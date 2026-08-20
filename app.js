@@ -1095,11 +1095,13 @@ function go(page, btnId) {
   if (page === 'orders') renderOrders();
   if (page === 'pickups') renderPickups();
   updateTodoBadge();
-  // Admin is a drill-down, not a departure: on a phone the drawer swaps its
-  // list for the sub-tabs and stays open, because closing it is exactly what
-  // made the section feel unreachable. Every other page is somewhere the user
-  // has now arrived, so the drawer gets out of the way.
-  if (page !== 'settings') sbCloseMobile();
+  // Every page, Admin included, is somewhere the user has now arrived, so the
+  // drawer gets out of the way. Admin used to be the exception — the drawer
+  // swapped its list for the sub-tabs and stayed open, because on a phone
+  // closing it left nothing to navigate the section with. The section now has
+  // its own list on the page, so keeping the drawer open would only put the
+  // same thirteen entries on top of the thirteen behind it.
+  sbCloseMobile();
 }
 function openStab(page, sub) {
   document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
@@ -1164,6 +1166,66 @@ function openStab(page, sub) {
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
+  // A phone shows one sub-page at a time, with a back row where the strip was.
+  // Every route into a sub-page runs through here — the strip, the admin
+  // drawer, and the dozen `openStab(...)` calls that land somewhere after a
+  // save — so this is the one place that has to say "we are inside one now".
+  //
+  // Both guards are load-bearing. `stab-drill` is only on the pages
+  // stabDrillInit() gave a back row to, so a page with no way out never gets
+  // shut into a sub-page. And a tab that is not in the list is not a place to
+  // land — see stabLandable().
+  const pgEl = document.getElementById(`p-${page}`);
+  if (pgEl && pgEl.classList.contains('stab-drill') && stabLandable(stEl)) pgEl.classList.add('stab-drilled');
+}
+
+// A sub-tab hidden from the strip is not somewhere to send a phone: the list it
+// would have to go back through does not offer it. Admin's "Server" is the one
+// that exists — it opens on first visit of a session and is display:none in
+// both the strip and the sidebar list — so on a phone Admin opens on its index
+// instead of on a panel the index cannot reach.
+function stabLandable(stab) {
+  return !!stab && stab.style.display !== 'none';
+}
+
+// Gives each sub-tab strip its back row and decides which of the two states the
+// page starts in. See the drill-down block in styles.css for what the states
+// look like; this only sets the class, so above 769px it is inert.
+function stabDrillInit() {
+  document.querySelectorAll('.page > .stabs').forEach((strip) => {
+    // Bestellungen navigates from the sidebar and hides its strip on every
+    // device, so it has no index to go back to.
+    if (strip.style.display === 'none') return;
+    const page = strip.parentElement;
+    const home = strip.dataset.stabHome;
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'stab-back';
+    // The label is the page's own name — where the row leads, not where you
+    // are; the sub-page below it already says that. data-i18n on the span (and
+    // data-i18n-aria-label on the button) hands both to translatePage(), so a
+    // language switch reaches them like any other string in the markup.
+    back.setAttribute('data-i18n-aria-label', 'nav.backToList');
+    back.setAttribute('aria-label', t('nav.backToList'));
+    const ico = document.createElement('span');
+    ico.className = 'stab-back-ico';
+    ico.setAttribute('aria-hidden', 'true');
+    ico.textContent = '\u2190';
+    const label = document.createElement('span');
+    label.setAttribute('data-i18n', home);
+    label.textContent = t(home);
+    back.append(ico, label);
+    back.addEventListener('click', () => page.classList.remove('stab-drilled'));
+    page.insertBefore(back, strip);
+    // The marker is what scopes the CSS. Only a page that got a back row here
+    // may have its sub-pages hidden, because only that page can get them back:
+    // Bestellungen keeps its strip display:none on every device, and hiding its
+    // panels on the way to an index it does not have renders the page blank.
+    page.classList.add('stab-drill');
+    // Land on the sub-page the page defaults to, unless that tab is not one you
+    // can land on — same rule as openStab(), so both entrances agree.
+    if (stabLandable(strip.querySelector('.stab.active'))) page.classList.add('stab-drilled');
+  });
 }
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -1212,7 +1274,7 @@ let _ordersCache = [];
 let _ordersFilter = '';
 
 function _ohEmpty(cols, msg) {
-  return `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
+  return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
 }
 function _ohChannel(ch) {
   const label =
@@ -1265,12 +1327,12 @@ function _renderOrdersInbox() {
   body.innerHTML = rows
     .map(
       (o) =>
-        `<tr><td>${_ohChannel(o.channel)}</td>` +
-        `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
-        `<td>${esc(o.customerName || '—')}</td>` +
-        `<td>${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
-        `<td style="font-size:11px">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
-        `<td>${_ohStatus(o.status)}</td></tr>`
+        `<tr><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
+        `<td class="fs-xs" data-mlabel="${esc(t('orders.th.order'))}" style="font-family:monospace">${esc(o.channelOrderId)}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.customer'))}">${esc(o.customerName || '—')}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
+        `<td class="fs-xs" data-mlabel="${esc(t('orders.th.shipBy'))}">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.status'))}">${_ohStatus(o.status)}</td></tr>`
     )
     .join('');
 }
@@ -1312,10 +1374,12 @@ function renderOrdersDemand() {
                 ? `<span class="oh-st oh-st-cancelled">${r.backorder} ${esc(t('orders.backorder'))}</span>`
                 : '<span class="muted">0</span>';
           return (
-            `<tr><td><strong>${esc(r.product)}</strong> <span class="muted" style="font-size:11px">${esc(r.category || '')}</span></td>` +
-            `<td>${r.demand}</td><td>${r.fromStock}</td><td>${produce}</td>` +
-            `<td style="font-size:11px">${r.startBy ? esc(r.startBy) : '—'}</td>` +
-            `<td style="font-size:11px">${comps}</td></tr>`
+            `<tr><td data-mlabel="${esc(t('orders.th.product'))}"><strong>${esc(r.product)}</strong> <span class="muted fs-xs">${esc(r.category || '')}</span></td>` +
+            `<td data-mlabel="${esc(t('orders.th.demand'))}">${r.demand}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.fromStock'))}">${r.fromStock}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.toProduce'))}">${produce}</td>` +
+            `<td class="fs-xs" data-mlabel="${esc(t('orders.th.startBy'))}">${r.startBy ? esc(r.startBy) : '—'}</td>` +
+            `<td class="fs-xs" data-mlabel="${esc(t('orders.th.components'))}">${comps}</td></tr>`
           );
         })
         .join('');
@@ -1340,8 +1404,8 @@ function renderOrdersMapping() {
               (it) =>
                 `<div class="oh-maprow">${_ohChannel(it.channel)}` +
                 `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
-                `<div class="muted" style="font-size:11px;font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
-                `<select class="oh-mapsel" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" data-title="${esc(it.title || '')}" style="width:auto;font-size:12px">` +
+                `<div class="muted fs-xs" style="font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
+                `<select class="oh-mapsel fs-meta" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" data-title="${esc(it.title || '')}" style="width:auto">` +
                 `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}</select>` +
                 `<button class="btn btn-sm btn-p" data-action="oh-map">${esc(t('orders.assign'))}</button></div>`
             )
@@ -1353,9 +1417,10 @@ function renderOrdersMapping() {
           ? products
               .map(
                 (pr) =>
-                  `<tr><td><strong>${esc(pr.name)}</strong></td><td>${esc(pr.category || '—')}</td>` +
-                  `<td class="muted" style="font-size:11px">${esc(pr.sku || '')}</td>` +
-                  `<td><button class="btn btn-sm" data-action="oh-prod-edit" data-id="${pr.id}">${esc(t('orders.edit'))}</button></td></tr>`
+                  `<tr><td data-mlabel="${esc(t('orders.th.product'))}"><strong>${esc(pr.name)}</strong></td>` +
+                  `<td data-mlabel="${esc(t('orders.th.category'))}">${esc(pr.category || '—')}</td>` +
+                  `<td data-mlabel="${esc(t('orders.th.sku'))}" class="muted fs-xs">${esc(pr.sku || '')}</td>` +
+                  `<td class="oh-actions"><button class="btn btn-sm" data-action="oh-prod-edit" data-id="${pr.id}">${esc(t('orders.edit'))}</button></td></tr>`
               )
               .join('')
           : _ohEmpty(4, t('orders.noProducts'));
@@ -1408,7 +1473,7 @@ function renderOrdersCustomers() {
           const privacy = !isAdmin
             ? ''
             : erased
-              ? `<span style="font-size:11px;color:var(--c-text-muted)">${esc(t('orders.erased'))}</span>`
+              ? `<span class="fs-xs" style="color:var(--c-text-muted)">${esc(t('orders.erased'))}</span>`
               : `<button type="button" class="btn btn-sm btn-r" data-action="oh-erase-customer" data-id="${esc(String(c.id))}" data-name="${esc(c.name || c.email || String(c.id))}">${esc(t('orders.erase'))}</button>`;
           // Arrived here from an account-closure notification: mark the row the
           // request is about, otherwise it is one of up to 200 and the admin has
@@ -1416,12 +1481,13 @@ function renderOrdersCustomers() {
           const hit = _ohHighlightCustomer && c.id === _ohHighlightCustomer;
           return (
             `<tr${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
-            `<td><strong>${esc(c.name || c.email || '—')}</strong></td>` +
-            `<td>${chans}</td><td>${c.orderCount || 0}</td>` +
-            `<td><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
-            `<td style="font-size:11px">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
-            `<td>${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td>` +
-            (isAdmin ? `<td>${privacy}</td>` : '') +
+            `<td data-mlabel="${esc(t('orders.th.customer'))}"><strong>${esc(c.name || c.email || '—')}</strong></td>` +
+            `<td data-mlabel="${esc(t('orders.th.channels'))}">${chans}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.orders'))}">${c.orderCount || 0}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.ltv'))}"><strong>${ltv} ${esc(c.currency || '€')}</strong></td>` +
+            `<td class="fs-xs" data-mlabel="${esc(t('orders.th.last'))}">${c.lastOrder ? esc(fmtDt(c.lastOrder)) : '—'}</td>` +
+            `<td data-mlabel="${esc(t('orders.th.type'))}">${(c.orderCount || 0) > 1 ? `<span class="oh-st oh-st-ready">${esc(t('orders.repeat'))}</span>` : ''}</td>` +
+            (isAdmin ? `<td data-mlabel="${esc(t('orders.th.privacy'))}">${privacy}</td>` : '') +
             '</tr>'
           );
         })
@@ -1499,7 +1565,7 @@ function renderPickups() {
             .join('<br>');
           // The zone belongs next to the time or the time means nothing. A
           // pickup in another country is exactly when the label earns its width.
-          const zone = p.zone ? `<div style="font-size:11px;color:var(--c-text-muted)">${esc(p.zone)}</div>` : '';
+          const zone = p.zone ? `<div class="fs-xs" style="color:var(--c-text-muted)">${esc(p.zone)}</div>` : '';
           // Two different states, and only one of them is a problem. Overbooked
           // is the receiver saying it sold more of that slot than it should
           // have; unconfirmed just means the next push has not gone out yet.
@@ -1507,14 +1573,14 @@ function renderPickups() {
             ? `<span class="oh-st oh-st-over">${esc(t('pickups.overbooked'))}</span>`
             : p.acked
               ? `<span class="oh-st oh-st-ready">${esc(t('pickups.confirmed'))}</span>`
-              : `<span style="font-size:11px;color:var(--c-text-muted)">${esc(t('pickups.pending'))}</span>`;
+              : `<span class="fs-xs" style="color:var(--c-text-muted)">${esc(t('pickups.pending'))}</span>`;
           return (
             '<tr>' +
-            `<td><strong>${_pickupWhen(p)}</strong>${zone}</td>` +
-            `<td>${esc(p.place || '—')}</td>` +
-            `<td>${esc(p.order || '—')}</td>` +
-            `<td style="font-size:12px">${items || '—'}</td>` +
-            `<td>${state}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.when'))}"><strong>${_pickupWhen(p)}</strong>${zone}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.place'))}">${esc(p.place || '—')}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.order'))}">${esc(p.order || '—')}</td>` +
+            `<td class="fs-meta" data-mlabel="${esc(t('pickups.th.items'))}">${items || '—'}</td>` +
+            `<td data-mlabel="${esc(t('pickups.th.state'))}">${state}</td>` +
             '</tr>'
           );
         })
@@ -1574,7 +1640,7 @@ function renderOrdersVersand() {
               : `<button class="btn btn-sm btn-p" data-action="oh-ship-open" data-order-id="${o.id}">${t('versand.shipBtn')}</button>`;
           return (
             `<tr><td>${_ohChannel(o.channel)}</td>` +
-            `<td style="font-family:monospace;font-size:11px">${esc(o.channelOrderId)}</td>` +
+            `<td class="fs-xs" style="font-family:monospace">${esc(o.channelOrderId)}</td>` +
             `<td>${esc(o.customerName || '—')}</td>` +
             `<td>${_ohStatus(o.status)}</td>` +
             `<td style="white-space:nowrap">${btn}</td></tr>`
@@ -2061,9 +2127,9 @@ function renderInventoryCard() {
       const min = (thr[m] && thr[m].minKg) || 0;
       const low = min > 0 && have <= min;
       return (
-        `<tr><td><strong>${esc(_ohMatName(m))}</strong></td>` +
-        `<td>${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
-        `<td style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
+        `<tr><td data-mlabel="${esc(t('orders.mat.name'))}"><strong>${esc(_ohMatName(m))}</strong></td>` +
+        `<td data-mlabel="${esc(t('orders.rawStockKg'))}">${_ohN(have)}${low ? ' <span class="oh-warn">⚠︎</span>' : ''}</td>` +
+        `<td class="oh-actions" style="white-space:nowrap"><input class="oh-inv-input" data-mat="${m}" type="number" min="0" step="0.1" value="${_ohN(have)}" style="width:80px" /> ` +
         `<button class="btn btn-sm" data-action="oh-inv-set" data-mat="${m}">${esc(t('orders.set'))}</button></td></tr>`
       );
     })
@@ -3748,7 +3814,7 @@ function renderRackSection(zone, racks, filtered) {
           <span class="batch-card-count">${d.bags.length}</span>
         </div>
         <div class="batch-card-meta">
-          <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
+          <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
           <span>${esc(d.st)}</span>
           ${bd && bd.ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}
         </div>
@@ -3762,7 +3828,7 @@ function renderRackSection(zone, racks, filtered) {
         })
         .join('');
       if (!batchEntries.length && !count)
-        batchHtml = `<div style="font-size:11px;color:var(--c-text-muted);font-style:italic">${t('dash.empty')}</div>`;
+        batchHtml = `<div class="fs-xs" style="color:var(--c-text-muted);font-style:italic">${t('dash.empty')}</div>`;
 
       return `<div class="rack-card-new">
       <div class="rack-card-header">
@@ -3780,7 +3846,7 @@ function renderRackSection(zone, racks, filtered) {
   const capHtml = cap
     ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
       <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags > cap ? '#ef4444' : color};width:${Math.min(100, Math.round((totalBags / cap) * 100))}%;border-radius:3px"></div></div>
-      <span style="font-size:11px;color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
+      <span class="fs-xs" style="color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
     </div>`
     : '';
   const zoneHasUrgent = filtered.some(
@@ -3791,7 +3857,7 @@ function renderRackSection(zone, racks, filtered) {
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
-      <button type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
+      <button class="fs-xs" type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
     </div>
     <div class="location-section-body">${capHtml}
       <div class="${gridClass}">${rackCards}</div>
@@ -3838,7 +3904,7 @@ function renderFruitingSection(fruitingZones, filtered) {
           <span class="batch-card-count">${d.bags.length}</span>
         </div>
         <div class="batch-card-meta">
-          <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
+          <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
           <span>${esc(d.st)}</span>
           ${harv > 0 ? `<span style="color:var(--c-amber-dark);font-weight:500">${t('dash.harvested')}: ${harv}g</span>` : ''}
           ${due ? `<span style="color:${ov ? 'var(--c-red-dark)' : 'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov ? ' \u26a0' : ''}</span>` : ''}
@@ -3856,11 +3922,11 @@ function renderFruitingSection(fruitingZones, filtered) {
       const capBar = cap
         ? `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
         <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : z.color || color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
-        <span style="font-size:10px;color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
+        <span class="fs-micro" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
       </div>`
         : '';
       return `<div class="tent-column">
-      <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span style="font-size:11px;font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
+      <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span class="fs-xs" style="font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
       ${cards}
     </div>`;
     })
@@ -3912,17 +3978,17 @@ function locSortControlHtml() {
   const cur = locSortKey();
   return (
     '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px">' +
-    '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+    '<span class="fs-xs" style="color:var(--c-text-muted);flex-shrink:0">' +
     esc(t('sort.by')) +
     '</span>' +
     LOC_SORTS.map((k) => {
       const on = k === cur;
       return (
-        '<button type="button" data-action="loc-sort" data-key="' +
+        '<button type="button" class="fs-floor" data-action="loc-sort" data-key="' +
         esc(k) +
         '" aria-pressed="' +
         on +
-        '" style="font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+        '" style="--fs-own:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
         (on ? 'var(--c-accent)' : 'var(--c-border)') +
         ';background:' +
         (on ? 'var(--c-accent)' : 'transparent') +
@@ -3973,7 +4039,7 @@ function renderSimpleZoneSection(zone, filtered) {
       d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
       return `<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
-      <div class="batch-card-meta"><span style="font-family:monospace;font-size:10px">${esc(bid)}</span><span>${esc(d.st)}</span></div>
+      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span></div>
       <div class="batch-card-chips">${d.bags
         .map((bg) => {
           const sel = selectedLocBags.has(bg.id);
@@ -3988,7 +4054,7 @@ function renderSimpleZoneSection(zone, filtered) {
   const capHtml = cap
     ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
       <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : zone.color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
-      <span style="font-size:11px;color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
+      <span class="fs-xs" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
     </div>`
     : '';
   return `<div class="location-section">
@@ -4024,7 +4090,7 @@ function renderContamSection(zone, filtered) {
         <span class="batch-card-count">${d.bags.length}</span>
       </div>
       <div class="batch-card-meta">
-        <span style="font-family:monospace;font-size:10px">${esc(bid)}</span>
+        <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
         <span>${esc(d.st)}</span>
       </div>
       <div class="batch-card-chips">${d.bags
@@ -4053,10 +4119,10 @@ function updateActionBar() {
   if (n > 0) {
     bar.style.display = 'flex';
     bar.innerHTML = `<span class="action-bar-count">${tp('dash.bagsSelected', n)}</span><span style="flex:1"></span>
-      <button class="btn btn-sm" onclick="locSelectAllVisible()" style="font-size:11px">${t('dash.selectAll')}</button>
-      <button class="btn btn-sm" onclick="selectedLocBags.clear();renderStatus()" style="font-size:11px">${t('dash.clear')}</button>
-      <button class="btn btn-sm btn-p" onclick="openLocMovePopup()" style="font-size:11px">${t('dash.move')}</button>
-      <button class="btn btn-sm btn-r" onclick="locRemoveSelected()" style="font-size:11px">${t('dash.remove')}</button>`;
+      <button class="btn btn-sm fs-xs" onclick="locSelectAllVisible()">${t('dash.selectAll')}</button>
+      <button class="btn btn-sm fs-xs" onclick="selectedLocBags.clear();renderStatus()">${t('dash.clear')}</button>
+      <button class="btn btn-sm btn-p fs-xs" onclick="openLocMovePopup()">${t('dash.move')}</button>
+      <button class="btn btn-sm btn-r fs-xs" onclick="locRemoveSelected()">${t('dash.remove')}</button>`;
   } else {
     bar.style.display = 'none';
   }
@@ -4238,8 +4304,8 @@ function renderWorkList() {
         return (
           `<div data-wl-batch="${esc(g.batchId)}" style="margin-bottom:14px;cursor:pointer">` +
           `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 4px;border-bottom:2px solid var(--c-border)">` +
-          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:monospace;font-size:13px;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span style="font-size:12px;color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
-          `<span style="font-size:12px;color:var(--c-text-muted);white-space:nowrap">${g.bags} ${bags}</span></div>` +
+          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:monospace;font-size:13px;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span class="fs-meta" style="color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
+          `<span class="fs-meta" style="color:var(--c-text-muted);white-space:nowrap">${g.bags} ${bags}</span></div>` +
           zoneRows +
           `</div>`
         );
@@ -4249,14 +4315,14 @@ function renderWorkList() {
           (it) =>
             `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
             `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
-            `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
+            `<span class="fs-meta" style="flex:1;min-width:0;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
             `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
             `</div>`
         )
         .join('');
       return (
         '<div style="margin-bottom:14px">' +
-        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.name)}</span><span style="font-size:12px;color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.name)}</span><span class="fs-meta" style="color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
         batchRows +
         '</div>'
       );
@@ -4313,16 +4379,6 @@ function printWorkList() {
   win.document.write(html);
   win.document.close();
 }
-// "+ Ernte erfassen" from the speed-dial. Harvests used to have their own card;
-// they are rows in the day plan now, so this opens the day they sit on and
-// flashes the card holding it rather than pointing at a card that is gone.
-// "Ernte erfassen" used to scroll to the task card and flash it for 1.5 s —
-// which told the worker where to look but left them with nothing to type into,
-// because the only way to actually record a harvest was to scan a bag. It now
-// opens the harvest flow, where the bag is picked from a list.
-function dashGoHarvest() {
-  wkfOpen('harvest');
-}
 // Warnungen is for problems you can't see anywhere else on the dashboard: low
 // stock, lab issues, zones at capacity. It deliberately does NOT restate
 // due-today / overdue batches — those are already the "zu verschieben" chip and
@@ -4358,9 +4414,9 @@ function renderDashAlerts() {
   el.innerHTML = allAlerts
     .map((a) => {
       const btn = a.attentionKey
-        ? `<button class="btn btn-sm" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
-        : `<button class="btn btn-sm" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="font-size:11px;padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
+        ? `<button class="btn btn-sm fs-xs" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
+        : `<button class="btn btn-sm fs-xs" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
+      return `<div class="fs-meta" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
     })
     .join('');
 }
@@ -4563,7 +4619,7 @@ function dashTaskBtn(tk) {
   if (tk.taskAction === 'inoculate') {
     // Colonised grain: the useful next step is making blocks from it, so go
     // straight to the create dialog rather than offering a move.
-    return `<button class="btn btn-sm btn-p" data-action="inoculate-from" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${esc(t('dash.doInoculate'))}</button>`;
+    return `<button class="btn btn-sm btn-p fs-xs" data-action="inoculate-from" data-batch="${id}" style="padding:3px 10px;flex-shrink:0">${esc(t('dash.doInoculate'))}</button>`;
   }
   if (tk.taskAction === 'move' && tk.ready) {
     // One-tap \u2192 Fruchtung (the dominant move) as the primary action; the
@@ -4577,14 +4633,14 @@ function dashTaskBtn(tk) {
     // the passive "Ansehen" button below, which is what it did before the tabs.
     const canFruit = getStatus(tk.batchId).status === 'INCUBATING' && zones.some((z) => z.role === 'fruiting');
     const toFruiting = canFruit
-      ? `<button class="btn btn-sm btn-p" data-action="move-to-fruiting" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">\u2192 ${esc(t('dash.toFruiting'))}</button>`
+      ? `<button class="btn btn-sm btn-p fs-xs" data-action="move-to-fruiting" data-batch="${id}" style="padding:3px 10px;flex-shrink:0">\u2192 ${esc(t('dash.toFruiting'))}</button>`
       : '';
     return (
       toFruiting +
-      `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
+      `<button class="btn btn-sm fs-xs" data-action="open-move-modal" data-batch="${id}" style="padding:3px 10px;flex-shrink:0;margin-left:${toFruiting ? '4px' : '0'}">${t('dash.move')}</button>`
     );
   }
-  return `<button class="btn btn-sm" data-action="go-to-batch" data-batch="${id}" style="font-size:11px;padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
+  return `<button class="btn btn-sm fs-xs" data-action="go-to-batch" data-batch="${id}" style="padding:3px 10px;flex-shrink:0">${t('dash.view')}</button>`;
 }
 // The urgency sections of the batch-tasks card, in the order a worker triages:
 // what is late, what is due today, what is coming, and what got left behind.
@@ -5185,7 +5241,7 @@ function _weekHeadHtml(d, off, sel) {
         (short ? ' · ' + short : '')
     ) +
     '">' +
-    '<span style="display:block;font-size:9.5px;font-weight:' +
+    '<span class="fs-floor" style="--fs-own:9.5px;display:block;font-weight:' +
     (isToday ? '700' : '600') +
     ';color:' +
     (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
@@ -5201,7 +5257,7 @@ function _weekHeadHtml(d, off, sel) {
     '</span>' +
     // Clipped rather than wrapped: a wrapped word would push the columns to
     // different heights and the strip would stop reading as a row.
-    '<span style="display:block;font-size:9px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    '<span class="fs-floor" style="--fs-own:9px;display:block;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     (foot || '&nbsp;') +
     '</span></button>'
   );
@@ -5290,16 +5346,16 @@ function _weekColPreviewHtml(d) {
       '</div>';
   }
   if (!d.items.length && !html) {
-    return '<div style="padding:3px 2px;color:var(--c-text-muted);font-size:10px">' + esc(t('rhythm.nothing')) + '</div>';
+    return '<div class="fs-micro" style="padding:3px 2px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div>';
   }
   const counts = countByCategory(d.items);
   const overdue = d.items.filter((i) => i.overdue).length;
   for (const cat of PLAN_CATS) {
     if (!counts[cat]) continue;
     html +=
-      '<div style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
+      '<div class="fs-micro" style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
       PLAN_CAT_COLOR[cat] +
-      ';margin-bottom:2px;font-size:10px">' +
+      ';margin-bottom:2px">' +
       '<span style="font-weight:700;flex-shrink:0">' +
       counts[cat] +
       '</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-sec)">' +
@@ -5309,7 +5365,7 @@ function _weekColPreviewHtml(d) {
   // Late work is the one thing that should pull the eye across the week.
   if (overdue) {
     html +=
-      '<div style="font-size:10px;color:var(--c-red-dark);padding:1px 2px">' +
+      '<div class="fs-micro" style="color:var(--c-red-dark);padding:1px 2px">' +
       esc(t('cat.overdue', { n: overdue })) +
       '</div>';
   }
@@ -5328,7 +5384,7 @@ function _weekDayBodyHtml(d, off, isToday) {
   const th = themeFor(d.weekday);
   const bits = [th.suggested && th.theme ? weekThemeLabel(th.theme) + ' (' + t('rhythm.guess') + ')' : '', mix, r && r.note];
   const line = bits.filter(Boolean).join(' · ');
-  if (line) html += '<div style="font-size:10.5px;color:var(--c-text-muted);margin:0 0 5px">' + esc(line) + '</div>';
+  if (line) html += '<div class="fs-floor" style="--fs-own:10.5px;color:var(--c-text-muted);margin:0 0 5px">' + esc(line) + '</div>';
   // The day's own planned job, and — on today only — whatever earlier days
   // still owe. Arrears belong on today because that is when they can be done.
   const own = rhythmTaskOn(d.date);
@@ -5344,7 +5400,7 @@ function _weekDayBodyHtml(d, off, isToday) {
         '<div style="width:' +
         pct +
         '%;height:100%;background:var(--action-color,var(--c-accent))"></div></div>' +
-        '<span style="font-size:11px;color:var(--c-text-muted);flex-shrink:0">' +
+        '<span class="fs-xs" style="color:var(--c-text-muted);flex-shrink:0">' +
         prog.done +
         '/' +
         prog.total +
@@ -5352,7 +5408,7 @@ function _weekDayBodyHtml(d, off, isToday) {
     }
   }
   if (!d.items.length) {
-    return html + '<div style="font-size:11.5px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div></div>';
+    return html + '<div class="fs-floor" style="--fs-own:11.5px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div></div>';
   }
   html += _fruitingTargetHtml(d.items);
 
@@ -5373,7 +5429,7 @@ function _weekDayBodyHtml(d, off, isToday) {
     if (cat !== lastCat) {
       lastCat = cat;
       html +=
-        '<div style="display:flex;align-items:baseline;gap:5px;font-size:10.5px;font-weight:600;color:var(--c-text-sec);margin:7px 0 2px">' +
+        '<div class="fs-floor" style="--fs-own:10.5px;display:flex;align-items:baseline;gap:5px;font-weight:600;color:var(--c-text-sec);margin:7px 0 2px">' +
         '<span style="width:6px;height:6px;border-radius:50%;background:' +
         PLAN_CAT_COLOR[cat] +
         ';flex-shrink:0"></span>' +
@@ -5385,11 +5441,11 @@ function _weekDayBodyHtml(d, off, isToday) {
   const hidden = items.length - shown.length;
   if (hidden > 0 || full) {
     html +=
-      '<button type="button" data-action="dash-room-more" data-room="' +
+      '<button type="button" class="fs-floor" data-action="dash-room-more" data-room="' +
       esc(openKey) +
       '" aria-expanded="' +
       full +
-      '" style="border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;font-size:11.5px;color:var(--c-text-sec)">' +
+      '" style="--fs-own:11.5px;border:0;background:none;padding:3px 0;cursor:pointer;font-family:inherit;color:var(--c-text-sec)">' +
       esc(hidden > 0 ? '+ ' + t('dash.moreRows', { n: hidden }) : '− ' + t('dash.fewerRows')) +
       '</button>';
   }
@@ -5419,9 +5475,9 @@ function _rhythmTaskRowHtml(task, outstanding) {
     // The amount is the thing that changes week to week, so it is the thing you
     // can tap. Editing it here changes this date only — the recurring rhythm is
     // the usual amount, and one busy Monday must not rewrite every Monday after.
-    '<div style="flex:1;min-width:0;font-size:12px">' +
+    '<div class="fs-meta" style="flex:1;min-width:0">' +
     _rhythmTargetBtn(task.date, target, label) +
-    '<div style="font-size:11px;color:' +
+    '<div class="fs-xs" style="color:' +
     (late ? 'var(--c-red-dark)' : 'var(--c-text-muted)') +
     '">' +
     esc(meta) +
@@ -5430,13 +5486,13 @@ function _rhythmTaskRowHtml(task, outstanding) {
     // recording work before the day arrives would be recording a guess.
     (task.planned
       ? ''
-      : '<button class="btn btn-sm btn-p" data-action="rhythm-log" data-date="' +
+      : '<button class="btn btn-sm btn-p fs-xs" data-action="rhythm-log" data-date="' +
         esc(task.date) +
         '" data-target="' +
         target +
         '" data-done="' +
         done +
-        '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+        '" style="padding:3px 10px;flex-shrink:0">' +
         esc(t('rhythm.log')) +
         '</button>') +
     '</div>'
@@ -5503,7 +5559,7 @@ function logRhythmProgress(date, target, done) {
 function _rhythmEditLink() {
   return (
     '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--c-border)">' +
-    '<button type="button" data-action="edit-rhythm" style="border:0;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:11px;color:var(--c-text-sec)">' +
+    '<button class="fs-xs" type="button" data-action="edit-rhythm" style="border:0;background:none;padding:0;cursor:pointer;font-family:inherit;color:var(--c-text-sec)">' +
     esc(t('rhythm.edit')) +
     '</button></div>'
   );
@@ -5523,10 +5579,10 @@ function _dashPlanRowHtml(it, withRoom) {
     (it.overdue ? 'var(--c-red-dark)' : spColor(it.species)) +
     '">' +
     '<div style="flex:1;min-width:0">' +
-    '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    '<div class="fs-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     esc(it.label) +
     '</div>' +
-    (meta ? '<div style="font-size:11px;color:var(--c-text-muted)">' + esc(meta) + '</div>' : '') +
+    (meta ? '<div class="fs-xs" style="color:var(--c-text-muted)">' + esc(meta) + '</div>' : '') +
     '</div>' +
     btn +
     '</div>'
@@ -5547,13 +5603,13 @@ function _fruitingTargetHtml(items) {
   const fill = fruitingFill(dest, incoming);
   const warn =
     fill && fill.over
-      ? '<div style="font-size:10.5px;color:var(--c-red-dark);margin-bottom:4px">⚠ ' +
+      ? '<div class="fs-floor" style="--fs-own:10.5px;color:var(--c-red-dark);margin-bottom:4px">⚠ ' +
         esc(t('dash.destFull', { zone: zoneDisplayName(dest), n: fill.used + fill.incoming, cap: fill.cap })) +
         '</div>'
       : '';
   if (tents.length < 2) {
     return (
-      '<div style="font-size:10.5px;color:var(--c-text-muted);margin:6px 0 2px">→ ' +
+      '<div class="fs-floor" style="--fs-own:10.5px;color:var(--c-text-muted);margin:6px 0 2px">→ ' +
       esc(zoneDisplayName(dest)) +
       (fill ? ' ' + fill.used + '/' + fill.cap : '') +
       '</div>' +
@@ -5567,13 +5623,13 @@ function _fruitingTargetHtml(items) {
       const on = z.id === dest;
       const zf = z.maxCapacity ? fruitingFill(z.id, on ? incoming : 0) : null;
       return (
-        '<button type="button" data-action="dash-dest" data-zone="' +
+        '<button type="button" class="fs-floor" data-action="dash-dest" data-zone="' +
         esc(z.id) +
         '" aria-pressed="' +
         on +
         '" title="' +
         esc(z.name) +
-        '" style="flex:0 0 auto;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+        '" style="--fs-own:10.5px;flex:0 0 auto;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
         (on ? 'var(--c-accent)' : 'var(--c-border)') +
         ';background:' +
         (on ? 'var(--c-accent)' : 'transparent') +
@@ -5588,7 +5644,7 @@ function _fruitingTargetHtml(items) {
     .join('');
   return (
     '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 2px">' +
-    '<span style="font-size:10.5px;color:var(--c-text-muted);flex-shrink:0">' +
+    '<span class="fs-floor" style="--fs-own:10.5px;color:var(--c-text-muted);flex-shrink:0">' +
     esc(t('dash.destLabel')) +
     '</span>' +
     '<span role="group" aria-label="' +
@@ -5608,8 +5664,8 @@ function _fruitingTargetHtml(items) {
 function _bulkPillHtml(movable) {
   if (movable.length < 2) return '';
   return (
-    '<button type="button" class="btn btn-sm btn-p" data-action="bulk-fruiting" data-bucket="today" ' +
-    'style="font-size:11px;padding:3px 10px;white-space:nowrap;flex-shrink:0;margin-left:auto">' +
+    '<button type="button" class="btn btn-sm btn-p fs-xs" data-action="bulk-fruiting" data-bucket="today" ' +
+    'style="padding:3px 10px;white-space:nowrap;flex-shrink:0;margin-left:auto">' +
     esc(t('dash.bulkFruiting')) +
     '</button>'
   );
@@ -5626,26 +5682,26 @@ function _planBtn(it) {
     // page. The row says "Ernte erfassen", so it should record a harvest — the
     // jump to a list was one more place where the button and the job differed.
     return (
-      '<button class="btn btn-sm" data-action="harvest-batch" data-batch="' +
+      '<button class="btn btn-sm fs-xs" data-action="harvest-batch" data-batch="' +
       id +
-      '" style="font-size:11px;padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
+      '" style="padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
       esc(t('harvest.logHarvest')) +
       '</button>'
     );
   }
   if (it.kind === 'manual') {
     return (
-      '<button class="btn btn-sm" data-action="toggle-task" data-id="' +
+      '<button class="btn btn-sm fs-xs" data-action="toggle-task" data-id="' +
       esc(String(it.taskId || '')) +
-      '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+      '" style="padding:3px 10px;flex-shrink:0">' +
       esc(t('calDetail.markDone')) +
       '</button>'
     );
   }
   return (
-    '<button class="btn btn-sm" data-action="go-to-batch" data-batch="' +
+    '<button class="btn btn-sm fs-xs" data-action="go-to-batch" data-batch="' +
     id +
-    '" style="font-size:11px;padding:3px 10px;flex-shrink:0">' +
+    '" style="padding:3px 10px;flex-shrink:0">' +
     esc(t('dash.view')) +
     '</button>'
   );
@@ -5807,13 +5863,14 @@ function renderBatchAttentionBanner() {
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'batch-attention-banner';
+    banner.className = 'fs-meta';
     banner.style.cssText =
-      'display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:8px;background:#fed7aa;border-left:4px solid #ea580c;border-radius:6px;font-size:12px;color:#7c2d12;font-weight:500';
+      'display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:8px;background:#fed7aa;border-left:4px solid #ea580c;border-radius:6px;color:#7c2d12;font-weight:500';
     card.insertBefore(banner, card.firstChild);
   }
   banner.innerHTML =
     `<div style="flex:1">${esc(batchAttentionFilter.label)}</div>` +
-    `<button class="btn btn-sm" data-action="clear-attention" style="font-size:11px;padding:2px 8px;background:#ea580c;color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
+    `<button class="btn btn-sm fs-xs" data-action="clear-attention" style="padding:2px 8px;background:#ea580c;color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
 }
 
 // Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
@@ -6061,31 +6118,31 @@ function renderDashLabStock() {
           const against = s.min > 0 ? '<span style="color:var(--c-text-muted);font-weight:400">/' + s.min + '</span>' : '';
           return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
-        <span style="flex:1;font-size:11px;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(s.desc) + '</span>' : ''}</span>
-        <span style="font-size:11px;font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
+        <span class="fs-xs" style="flex:1;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span class="fs-micro" style="color:var(--c-text-muted)">' + esc(s.desc) + '</span>' : ''}</span>
+        <span class="fs-xs" style="font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
         <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${strainLow ? 'var(--c-red)' : s.color};border-radius:3px"></div></div>
       </div>`;
         })
         .join('');
       const emptyMsg =
         count === 0
-          ? `<div style="font-size:11px;color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`
+          ? `<div class="fs-xs" style="color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`
           : '';
       return `<div style="background:var(--c-bg);border:1px solid ${low ? 'var(--c-red)' : 'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
       <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low ? 'var(--c-red)' : tc.accent}"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;margin-top:2px">
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:12px;font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
-          <span style="font-size:11px;color:var(--c-text-sec)">${esc(label)}</span>
+          <span class="fs-meta" style="font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
+          <span class="fs-xs" style="color:var(--c-text-sec)">${esc(label)}</span>
         </div>
-        ${low ? '<span style="font-size:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">' + t('lab.lowStock') + '</span>' : ''}
+        ${low ? '<span class="fs-floor" style="--fs-own:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">' + t('lab.lowStock') + '</span>' : ''}
       </div>
       <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length ? '8' : '2'}px">
         <span style="font-size:28px;font-weight:800;color:${low ? 'var(--c-red-dark)' : 'var(--c-text)'};line-height:1">${count}</span>
-        <span style="font-size:11px;color:var(--c-text-muted)">${min > 0 ? '/ min ' + min + (type === 'GS' ? ' kg per strain' : '') : ''}</span>
+        <span class="fs-xs" style="color:var(--c-text-muted)">${min > 0 ? '/ min ' + min + (type === 'GS' ? ' kg per strain' : '') : ''}</span>
       </div>
-      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + (type === 'GS' ? '<div style="border-top:1px solid var(--c-border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--c-text)"><span>Total</span><span>' + (Number.isInteger(strainTotal) ? strainTotal : strainTotal.toFixed(1)) + ' kg</span></div>' : '') + '</div>' : emptyMsg}
-      <button class="btn btn-sm" onclick="setLabMin('${type}')" style="margin-top:8px;font-size:10px;padding:2px 8px">${t('lab.setMinimum')}</button>
+      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + (type === 'GS' ? '<div class="fs-xs" style="border-top:1px solid var(--c-border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700;color:var(--c-text)"><span>Total</span><span>' + (Number.isInteger(strainTotal) ? strainTotal : strainTotal.toFixed(1)) + ' kg</span></div>' : '') + '</div>' : emptyMsg}
+      <button class="btn btn-sm fs-micro" onclick="setLabMin('${type}')" style="margin-top:8px;padding:2px 8px">${t('lab.setMinimum')}</button>
     </div>`;
     }).join('') +
     '</div>';
@@ -6390,7 +6447,7 @@ function renderZoneCheck() {
         `<div data-zc-bag="${esc(bagId)}" style="display:flex;align-items:center;gap:10px;padding:11px 8px;border-bottom:0.5px solid var(--c-border);cursor:pointer;${on ? 'opacity:.5' : ''}">` +
         `<span style="width:22px;height:22px;flex:none;border-radius:6px;border:2px solid ${on ? 'var(--c-primary,#16a34a)' : 'var(--c-border)'};background:${on ? 'var(--c-primary,#16a34a)' : 'transparent'};color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700">${on ? '✓' : ''}</span>` +
         `<span style="font-family:monospace;font-size:13px;font-weight:600;${on ? 'text-decoration:line-through' : ''}">${esc(bagId)}</span>` +
-        `<span style="flex:1;min-width:0;font-size:12px;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.batchId || '')}</span>` +
+        `<span class="fs-meta" style="flex:1;min-width:0;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.batchId || '')}</span>` +
         `</div>`
       );
     })
@@ -6502,7 +6559,7 @@ function setLocFb(msg) {
   el.className = 'scan-toast fb-ok visible';
   el.innerHTML =
     msg +
-    ' <button onclick="locUndo()" style="margin-left:8px;font-size:11px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
+    ' <button class="fs-xs" onclick="locUndo()" style="margin-left:8px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
@@ -6757,7 +6814,7 @@ function inocRender(prefix) {
     chips.innerHTML = _inoc
       .map(
         (x) =>
-          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(x.id)}<button type="button" data-action="inoc-drop" data-id="${esc(x.id)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
+          `<span class="fs-xs" style="display:inline-flex;align-items:center;gap:5px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(x.id)}<button type="button" data-action="inoc-drop" data-id="${esc(x.id)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
       )
       .join('');
   const sel = document.getElementById(prefix + '-inoc-pick');
@@ -7205,7 +7262,7 @@ function createBatch() {
     document.getElementById('nb-bags').innerHTML = bags
       .map(
         (b) =>
-          `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
       )
       .join('');
     const _res = document.getElementById('nb-result');
@@ -7238,16 +7295,16 @@ async function sbPreview() {
   _sbLast = null;
   if (btn) btn.disabled = true;
   if (!recipeStrainId || kg <= 0) {
-    out.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
+    out.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
     return;
   }
   const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg });
   if (!r || r.error) {
-    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
+    out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
     return;
   }
   if (!r.hasRecipe) {
-    out.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc(t('sub.noRecipe')) + '</div>';
+    out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc(t('sub.noRecipe')) + '</div>';
     return;
   }
   const m = r.mix;
@@ -7300,7 +7357,7 @@ async function sbPreview() {
     ' min</td></tr>' +
     row(t('sub.moisture'), m.moisturePct, '%') +
     '</table>' +
-    '<div style="font-size:11px;color:var(--c-text-muted);margin-top:6px">' +
+    '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:6px">' +
     esc(t('sub.noSpawnHint')) +
     '</div>';
   _sbLast.shortfalls = shortfalls;
@@ -7309,8 +7366,8 @@ async function sbPreview() {
       .map((x) => esc(t('sub.shortLine', { mat: x.label, need: x.need.toFixed(1), have: x.have.toFixed(1) })))
       .join('<br>');
     out.innerHTML =
-      '<div style="background:var(--c-red-light);border:1px solid var(--c-red-border);color:var(--c-red-dark);' +
-      'border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12.5px;line-height:1.55">' +
+      '<div class="fs-floor" style="--fs-own:12.5px;background:var(--c-red-light);border:1px solid var(--c-red-border);color:var(--c-red-dark);' +
+      'border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.55">' +
       '<b>' + esc(t('sub.shortTitle')) + '</b><br>' + list + '<br>' + esc(t('sub.shortHint')) +
       '</div>' +
       out.innerHTML;
@@ -7374,11 +7431,11 @@ function renderSubstrateList() {
   if (!el) return;
   const open = _sbList.filter((s) => s.remainingKg > 0.0001);
   if (!open.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
+    el.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
     return;
   }
   el.innerHTML =
-    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    '<table class="fs-meta" style="width:100%;border-collapse:collapse">' +
     open
       .map((s) => {
         const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
@@ -7464,7 +7521,7 @@ function nbSubstrateNeed() {
   const left = s.remainingKg - need;
   const spawn = need * (((ms && ms.recSpawnPct) || 0) / 100);
   box.innerHTML =
-    '<div style="font-size:12px;line-height:1.7">' +
+    '<div class="fs-meta" style="line-height:1.7">' +
     '<div>' +
     esc(t('sub.mixComposition', { hw: s.composition.hardwoodPct, wb: s.composition.wheatbranPct, rh: s.composition.rhPct })) +
     '</div>' +
@@ -7557,14 +7614,14 @@ function renderSubstrateTab() {
     });
   }
   if (!rows.length) {
-    box.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
+    box.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
     return;
   }
   const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
     .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
     .join('');
   box.innerHTML =
-    '<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    '<div style="overflow-x:auto"><table class="fs-meta" style="width:100%;border-collapse:collapse">' +
     '<thead><tr style="text-align:left;color:var(--c-text-sec)">' +
     head +
     '</tr></thead><tbody>' +
@@ -7595,7 +7652,7 @@ function _sbRowHtml(s) {
       'white-space:nowrap'
     ) +
     cell(
-      '<span style="font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;color:#fff;background:' +
+      '<span class="fs-micro" style="padding:2px 7px;border-radius:99px;font-weight:600;color:#fff;background:' +
         col +
         '">' +
         esc(t(SB_STATUS[s.status] || s.status)) +
@@ -7625,12 +7682,12 @@ async function openSubstrateInfo(subId) {
   const body = document.getElementById('si-body');
   const acts = document.getElementById('si-actions');
   document.getElementById('si-title').textContent = subId;
-  body.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">…</div>';
+  body.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">…</div>';
   acts.innerHTML = '';
   document.getElementById('m-subinfo').classList.add('open');
   const s = await apiGet('/api/substrate-batches/' + encodeURIComponent(subId));
   if (!s || s.error) {
-    body.innerHTML = '<div style="font-size:12px;color:var(--c-red-dark)">' + esc((s && s.error) || '?') + '</div>';
+    body.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc((s && s.error) || '?') + '</div>';
     return;
   }
   const line = (label, val) =>
@@ -7642,10 +7699,10 @@ async function openSubstrateInfo(subId) {
   const kg = (v, d) => v.toFixed(d == null ? 1 : d) + ' kg';
   const c = s.composition;
   let html =
-    '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">' +
+    '<div class="fs-xs" style="color:var(--c-text-muted);margin-bottom:8px">' +
     esc(t('sub.madeOn', { date: fmtDt(s.created), recipe: s.recipeLabel })) +
     '</div>' +
-    '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+    '<div class="fs-meta" style="font-weight:600;margin-bottom:4px">' +
     esc(t('sub.howMade')) +
     '</div>' +
     '<table style="font-size:13px;border-collapse:collapse;margin-bottom:10px">' +
@@ -7664,18 +7721,18 @@ async function openSubstrateInfo(subId) {
   // that gap is exactly what somebody looking at a bad batch needs to see.
   if (s.ledger && s.ledger.length) {
     html +=
-      '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' +
+      '<div class="fs-meta" style="font-weight:600;margin-bottom:4px">' +
       esc(t('sub.booked')) +
-      '</div><div style="font-size:12px;color:var(--c-text-sec);margin-bottom:10px">' +
+      '</div><div class="fs-meta" style="color:var(--c-text-sec);margin-bottom:10px">' +
       s.ledger.map((l) => esc(_ohMatName(l.mat)) + ' ' + Math.abs(l.deltaKg).toFixed(2) + ' kg').join(' · ') +
       '</div>';
   }
-  html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' + esc(t('sub.drawnBy')) + '</div>';
+  html += '<div class="fs-meta" style="font-weight:600;margin-bottom:4px">' + esc(t('sub.drawnBy')) + '</div>';
   if (!s.drawn.length) {
-    html += '<div style="font-size:12px;color:var(--c-text-muted)">' + esc(t('sub.drawnNone')) + '</div>';
+    html += '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.drawnNone')) + '</div>';
   } else {
     html +=
-      '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+      '<table class="fs-meta" style="width:100%;border-collapse:collapse">' +
       s.drawn
         .map(
           (b) =>
@@ -7699,7 +7756,7 @@ async function openSubstrateInfo(subId) {
     '<div style="margin-top:10px;font-size:13px;font-weight:600">' +
     esc(t('sub.leftNow', { kg: s.remainingKg.toFixed(1), of: s.targetKg.toFixed(0) })) +
     '</div>';
-  if (s.notes) html += '<div style="margin-top:6px;font-size:12px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
+  if (s.notes) html += '<div class="fs-meta" style="margin-top:6px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
   body.innerHTML = html;
   // Two different mistakes need two different answers, and offering both at once
   // invites the wrong one. Nothing made from it yet: it can be removed cleanly,
@@ -8033,8 +8090,9 @@ function _openZonePicker(title, onPick, opts) {
   );
   if (_recents.length) {
     const hdr = document.createElement('div');
+    hdr.className = 'fs-xs';
     hdr.style.cssText =
-      'font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 10px 2px';
+      'font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 10px 2px';
     hdr.textContent = t('dash.recentDests');
     container.appendChild(hdr);
     _recents.forEach((loc) => {
@@ -8075,8 +8133,9 @@ function _openZonePicker(title, onPick, opts) {
       (z.racks || []).forEach((r) => {
         const rRow = document.createElement('button');
         rRow.type = 'button';
+        rRow.className = 'fs-meta';
         rRow.style.cssText =
-          'display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-size:12px;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
+          'display:block;width:100%;text-align:left;background:none;border:0;padding:5px 10px 5px 22px;font:inherit;cursor:pointer;font-family:monospace;border-radius:6px;color:var(--c-text-sec)';
         rRow.textContent = r.id.slice(z.id.length + 1) || r.id;
         rRow.title = r.id;
         rRow.addEventListener('mouseenter', () => {
@@ -8242,12 +8301,12 @@ function _groupBatchRows(rows) {
     const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : k;
     out +=
       '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
-      '<button type="button" data-action="batch-group" data-key="' +
+      '<button type="button" class="fs-meta" data-action="batch-group" data-key="' +
       esc(k) +
       '" aria-expanded="' +
       !closed +
-      '" style="width:100%;text-align:left;border:0;background:none;padding:6px 8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:var(--c-text-sec);display:flex;align-items:center;gap:6px">' +
-      '<span style="font-size:10px">' +
+      '" style="width:100%;text-align:left;border:0;background:none;padding:6px 8px;cursor:pointer;font-family:inherit;font-weight:600;color:var(--c-text-sec);display:flex;align-items:center;gap:6px">' +
+      '<span class="fs-micro">' +
       (closed ? '▸' : '▾') +
       '</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
       esc(label) +
@@ -8273,23 +8332,23 @@ function batchRowHtml(b) {
               ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
               : ''
           ].join('')
-        : '<span style="color:#ccc;font-size:11px">—</span>';
+        : '<span class="fs-xs" style="color:#ccc">—</span>';
       // Source is two things now: the culture on the batch row, and any grain
       // bags written off for it (recorded in the scan log, not on the batch).
       const _spawn = spawnSourceFor(b.batchId);
       const _srcParts = [];
       if (b.sourceId)
-        _srcParts.push(`<span style="font-family:monospace;font-size:10px;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
+        _srcParts.push(`<span class="fs-micro" style="font-family:monospace;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
       if (_spawn.length)
         _srcParts.push(
-          `<span style="font-family:monospace;font-size:10px;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
+          `<span class="fs-micro" style="font-family:monospace;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
         );
       const src = _srcParts.length
         ? _srcParts.join('<br>')
-        : '<span style="color:#ccc;font-size:11px">—</span>';
+        : '<span class="fs-xs" style="color:#ccc">—</span>';
       const note = b.notes
-        ? `<span style="font-size:11px;color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
-        : `<span style="font-size:11px;color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
+        ? `<span class="fs-xs" style="color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
+        : `<span class="fs-xs" style="color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
       const bst = (b.strainText || '').trim();
       const strainDisplay = bst ? esc(bst) : !b.strainId && b.strain ? esc(b.strain) : '—';
       const canMove = status !== 'DONE';
@@ -8300,7 +8359,7 @@ function batchRowHtml(b) {
       // card layout (styles.css "Batches table — mobile card mode").
       return {
         status,
-        html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id" style="font-family:monospace;font-size:10px"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.created)}</td><td data-mlabel="${esc(t('th.due'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
+        html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id fs-micro" style="font-family:monospace"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(b.created)}</td><td class="fs-micro" data-mlabel="${esc(t('th.due'))}" style="color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
       };
 }
 
@@ -8471,12 +8530,12 @@ function toggleBatchBags(batchId) {
         const bw = b.bagWeights ? b.bagWeights[bag] : null;
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
-        const wTag = showW ? `<span style="font-size:8px;color:#888;margin-left:1px">${esc(bw)}kg</span>` : '';
+        const wTag = showW ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(bw)}kg</span>` : '';
         // A button, not a span: this chip is the only way into the bag sheet
         // that does not involve a barcode, and the sheet is where moving,
         // harvesting, reporting and the history live. On a laptop it is the way in.
-        return `<button type="button" class="bag-open-chip" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-size:10px;font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px;cursor:pointer${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
-      ${esc(num)}${wTag} <span style="font-size:9px;color:${color};font-weight:600">${esc(loc)}</span>
+        return `<button type="button" class="bag-open-chip fs-micro" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px;cursor:pointer${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
+      ${esc(num)}${wTag} <span class="fs-floor" style="--fs-own:9px;color:${color};font-weight:600">${esc(loc)}</span>
     </button>`;
       })
       .join('') +
@@ -8551,7 +8610,7 @@ function confirmAddBags() {
   document.getElementById('ab-new-bags').innerHTML = newBags
     .map(
       (id) =>
-        '<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">' +
+        '<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">' +
         esc(id) +
         '</span>'
     )
@@ -8768,7 +8827,7 @@ function renderHarvests() {
     ? items
         .map(
           (h) =>
-            `<tr><td data-mlabel="${esc(t('th.date'))}" class="hv-date" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td data-mlabel="${esc(t('th.batch'))}" style="font-family:monospace;font-size:10px">${esc(h.batch) || '\u2014'}</td><td data-mlabel="${esc(t('th.bag'))}" style="font-family:monospace;font-size:10px">${esc(h.bag) || '\u2014'}</td><td data-mlabel="${esc(t('th.species'))}">${h.species ? spDot(h.species) + esc(h.species) : '\u2014'}</td><td data-mlabel="${esc(t('th.strain'))}">${esc(h.strain) || '\u2014'}</td><td data-mlabel="${esc(t('th.flush'))}">${h.flush || 1}</td><td data-mlabel="${esc(t('th.grams'))}" class="hv-grams" style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`
+            `<tr><td data-mlabel="${esc(t('th.date'))}" class="hv-date fs-micro" style="color:var(--c-text-muted)">${fmtDtTime(h.time)}</td><td class="fs-micro" data-mlabel="${esc(t('th.batch'))}" style="font-family:monospace">${esc(h.batch) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.bag'))}" style="font-family:monospace">${esc(h.bag) || '\u2014'}</td><td data-mlabel="${esc(t('th.species'))}">${h.species ? spDot(h.species) + esc(h.species) : '\u2014'}</td><td data-mlabel="${esc(t('th.strain'))}">${esc(h.strain) || '\u2014'}</td><td data-mlabel="${esc(t('th.flush'))}">${h.flush || 1}</td><td data-mlabel="${esc(t('th.grams'))}" class="hv-grams" style="font-weight:500;color:var(--c-amber-dark)">${h.grams}g</td></tr>`
         )
         .join('')
     : '<tr><td colspan="7" class="empty">' + t('harvest.noHarvests') + '</td></tr>';
@@ -8888,7 +8947,7 @@ function renderHarvests() {
     .map((id) => {
       const d = byBatch[id],
         pct = Math.round((d.total / max) * 100);
-      return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${Object.entries(
+      return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span class="fs-meta" style="font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div class="fs-micro" style="color:var(--c-text-muted);margin-top:2px">${Object.entries(
         d.flushes
       )
         .map(([f, g]) => `Flush ${f}: ${g}g`)
@@ -8986,7 +9045,7 @@ function renderTeam() {
   el.innerHTML = teamMembers
     .map(
       (m) =>
-        `<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role ? `<span style="font-size:11px;color:var(--c-text-muted)">${esc(m.role)}</span>` : ''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`
+        `<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role ? `<span class="fs-xs" style="color:var(--c-text-muted)">${esc(m.role)}</span>` : ''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`
     )
     .join('');
 }
@@ -9050,17 +9109,17 @@ async function loadCaldavAppPasswords() {
     const r = await authFetch('/api/caldav/app-passwords').then((x) => x.json());
     const items = (r && r.items) || [];
     if (!items.length) {
-      box.innerHTML = `<div style="font-size:12px;color:var(--c-text-muted)">${esc(t('caldav.appPwNone'))}</div>`;
+      box.innerHTML = `<div class="fs-meta" style="color:var(--c-text-muted)">${esc(t('caldav.appPwNone'))}</div>`;
       return;
     }
     const head = `<tr style="text-align:left;color:var(--c-text-muted)"><th style="padding:4px">${esc(t('caldav.appPwDevice'))}</th><th style="padding:4px">${esc(t('caldav.appPwCreated'))}</th><th style="padding:4px">${esc(t('caldav.appPwLastUsed'))}</th><th style="padding:4px"></th></tr>`;
     const rows = items
       .map(
         (i) =>
-          `<tr><td style="padding:4px">${esc(i.label)}</td><td style="padding:4px">${esc(fmtDt(i.created))}</td><td style="padding:4px">${i.lastUsedAt ? esc(fmtDt(i.lastUsedAt)) : '—'}</td><td style="padding:4px;text-align:right"><button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="caldav-apppw-revoke" data-id="${esc(i.id)}">${esc(t('caldav.appPwRevoke'))}</button></td></tr>`
+          `<tr><td style="padding:4px">${esc(i.label)}</td><td style="padding:4px">${esc(fmtDt(i.created))}</td><td style="padding:4px">${i.lastUsedAt ? esc(fmtDt(i.lastUsedAt)) : '—'}</td><td style="padding:4px;text-align:right"><button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="caldav-apppw-revoke" data-id="${esc(i.id)}">${esc(t('caldav.appPwRevoke'))}</button></td></tr>`
       )
       .join('');
-    box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">${head}${rows}</table>`;
+    box.innerHTML = `<table class="fs-meta" style="width:100%;border-collapse:collapse">${head}${rows}</table>`;
   } catch (e) {
     box.textContent = t('common.error');
   }
@@ -9521,7 +9580,7 @@ function renderHarvestPackSizes(chosen) {
   box.innerHTML = all
     .map((g) => {
       const feld =
-        '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin:0;font-size:12px">' +
+        '<label class="fs-meta" style="display:flex;align-items:center;gap:4px;cursor:pointer;margin:0">' +
         '<input type="checkbox" class="hf-pack" value="' +
         g +
         '" style="width:auto"' +
@@ -9737,7 +9796,8 @@ function harvestReleaseRemoveBtn(row) {
 function renderHarvestReleases() {
   const body = document.getElementById('harvestrelease-body');
   if (!harvestReleaseRows.length) {
-    body.innerHTML = '<tr><td colspan="7" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
+    body.innerHTML =
+      '<tr><td class="empty" colspan="7" style="color:var(--c-text-muted)">' + esc(t('harvestFeed.noRelease')) + '</td></tr>';
     updateHarvestReleasePending();
     // Also here: bookings that match no release row are exactly what an empty
     // table needs to mention, not what it may leave out.
@@ -9760,28 +9820,36 @@ function renderHarvestReleases() {
         i +
         '"' +
         (touched ? ' style="background:var(--c-amber-light)"' : '') +
-        '><td' +
+        '><td data-mlabel="' +
+        esc(t('harvestFeed.colSpecies')) +
+        '"' +
         durch +
         '>' +
         esc(row.species) +
-        '</td><td style="color:var(--c-text-muted)">' +
+        '</td><td data-mlabel="' +
+        esc(t('harvestFeed.colHarvested')) +
+        '" style="color:var(--c-text-muted)">' +
         harvested +
         (row.removing
           ? ' <span style="color:var(--c-amber-dark)">(' + esc(t('harvestFeed.markedRemoved')) + ')</span>'
           : row.expired
             ? ' <span style="color:var(--c-red-dark)">(' + esc(t('harvestFeed.expired')) + ')</span>'
             : '') +
-        '</td><td><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
+        '</td><td data-mlabel="' +
+        esc(t('harvestFeed.colRelease')) +
+        '"><input type="number" class="hr-kg" step="0.01" min="0" style="width:90px" value="' +
         esc(row.kg) +
         '"' +
         (row.removing ? ' disabled' : '') +
         '></td>' +
         promisedCells(row) +
-        '<td><input type="date" class="hr-until" style="width:150px" value="' +
+        '<td data-mlabel="' +
+        esc(t('harvestFeed.colUntil')) +
+        '"><input type="date" class="hr-until" style="width:150px" value="' +
         esc(row.until) +
         '"' +
         (row.removing ? ' disabled' : '') +
-        '></td><td>' +
+        '></td><td class="hr-actions">' +
         harvestReleaseRemoveBtn(row) +
         '</td></tr>'
       );
@@ -9832,15 +9900,20 @@ function promisedCells(row) {
   const still = Number(harvestReleasePromised[row.species]) || 0;
   const released = Number(row.wasKg) * 1000;
   const muted = 'color:var(--c-text-muted)';
-  if (!(released > 0) && !still) return '<td style="' + muted + '">—</td><td style="' + muted + '">—</td>';
+  const lbl = (k) => ' data-mlabel="' + esc(t(k)) + '"';
+  if (!(released > 0) && !still)
+    return (
+      '<td' + lbl('harvestFeed.colPromised') + ' style="' + muted + '">—</td>' +
+      '<td' + lbl('harvestFeed.colFree') + ' style="' + muted + '">—</td>'
+    );
   const frei = released - still;
   // Negative is real and not an arithmetic slip: more is promised than was set
   // aside. It reads as a warning rather than a quantity, because there is
   // nothing left to hand out and somebody has to decide what happens.
   const freiFarbe = frei > 0 ? '' : 'color:var(--c-red-dark);font-weight:600';
   return (
-    '<td style="' + muted + '">' + (still ? (still / 1000).toFixed(2) + ' kg' : '—') + '</td>' +
-    '<td style="' + freiFarbe + '">' + (frei / 1000).toFixed(2) + ' kg</td>'
+    '<td' + lbl('harvestFeed.colPromised') + ' style="' + muted + '">' + (still ? (still / 1000).toFixed(2) + ' kg' : '—') + '</td>' +
+    '<td' + lbl('harvestFeed.colFree') + ' style="' + freiFarbe + '">' + (frei / 1000).toFixed(2) + ' kg</td>'
   );
 }
 
@@ -10318,7 +10391,7 @@ function renderCameraStats(s) {
   }
   const cell = (label, value) =>
     `<div class="card" style="padding:10px;margin:0">
-      <div style="font-size:11px;color:var(--c-text-muted)">${esc(label)}</div>
+      <div class="fs-xs" style="color:var(--c-text-muted)">${esc(label)}</div>
       <div style="font-size:18px;font-weight:600;color:var(--c-text)">${esc(String(value))}</div>
     </div>`;
   el.innerHTML =
@@ -10348,8 +10421,8 @@ function renderCameraList(list) {
       return `<div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <div style="flex:1;min-width:200px">
             <div style="font-weight:600">${esc(c.name)} ${stateBadge}</div>
-            <div style="font-size:11px;color:var(--c-text-muted);font-family:monospace;word-break:break-all">${esc(masked)}</div>
-            <div style="font-size:11px;color:var(--c-text-muted)">${esc(t('cam.fieldZone'))}: ${zone}</div>
+            <div class="fs-xs" style="color:var(--c-text-muted);font-family:monospace;word-break:break-all">${esc(masked)}</div>
+            <div class="fs-xs" style="color:var(--c-text-muted)">${esc(t('cam.fieldZone'))}: ${zone}</div>
           </div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-sm" data-cam-edit="${c.id}" data-i18n="cam.edit">Edit</button>
@@ -10385,7 +10458,7 @@ function renderCameraCalibForm(c) {
     const step = kind === 'int' ? '1' : '0.01';
     const val = c[key] != null ? c[key] : '';
     return `<div>
-        <label style="font-size:12px;font-weight:600;display:block" data-i18n="${label}">${esc(key)}</label>
+        <label class="fs-meta" style="font-weight:600;display:block" data-i18n="${label}">${esc(key)}</label>
         <input type="number" step="${step}" min="0" data-cam-calib="${key}" value="${esc(String(val))}" style="width:100%" />
       </div>`;
   }).join('');
@@ -10447,7 +10520,7 @@ function renderCameraFlags(flags) {
     return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--c-border)">
         <div style="flex:1;min-width:180px">
           <div><b>${esc(f.bagId)}</b> <span style="color:var(--c-text-muted)">${esc(f.batchId || '')}</span></div>
-          <div style="font-size:11px;color:var(--c-text-muted)">${esc(ago)}${extra ? ' · ' + extra : ''}</div>
+          <div class="fs-xs" style="color:var(--c-text-muted)">${esc(ago)}${extra ? ' · ' + extra : ''}</div>
         </div>
         <button class="btn btn-sm" data-cam-resolve="${kind}:${f.id}" data-i18n="cam.resolve">Resolve</button>
       </div>`;
@@ -10912,7 +10985,7 @@ async function runMcpDiagnostics() {
       return;
     }
     const d = await r.json();
-    let html = '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    let html = '<table class="fs-meta" style="width:100%;border-collapse:collapse">';
     const row = (label, val, color) =>
       '<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;vertical-align:top">' +
       label +
@@ -10929,7 +11002,7 @@ async function runMcpDiagnostics() {
     html += row('Protocol', esc(d.protocol));
     html += row(
       'Base URL',
-      '<code style="font-size:11px;background:#f1f5f9;padding:1px 4px;border-radius:3px">' +
+      '<code class="fs-xs" style="background:#f1f5f9;padding:1px 4px;border-radius:3px">' +
         esc(d.connectorUrl) +
         '</code>'
     );
@@ -10939,7 +11012,7 @@ async function runMcpDiagnostics() {
     html += '</table>';
     if (d.hint)
       html +=
-        '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;font-size:11px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">' +
+        '<div class="fs-xs" style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--c-primary-light);border:1px solid var(--c-green-border);color:var(--c-green-dark)">' +
         esc(d.hint) +
         '</div>';
     el.innerHTML = html;
@@ -10966,11 +11039,11 @@ async function loadOAuthClients() {
     const list = document.getElementById('oauth-client-list');
     if (!list) return;
     if (!data.clients || data.clients.length === 0) {
-      list.innerHTML = '<p style="color:var(--c-text-muted);font-size:12px">' + t('mcp.noClients') + '</p>';
+      list.innerHTML = '<p class="fs-meta" style="color:var(--c-text-muted)">' + t('mcp.noClients') + '</p>';
       return;
     }
     list.innerHTML =
-      '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' +
+      '<table class="fs-meta" style="width:100%;border-collapse:collapse"><thead><tr>' +
       '<th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">' +
       t('mcp.clientName') +
       '</th>' +
@@ -10999,7 +11072,7 @@ async function loadOAuthClients() {
             '<td style="padding:6px;text-align:center">' +
             c.activeSessions +
             '</td>' +
-            '<td style="padding:6px"><button class="btn btn-sm" style="font-size:11px;padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="' +
+            '<td style="padding:6px"><button class="btn btn-sm fs-xs" style="padding:2px 8px;color:var(--c-red-dark)" data-oauth-action="delete" data-client-id="' +
             esc(c.clientId) +
             '" data-auto="' +
             (c.autoRegistered ? 1 : 0) +
@@ -11101,7 +11174,7 @@ function renderLog() {
     ? items
         .map((e) => {
           const isRecent = now - new Date(e.time).getTime() < h24;
-          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time" style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td data-mlabel="${esc(t('settings.user'))}" style="font-size:11px">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace;font-size:10px">${esc(e.batch) || '\u2014'}</td><td data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace;font-size:10px">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs lg-del" style="padding:2px 6px;font-size:10px" data-time="' + esc(e.time) + '" data-batch="' + esc(e.batch || '') + '" data-action="' + esc(e.action) + '" data-bag="' + esc(e.bag || '') + '" title="' + esc(t('common.delete')) + '">✕</button>' : ''}</td></tr>`;
+          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time fs-micro" style="color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td class="fs-xs" data-mlabel="${esc(t('settings.user'))}">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td class="fs-micro" data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace">${esc(e.batch) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs lg-del fs-micro" style="padding:2px 6px" data-time="' + esc(e.time) + '" data-batch="' + esc(e.batch || '') + '" data-action="' + esc(e.action) + '" data-bag="' + esc(e.bag || '') + '" title="' + esc(t('common.delete')) + '">✕</button>' : ''}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="9" class="empty">' + t('settings.noScans') + '</td></tr>';
@@ -11217,25 +11290,25 @@ function renderInvStock() {
       const estNote = isGrain
         ? t('inv.grainBagsEst', { n: bags, kg: bagKg })
         : t('inv.blocksEst', { n: '<strong>' + bags + '</strong>', kg: bagKg }) +
-          ' <span style="font-size:10px;color:var(--c-text-muted)">' +
+          ' <span class="fs-micro" style="color:var(--c-text-muted)">' +
           t('inv.avgEstimate') +
           '</span>';
       return `<div style="background:${MAT_BG[mat]};border:1px solid ${low ? 'var(--c-red)' : MAT_BORDER[mat]};border-radius:10px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
-        ${low ? `<span style="font-size:10px;background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>` : ''}
+        <div class="fs-meta" style="font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
+        ${low ? `<span class="fs-micro" style="background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>` : ''}
       </div>
       <div style="font-size:26px;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:var(--c-text-muted)">kg</span></div>
       <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
         <div style="height:100%;border-radius:3px;background:${low ? 'var(--c-red)' : MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
       </div>
-      <div style="font-size:12px;color:var(--c-text-sec);line-height:1.6">${estNote}</div>
-      ${thresh.minKg > 0 ? `<div style="font-size:11px;color:${low ? 'var(--c-red-dark)' : 'var(--c-text-muted)'};margin-top:2px">${t('inv.alertBelow', { n: thresh.minKg })}</div>` : ''}
-      <button class="btn btn-sm" onclick="openStab('inv','delivery')" style="margin-top:8px;font-size:11px">${t('inv.logDelivery')}</button>
+      <div class="fs-meta" style="color:var(--c-text-sec);line-height:1.6">${estNote}</div>
+      ${thresh.minKg > 0 ? `<div class="fs-xs" style="color:${low ? 'var(--c-red-dark)' : 'var(--c-text-muted)'};margin-top:2px">${t('inv.alertBelow', { n: thresh.minKg })}</div>` : ''}
+      <button class="btn btn-sm fs-xs" onclick="openStab('inv','delivery')" style="margin-top:8px">${t('inv.logDelivery')}</button>
       ${(() => {
         const sups = getSuppliersForMat(mat);
         if (!sups.length) return '';
-        return `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);font-size:11px;color:var(--c-text-sec)">
+        return `<div class="fs-xs" style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);color:var(--c-text-sec)">
           <span style="font-weight:600;color:${low ? 'var(--c-red-dark)' : 'var(--c-text-muted)'}">${low ? t('inv.reorderFrom') : t('inv.suppliers')}:</span>
           ${sups.map((s) => (safeHref(s.url) ? `<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);margin-left:4px">${esc(s.name)}</a>` : `<span style="margin-left:4px">${esc(s.name)}</span>`)).join(',')}
         </div>`;
@@ -11263,8 +11336,8 @@ function renderThresholds() {
         return `<tr>
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
-        <td><input type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;font-size:12px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
-        <td style="font-size:12px;color:var(--c-text-sec)">~${bags} bags <span style="font-size:10px;color:var(--c-text-muted)">(avg)</span></td>
+        <td><input class="fs-meta" type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
+        <td class="fs-meta" style="color:var(--c-text-sec)">~${bags} bags <span class="fs-micro" style="color:var(--c-text-muted)">(avg)</span></td>
       </tr>`;
       })
       .join('')}
@@ -11273,27 +11346,27 @@ function renderThresholds() {
 
   // Average composition settings
   const compHtml = `<div style="background:var(--c-bg);border-radius:8px;padding:12px">
-    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
+    <div class="fs-xs" style="font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">
       ${t('inv.avgCompTitle')}
     </div>
-    <p style="font-size:12px;color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
+    <p class="fs-meta" style="color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
       ${t('inv.avgCompDesc')}
     </p>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
-      <div><label style="font-size:11px">${t('inv.hwPct')}</label>
+    <div class="g6" style="gap:8px">
+      <div><label class="fs-xs">${t('inv.hwPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
-      <div><label style="font-size:11px">${t('inv.wbPct')}</label>
+      <div><label class="fs-xs">${t('inv.wbPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.wbPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
-      <div><label style="font-size:11px">${t('inv.waterPct')}</label>
+      <div><label class="fs-xs">${t('inv.waterPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.rhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
-      <div><label style="font-size:11px">${t('inv.blockWeight')}</label>
+      <div><label class="fs-xs">${t('inv.blockWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
-      <div><label style="font-size:11px">${t('inv.grainBagWeight')}</label>
+      <div><label class="fs-xs">${t('inv.grainBagWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
-      <div><label style="font-size:11px">${t('inv.grainWaterPct')}</label>
+      <div><label class="fs-xs">${t('inv.grainWaterPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.grainRhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainRhPct',this.value)" /></div>
     </div>
-    <div style="margin-top:8px;font-size:11px;color:var(--c-text-muted)">
+    <div class="fs-xs" style="margin-top:8px;color:var(--c-text-muted)">
       With these settings: 1 × ${c.bagKg}kg block uses ~${(mtDryKg(c.bagKg, c.rhPct) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(mtDryKg(c.bagKg, c.rhPct) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(mtDryKg(c.grainBagKg, c.grainRhPct)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
     </div>
   </div>`;
@@ -11493,12 +11566,12 @@ function renderInvLog() {
   body.innerHTML = rows
     .map(
       (e) => `<tr>
-    <td style="font-size:10px;color:var(--c-text-muted)">${fmtDtTime(e.time)}</td>
+    <td class="fs-micro" style="color:var(--c-text-muted)">${fmtDtTime(e.time)}</td>
     <td style="color:${MAT_COLORS[e.mat]};font-weight:500">${MAT_LABELS[e.mat]}</td>
     <td style="font-weight:600;color:${e.deltaKg < 0 ? 'var(--c-red-dark)' : 'var(--c-green-dark)'}">${e.deltaKg > 0 ? '+' : ''}${e.deltaKg.toFixed(2)} kg</td>
-    <td style="font-size:11px">${(e.running || 0).toFixed(1)} kg</td>
+    <td class="fs-xs">${(e.running || 0).toFixed(1)} kg</td>
     <td><span class="badge ${e.type === 'delivery' ? 'b-add' : e.type === 'adjustment' ? 'b-move' : 'b-harvest'}">${esc(e.type)}</span></td>
-    <td style="font-size:11px;color:var(--c-text-sec)">${esc(e.ref) || '—'}</td>
+    <td class="fs-xs" style="color:var(--c-text-sec)">${esc(e.ref) || '—'}</td>
   </tr>`
     )
     .join('');
@@ -11586,19 +11659,19 @@ function renderSuppliers() {
       const list = grouped[mat];
       if (!list.length) return '';
       return `<div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;color:${MAT_COLORS[mat]};margin-bottom:6px">${MAT_LABELS[mat]}</div>
+      <div class="fs-meta" style="font-weight:600;color:${MAT_COLORS[mat]};margin-bottom:6px">${MAT_LABELS[mat]}</div>
       <div style="overflow-x:auto"><table>
         <thead><tr><th>${t('inv.supplierName')}</th><th>${t('inv.supplierUrl')}</th><th>${t('inv.supplierPhone')}</th><th>${t('inv.supplierNotes')}</th><th></th></tr></thead>
         <tbody>${list
           .map(
             (s) => `<tr>
           <td style="font-weight:500">${esc(s.name)}</td>
-          <td>${safeHref(s.url) ? `<a href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue);font-size:12px">${esc(s.url)}</a>` : esc(s.url) || '-'}</td>
-          <td style="font-size:12px">${s.phone ? esc(s.phone) : '-'}</td>
-          <td style="font-size:12px;color:var(--c-text-sec)">${s.notes ? esc(s.notes) : '-'}</td>
+          <td>${safeHref(s.url) ? `<a class="fs-meta" href="${safeHref(s.url)}" target="_blank" rel="noopener" style="color:var(--c-blue)">${esc(s.url)}</a>` : esc(s.url) || '-'}</td>
+          <td class="fs-meta">${s.phone ? esc(s.phone) : '-'}</td>
+          <td class="fs-meta" style="color:var(--c-text-sec)">${s.notes ? esc(s.notes) : '-'}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-sm" onclick="editSupplier(${s.id})" style="font-size:11px">${t('inv.editSupplier')}</button>
-            <button class="btn btn-sm" onclick="removeSupplier(${s.id})" style="font-size:11px;color:var(--c-red-dark)">${t('inv.deleteSupplier')}</button>
+            <button class="btn btn-sm fs-xs" onclick="editSupplier(${s.id})">${t('inv.editSupplier')}</button>
+            <button class="btn btn-sm fs-xs" onclick="removeSupplier(${s.id})" style="color:var(--c-red-dark)">${t('inv.deleteSupplier')}</button>
           </td>
         </tr>`
           )
@@ -11684,15 +11757,15 @@ function renderPickupLocations() {
     <tbody>${pickupLocations
       .map(
         (l) => `<tr${l.active ? '' : ' style="opacity:.55"'}>
-      <td style="font-weight:500">${esc(l.name)}${l.active ? '' : ` <span style="font-weight:400;font-size:11px;color:var(--c-text-muted)">(${t('pickupLoc.retired')})</span>`}</td>
-      <td style="font-size:12px;color:var(--c-text-sec)">${l.address ? esc(l.address) : '-'}</td>
-      <td style="font-size:12px">${l.sortOrder}</td>
+      <td style="font-weight:500">${esc(l.name)}${l.active ? '' : ` <span class="fs-xs" style="font-weight:400;color:var(--c-text-muted)">(${t('pickupLoc.retired')})</span>`}</td>
+      <td class="fs-meta" style="color:var(--c-text-sec)">${l.address ? esc(l.address) : '-'}</td>
+      <td class="fs-meta">${l.sortOrder}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm" data-act="edit" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.edit')}</button>
+        <button class="btn btn-sm fs-xs" data-act="edit" data-id="${l.id}">${t('pickupLoc.edit')}</button>
         ${
           l.active
-            ? `<button class="btn btn-sm" data-act="retire" data-id="${l.id}" style="font-size:11px;color:var(--c-red-dark)">${t('pickupLoc.retire')}</button>`
-            : `<button class="btn btn-sm" data-act="reactivate" data-id="${l.id}" style="font-size:11px">${t('pickupLoc.reactivate')}</button>`
+            ? `<button class="btn btn-sm fs-xs" data-act="retire" data-id="${l.id}" style="color:var(--c-red-dark)">${t('pickupLoc.retire')}</button>`
+            : `<button class="btn btn-sm fs-xs" data-act="reactivate" data-id="${l.id}">${t('pickupLoc.reactivate')}</button>`
         }
       </td>
     </tr>`
@@ -11709,7 +11782,7 @@ function renderPickupLocations() {
 function editPickupLocation(id) {
   const existing = id ? pickupLocations.find((l) => l.id === id) : null;
   const hint = (key) =>
-    `<div style="font-size:11px;color:var(--c-text-muted);margin-top:2px;line-height:1.5">${esc(t(key))}</div>`;
+    `<div class="fs-xs" style="color:var(--c-text-muted);margin-top:2px;line-height:1.5">${esc(t(key))}</div>`;
   const html = `<div style="display:flex;flex-direction:column;gap:10px">
     <div><label>${t('pickupLoc.name')}</label><input type="text" id="ploc-name" maxlength="120" value="${existing ? esc(existing.name) : ''}" placeholder="${esc(t('pickupLoc.namePh'))}" />${hint('pickupLoc.nameHint')}</div>
     <div><label>${t('pickupLoc.address')}</label><input type="text" id="ploc-address" maxlength="200" value="${existing && existing.address ? esc(existing.address) : ''}" placeholder="${esc(t('pickupLoc.addressPh'))}" />${hint('pickupLoc.addressHint')}</div>
@@ -11951,25 +12024,25 @@ function renderZones() {
             return `<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags === 0 ? `<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>` : ''}</span>`;
           })
           .join('')
-      : '<span style="color:var(--c-text-muted);font-size:11px">' + t('zones.noRacks') + '</span>';
+      : '<span class="fs-xs" style="color:var(--c-text-muted)">' + t('zones.noRacks') + '</span>';
     return `<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
         <span class="zone-row-name">${esc(z.name)}</span>
         <span class="badge">${esc(t(ROLE_LABELS[z.role]) || z.role)}</span>
-        <span style="font-size:11px;color:var(--c-text-muted)">${z.maxCapacity ? bagCount + ' / ' + z.maxCapacity + ' Bags' : tp('dash.bags', bagCount)}</span>
+        <span class="fs-xs" style="color:var(--c-text-muted)">${z.maxCapacity ? bagCount + ' / ' + z.maxCapacity + ' Bags' : tp('dash.bags', bagCount)}</span>
         ${directCount > 0 ? `<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags', { count: directCount }))}</span>` : ''}
-        ${directCount > 0 && z.racks.length ? `<button class="btn btn-sm" data-action="bulk-move" data-zone="${esc(z.id)}" style="font-size:10px;color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>` : ''}
+        ${directCount > 0 && z.racks.length ? `<button class="btn btn-sm fs-micro" data-action="bulk-move" data-zone="${esc(z.id)}" style="color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>` : ''}
         <span style="flex:1"></span>
-        <button class="btn btn-sm" data-action="rename-zone" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('batch.zones.rename'))}</button>
-        <button class="btn btn-sm" data-action="zone-capacity" data-zone="${esc(z.id)}" title="${esc(z.maxCapacity ? z.name + ': ' + bagCount + ' / ' + z.maxCapacity : t('zones.capacityNone'))}" style="font-size:11px">${esc(t('zones.capacity'))}</button>
-        <button class="btn btn-sm" data-action="add-rack" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.addRack'))}</button>
-        <button class="btn btn-sm" data-action="toggle-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.showQr'))}</button>
-        <button class="btn btn-sm" data-action="print-zone-qr" data-zone="${esc(z.id)}" style="font-size:11px">${esc(t('zones.printQr'))}</button>
+        <button class="btn btn-sm fs-xs" data-action="rename-zone" data-zone="${esc(z.id)}">${esc(t('batch.zones.rename'))}</button>
+        <button class="btn btn-sm fs-xs" data-action="zone-capacity" data-zone="${esc(z.id)}" title="${esc(z.maxCapacity ? z.name + ': ' + bagCount + ' / ' + z.maxCapacity : t('zones.capacityNone'))}">${esc(t('zones.capacity'))}</button>
+        <button class="btn btn-sm fs-xs" data-action="add-rack" data-zone="${esc(z.id)}">${esc(t('zones.addRack'))}</button>
+        <button class="btn btn-sm fs-xs" data-action="toggle-qr" data-zone="${esc(z.id)}">${esc(t('zones.showQr'))}</button>
+        <button class="btn btn-sm fs-xs" data-action="print-zone-qr" data-zone="${esc(z.id)}">${esc(t('zones.printQr'))}</button>
         ${
           bagCount === 0
-            ? `<button class="btn btn-sm btn-r" data-action="del-zone" data-zone="${esc(z.id)}" style="font-size:11px">${t('zones.delete')}</button>`
-            : `<button class="btn btn-sm btn-r" disabled title="${esc(t('zones.hasBags', { count: bagCount }))}" style="font-size:11px;opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`
+            ? `<button class="btn btn-sm btn-r fs-xs" data-action="del-zone" data-zone="${esc(z.id)}">${t('zones.delete')}</button>`
+            : `<button class="btn btn-sm btn-r fs-xs" disabled title="${esc(t('zones.hasBags', { count: bagCount }))}" style="opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`
         }
       </div>
       <div class="zone-row-racks">${rackHtml}</div>
@@ -12329,7 +12402,7 @@ function bulkMoveToRack(zoneId) {
   grid.innerHTML = z.racks
     .map((r) => {
       const rBags = Object.keys(getRackBags(r.id)).length;
-      return `<button class="btn btn-sm" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="font-size:12px;padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
+      return `<button class="btn btn-sm fs-meta" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
     })
     .join('');
   m.classList.add('open');
@@ -12438,7 +12511,8 @@ async function printQrSheet(items, title) {
       cell.appendChild(img);
     }
     const lbl = document.createElement('div');
-    lbl.style.cssText = 'font-size:10px;font-weight:bold;font-family:Arial,sans-serif';
+    lbl.className = 'fs-micro';
+    lbl.style.cssText = 'font-weight:bold;font-family:Arial,sans-serif';
     lbl.textContent = val;
     cell.appendChild(lbl);
     row.appendChild(cell);
@@ -12510,10 +12584,10 @@ function renderStrains() {
         : '';
       return `<tr>
       <td style="font-weight:500">${esc(ms.name)}</td>
-      <td><span style="font-family:monospace;font-size:12px;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
-      <td style="font-size:12px;color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
-      <td style="font-size:12px;color:var(--c-text-sec)">${msRecipeSummary(ms)}</td>
-      <td style="font-size:12px;color:var(--c-text-sec)">${esc(usageText)}</td>
+      <td><span class="fs-meta" style="font-family:monospace;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
+      <td class="fs-meta" style="color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
+      <td class="fs-meta" style="color:var(--c-text-sec)">${msRecipeSummary(ms)}</td>
+      <td class="fs-meta" style="color:var(--c-text-sec)">${esc(usageText)}</td>
       <td style="white-space:nowrap">
         ${chargeBtn}<button class="btn btn-sm" onclick="msQuickLabor(${ms.id})" style="padding:2px 7px" title="${t('strains.addLaborHint')}">${t('strains.addLabor')}</button>
         <button class="btn btn-sm" onclick="editMStrain(${ms.id})" style="padding:2px 7px">${t('strains.editBtn')}</button>
@@ -12848,7 +12922,7 @@ function msRecipeSummary(ms) {
     if (ms.recBagKg) parts.push((ms.recBagKg || 0) + ' kg');
   }
   if ((type === 'allinone' || type === 'grain') && ms.recGrainKg) parts.push('Grain ' + ms.recGrainKg + ' kg');
-  return '<span style="font-size:11px">' + parts.join(' · ') + '</span>';
+  return '<span class="fs-xs">' + parts.join(' · ') + '</span>';
 }
 function msRecipeSummaryText(ms) {
   // Plain-text variant of msRecipeSummary for the quick-create modal subtitle.
@@ -13377,7 +13451,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id" style="font-family:monospace;font-size:11px;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td data-mlabel="${esc(t('th.created'))}" style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td data-mlabel="${esc(t('th.notes'))}" style="font-size:11px;color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;font-size:11px;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -13595,7 +13669,7 @@ function logLabWork() {
   document.getElementById('lw-ids').innerHTML = lastCreatedCultureIds
     .map(
       (id) =>
-        `<span style="font-size:10px;font-family:monospace;background:var(--c-card);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
+        `<span class="fs-micro" style="font-family:monospace;background:var(--c-card);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
     )
     .join('');
   document.getElementById('lw-result').style.display = 'block';
@@ -13608,7 +13682,7 @@ function renderLabLog() {
         .map((c) => {
           const name = c.strainName || c.species || '';
           const kz = c.strainKuerzel || c.strain || '';
-          return `<tr><td style="font-size:10px;color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td style="font-family:monospace;font-size:11px">${esc(c.id)}</td><td style="font-family:monospace;font-size:10px;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td>${spDot(name)}${esc(name)}${kz ? ' / ' + esc(kz) : ''}</td></tr>`;
+          return `<tr><td class="fs-micro" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td>${ctBadge(c.type)}</td><td class="fs-xs" style="font-family:monospace">${esc(c.id)}</td><td class="fs-micro" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td>${spDot(name)}${esc(name)}${kz ? ' / ' + esc(kz) : ''}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="5" class="empty">' + t('lab.noLabWork') + '</td></tr>';
@@ -13709,7 +13783,7 @@ function gsPreview() {
   const enough = avail >= totalDry;
   const hydrationNote =
     grainRh > 0
-      ? ` <span style="font-size:11px;color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
+      ? ` <span class="fs-xs" style="color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
       : '';
   el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
   el.style.display = 'block';
@@ -13850,7 +13924,7 @@ function createGrainBatch() {
     document.getElementById('gs-bags').innerHTML = bagIds
       .map(
         (b) =>
-          `<span style="font-size:10px;font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
       )
       .join('');
     document.getElementById('gs-result').style.display = 'block';
@@ -13993,7 +14067,7 @@ function treeHtml(node, depth) {
     ? `<div style="margin-left:${depth ? 20 : 0}px;padding-left:16px;border-left:2px solid var(--c-border);margin-top:5px">${node.children.map((c) => treeHtml(c, depth + 1)).join('')}</div>`
     : '';
   const harv = node.harvest > 0 ? `<span class="badge b-harvest" style="margin-left:4px">${node.harvest}g</span>` : '';
-  return `<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type] || '#f5f4f0'};border:1px solid ${NODE_BD[node.type] || '#e5e3dd'};border-radius:7px;padding:5px 10px"><span style="font-size:10px;font-weight:600;color:var(--c-text-sec)">${esc(node.type)}</span><span style="font-family:monospace;font-size:12px;font-weight:600">${esc(node.id)}</span><span style="font-size:11px;color:var(--c-text-sec)">${esc(node.species) || ''}${node.strain ? ' / ' + esc(node.strain) : ''}</span><span style="font-size:10px;color:var(--c-text-muted)">${esc(node.status) || ''}</span>${harv}<span style="font-size:10px;color:var(--c-text-muted)">${node.created ? fmtDt(node.created) : ''}</span></div>${ch}</div>`;
+  return `<div style="margin-bottom:5px"><div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;background:${NODE_BG[node.type] || '#f5f4f0'};border:1px solid ${NODE_BD[node.type] || '#e5e3dd'};border-radius:7px;padding:5px 10px"><span class="fs-micro" style="font-weight:600;color:var(--c-text-sec)">${esc(node.type)}</span><span class="fs-meta" style="font-family:monospace;font-weight:600">${esc(node.id)}</span><span class="fs-xs" style="color:var(--c-text-sec)">${esc(node.species) || ''}${node.strain ? ' / ' + esc(node.strain) : ''}</span><span class="fs-micro" style="color:var(--c-text-muted)">${esc(node.status) || ''}</span>${harv}<span class="fs-micro" style="color:var(--c-text-muted)">${node.created ? fmtDt(node.created) : ''}</span></div>${ch}</div>`;
 }
 function renderLineage() {
   const val = document.getElementById('lineage-sel').value,
@@ -14045,7 +14119,7 @@ function openBagInfo(bagId, batchId, batch) {
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
+    <div class="fs-xs" style="font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags
         .map((bag) => {
@@ -14053,13 +14127,13 @@ function openBagInfo(bagId, batchId, batch) {
           const bagNum = bag.split('-').pop();
           const bagLast = lastByBag.get(bag.toUpperCase());
           const loc = !bagLast ? '—' : bagLast.action === 'REMOVE' ? '✗' : bagLast.to || '?';
-          return `<span style="font-size:11px;font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${esc(loc)}">
-          ${esc(bagNum)} <span style="font-size:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${esc(loc)}</span>
+          return `<span class="fs-xs" style="font-family:monospace;padding:3px 8px;border-radius:5px;background:${isThis ? 'var(--c-text)' : 'var(--c-bg)'};color:${isThis ? '#fff' : 'var(--c-text-sec)'};border:1px solid ${isThis ? 'var(--c-text)' : 'var(--c-border)'}" title="${esc(loc)}">
+          ${esc(bagNum)} <span class="fs-floor" style="--fs-own:9px;color:${isThis ? 'var(--c-text-muted)' : 'var(--c-border)'}">${esc(loc)}</span>
         </span>`;
         })
         .join('')}
     </div>
-    ${bagHarvests.length ? `<div style="margin-top:10px;font-size:12px;color:var(--c-amber-dark)"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map((h) => `Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>` : ''}
+    ${bagHarvests.length ? `<div class="fs-meta" style="margin-top:10px;color:var(--c-amber-dark)"><strong>${t('harvest.log')}:</strong> ${bagHarvests.map((h) => `Flush ${h.flush}: ${h.grams}g`).join(' \u00b7 ')}</div>` : ''}
   `;
   closeCamScan();
   closeScanModal();
@@ -14308,7 +14382,7 @@ function _renderCrTypeGrid() {
   const grid = document.getElementById('cr-type-grid');
   if (!_crTypes || !_crTypes.length) {
     grid.innerHTML =
-      '<div style="font-size:12px;color:var(--c-text-muted);grid-column:1/-1">' + t('contam.noTypes') + '</div>';
+      '<div class="fs-meta" style="color:var(--c-text-muted);grid-column:1/-1">' + t('contam.noTypes') + '</div>';
     return;
   }
   grid.innerHTML = _crTypes
@@ -14725,7 +14799,7 @@ async function renderContamReports() {
             <span class="contam-type-badge"><span class="dot" style="background:${esc(r.type_color || '#888')}"></span>${typeName}</span>
             <span class="contam-sev-badge sev-${esc(r.severity)}">${esc(t('contam.' + sevKey))}</span>
             ${resolvedBadge}
-            ${(r.photo_count || 0) > 0 ? `<span style="font-size:11px;color:var(--c-text-muted)">${r.photo_count} 📷</span>` : ''}
+            ${(r.photo_count || 0) > 0 ? `<span class="fs-xs" style="color:var(--c-text-muted)">${r.photo_count} 📷</span>` : ''}
           </div>
           ${notes}
         </div>
@@ -14767,7 +14841,7 @@ async function openContamDetail(id) {
   const isResolved = !!r.resolved_at;
   const resolutionLabel = r.resolution ? esc(t('contam.res.' + r.resolution)) : '';
   const statusCell = isResolved
-    ? `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-resolved-badge">✓ ${resolutionLabel}</span><div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">${esc(fmtDtTime(r.resolved_at))}</div></div></div>`
+    ? `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-resolved-badge">✓ ${resolutionLabel}</span><div class="fs-xs" style="color:var(--c-text-muted);margin-top:2px">${esc(fmtDtTime(r.resolved_at))}</div></div></div>`
     : `<div><div class="label">${esc(t('contam.statusLabel'))}</div><div><span class="contam-open-badge">${esc(t('contam.statusOpen'))}</span></div></div>`;
   const resolveActions = isResolved
     ? `<div class="cd-resolve-row"><button id="cd-reopen" type="button" class="btn btn-sm" data-i18n="contam.reopen">Wieder öffnen</button></div>`
@@ -14922,7 +14996,7 @@ function renderBagSelect() {
       '<div style="font-size:14px;font-weight:700;font-family:monospace">' +
       esc(bagNum) +
       '</div>' +
-      '<div style="font-size:10px;margin-top:2px;opacity:0.85">' +
+      '<div class="fs-micro" style="margin-top:2px;opacity:0.85">' +
       esc(loc) +
       '</div>';
     btn.style.cssText =
@@ -15783,10 +15857,10 @@ function renderLabList() {
     ? rows
         .map(
           (c) =>
-            `<label style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id) ? 'checked' : ''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type === 'MC' ? 'badge-mc' : c.type === 'PD' ? 'badge-pd' : 'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain ? ' / ' + esc(c.strain) : ''}</span></label>`
+            `<label class="fs-meta" style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id) ? 'checked' : ''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type === 'MC' ? 'badge-mc' : c.type === 'PD' ? 'badge-pd' : 'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain ? ' / ' + esc(c.strain) : ''}</span></label>`
         )
         .join('')
-    : '<div style="font-size:12px;color:var(--c-text-muted);padding:6px">No cultures match.</div>';
+    : '<div class="fs-meta" style="color:var(--c-text-muted);padding:6px">No cultures match.</div>';
 }
 function toggleLabId(id, on) {
   if (on) selectedLabIds.add(id);
@@ -15869,7 +15943,8 @@ async function renderRefBarcodes() {
         const img = await makeQR(val);
         if (img) cell.appendChild(img);
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px';
+        lbl.className = 'fs-meta';
+        lbl.style.cssText = 'font-weight:700;color:var(--c-text-sec);margin-top:5px';
         lbl.textContent = label;
         cell.appendChild(lbl);
       } else {
@@ -15890,7 +15965,8 @@ async function renderRefBarcodes() {
           } catch {}
         }, 20);
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--c-text-sec);margin-top:5px;text-align:center';
+        lbl.className = 'fs-meta';
+        lbl.style.cssText = 'font-weight:700;color:var(--c-text-sec);margin-top:5px;text-align:center';
         lbl.textContent = label;
         cell.appendChild(lbl);
       }
@@ -15913,8 +15989,9 @@ async function printRef() {
   let delay = 0;
   for (const group of REF_GROUPS) {
     const sec = document.createElement('div');
+    sec.className = 'fs-micro';
     sec.style.cssText =
-      'font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';
+      'font-family:Arial,sans-serif;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';
     sec.textContent = group.g;
     sheet.appendChild(sec);
     const row = document.createElement('div');
@@ -15933,7 +16010,8 @@ async function printRef() {
           cell.appendChild(img);
         }
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
+        lbl.className = 'fs-xs';
+        lbl.style.cssText = 'font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
         lbl.textContent = label;
         cell.appendChild(lbl);
       } else {
@@ -15954,7 +16032,8 @@ async function printRef() {
         }, delay);
         delay += 25;
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:11px;font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
+        lbl.className = 'fs-xs';
+        lbl.style.cssText = 'font-weight:bold;font-family:Arial,sans-serif;margin-top:5px';
         lbl.textContent = label;
         cell.appendChild(lbl);
       }
@@ -16238,7 +16317,7 @@ function _addLogEntry(type, msg, entryData) {
       '<span class="sle-msg"><b>' +
       esc(bagLabel) +
       '</b>' +
-      (sp ? ' <span style="color:var(--c-text-muted);font-size:10px">' + esc(sp) + '</span>' : '') +
+      (sp ? ' <span class="fs-micro" style="color:var(--c-text-muted)">' + esc(sp) + '</span>' : '') +
       (locStr ? ' <span style="color:var(--c-text-muted)">' + esc(locStr) + '</span>' : '') +
       '</span>' +
       (canUndo ? '<button class="sle-undo" onclick="undoScanEntry(this)" title="Undo">↩</button>' : '');
@@ -16533,7 +16612,7 @@ function endScanSession() {
         '</div></div>'
       : '') +
     '</div>' +
-    '<div style="font-size:12px;color:var(--c-text-muted);margin-bottom:8px">' +
+    '<div class="fs-meta" style="color:var(--c-text-muted);margin-bottom:8px">' +
     t('scan.duration') +
     ': ' +
     dur +
@@ -16541,7 +16620,7 @@ function endScanSession() {
     (startStr ? ' (' + startStr + ' – ' + endStr + ')' : '') +
     '</div>' +
     (batchHtml ? '<div class="scan-summary-batches">' + t('scan.batches') + ': ' + batchHtml + '</div>' : '') +
-    (locSummary.length ? '<div style="font-size:12px;margin-bottom:12px">' + locSummary.join(' · ') + '</div>' : '') +
+    (locSummary.length ? '<div class="fs-meta" style="margin-bottom:12px">' + locSummary.join(' · ') + '</div>' : '') +
     '<div class="scan-summary-actions">' +
     '<button class="btn-xs" onclick="closeScanSession()">' +
     t('scan.close') +
@@ -17180,7 +17259,7 @@ async function loadUsersTab() {
   if (acct && currentUser)
     acct.innerHTML =
       t('users.loggedInAs', { user: esc(currentUser.username), role: esc(currentUser.role) }) +
-      ` <button class="btn" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">${t('chpw.title')}</button>`;
+      ` <button class="btn fs-xs" style="padding:2px 8px;margin-left:8px" onclick="showChangePasswordModal()">${t('chpw.title')}</button>`;
   if (!currentUser || currentUser.role !== 'admin') {
     const tbl = document.getElementById('users-table');
     if (tbl) tbl.innerHTML = '<p style="color:var(--c-text-muted)">' + t('users.adminRequiredManage') + '</p>';
@@ -17196,7 +17275,7 @@ async function loadUsersTab() {
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r" style="font-size:11px;padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
@@ -17592,13 +17671,36 @@ function collectCalendarEvents() {
   return events;
 }
 
+// One place decides whether this is a phone, and both the router and the
+// navigation read it. The breakpoint is duplicated in styles.css — where it
+// hides the view toggle — and that pair is exactly the split-brain
+// test/mobile-nav.test.js exists to catch, so it is asserted there too.
+// A group heading whose entries are all in the bottom bar would be left over
+// the gap where they used to be — "Arbeiten" loses all three. Derived from what
+// is actually marked rather than named, so it follows the list above.
+function markEmptyDrawerGroups() {
+  document.querySelectorAll('.sb-group-label').forEach((label) => {
+    const entries = [];
+    for (let el = label.nextElementSibling; el && !el.classList.contains('sb-group-label'); el = el.nextElementSibling) {
+      if (el.classList.contains('sb-btn')) entries.push(el);
+    }
+    const allInBar = entries.length > 0 && entries.every((e) => e.classList.contains('sb-in-bottom-nav'));
+    label.classList.toggle('sb-in-bottom-nav', allInBar);
+  });
+}
+
+function calAgendaOnly() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+}
+
 function renderCalendar() {
   const title = document.getElementById('cal-title');
   if (!title) return;
   document.querySelectorAll('.cal-vbtn').forEach((b) => b.classList.remove('active'));
   const btn = document.getElementById('cv-' + calView);
   if (btn) btn.classList.add('active');
-  if (calView === 'month') renderCalMonth();
+  if (calAgendaOnly()) renderCalAgenda();
+  else if (calView === 'month') renderCalMonth();
   else if (calView === 'week') renderCalWeek();
   else if (calView === 'day') renderCalDay();
 }
@@ -17615,7 +17717,11 @@ function calToday() {
 }
 
 function calNav(delta) {
-  if (calView === 'month') {
+  // The agenda spans the displayed month, so on a phone prev/next moves a
+  // month regardless of which grid calView still names — otherwise a stale
+  // 'week' from a desktop session steps the title by seven days while the list
+  // below it changes by thirty.
+  if (calView === 'month' || calAgendaOnly()) {
     calMonth += delta;
     if (calMonth < 0) {
       calMonth = 11;
@@ -17647,12 +17753,56 @@ function closeCalPrintModal() {
   if (m) m.classList.remove('open');
 }
 
+// The type of an event, in words. Shared by the printed task list and the
+// on-screen agenda, because a dot in one and a word in the other would be two
+// vocabularies for one set of five things.
+function calTypeLabels() {
+  return {
+    'batch-due': t('cal.legend.batches'),
+    'task-due': t('calDetail.taskDue'),
+    harvest: t('cal.legend.harvests'),
+    custom: t('calEntry.cat.custom'),
+    'caldav-import': t('calDetail.external')
+  };
+}
+
+// Every day between two dates, each carrying its events in reading order:
+// all-day first, then by start time. Empty days are kept — on a task list the
+// blank Sunday is information.
+//
+// This was the middle of printCalendarTaskList() and nothing else could reach
+// it, which is the only reason the calendar had no agenda view: the grouping
+// and the sort, the two parts that are actually fiddly against recurrence
+// expansion, were already written and already correct, three lines below a
+// window.print().
+function calAgendaDays(startDate, endDate) {
+  const DAYS = calDays();
+  const startStr = fmtDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const byDate = {};
+  collectCalendarEvents()
+    .filter((e) => e.date >= startStr && e.date <= endStr)
+    .forEach((e) => {
+      (byDate[e.date] = byDate[e.date] || []).push(e);
+    });
+  const days = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayEvents = (byDate[ds] || []).slice().sort((a, b) => {
+      if (a.allDay && !b.allDay) return -1;
+      if (!a.allDay && b.allDay) return 1;
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
+    days.push({ ds, dayName: DAYS[(d.getDay() + 6) % 7], date: new Date(d), events: dayEvents });
+  }
+  return days;
+}
+
 function printCalendarTaskList(range) {
   const sheet = document.getElementById('print-sheet');
   if (!sheet) return;
 
-  const MONTHS = calMonths(),
-    DAYS = calDays();
+  const MONTHS = calMonths();
 
   // Determine date range — rolling window anchored on today
   const today = new Date();
@@ -17683,39 +17833,9 @@ function printCalendarTaskList(range) {
     ' ' +
     endDate.getFullYear();
 
-  // Collect and filter events in range
-  const allEvents = collectCalendarEvents();
-  const startStr = fmtDate(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  const endStr = fmtDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-  const eventsInRange = allEvents.filter((e) => e.date >= startStr && e.date <= endStr);
-
-  // Group by date
-  const byDate = {};
-  eventsInRange.forEach((e) => {
-    (byDate[e.date] = byDate[e.date] || []).push(e);
-  });
-
-  // Type label map
-  const typeLabels = {
-    'batch-due': t('cal.legend.batches'),
-    'task-due': t('calDetail.taskDue'),
-    harvest: t('cal.legend.harvests'),
-    custom: t('calEntry.cat.custom'),
-    'caldav-import': t('calDetail.external')
-  };
-
-  // Build day list
-  const days = [];
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const ds = fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayName = DAYS[(d.getDay() + 6) % 7];
-    const dayEvents = (byDate[ds] || []).slice().sort((a, b) => {
-      if (a.allDay && !b.allDay) return -1;
-      if (!a.allDay && b.allDay) return 1;
-      return (a.startTime || '').localeCompare(b.startTime || '');
-    });
-    days.push({ ds, dayName, date: new Date(d), events: dayEvents });
-  }
+  const days = calAgendaDays(startDate, endDate);
+  const typeLabels = calTypeLabels();
+  const totalEvents = days.reduce((n, d) => n + d.events.length, 0);
 
   // Render HTML
   const todayStr = localDateStr(new Date());
@@ -17769,7 +17889,6 @@ function printCalendarTaskList(range) {
     bodyHtml += '</div>';
   });
 
-  const totalEvents = eventsInRange.length;
   sheet.innerHTML =
     '<div class="cal-print-page cal-print-tasklist">' +
     '<div class="cal-print-header">' +
@@ -17779,7 +17898,7 @@ function printCalendarTaskList(range) {
     '<div style="font-size:13px;color:#444;margin-top:2px">' +
     esc(rangeLabel) +
     '</div>' +
-    '<div style="font-size:11px;color:#666;margin-top:2px">' +
+    '<div class="fs-xs" style="color:#666;margin-top:2px">' +
     totalEvents +
     ' ' +
     t('cal.entries') +
@@ -17796,6 +17915,116 @@ function printCalendarTaskList(range) {
 
   closeCalPrintModal();
   setTimeout(() => window.print(), 150);
+}
+
+// ── Agenda View — what the calendar is on a phone ──
+//
+// Not a preference and not a fourth tab: below 769px the three grids cannot
+// work, and the numbers say so rather than taste. Seven columns at the 44px
+// WCAG floor need 316px of grid, which fits in 343px of content — and leaves
+// each cell 36px wide, so the day-number circle fills it edge to edge with
+// nothing left for an event. Today a month cell is 47.9px wide and an event
+// label gets 29.9px at 10px type: four glyphs and an ellipsis. Week view is
+// worse at 40.7px per column. The constraint is horizontal, and a taller cell
+// cannot reach it, which is what settles §9 decision 3.
+//
+// Empty days are dropped here and kept in print. That is deliberate on both
+// sides: on paper the blank Sunday is a line you tick, on a phone it is thirty
+// rows of "no tasks" between you and the four that matter.
+function renderCalAgenda() {
+  const container = document.getElementById('cal-container');
+  const title = document.getElementById('cal-title');
+  if (!container || !title) return;
+  const MONTHS = calMonths();
+  title.textContent = MONTHS[calMonth] + ' ' + calYear;
+
+  const days = calAgendaDays(new Date(calYear, calMonth, 1), new Date(calYear, calMonth + 1, 0)).filter(
+    (d) => d.events.length
+  );
+  const typeLabels = calTypeLabels();
+  const todayStr = localDateStr(new Date());
+
+  if (!days.length) {
+    container.innerHTML = '<div class="cal-agenda-empty">' + esc(t('cal.agendaEmpty')) + '</div>';
+    container.onclick = null;
+    return;
+  }
+
+  container.innerHTML =
+    '<div class="cal-agenda">' +
+    days
+      .map((day) => {
+        const rows = day.events
+          .map((e) => {
+            const when = e.allDay
+              ? t('cal.allDay')
+              : (e.startTime || '') + (e.endTime ? '–' + e.endTime : '');
+            const desc = e.description
+              ? '<span class="cal-agenda-desc">' + esc(e.description) + '</span>'
+              : '';
+            const who =
+              e.assignees && e.assignees.length
+                ? '<span class="cal-agenda-who">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>'
+                : '';
+            return (
+              '<button type="button" class="cal-agenda-row" data-type="' +
+              esc(e.type) +
+              '" data-id="' +
+              esc(e.id || '') +
+              '">' +
+              '<span class="cal-agenda-dot" style="background:' +
+              safeColor(e.color || '#64748b') +
+              '"></span>' +
+              '<span class="cal-agenda-when">' +
+              esc(when) +
+              '</span>' +
+              '<span class="cal-agenda-what">' +
+              '<span class="cal-agenda-label">' +
+              esc(e.label) +
+              '</span>' +
+              '<span class="cal-agenda-meta">' +
+              esc(typeLabels[e.type] || '') +
+              who +
+              '</span>' +
+              desc +
+              '</span>' +
+              '</button>'
+            );
+          })
+          .join('');
+        return (
+          '<div class="cal-agenda-day' +
+          (day.ds === todayStr ? ' today' : '') +
+          '" data-date="' +
+          day.ds +
+          '">' +
+          '<div class="cal-agenda-date">' +
+          '<span class="cal-agenda-num">' +
+          day.date.getDate() +
+          '</span>' +
+          '<span class="cal-agenda-dow">' +
+          esc(day.dayName) +
+          '</span>' +
+          '</div>' +
+          '<div class="cal-agenda-rows">' +
+          rows +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('') +
+    '</div>';
+
+  // The same opener the month grid uses. No drag-and-drop: rescheduling by
+  // dragging is a mouse gesture, and this view exists for the hand.
+  container.onclick = function (ev) {
+    const row = ev.target.closest('.cal-agenda-row');
+    if (!row) return;
+    onCalMonthEventClick(row.dataset.type, row.dataset.id);
+  };
+
+  const today = container.querySelector('.cal-agenda-day.today');
+  if (today) today.scrollIntoView({ block: 'nearest' });
 }
 
 // ── Month View ──
@@ -18056,9 +18285,9 @@ function renderCalWeek() {
             ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>';
         if (height >= 48 && e.startTime)
           wkContent +=
-            '<div style="opacity:.8;font-size:10px">' + e.startTime + (e.endTime ? ' — ' + e.endTime : '') + '</div>';
+            '<div class="fs-micro" style="opacity:.8">' + e.startTime + (e.endTime ? ' — ' + e.endTime : '') + '</div>';
         if (height >= 72 && e.description)
-          wkContent += '<div style="opacity:.7;font-size:10px;margin-top:1px">' + esc(e.description) + '</div>';
+          wkContent += '<div class="fs-micro" style="opacity:.7;margin-top:1px">' + esc(e.description) + '</div>';
         el.innerHTML = wkContent;
         el.title = e.label;
         el.dataset.type = e.type;
@@ -18175,12 +18404,12 @@ function renderCalDay() {
           ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>';
       if (e.startTime)
         dayContent +=
-          '<div style="opacity:.8;font-size:11px;margin-top:2px">' +
+          '<div class="fs-xs" style="opacity:.8;margin-top:2px">' +
           e.startTime +
           (e.endTime ? ' — ' + e.endTime : '') +
           '</div>';
       if (height >= 72 && e.description)
-        dayContent += '<div style="opacity:.7;font-size:10px;margin-top:2px">' + esc(e.description) + '</div>';
+        dayContent += '<div class="fs-micro" style="opacity:.7;margin-top:2px">' + esc(e.description) + '</div>';
       el.innerHTML = dayContent;
       el.title = e.label;
       el.dataset.type = e.type;
@@ -18530,14 +18759,14 @@ function openEventDetail(ev) {
       monthly: t('calEntry.rec.monthly')
     };
     let badges =
-      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
+      '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
       (CATEGORY_COLORS[ce.category] || safeColor(ce.color)) +
       ';color:#fff">' +
       esc(catLabels[ce.category] || ce.category) +
       '</span>';
     if (ce.recurrence)
       badges +=
-        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
+        '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
         esc(recLabels[ce.recurrence] || ce.recurrence) +
         '</span>';
     // Seats, but only where they mean something. A window with no number takes
@@ -18545,7 +18774,7 @@ function openEventDetail(ev) {
     // would be noise.
     if (ce.category === 'pickup' && ce.pickupCapacity !== null && ce.pickupCapacity !== undefined)
       badges +=
-        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">' +
+        '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">' +
         esc(t('calDetail.seats', { n: ce.pickupCapacity })) +
         '</span>';
     badgesEl.innerHTML = badges;
@@ -18597,19 +18826,19 @@ function openEventDetail(ev) {
       monthly: t('calEntry.rec.monthly')
     };
     let tBadges =
-      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">' +
+      '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-blue);color:#fff">' +
       esc(t('calDetail.taskDue')) +
       '</span>';
     if (tk.priority)
       tBadges +=
-        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
+        '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:' +
         (prioColors[tk.priority] || '#888') +
         ';color:#fff">' +
         esc(prioLabels[tk.priority] || tk.priority) +
         '</span>';
     if (tk.recurrence)
       tBadges +=
-        '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
+        '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-text-muted);color:#fff">🔁 ' +
         esc(recLabels2[tk.recurrence] || tk.recurrence) +
         '</span>';
     badgesEl.innerHTML = tBadges;
@@ -18648,12 +18877,12 @@ function openEventDetail(ev) {
       meta += ' — ' + new Date(b.due).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
     metaEl.textContent = meta;
     badgesEl.innerHTML =
-      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">' +
+      '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-red);color:#fff">' +
       esc(t('calDetail.batchDue')) +
       '</span>';
     const curDate = b && b.due ? b.due.slice(0, 10) : '';
     assignEl.innerHTML =
-      '<label style="font-size:12px;color:var(--c-text-sec)">' +
+      '<label class="fs-meta" style="color:var(--c-text-sec)">' +
       esc(t('calDetail.changeDate')) +
       '</label> <input type="date" id="cal-detail-batch-date" value="' +
       curDate +
@@ -18677,7 +18906,7 @@ function openEventDetail(ev) {
     if (ev.startTime) meta += ', ' + ev.startTime + (ev.endTime ? ' — ' + ev.endTime : '');
     metaEl.textContent = meta;
     badgesEl.innerHTML =
-      '<span style="display:inline-block;font-size:11px;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">' +
+      '<span class="fs-xs" style="display:inline-block;padding:2px 10px;border-radius:4px;font-weight:500;background:var(--c-indigo);color:#fff">' +
       esc(t('calDetail.external')) +
       '</span>';
     assignEl.innerHTML = '';
@@ -19423,7 +19652,7 @@ function renderAssigneePicker() {
   const dd = document.getElementById('cal-ev-assignee-dropdown');
   if (!calEvSelectedAssignees.length) {
     box.innerHTML =
-      '<span style="color:var(--c-text-muted);font-size:12px">' + esc(t('calEntry.allClickToSelect')) + '</span>';
+      '<span class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('calEntry.allClickToSelect')) + '</span>';
   } else {
     box.innerHTML = calEvSelectedAssignees
       .map(
@@ -19440,13 +19669,13 @@ function renderAssigneePicker() {
     const names = getSelectableAssignees();
     if (!names.length) {
       dd.innerHTML =
-        '<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
+        '<div class="fs-meta" style="padding:8px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
     } else {
       dd.innerHTML = names
         .map((n) => {
           const checked = calEvSelectedAssignees.includes(n);
           return (
-            '<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;' +
+            '<label class="fs-meta" style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;' +
             (checked ? 'background:#e8f5e9' : '') +
             '" data-assignee-toggle="' +
             esc(n) +
@@ -19505,7 +19734,7 @@ function renderTaskAssigneePicker() {
   const dd = document.getElementById('cal-task-assignee-dropdown');
   if (!calTaskSelectedAssignees.length) {
     box.innerHTML =
-      '<span style="color:var(--c-text-muted);font-size:12px">' + esc(t('calEntry.allClickToSelect')) + '</span>';
+      '<span class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('calEntry.allClickToSelect')) + '</span>';
   } else {
     box.innerHTML = calTaskSelectedAssignees
       .map(
@@ -19522,13 +19751,13 @@ function renderTaskAssigneePicker() {
     const names = getSelectableAssignees();
     if (!names.length) {
       dd.innerHTML =
-        '<div style="padding:8px;font-size:12px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
+        '<div class="fs-meta" style="padding:8px;color:var(--c-text-muted)">' + esc(t('calEntry.noMembers')) + '</div>';
     } else {
       dd.innerHTML = names
         .map((n) => {
           const checked = calTaskSelectedAssignees.includes(n);
           return (
-            '<label style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;font-size:12px;' +
+            '<label class="fs-meta" style="display:flex;align-items:center;padding:6px 8px;cursor:pointer;' +
             (checked ? 'background:#e8f5e9' : '') +
             '" data-task-assignee-toggle="' +
             esc(n) +
@@ -19731,8 +19960,9 @@ function updateOfflineBadge(count) {
   if (!badge) {
     badge = document.createElement('span');
     badge.id = 'offline-badge';
+    badge.className = 'fs-micro';
     badge.style.cssText =
-      'display:inline-block;background:var(--c-red);color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
+      'display:inline-block;background:var(--c-red);color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:600';
     const syncEl = document.getElementById('sync-label');
     if (syncEl) syncEl.parentNode.appendChild(badge);
     else document.querySelector('.topbar')?.appendChild(badge);
@@ -20260,11 +20490,25 @@ function initEventListeners() {
   });
   // Mobile bottom-nav buttons delegate to their sidebar counterparts so any
   // side effects (e.g. n-batch resetting batchAttentionFilter) stay in one place.
+  //
+  // The same loop marks those counterparts, which is what closes Phase 1's one
+  // deferred item: below 769px the drawer repeated all five bottom-nav
+  // destinations, 19 rows and 868px of content in a 655px viewport, so five of
+  // fourteen sat below the fold — and the five the bar already shows
+  // permanently were among them. That note asked for "a real mechanism — the
+  // bottom nav emitting the list it owns — not five hardcoded selectors", and
+  // the mechanism was already here: this list is the list, and `'n-' +
+  // bnId.slice(3)` is already how the two navigations are paired. Marking from
+  // inside it cannot drift, because a bottom-nav entry that is added or removed
+  // changes both halves in the same edit.
   ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());
+    const twin = $(sidebarId);
+    if (btn && twin) twin.classList.add('sb-in-bottom-nav');
   });
+  markEmptyDrawerGroups();
   $('n-inv').addEventListener('click', () => {
     go('inv', 'n-inv');
   });
@@ -20506,8 +20750,8 @@ function initEventListeners() {
         break;
     }
   });
-  // The two creation flows keep one-tap buttons on the dashboard; the speed-dial
-  // FAB carries the same actions for every other page.
+  // The two creation flows keep one-tap buttons here, on the screen where you
+  // decide what to do next. Every other page reaches them through Arbeitsgänge.
   $('dash-act-newbatch').addEventListener('click', msQuickChargeNew);
   $('dash-act-labwork').addEventListener('click', msQuickLaborNew);
   applyDashMode();
@@ -20767,6 +21011,16 @@ function initEventListeners() {
   $('cv-day').addEventListener('click', () => {
     setCalView('day');
   });
+  // Crossing the breakpoint has to re-render, not just re-style. Rotate a phone
+  // into landscape and the view toggle reappears while the container still
+  // holds agenda markup — the grid the toggle claims is showing would not exist
+  // until the next navigation. Cheap to fix, invisible until someone turns the
+  // device sideways, which in a lab is most of the time.
+  if (typeof window.matchMedia === 'function') {
+    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
+      if (document.getElementById('cal-title')) renderCalendar();
+    });
+  }
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);
   $('m-cal-print-week').addEventListener('click', () => printCalendarTaskList('week'));
@@ -21025,6 +21279,11 @@ document.addEventListener('DOMContentLoaded', function () {
       openCamScan();
     });
 
+  // Back rows for the sub-tab strips. Here rather than in initEventListeners()
+  // for the same reason as the FAB above: this inserts elements, and doing that
+  // once the document is settled keeps it off the critical path.
+  stabDrillInit();
+
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
   // Wait until the rest of the app has had a chance to fetch data + render
   // before dispatching, so go() / openCamScan find the elements they need.
@@ -21051,48 +21310,6 @@ document.addEventListener('DOMContentLoaded', function () {
   } catch (e) {
     /* ignore — bad URL or no URLSearchParams */
   }
-
-  // Action speed-dial FAB — toggles a 3-button menu (New batch / Lab work /
-  // Log harvest). This is the single home for the creation flows on every page.
-  const afab = document.getElementById('action-fab');
-  const afabMenu = document.getElementById('action-fab-menu');
-  const afabWrap = document.getElementById('action-fab-wrap');
-  function setAfabOpen(open) {
-    if (!afab || !afabMenu) return;
-    afab.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) afabMenu.removeAttribute('hidden');
-    else afabMenu.setAttribute('hidden', '');
-  }
-  if (afab) {
-    afab.addEventListener('click', function (e) {
-      e.stopPropagation();
-      const open = afab.getAttribute('aria-expanded') === 'true';
-      setAfabOpen(!open);
-    });
-  }
-  // The speed-dial is now the single home for the creation flows (the duplicate
-  // dashboard button row is gone), so these call the flows directly.
-  [
-    // Guided, recipe-driven create dialog (pick Sorte → substrate auto-filled
-    // from its recipe → zone pick → print). The old full form is still reachable
-    // via Chargen → Neue Charge for advanced/recipe-less cases.
-    ['action-fab-newbatch', msQuickChargeNew],
-    ['action-fab-labwork', msQuickLaborNew],
-    ['action-fab-harvest', dashGoHarvest]
-  ].forEach(function (pair) {
-    const src = document.getElementById(pair[0]);
-    if (!src) return;
-    src.addEventListener('click', function () {
-      pair[1]();
-      setAfabOpen(false);
-    });
-  });
-  // Close on outside tap (backdrop dismiss). Don't close when the user
-  // taps inside the wrap — they may be aiming at a menu item.
-  document.addEventListener('click', function (e) {
-    if (!afabWrap || afab.getAttribute('aria-expanded') !== 'true') return;
-    if (!afabWrap.contains(e.target)) setAfabOpen(false);
-  });
 });
 
 // ═══ ARBEITSGÄNGE ════════════════════════════════════════════════════════════

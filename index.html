@@ -91,16 +91,9 @@
               <label data-i18n="addBags.howMany">How many bags to add</label>
               <input type="number" id="ab-qty" value="1" min="1" max="200" style="width: 100px" />
             </div>
-            <div
+            <div class="fs-meta"
               id="ab-preview"
-              style="
-                font-size: 12px;
-                color: var(--c-text-sec);
-                background: var(--c-bg);
-                border-radius: 7px;
-                padding: 8px 10px;
-                display: none;
-              "
+              style="color: var(--c-text-sec); background: var(--c-bg); border-radius: 7px; padding: 8px 10px; display: none"
             ></div>
           </div>
           <div class="modal-btns">
@@ -213,7 +206,7 @@
     >
       <div class="card" style="max-width: 380px; width: 100%; margin: 0">
         <div class="sec" id="ms-q-title">—</div>
-        <div id="ms-q-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+        <div id="ms-q-sub" class="muted fs-meta" style="margin: 4px 0 10px"></div>
         <div id="ms-q-sorte-wrap" style="display: none; margin-bottom: 8px">
           <label data-i18n="msq.pickSorte">Pilzsorte</label>
           <select id="ms-q-sorte" onchange="msQuickSorteChanged()"></select>
@@ -312,7 +305,7 @@
         </div>
         <!-- Kept only so msQuickConfirm can hand a culture to nb-culture/gs-culture. -->
         <select id="ms-q-culture" style="display: none"></select>
-        <div id="ms-q-preview" class="muted" style="font-size: 12px; margin-top: 8px"></div>
+        <div id="ms-q-preview" class="muted fs-meta" style="margin-top: 8px"></div>
         <div style="display: flex; gap: 8px; margin-top: 12px">
           <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
           <button class="btn" onclick="msQuickClose()" data-i18n="strains.cancel">Abbrechen</button>
@@ -385,7 +378,7 @@
     <div class="modal-bg" id="m-rhythm" role="dialog" aria-modal="true" aria-labelledby="rhythm-title" hidden>
       <div class="modal">
         <h3 id="rhythm-title" data-i18n="rhythm.title">Wochenrhythmus</h3>
-        <p id="rhythm-hint" style="font-size: 12px; color: var(--c-text-muted); margin: 0 0 10px"></p>
+        <p class="fs-meta" id="rhythm-hint" style="color: var(--c-text-muted); margin: 0 0 10px"></p>
         <div id="rhythm-rows"></div>
         <div class="modal-btns">
           <button id="rhythm-cancel" class="btn" data-i18n="common.cancel">Cancel</button
@@ -506,20 +499,12 @@
         </div>
         <div style="margin-bottom: 8px">
           <label data-i18n="calEntry.desc">Beschreibung (optional)</label>
-          <textarea
+          <textarea class="fs-meta"
             id="cal-entry-desc"
             rows="2"
             data-i18n-placeholder="calEntry.descPh"
             placeholder="Details..."
-            style="
-              width: 100%;
-              font-size: 12px;
-              padding: 6px 8px;
-              border: 1px solid var(--c-border);
-              border-radius: 6px;
-              resize: vertical;
-              font-family: inherit;
-            "
+            style="width: 100%; padding: 6px 8px; border: 1px solid var(--c-border); border-radius: 6px; resize: vertical; font-family: inherit"
           ></textarea>
         </div>
         <div id="cal-entry-task-assign-wrap" style="margin-bottom: 8px">
@@ -537,7 +522,7 @@
               cursor: pointer;
             "
           >
-            <span style="color: var(--c-text-muted); font-size: 12px" data-i18n="calEntry.allClickToSelect"
+            <span class="fs-meta" style="color: var(--c-text-muted)" data-i18n="calEntry.allClickToSelect"
               >Alle (klicken um auszuwählen)</span
             >
           </div>
@@ -568,7 +553,7 @@
               cursor: pointer;
             "
           >
-            <span style="color: var(--c-text-muted); font-size: 12px" data-i18n="calEntry.allClickToSelect"
+            <span class="fs-meta" style="color: var(--c-text-muted)" data-i18n="calEntry.allClickToSelect"
               >Alle (klicken um auszuwählen)</span
             >
           </div>
@@ -585,16 +570,8 @@
           ></div>
         </div>
         <div id="cal-entry-private-wrap" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-          <label
-            style="
-              display: flex;
-              align-items: center;
-              gap: 5px;
-              cursor: pointer;
-              margin: 0;
-              font-size: 11px;
-              color: var(--c-text-muted);
-            "
+          <label class="fs-xs"
+            style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; color: var(--c-text-muted)"
           >
             <input type="checkbox" id="cal-entry-private" style="width: auto" />
             <span data-i18n="calEntry.private">Nur für zugewiesene Person sichtbar</span>
@@ -618,9 +595,9 @@
     <div class="modal-bg" id="m-cal-detail" role="dialog" aria-modal="true" aria-labelledby="cal-detail-title" hidden>
       <div class="modal">
         <h3 id="cal-detail-title" style="margin-bottom: 4px; word-break: break-word"></h3>
-        <div id="cal-detail-meta" style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px"></div>
+        <div class="fs-meta" id="cal-detail-meta" style="color: var(--c-text-muted); margin-bottom: 12px"></div>
         <div id="cal-detail-badges" style="margin-bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap"></div>
-        <div id="cal-detail-assignee" style="margin-bottom: 10px; font-size: 12px; color: var(--c-text-sec)"></div>
+        <div class="fs-meta" id="cal-detail-assignee" style="margin-bottom: 10px; color: var(--c-text-sec)"></div>
         <div
           id="cal-detail-desc"
           style="
@@ -651,7 +628,7 @@
             <label data-i18n="batchAddModal.location">Location / rack</label
             ><select id="ba-loc"></select>
           </div>
-          <div id="ba-prev" style="font-size: 12px; color: var(--c-text-sec); min-height: 16px"></div>
+          <div class="fs-meta" id="ba-prev" style="color: var(--c-text-sec); min-height: 16px"></div>
         </div>
         <div class="modal-btns">
           <button id="cls-7" class="btn" data-i18n="common.cancel">Cancel</button
@@ -667,8 +644,8 @@
           <h3 id="lm-title" style="font-family: monospace; font-size: 15px" data-i18n="locmove.bag">Bag</h3>
           <button id="cls-9" class="btn btn-sm" data-i18n="common.close">Close</button>
         </div>
-        <div id="lm-info" style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px"></div>
-        <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px" data-i18n="locmove.moveTo">Move to:</div>
+        <div class="fs-meta" id="lm-info" style="color: var(--c-text-muted); margin-bottom: 12px"></div>
+        <div class="fs-meta" style="font-weight: 600; margin-bottom: 8px" data-i18n="locmove.moveTo">Move to:</div>
         <div id="lm-grid" style="display: flex; flex-wrap: wrap; gap: 6px"></div>
         <div id="lm-confirm" style="display: none"></div>
         <div style="border-top: 1px solid var(--c-border); margin-top: 14px; padding-top: 12px">
@@ -690,7 +667,7 @@
     >
       <div class="modal" style="max-width: 400px">
         <h3 id="zp-title" data-i18n="batch.whereGo">Where do these bags go?</h3>
-        <p id="zp-info" style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px"></p>
+        <p class="fs-meta" id="zp-info" style="color: var(--c-text-muted); margin-bottom: 12px"></p>
         <div id="zp-zones" style="display: flex; flex-direction: column; gap: 8px"></div>
       </div>
     </div>
@@ -723,10 +700,10 @@
           <h3 id="bs-title" data-i18n="bagSelect.title">Select bags to move</h3>
           <button id="bs-cancel" class="btn btn-sm" data-i18n="common.close">Close</button>
         </div>
-        <p id="bs-subtitle" style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 4px"></p>
-        <p
+        <p class="fs-meta" id="bs-subtitle" style="color: var(--c-text-muted); margin-bottom: 4px"></p>
+        <p class="fs-xs"
           id="bs-hint"
-          style="font-size: 11px; color: var(--c-text-muted); margin-bottom: 10px; font-style: italic"
+          style="color: var(--c-text-muted); margin-bottom: 10px; font-style: italic"
           data-i18n="bagSelect.scanHint"
         >
           Tap bags below or scan more QR codes to toggle them.
@@ -830,16 +807,7 @@
             type="button"
             data-wl-group="location"
             aria-pressed="true"
-            style="
-              flex: 1;
-              padding: 9px 10px;
-              border: 1px solid var(--c-border);
-              border-radius: 9px;
-              background: transparent;
-              font-size: 13px;
-              font-weight: 600;
-              cursor: pointer;
-            "
+            class="wl-group-btn"
             data-i18n="worklist.byLocation"
           >
             Nach Ort
@@ -848,16 +816,7 @@
             type="button"
             data-wl-group="batch"
             aria-pressed="false"
-            style="
-              flex: 1;
-              padding: 9px 10px;
-              border: 1px solid var(--c-border);
-              border-radius: 9px;
-              background: transparent;
-              font-size: 13px;
-              font-weight: 600;
-              cursor: pointer;
-            "
+            class="wl-group-btn"
             data-i18n="worklist.byBatch"
           >
             Nach Charge
@@ -985,7 +944,7 @@
           <label class="cr-label" data-i18n="contam.photos">Foto(s)</label>
           <div id="cr-photo-tiles" class="contam-photo-tiles"></div>
           <input type="file" id="cr-file-input" accept="image/*" capture="environment" multiple hidden />
-          <div id="cr-photo-status" style="font-size: 11px; color: var(--c-text-muted); margin-top: 4px"></div>
+          <div class="fs-xs" id="cr-photo-status" style="color: var(--c-text-muted); margin-top: 4px"></div>
         </div>
 
         <div style="margin-bottom: 14px">
@@ -1463,9 +1422,11 @@
           ><span data-i18n="nav.ordersVersand">Versand</span>
         </button>
       </nav>
-      <!-- Admin navigation — takes the sidebar over while the Admin section is open.
-           Fourteen sub-tabs never fitted the horizontal strip on a desktop; grouped and
-           vertical they do. See .sb-admin-nav in styles.css for the mobile arrangement. -->
+      <!-- Admin navigation — takes the sidebar over while the Admin section is open, on a
+           desktop. Fourteen sub-tabs never fitted the horizontal strip there; grouped and
+           vertical they do. A phone reaches them through the page's own drill-down list
+           instead, and keeps the main navigation in the drawer — see .sb-admin-nav in
+           styles.css. -->
       <nav class="sb-admin-nav" id="sb-admin-nav" data-i18n-aria-label="aria.adminNav" aria-label="Admin navigation">
         <div class="sb-group-label" data-i18n="nav.adminSystem">System</div>
         <button class="sb-btn active" id="sn-settings-server" type="button" data-sub="server" style="display: none">
@@ -1779,7 +1740,7 @@
     <!-- Sidebar overlay for mobile -->
     <div class="sb-overlay" id="sb-overlay"></div>
 
-    <!-- Mobile bottom navigation — 4 most-used pages, thumb-reach zone.
+    <!-- Mobile bottom navigation — the five most-used pages, thumb-reach zone.
          Visible only on touch + narrow viewport; the sidebar remains the
          single source of truth for active state and routing. -->
     <nav class="bottom-nav no-print" id="bottom-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation">
@@ -2027,22 +1988,22 @@
       <div id="harvest-panel">
         <div class="inner">
           <div>
-            <div
-              style="font-size: 11px; color: var(--c-amber-dark); font-weight: 600; margin-bottom: 3px"
+            <div class="fs-xs"
+              style="color: var(--c-amber-dark); font-weight: 600; margin-bottom: 3px"
               id="hp-lbl"
               data-i18n="harvest.logHarvest"
             >
               Log harvest
             </div>
-            <input
+            <input class="fs-meta"
               type="text"
               id="hp-bag"
               readonly
-              style="width: 180px; font-family: monospace; font-size: 12px; background: var(--c-amber-light)"
+              style="width: 180px; font-family: monospace; background: var(--c-amber-light)"
             />
           </div>
           <div>
-            <label style="color: var(--c-amber-dark); font-size: 11px" data-i18n="harvest.grams">Grams</label
+            <label class="fs-xs" style="color: var(--c-amber-dark)" data-i18n="harvest.grams">Grams</label
             ><input
               type="text"
               inputmode="decimal"
@@ -2055,7 +2016,7 @@
             />
           </div>
           <div>
-            <label style="color: var(--c-amber-dark); font-size: 11px" data-i18n="harvest.flush">Flush #</label
+            <label class="fs-xs" style="color: var(--c-amber-dark)" data-i18n="harvest.flush">Flush #</label
             ><input
               type="text"
               inputmode="numeric"
@@ -2067,8 +2028,8 @@
             />
           </div>
           <div id="hp-release-wrap" style="display: none">
-            <label
-              style="color: var(--c-amber-dark); font-size: 11px"
+            <label class="fs-xs"
+              style="color: var(--c-amber-dark)"
               data-i18n="harvest.release"
               data-i18n-title="harvest.releaseHint"
               >Release for sale</label
@@ -2276,8 +2237,10 @@
           <!-- Farm-only sections (hidden in Overview mode) -->
           <div id="dash-farm-section">
             <!-- The two creation flows that start real work keep a one-tap button
-                 here. "Ernte erfassen" doesn't: it only scrolls to the Erntebereit
-                 card already on this screen, so it lives in the + FAB alone. -->
+                 here, on the screen where you decide what to do next. The complete
+                 set lives on Arbeitsgänge — the first bottom-nav entry, one tap from
+                 anywhere — which is why the floating + speed-dial that repeated these
+                 same three calls is gone. -->
             <div style="display: flex; gap: 8px; margin-bottom: 10px">
               <button
                 id="dash-act-newbatch"
@@ -2308,14 +2271,8 @@
                 </div>
                 <div id="dash-batch-tasks"></div>
                 <details
-                  class="dash-legend"
-                  style="
-                    margin-top: 8px;
-                    font-size: 11px;
-                    color: var(--c-text-muted);
-                    border-top: 1px solid var(--c-border);
-                    padding-top: 6px;
-                  "
+                  class="dash-legend fs-xs"
+                  style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
                 >
                   <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
                     Color guide
@@ -2379,7 +2336,7 @@
               <!-- Alerts (inventory + overdue batches + capacity) -->
               <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
                 <div style="margin-bottom: 6px">
-                  <div class="sec" style="margin: 0; font-size: 11px" data-i18n="dash.alerts">Alerts</div>
+                  <div class="sec fs-xs" style="margin: 0" data-i18n="dash.alerts">Alerts</div>
                 </div>
                 <div id="dash-alerts"></div>
               </div>
@@ -2477,10 +2434,10 @@
               <div style="display: flex; align-items: center; justify-content: space-between">
                 <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
                 <button
-                  class="btn btn-sm"
+                  class="btn btn-sm fs-xs"
                   onclick="takeKpiSnapshot()"
                   title="Update today's snapshot"
-                  style="padding: 3px 8px; font-size: 11px"
+                  style="padding: 3px 8px"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="23 4 23 10 17 10" />
@@ -2532,7 +2489,7 @@
             <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
             <div id="metrics" style="margin-bottom: 10px"></div>
           </div>
-          <div class="stabs">
+          <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
                  sp-batch-new panel stays in the DOM as that dialog's backing form. -->
@@ -2571,17 +2528,17 @@
               >
                 <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
                 <div style="display: flex; gap: 6px; align-items: center">
-                  <select
+                  <select class="fs-meta"
                     id="batch-archive-filter"
                     data-i18n-aria-label="batch.filterArchiveAria"
                     aria-label="Filter by archive status"
-                    style="font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
+                    style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
                   >
                     <option value="active" data-i18n="batch.filterActive">Active</option>
                     <option value="archived" data-i18n="batch.filterArchived">Archived</option>
                     <option value="all" data-i18n="batch.filterAll">All</option>
                   </select>
-                  <input
+                  <input class="fs-meta"
                     type="search"
                     enterkeyhint="search"
                     autocomplete="off"
@@ -2590,12 +2547,12 @@
                     aria-label="Search batches"
                     data-i18n-placeholder="dash.search"
                     placeholder="Search..."
-                    style="width: 140px; font-size: 12px; padding: 4px 8px"
+                    style="width: 140px; padding: 4px 8px"
                   />
                 </div>
               </div>
               <div style="overflow-x: auto">
-                <table id="t-batches">
+                <table id="t-batches" class="t-cards">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
@@ -2623,12 +2580,12 @@
             <div class="card">
               <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
                 <div class="sec" data-i18n="sub.allTitle">Substrat-Ansätze</div>
-                <label style="font-size: 12px; color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
+                <label class="fs-meta" style="color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
                   <input type="checkbox" id="sb-show-spent" style="width: auto" onchange="renderSubstrateTab()" />
                   <span data-i18n="sub.showSpent">Verbrauchte anzeigen</span>
                 </label>
               </div>
-              <div id="sb-tab-summary" style="font-size: 12px; color: var(--c-text-sec); margin: 4px 0 10px"></div>
+              <div class="fs-meta" id="sb-tab-summary" style="color: var(--c-text-sec); margin: 4px 0 10px"></div>
               <div id="sb-tab-list"></div>
             </div>
           </div>
@@ -2643,7 +2600,7 @@
                 <span class="card-head-art" aria-hidden="true"><svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="20" width="100" height="52" rx="26" fill="currentColor" opacity=".15"/><ellipse cx="46" cy="46" rx="13" ry="26" fill="currentColor" opacity=".10"/><path d="M44 33l26 26M44 59l26-26" stroke="currentColor" stroke-width="3.4" opacity=".20" stroke-linecap="round"/><path d="M96 14a26 26 0 0 1 12 14" stroke="currentColor" stroke-width="3.4" opacity=".28" stroke-linecap="round" fill="none"/><path d="M110 30l-1-9 -8 5z" fill="currentColor" opacity=".28"/><path d="M40 72l-9 30M104 72l9 30" stroke="currentColor" stroke-width="5" opacity=".20" stroke-linecap="round"/><path d="M24 104h96" stroke="currentColor" stroke-width="4" opacity=".26" stroke-linecap="round"/></svg></span>
                 <div class="sec" style="margin: 0" data-i18n="sub.title">Substrat ansetzen</div>
               </div>
-              <div style="font-size: 12px; color: var(--c-text-sec); margin: 4px 0 10px" data-i18n="sub.desc">
+              <div class="fs-meta" style="color: var(--c-text-sec); margin: 4px 0 10px" data-i18n="sub.desc">
                 Menge fertiges Substrat und Rezept angeben. Nur dieser Schritt bucht Pellets, Kleie und Gips vom Lager
                 ab — die Chargen darunter ziehen dann Kilo aus dem Ansatz.
               </div>
@@ -2674,10 +2631,10 @@
                 <button id="sb-go" class="btn btn-p" onclick="createSubstrateBatchUI()" data-i18n="sub.create">
                   Ansatz anlegen
                 </button>
-                <span id="sb-status" style="font-size: 12px; color: var(--c-text-sec)"></span>
+                <span class="fs-meta" id="sb-status" style="color: var(--c-text-sec)"></span>
               </div>
               <div style="margin-top: 12px; border-top: 1px solid var(--c-border); padding-top: 8px">
-                <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px" data-i18n="sub.openMixes">
+                <div class="fs-meta" style="font-weight: 600; margin-bottom: 4px" data-i18n="sub.openMixes">
                   Offene Ansätze
                 </div>
                 <div id="sb-list"></div>
@@ -2691,18 +2648,9 @@
                     Schritt für Schritt
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="nb-source-banner"
-                  style="
-                    display: none;
-                    margin-top: 6px;
-                    padding: 6px 10px;
-                    font-size: 12px;
-                    border-radius: 6px;
-                    background: #dcfce7;
-                    border-left: 4px solid #16a34a;
-                    color: #14532d;
-                  "
+                  style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: 6px; background: #dcfce7; border-left: 4px solid #16a34a; color: #14532d"
                 ></div>
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
                   <div>
@@ -2728,9 +2676,9 @@
                     <select id="nb-strain-sel" onchange="nbStrainChanged()">
                       <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
                     </select>
-                    <div
+                    <div class="fs-xs"
                       id="nb-no-strains-hint"
-                      style="display: none; font-size: 11px; color: var(--c-red); margin-top: 4px"
+                      style="display: none; color: var(--c-red); margin-top: 4px"
                     >
                       <span data-i18n="strains.noStrainsHint"
                         >Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.</span
@@ -2738,8 +2686,8 @@
                       <button
                         type="button"
                         id="nb-create-strain-btn"
-                        class="btn btn-sm btn-p"
-                        style="margin-left: 6px; padding: 3px 8px; font-size: 11px"
+                        class="btn btn-sm btn-p fs-xs"
+                        style="margin-left: 6px; padding: 3px 8px"
                         data-i18n="strains.createNow"
                       >
                         Jetzt Pilzsorte anlegen →
@@ -2761,9 +2709,9 @@
                     <select id="nb-product" onchange="_nbProductChanged()">
                       <option value="" data-i18n="batch.noProduct">— ohne Produkt —</option>
                     </select>
-                    <div
+                    <div class="fs-xs"
                       id="nb-product-hint"
-                      style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                      style="color: var(--c-text-muted); margin-top: 2px"
                       data-i18n="batch.fromProductHint"
                     >
                       Produkt wählen → Substrat, Kokos & Grain werden automatisch berechnet.
@@ -2787,7 +2735,7 @@
                     </div>
                   </div>
                   <details id="nb-sub-section" style="background: var(--c-bg); border-radius: 8px; padding: 10px">
-                    <summary style="font-size: 12px; color: var(--c-text-sec); cursor: pointer">
+                    <summary class="fs-meta" style="color: var(--c-text-sec); cursor: pointer">
                       <span data-i18n="batch.substrate">Substrate</span>
                       <!-- Filled by nbSubSum() so the composition that will actually be
                            deducted stays visible while this section is collapsed. -->
@@ -2836,7 +2784,7 @@
                           ><input type="number" id="nb-grainrh" placeholder="52" min="0" max="100" />
                         </div>
                       </div>
-                      <div id="nb-subsum" style="font-size: 11px; color: var(--c-text-muted)"></div>
+                      <div class="fs-xs" id="nb-subsum" style="color: var(--c-text-muted)"></div>
                     </div>
                   </details>
                   <!-- One field for every kind of inoculant. Cultures live in
@@ -2858,7 +2806,7 @@
                       <select id="nb-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('nb')"></select>
                     </div>
                     <div id="nb-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
-                    <div style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px" data-i18n="inoc.hint">
+                    <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 3px" data-i18n="inoc.hint">
                       Flüssigkultur, Petrischale, Mutterkultur oder Körnerbrut — scannen oder wählen
                     </div>
                   </div>
@@ -2883,18 +2831,9 @@
                       —
                     </div>
                   </div>
-                  <div
+                  <div class="fs-meta"
                     id="nb-mat-preview"
-                    style="
-                      display: none;
-                      background: var(--c-primary-light);
-                      border: 1px solid var(--c-green-border);
-                      border-radius: 8px;
-                      padding: 10px 12px;
-                      font-size: 12px;
-                      color: var(--c-green-dark);
-                      line-height: 1.8;
-                    "
+                    style="display: none; background: var(--c-primary-light); border: 1px solid var(--c-green-border); border-radius: 8px; padding: 10px 12px; color: var(--c-green-dark); line-height: 1.8"
                   ></div>
                   <button id="btn-24" class="btn btn-p" data-i18n="batch.create">Create batch</button>
                 </div>
@@ -2947,7 +2886,7 @@
             <div class="card">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
                 <div class="sec" style="margin: 0" data-i18n="harvest.log">Harvest log</div>
-                <input
+                <input class="fs-meta"
                   type="search"
                   enterkeyhint="search"
                   autocomplete="off"
@@ -2956,11 +2895,11 @@
                   aria-label="Search harvests"
                   data-i18n-placeholder="harvest.searchBatch"
                   placeholder="Search batch..."
-                  style="width: 140px; font-size: 12px; padding: 4px 8px"
+                  style="width: 140px; padding: 4px 8px"
                 />
               </div>
               <div style="overflow-x: auto">
-                <table id="t-harvest">
+                <table id="t-harvest" class="t-cards">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="time" data-i18n="th.date">Date</th>
@@ -3024,8 +2963,8 @@
                   >
                     Standard-Anbau (optional)
                   </div>
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin: 2px 0 8px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin: 2px 0 8px"
                     data-i18n="strains.recHint"
                   >
                     Vorlage, die neue Chargen automatisch vorausfüllt. Kann leer bleiben — nur nötig, damit „+ Charge"
@@ -3034,7 +2973,7 @@
                   <select id="ms-rec-copy" onchange="msRecCopyFrom()" style="width: 100%; margin-bottom: 8px">
                     <option value="" data-i18n="strains.recCopyNone">— Rezept von anderer Sorte übernehmen —</option>
                   </select>
-                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                  <label class="fs-meta" style="color: var(--c-text-muted)">
                     <span data-i18n="strains.recType">Anbau-Art</span>
                     <select id="ms-rec-type" onchange="msRecTypeChange()">
                       <option value="" data-i18n="strains.recNone">Kein Rezept</option>
@@ -3045,18 +2984,18 @@
                   </label>
                   <div id="ms-rec-subgroup" style="display: none; margin-top: 8px">
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.substrate">Substrat-Art</span>
                         <select id="ms-rec-substrate" onchange="msRecTypeChange()">
                           <option value="holzkleie" data-i18n="orders.sub.holzkleie">Holz + Weizenkleie</option>
                           <option value="cvg" data-i18n="orders.sub.cvg">Kokos / CVG</option>
                         </select>
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.bagKg">Beutel kg (nass)</span>
                         <input id="ms-rec-bagkg" type="number" min="0" step="0.1" value="0" oninput="msRecNeed()" />
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.rh">Hydration %</span>
                         <input
                           id="ms-rec-rh"
@@ -3073,7 +3012,7 @@
                       id="ms-rec-holzgroup"
                       style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px"
                     >
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.hw">Hartholz %</span>
                         <input
                           id="ms-rec-hw"
@@ -3085,7 +3024,7 @@
                           oninput="msRecNeed()"
                         />
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.wb">Weizenkleie %</span>
                         <input
                           id="ms-rec-wb"
@@ -3099,7 +3038,7 @@
                       </label>
                       <!-- Only maitake uses this (76/19/5), but it has to be enterable
                            or that recipe cannot be expressed at all. -->
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="strains.recCornPct">Maismehl %</span>
                         <input
                           id="ms-rec-corn"
@@ -3116,7 +3055,7 @@
                       id="ms-rec-coirgroup"
                       style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px"
                     >
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.coir">Kokos %</span>
                         <input
                           id="ms-rec-coir"
@@ -3137,25 +3076,25 @@
                          how much gypsum goes in per dry kilo, and how much spawn the
                          finished substrate is inoculated at. -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px">
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="strains.recGypsumPct">Gips % vom Trockenmix</span>
                         <input id="ms-rec-gyppct" type="number" min="0" max="20" step="0.5" value="0" oninput="msRecNeed()" />
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="strains.recSpawnPct">Körnerbrut % vom Substrat</span>
                         <input id="ms-rec-spawn" type="number" min="0" max="20" step="0.5" value="0" oninput="msRecNeed()" />
                       </label>
                     </div>
-                    <div id="ms-rec-ref" style="font-size: 11px; color: var(--c-text-muted); margin-top: 6px"></div>
+                    <div class="fs-xs" id="ms-rec-ref" style="color: var(--c-text-muted); margin-top: 6px"></div>
                     <!-- What the lab should never be without while this Sorte is
                          being grown. Per Sorte because shiitake needs two months of
                          notice and an oyster needs a fortnight. -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px">
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="strains.minSpawn">Mindestbestand Körnerbrut (kg)</span>
                         <input id="ms-min-spawn" type="number" min="0" step="1" value="0" />
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="strains.minLc">Mindestbestand Flüssigkultur (Gläser)</span>
                         <input id="ms-min-lc" type="number" min="0" step="1" value="0" />
                       </label>
@@ -3163,11 +3102,11 @@
                   </div>
                   <div id="ms-rec-graingroup" style="display: none; margin-top: 8px">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.grainKg">Grain kg (nass)</span>
                         <input id="ms-rec-grainkg" type="number" min="0" step="0.01" value="0" oninput="msRecNeed()" />
                       </label>
-                      <label style="font-size: 12px; color: var(--c-text-muted)">
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
                         <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
                         <input
                           id="ms-rec-grainrh"
@@ -3182,18 +3121,18 @@
                     </div>
                   </div>
                   <div id="ms-rec-daysrow" class="g2" style="display: none; margin-top: 8px">
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="batch.incDays">Inkubationstage</span>
                       <input id="ms-rec-days" type="number" min="1" step="1" value="14" />
                     </label>
                     <!-- Distinct from incubation: rec_inc_days ends at colonisation,
                          this is how long the bags then sit in the fruiting tent. -->
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="strains.recFruitDays">Erntetage</span>
                       <input id="ms-rec-fruitdays" type="number" min="0" step="1" value="0" />
                     </label>
                   </div>
-                  <div id="ms-rec-need" class="muted" style="font-size: 12px; margin-top: 6px"></div>
+                  <div id="ms-rec-need" class="muted fs-meta" style="margin-top: 6px"></div>
                 </div>
                 <div style="display: flex; gap: 8px">
                   <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>
@@ -3206,9 +3145,9 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="strains.list">Vorhandene Pilzsorten</div>
-              <div
+              <div class="fs-meta"
                 id="strains-hint"
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 8px"
+                style="color: var(--c-text-muted); margin-bottom: 8px"
                 data-i18n="strains.hint"
               >
                 Ohne angelegte Pilzsorte können keine Chargen erstellt werden.
@@ -3317,7 +3256,7 @@
               </div>
 
               <div style="overflow-x: auto">
-                <table id="t-orders">
+                <table id="t-orders" class="t-cards">
                   <thead>
                     <tr>
                       <th data-i18n="orders.th.channel">Kanal</th>
@@ -3338,11 +3277,11 @@
           <div class="sp" id="sp-orders-tomake">
             <div class="card">
               <div class="sec" data-i18n="orders.demandTitle">Netto-Produktionsbedarf</div>
-              <div class="muted" style="font-size: 12px; margin-bottom: 8px" data-i18n="orders.demandHint">
+              <div class="muted fs-meta" style="margin-bottom: 8px" data-i18n="orders.demandHint">
                 Offene Bestellungen minus reserviert. „Start bis" = frühestes Lieferdatum minus Vorlaufzeit.
               </div>
               <div style="overflow-x: auto">
-                <table id="t-demand">
+                <table id="t-demand" class="t-cards">
                   <thead>
                     <tr>
                       <th data-i18n="orders.th.product">Produkt</th>
@@ -3387,7 +3326,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px">
                   <input id="oh-p-name" data-i18n-placeholder="orders.p.name" placeholder="Produktname" />
                   <input id="oh-p-sku" data-i18n-placeholder="orders.p.sku" placeholder="SKU (optional)" />
-                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                  <label class="fs-meta" style="color: var(--c-text-muted)">
                     <span data-i18n="orders.th.category">Kategorie</span>
                     <select id="oh-p-category">
                       <option value="all-in-one" data-i18n="orders.cat.allinone">All-in-One</option>
@@ -3398,7 +3337,7 @@
                       <option value="zubehoer" data-i18n="orders.cat.zubehoer">Zubehör</option>
                     </select>
                   </label>
-                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                  <label class="fs-meta" style="color: var(--c-text-muted)">
                     <span data-i18n="orders.p.prodType">Produktionsart</span>
                     <select id="oh-p-prodtype">
                       <option value="allinone" data-i18n="orders.pt.allinone">All-in-One (Grain + Substrat)</option>
@@ -3407,11 +3346,11 @@
                       <option value="buy" data-i18n="orders.pt.buy">Zukauf / nur Lager</option>
                     </select>
                   </label>
-                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                  <label class="fs-meta" style="color: var(--c-text-muted)">
                     <span data-i18n="orders.p.stock">Fertigbestand</span>
                     <input id="oh-p-stock" type="number" min="0" step="1" value="0" />
                   </label>
-                  <label style="font-size: 12px; color: var(--c-text-muted)">
+                  <label class="fs-meta" style="color: var(--c-text-muted)">
                     <span data-i18n="orders.p.lead">Vorlauf (Tage)</span>
                     <input id="oh-p-lead" type="number" min="0" step="1" value="0" />
                   </label>
@@ -3421,22 +3360,22 @@
                   id="oh-p-subgroup"
                   style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
                 >
-                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.subTitle">
+                  <div class="muted fs-meta" style="margin-bottom: 6px" data-i18n="orders.p.subTitle">
                     Substrat pro Stück
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.substrate">Substrat-Art</span>
                       <select id="oh-p-substrate">
                         <option value="holzkleie" data-i18n="orders.sub.holzkleie">Holz + Weizenkleie</option>
                         <option value="cvg" data-i18n="orders.sub.cvg">Kokos / CVG</option>
                       </select>
                     </label>
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.bagKg">Beutel kg (nass)</span>
                       <input id="oh-p-bagkg" type="number" min="0" step="0.1" value="0" />
                     </label>
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.rh">Hydration %</span>
                       <input id="oh-p-rh" type="number" min="0" max="100" step="1" value="0" />
                     </label>
@@ -3445,17 +3384,17 @@
                     id="oh-p-holzgroup"
                     style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px"
                   >
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.hw">Hartholz %</span>
                       <input id="oh-p-hw" type="number" min="0" max="100" step="1" value="0" />
                     </label>
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.wb">Weizenkleie %</span>
                       <input id="oh-p-wb" type="number" min="0" max="100" step="1" value="0" />
                     </label>
                   </div>
                   <div id="oh-p-coirgroup" style="display: none; grid-template-columns: 1fr; gap: 8px; margin-top: 8px">
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.coir">Kokos %</span>
                       <input id="oh-p-coir" type="number" min="0" max="100" step="1" value="100" />
                     </label>
@@ -3470,22 +3409,22 @@
                   id="oh-p-graingroup"
                   style="display: none; border-top: 1px solid var(--c-border); padding-top: 8px; margin-bottom: 8px"
                 >
-                  <div class="muted" style="font-size: 12px; margin-bottom: 6px" data-i18n="orders.p.grainTitle">
+                  <div class="muted fs-meta" style="margin-bottom: 6px" data-i18n="orders.p.grainTitle">
                     Körnerbrut pro Stück
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.grainKg">Grain kg (nass)</span>
                       <input id="oh-p-grainkg" type="number" min="0" step="0.01" value="0" />
                     </label>
-                    <label style="font-size: 12px; color: var(--c-text-muted)">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="orders.p.grainRh">Grain Hydration %</span>
                       <input id="oh-p-grainrh" type="number" min="0" max="100" step="1" value="52" />
                     </label>
                   </div>
                 </div>
 
-                <div id="oh-p-need" class="muted" style="font-size: 12px; margin: 6px 0"></div>
+                <div id="oh-p-need" class="muted fs-meta" style="margin: 6px 0"></div>
 
                 <div style="display: flex; gap: 6px; margin-top: 10px">
                   <button class="btn btn-p btn-sm" data-action="oh-prod-save" data-i18n="common.save">Speichern</button>
@@ -3503,7 +3442,7 @@
               </div>
 
               <div style="overflow-x: auto">
-                <table id="t-catalog">
+                <table id="t-catalog" class="t-cards">
                   <thead>
                     <tr>
                       <th data-i18n="orders.th.product">Produkt</th>
@@ -3519,11 +3458,11 @@
 
             <div class="card">
               <div class="sec" data-i18n="orders.rawStock">Lager — Rohstoffe</div>
-              <div class="muted" style="font-size: 12px; margin-bottom: 8px" data-i18n="orders.rawStockHint">
+              <div class="muted fs-meta" style="margin-bottom: 8px" data-i18n="orders.rawStockHint">
                 Bestände aus dem zentralen Lager. Hier gesetzt wirkt überall (Chargen + Bedarf).
               </div>
               <div style="overflow-x: auto">
-                <table id="t-rawstock">
+                <table id="t-rawstock" class="t-cards">
                   <thead>
                     <tr>
                       <th data-i18n="orders.mat.name">Material</th>
@@ -3542,7 +3481,7 @@
             <div class="card">
               <div class="sec" data-i18n="orders.customersTitle">Kunden</div>
               <div style="overflow-x: auto">
-                <table id="t-customers">
+                <table id="t-customers" class="t-cards">
                   <thead>
                     <tr>
                       <th data-i18n="orders.th.customer">Kunde</th>
@@ -3568,9 +3507,9 @@
           <div class="sp" id="sp-orders-versand">
             <div class="card">
               <div class="sec" data-i18n="versand.ordersTitle">Versand — Etiketten</div>
-              <div
+              <div class="fs-meta"
                 id="versand-config-warn"
-                style="display: none; font-size: 12px; color: var(--c-red-dark); margin-bottom: 8px"
+                style="display: none; color: var(--c-red-dark); margin-bottom: 8px"
                 data-i18n="versand.notConfigured"
               >
                 Versand ist noch nicht eingerichtet — Admin → Einstellungen → Versand.
@@ -3608,37 +3547,37 @@
           >
             <div class="card" style="max-width: 480px; width: 100%; margin: 0; max-height: 92vh; overflow: auto">
               <div class="sec" data-i18n="versand.modalTitle">Label kaufen</div>
-              <div id="ship-m-sub" class="muted" style="font-size: 12px; margin: 4px 0 10px"></div>
+              <div id="ship-m-sub" class="muted fs-meta" style="margin: 4px 0 10px"></div>
               <input type="hidden" id="ship-m-orderid" />
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.name">Name</span><input id="ship-m-name"
                 /></label>
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.company">Firma</span><input id="ship-m-company"
                 /></label>
               </div>
               <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 8px; margin-top: 8px">
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.street">Straße</span><input id="ship-m-street"
                 /></label>
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.house">Nr.</span><input id="ship-m-house"
                 /></label>
               </div>
-              <label style="font-size: 12px; color: var(--c-text-muted); display: block; margin-top: 8px"
+              <label class="fs-meta" style="color: var(--c-text-muted); display: block; margin-top: 8px"
                 ><span data-i18n="versand.f.address2">Zusatz</span><input id="ship-m-address2"
               /></label>
               <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.postal">PLZ</span><input id="ship-m-postal"
                 /></label>
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.city">Ort</span><input id="ship-m-city"
                 /></label>
               </div>
               <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.country">Land</span
                   ><input
                     id="ship-m-country"
@@ -3647,23 +3586,23 @@
                     style="text-transform: uppercase"
                     onchange="shipLoadMethods()"
                 /></label>
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.phone">Telefon</span><input id="ship-m-phone"
                 /></label>
               </div>
               <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 8px">
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.weight">Gewicht (g)</span
                   ><input type="number" id="ship-m-weight" min="1" step="10" value="1000" onchange="shipLoadMethods()"
                 /></label>
-                <label style="font-size: 12px; color: var(--c-text-muted)"
+                <label class="fs-meta" style="color: var(--c-text-muted)"
                   ><span data-i18n="versand.f.method">Versandart</span>
                   <select id="ship-m-method">
                     <option value="" data-i18n="versand.loadingMethods">…</option>
                   </select>
                 </label>
               </div>
-              <div id="ship-m-result" class="muted" style="font-size: 12px; margin-top: 10px"></div>
+              <div id="ship-m-result" class="muted fs-meta" style="margin-top: 10px"></div>
               <div style="display: flex; gap: 8px; margin-top: 12px">
                 <button class="btn btn-p" data-action="oh-ship-buy" data-i18n="versand.buyBtn">Label kaufen</button>
                 <button class="btn" data-action="oh-ship-close" data-i18n="strains.cancel">Abbrechen</button>
@@ -3692,7 +3631,7 @@
             <span>Lab</span>
             <div id="dash-lab-stock"></div>
           </div>
-          <div class="stabs">
+          <div class="stabs" data-stab-home="nav.lab">
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
@@ -3717,7 +3656,7 @@
                 />
               </div>
               <div style="overflow-x: auto">
-                <table id="t-grain">
+                <table id="t-grain" class="t-cards">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
@@ -3742,17 +3681,17 @@
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="lab.cultureLibrary">Culture library</div>
-                <div style="display: flex; gap: 6px">
-                  <select id="cult-type" style="width: auto; font-size: 12px; padding: 4px 8px">
+              <div class="sec-head">
+                <div class="sec" data-i18n="lab.cultureLibrary">Culture library</div>
+                <div class="sec-head-tools">
+                  <select id="cult-type" class="head-select">
                     <option value="all" data-i18n="lab.allTypes">All types</option>
                     <option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
                     <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option>
                     <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
                     <option value="SY" data-i18n="lab.syringes">Liquid syringes</option>
                   </select>
-                  <select id="cult-stat" style="width: auto; font-size: 12px; padding: 4px 8px">
+                  <select id="cult-stat" class="head-select">
                     <option value="all" data-i18n="lab.allStatuses">All statuses</option>
                     <option value="active" data-i18n="lab.active">Active</option>
                     <option value="stored" data-i18n="lab.stored">Stored</option>
@@ -3764,7 +3703,7 @@
                     type="button"
                     id="lab-check-btn"
                     class="btn btn-sm"
-                    style="font-size: 12px; padding: 5px 10px; white-space: nowrap"
+                    style="white-space: nowrap"
                     data-i18n="zoneCheck.btn"
                   >
                     Check
@@ -3772,7 +3711,7 @@
                 </div>
               </div>
               <div style="overflow-x: auto">
-                <table id="t-cultures">
+                <table id="t-cultures" class="t-cards">
                   <thead>
                     <tr>
                       <th class="sortable" data-sort="id" data-i18n="th.id">ID</th>
@@ -3858,13 +3797,13 @@
                     id="lw-prev-box"
                     style="display: none; background: var(--c-bg); border-radius: 8px; padding: 8px 10px"
                   >
-                    <div
-                      style="font-size: 10px; color: var(--c-text-muted); margin-bottom: 3px"
+                    <div class="fs-micro"
+                      style="color: var(--c-text-muted); margin-bottom: 3px"
                       data-i18n="lab.idsCreated"
                     >
                       IDs that will be created
                     </div>
-                    <div id="lw-prev" style="font-family: monospace; font-size: 12px; line-height: 1.8"></div>
+                    <div class="fs-meta" id="lw-prev" style="font-family: monospace; line-height: 1.8"></div>
                   </div>
                   <!-- KB (Körnerbrut) fields — shown only when work type = KB -->
                   <div id="lw-kb-rows" style="display: none; flex-direction: column; gap: 10px">
@@ -3890,7 +3829,7 @@
                               style="width: 70px"
                               autocomplete="off"
                             />
-                            <span style="font-size: 12px; color: var(--c-text-muted)">kg</span>
+                            <span class="fs-meta" style="color: var(--c-text-muted)">kg</span>
                           </div>
                         </div>
                         <div style="min-width: 80px">
@@ -3918,8 +3857,8 @@
                       <div>
                         <label data-i18n="batch.grainRh">Wassergehalt (%)</label
                         ><input type="number" id="gs-rh" value="52" min="0" max="90" step="1" />
-                        <div
-                          style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px"
+                        <div class="fs-xs"
+                          style="color: var(--c-text-muted); margin-top: 3px"
                           data-i18n="batch.grainRhHint"
                         >
                           Wasseranteil nach Hydratation — nur Trockenmasse wird vom Lagerbestand abgezogen
@@ -3931,8 +3870,8 @@
                       ><select id="gs-culture">
                         <option value="" data-i18n="batch.none">— keine —</option>
                       </select>
-                      <div
-                        style="font-size: 11px; color: var(--c-text-muted); margin-top: 3px"
+                      <div class="fs-xs"
+                        style="color: var(--c-text-muted); margin-top: 3px"
                         data-i18n="batch.sourceCultureHint"
                       >
                         Link to the PD or LC used to inoculate this batch
@@ -3947,18 +3886,9 @@
                         —
                       </div>
                     </div>
-                    <div
+                    <div class="fs-meta"
                       id="gs-mat-preview"
-                      style="
-                        display: none;
-                        background: var(--c-primary-light);
-                        border: 1px solid var(--c-green-border);
-                        border-radius: 8px;
-                        padding: 10px 12px;
-                        font-size: 12px;
-                        color: var(--c-green-dark);
-                        line-height: 1.8;
-                      "
+                      style="display: none; background: var(--c-primary-light); border: 1px solid var(--c-green-border); border-radius: 8px; padding: 10px 12px; color: var(--c-green-dark); line-height: 1.8"
                     ></div>
                   </div>
                   <!-- KB result (shown after grain batch creation) -->
@@ -4026,9 +3956,9 @@
           <!-- Lineage -->
           <div class="sp" id="sp-lab-lineage">
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
-                <div class="sec" style="margin: 0" data-i18n="lab.geneticLineage">Genetic lineage</div>
-                <select id="lineage-sel" style="font-size: 12px; padding: 4px 8px; min-width: 220px; width: auto">
+              <div class="sec-head">
+                <div class="sec" data-i18n="lab.geneticLineage">Genetic lineage</div>
+                <select class="head-select" id="lineage-sel" style="min-width: min(220px, 100%)">
                   <option value="" data-i18n="lab.selectCultureBatch">— select a culture or batch —</option>
                 </select>
               </div>
@@ -4074,7 +4004,7 @@
                   </button>
                 </div>
               </div>
-              <div id="contam-list-count" style="font-size: 11px; color: var(--c-text-muted); margin-bottom: 8px"></div>
+              <div class="fs-xs" id="contam-list-count" style="color: var(--c-text-muted); margin-bottom: 8px"></div>
               <div id="contam-list"></div>
             </div>
           </div>
@@ -4098,9 +4028,9 @@
             <div id="printer-status-text" style="font-size: 13px; line-height: 1.5" data-i18n="print.status.checking">
               Checking printer status…
             </div>
-            <div id="printer-status-detail" style="font-size: 11px; opacity: 0.8; margin-top: 4px"></div>
+            <div class="fs-xs" id="printer-status-detail" style="opacity: 0.8; margin-top: 4px"></div>
           </div>
-          <div class="stabs">
+          <div class="stabs" data-stab-home="nav.print">
             <button class="stab active" id="st-print-bags" data-i18n="print.bagLabels">Bag labels</button>
             <button class="stab" id="st-print-lab" data-i18n="print.labLabels">Lab labels</button>
             <button class="stab" id="st-print-ref" data-i18n="print.refBarcodes">Reference barcodes</button>
@@ -4111,14 +4041,14 @@
               <div class="g2" style="margin-bottom: 12px">
                 <div>
                   <label data-i18n="print.selectBatch">Select batch</label>
-                  <input
+                  <input class="fs-meta"
                     type="search"
                     enterkeyhint="search"
                     id="print-batch-search"
                     data-i18n-placeholder="print.searchBatch"
                     placeholder="Search batches…"
                     autocomplete="off"
-                    style="margin-bottom: 4px; font-size: 12px"
+                    style="margin-bottom: 4px"
                   />
                   <select id="print-batch">
                     <option value="" data-i18n="print.chooseBatch">— choose batch —</option>
@@ -4179,7 +4109,7 @@
               <div style="display: flex; gap: 8px; flex-wrap: wrap">
                 <button id="prt-27" class="btn btn-p" data-i18n="print.printDirect">Print labels (direct)</button>
               </div>
-              <p style="font-size: 11px; color: var(--c-text-muted); margin-top: 8px">
+              <p class="fs-xs" style="color: var(--c-text-muted); margin-top: 8px">
                 50×30mm · Code 128 / QR · GK420d 203dpi
               </p>
             </div>
@@ -4239,7 +4169,7 @@
                       Print labels (direct)
                     </button>
                   </div>
-                  <p style="font-size: 11px; color: var(--c-text-muted); margin-top: 8px">
+                  <p class="fs-xs" style="color: var(--c-text-muted); margin-top: 8px">
                     50×30mm · Code 128 / QR · 203dpi
                   </p>
                 </div>
@@ -4258,16 +4188,8 @@
                   Reference barcodes — print &amp; hang on wall
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center">
-                  <label
-                    style="
-                      font-size: 12px;
-                      display: flex;
-                      align-items: center;
-                      gap: 5px;
-                      cursor: pointer;
-                      color: var(--c-text);
-                      margin: 0;
-                    "
+                  <label class="fs-meta"
+                    style="display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--c-text); margin: 0"
                   >
                     <input type="checkbox" id="ref-qr" style="width: auto; margin: 0" />
                     <span data-i18n="print.qrCodes">QR codes</span>
@@ -4275,7 +4197,7 @@
                   <button id="prt-29" class="btn btn-sm btn-p" data-i18n="print.printSheet">Print sheet</button>
                 </div>
               </div>
-              <p style="font-size: 12px; color: var(--c-text-sec)" data-i18n="print.scanInfo">
+              <p class="fs-meta" style="color: var(--c-text-sec)" data-i18n="print.scanInfo">
                 Scanning works on every tab — just scan from this sheet at any time.
               </p>
             </div>
@@ -4293,9 +4215,9 @@
               <span class="cal-title" id="cal-title"></span>
             </div>
             <div class="cal-toolbar-right">
-              <select
+              <select class="fs-meta"
                 id="cal-filter-user"
-                style="font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
+                style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
               >
                 <option value="" data-i18n="calEntry.assignTo.all">Alle (Betrieb)</option>
               </select>
@@ -4345,7 +4267,7 @@
 
         <!-- ══ MORE ══ -->
         <div class="page" id="p-settings">
-          <div class="stabs">
+          <div class="stabs" data-stab-home="nav.admin">
             <button class="stab active" id="st-settings-server" style="display: none" data-i18n="settings.tabServer">
               Server
             </button>
@@ -4370,8 +4292,8 @@
           <div class="sp" id="sp-settings-versand">
             <div class="card">
               <div class="sec" data-i18n="versand.title">Versand (Sendcloud)</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="versand.desc"
               >
                 Versandetiketten direkt aus dem Order-Hub kaufen. API-Keys: Sendcloud → Einstellungen → Integrationen →
@@ -4383,14 +4305,8 @@
                   <span data-i18n="versand.enable">Versand aktivieren</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="versand.publicKey"
                     >Public Key</label
                   >
@@ -4402,14 +4318,8 @@
                   />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="versand.secretKey"
                     >Secret Key</label
                   >
@@ -4423,14 +4333,8 @@
                 </div>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap">
                   <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
+                    <label class="fs-meta"
+                      style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                       data-i18n="versand.mode"
                       >Modus</label
                     >
@@ -4440,14 +4344,8 @@
                     </select>
                   </div>
                   <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
+                    <label class="fs-meta"
+                      style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                       data-i18n="versand.defWeight"
                       >Standardgewicht (g)</label
                     >
@@ -4458,16 +4356,9 @@
                   <button id="versand-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
                   <button id="versand-test-btn" class="btn btn-sm" data-i18n="versand.test">Verbindung testen</button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="versand-test-result"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
@@ -4476,8 +4367,8 @@
           <div class="sp" id="sp-settings-channels">
             <div class="card">
               <div class="sec" data-i18n="channels.wixTitle">Wix</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="channels.wixDesc"
               >
                 Bestellungen automatisch aus Wix holen. API-Key: Wix-Dashboard → Einstellungen → API-Keys (mit
@@ -4489,14 +4380,8 @@
                   <span data-i18n="channels.enable">Aktivieren</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.apiKey"
                     >API-Key</label
                   >
@@ -4509,28 +4394,16 @@
                   />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.siteId"
                     >Site-ID</label
                   >
                   <input type="text" id="wix-siteid" style="width: 100%" />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.accountId"
                     >Account-ID (falls erforderlich)</label
                   >
@@ -4543,23 +4416,16 @@
                     Jetzt synchronisieren
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="wix-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="channels.ebayTitle">eBay</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="channels.ebayDesc"
               >
                 Direkte eBay-Anbindung (Sell Fulfillment). App-ID, Cert-ID und RuName aus dem eBay-Developer-Portal
@@ -4572,28 +4438,16 @@
                   <span data-i18n="channels.enable">Aktivieren</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.appId"
                     >App-ID (Client-ID)</label
                   >
                   <input type="text" id="ebay-clientid" style="width: 100%" />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.certId"
                     >Cert-ID (Client-Secret)</label
                   >
@@ -4606,28 +4460,16 @@
                   />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.ruName"
                     >RuName (Redirect-URL-Name)</label
                   >
                   <input type="text" id="ebay-siteid" style="width: 100%" />
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.ebayVerifyToken"
                     >Verification-Token (Kontolöschung)</label
                   >
@@ -4638,25 +4480,17 @@
                     placeholder="(leer lassen = unverändert)"
                     style="width: 100%"
                   />
-                  <p
-                    style="font-size: 11px; color: var(--c-text-muted); margin: 4px 0 0; line-height: 1.5"
+                  <p class="fs-xs"
+                    style="color: var(--c-text-muted); margin: 4px 0 0; line-height: 1.5"
                     data-i18n="channels.ebayVerifyHint"
                   >
                     Selbst ausgedachtes Geheimnis, 32–80 Zeichen (A–Z, a–z, 0–9, _ und -). Muss im eBay-Developer-Portal
                     unter „Marketplace account deletion" identisch eingetragen werden — zusammen mit der Endpunkt-URL
                     unten.
                   </p>
-                  <code
+                  <code class="fs-xs"
                     id="ebay-deletion-url"
-                    style="
-                      display: block;
-                      font-size: 11px;
-                      margin-top: 6px;
-                      padding: 5px 8px;
-                      background: var(--c-bg);
-                      border-radius: 6px;
-                      word-break: break-all;
-                    "
+                    style="display: block; margin-top: 6px; padding: 5px 8px; background: var(--c-bg); border-radius: 6px; word-break: break-all"
                   ></code>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
@@ -4667,23 +4501,16 @@
                     Jetzt synchronisieren
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="ebay-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="channels.etsyTitle">Etsy</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="channels.etsyDesc"
               >
                 Direkte Etsy-Anbindung (Open API v3). Keystring (App-API-Key) eintragen, speichern, dann „Verbinden".
@@ -4695,14 +4522,8 @@
                   <span data-i18n="channels.enable">Aktivieren</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="channels.keystring"
                     >Keystring (API-Key)</label
                   >
@@ -4716,16 +4537,9 @@
                     Jetzt synchronisieren
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="etsy-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
@@ -4745,42 +4559,42 @@
               >
                 <div class="sec" style="margin: 0" data-i18n="settings.scanLog">Scan log</div>
                 <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
-                  <select id="log-action-filter" style="font-size: 12px; padding: 4px 6px">
+                  <select class="fs-meta" id="log-action-filter" style="padding: 4px 6px">
                     <option value="" data-i18n="log.allActions">Alle Aktionen</option>
                     <option value="ADD">ADD</option>
                     <option value="MOVE">MOVE</option>
                     <option value="REMOVE">REMOVE</option>
                     <option value="HARVEST">HARVEST</option>
                   </select>
-                  <input
+                  <input class="fs-meta"
                     type="date"
                     id="log-date-from"
-                    style="font-size: 12px; padding: 4px 6px"
+                    style="padding: 4px 6px"
                     data-i18n-title="log.dateFromTitle"
                     title="Von Datum"
                   />
-                  <input
+                  <input class="fs-meta"
                     type="date"
                     id="log-date-to"
-                    style="font-size: 12px; padding: 4px 6px"
+                    style="padding: 4px 6px"
                     data-i18n-title="log.dateToTitle"
                     title="Bis Datum"
                   />
-                  <input
+                  <input class="fs-meta"
                     type="text"
                     id="log-q"
                     data-i18n-aria-label="aria.searchLog"
                     aria-label="Search log"
                     data-i18n-placeholder="dash.search"
                     placeholder="Search..."
-                    style="width: 130px; font-size: 12px; padding: 4px 8px"
+                    style="width: 130px; padding: 4px 8px"
                   />
                   <button id="btn-37" class="btn btn-sm btn-r" data-i18n="settings.clear">Clear</button>
                 </div>
               </div>
-              <div id="log-count" style="font-size: 11px; color: var(--c-text-muted); margin-bottom: 4px"></div>
+              <div class="fs-xs" id="log-count" style="color: var(--c-text-muted); margin-bottom: 4px"></div>
               <div style="overflow-x: auto">
-                <table id="t-log">
+                <table id="t-log" class="t-cards">
                   <thead>
                     <tr>
                       <th id="tgl-38" data-i18n="settings.time" style="cursor: pointer">
@@ -4827,7 +4641,7 @@
                 />
                 <button id="btn-41" class="btn btn-p" data-i18n="settings.downloadBackupBtn">Download backup</button>
               </div>
-              <div id="backup-dl-status" style="margin-top: 8px; font-size: 12px; color: var(--c-text-sec)"></div>
+              <div class="fs-meta" id="backup-dl-status" style="margin-top: 8px; color: var(--c-text-sec)"></div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="settings.restoreBackupTitle">Restore backup</div>
@@ -4852,7 +4666,7 @@
                 />
                 <button id="btn-42" class="btn btn-r" data-i18n="settings.restoreBtn">Restore</button>
               </div>
-              <div id="backup-restore-status" style="margin-top: 8px; font-size: 12px; color: var(--c-text-sec)"></div>
+              <div class="fs-meta" id="backup-restore-status" style="margin-top: 8px; color: var(--c-text-sec)"></div>
             </div>
             <!-- Clean slate: wipe production data, keep the setup. Admin only;
                  writes a verified backup before deleting anything. -->
@@ -4899,12 +4713,12 @@
                 />
                 <button id="reset-go" class="btn btn-r" data-i18n="reset.btn">Delete permanently</button>
               </div>
-              <div id="reset-status" style="margin-top: 8px; font-size: 12px; color: var(--c-text-sec)"></div>
+              <div class="fs-meta" id="reset-status" style="margin-top: 8px; color: var(--c-text-sec)"></div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="settings.syncInfo">Sync info</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); line-height: 1.7"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); line-height: 1.7"
                 data-i18n-html="settings.syncInfoDesc"
               >
                 All data is stored on the server — shared by all devices automatically. Changes sync every 5 seconds.
@@ -4934,11 +4748,11 @@
                 "
               >
                 <div>
-                  <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.username">Username</label
+                  <label class="fs-xs" style="color: var(--c-text-muted)" data-i18n="users.username">Username</label
                   ><input type="text" id="new-username" autocomplete="username" style="width: 120px; font-size: 13px" />
                 </div>
                 <div>
-                  <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.password">Password</label
+                  <label class="fs-xs" style="color: var(--c-text-muted)" data-i18n="users.password">Password</label
                   ><input
                     type="password"
                     id="new-password"
@@ -4947,13 +4761,13 @@
                   />
                 </div>
                 <div>
-                  <label style="font-size: 11px; color: var(--c-text-muted)" data-i18n="users.role">Role</label
+                  <label class="fs-xs" style="color: var(--c-text-muted)" data-i18n="users.role">Role</label
                   ><select id="new-role" style="width: auto; font-size: 13px; padding: 6px">
                     <option value="user" data-i18n="users.roleUser">user</option>
                     <option value="admin" data-i18n="users.roleAdmin">admin</option>
                   </select>
                 </div>
-                <button id="btn-44" class="btn btn-p" style="font-size: 12px" data-i18n="users.addUser">
+                <button id="btn-44" class="btn btn-p fs-meta" data-i18n="users.addUser">
                   Add user
                 </button>
               </div>
@@ -4963,8 +4777,8 @@
           <div class="sp" id="sp-settings-caldav">
             <div class="card">
               <div class="sec" data-i18n="caldav.title">CalDAV calendar server</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="caldav.desc"
               >
                 This server includes a built-in CalDAV server. Connect any calendar app (Apple Calendar, Thunderbird,
@@ -4979,42 +4793,33 @@
                   margin-bottom: 12px;
                 "
               >
-                <div
-                  style="font-size: 11px; color: var(--c-green-dark); font-weight: 600; margin-bottom: 4px"
+                <div class="fs-xs"
+                  style="color: var(--c-green-dark); font-weight: 600; margin-bottom: 4px"
                   data-i18n="caldav.urlTitle"
                 >
                   CalDAV URL (use this in your calendar app)
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px">
-                  <code
+                  <code class="fs-meta"
                     id="caldav-url-display"
-                    style="font-size: 12px; word-break: break-all; color: var(--c-text); flex: 1"
+                    style="word-break: break-all; color: var(--c-text); flex: 1"
                     data-i18n="common.loading"
                     >Loading…</code
                   >
                   <button
                     id="btn-45"
-                    class="btn btn-sm"
+                    class="btn btn-sm fs-xs"
                     data-i18n-title="caldav.copyUrl"
                     title="Copy URL"
-                    style="white-space: nowrap; padding: 4px 8px; font-size: 11px"
+                    style="white-space: nowrap; padding: 4px 8px"
                     data-i18n="common.copy"
                   >
                     Copy
                   </button>
                 </div>
               </div>
-              <div
-                style="
-                  background: var(--c-blue-light);
-                  border: 1px solid var(--c-blue-border);
-                  border-radius: 8px;
-                  padding: 10px 12px;
-                  margin-bottom: 12px;
-                  font-size: 12px;
-                  color: var(--c-blue-dark);
-                  line-height: 1.6;
-                "
+              <div class="fs-meta"
+                style="background: var(--c-blue-light); border: 1px solid var(--c-blue-border); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; color: var(--c-blue-dark); line-height: 1.6"
                 data-i18n-html="caldav.loginHint"
               >
                 <strong>Login:</strong> Your usual username. For the password, prefer an <strong>app password</strong>
@@ -5031,40 +4836,24 @@
                   <button id="act-46" class="btn btn-sm btn-p" data-i18n="caldav.saveSettings">Save settings</button>
                   <button class="btn btn-sm" id="caldav-sync-btn" data-i18n="caldav.syncNow">Sync all tasks now</button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="caldav-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="caldav.appPwTitle">App passwords for calendar apps</div>
-              <div style="font-size: 12px; color: var(--c-text-sec); line-height: 1.6; margin-bottom: 10px" data-i18n="caldav.appPwDesc">
+              <div class="fs-meta" style="color: var(--c-text-sec); line-height: 1.6; margin-bottom: 10px" data-i18n="caldav.appPwDesc">
                 A calendar app stores whatever password you give it. Create one here per device instead of typing your account password: it opens calendars and nothing else, and you can revoke a single device without changing your login.
               </div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
                 <input type="text" id="caldav-apppw-label" maxlength="60" style="flex: 1 1 180px; min-width: 140px" data-i18n-placeholder="caldav.appPwLabelPh" placeholder="Device name, e.g. iPhone" />
                 <button id="caldav-apppw-create" class="btn btn-sm btn-p" data-i18n="caldav.appPwCreate">Create</button>
               </div>
-              <div
+              <div class="fs-meta"
                 id="caldav-apppw-new"
-                style="
-                  display: none;
-                  margin-top: 10px;
-                  padding: 10px 12px;
-                  border: 1px solid var(--c-green-border);
-                  border-radius: 8px;
-                  background: var(--c-green-light);
-                  font-size: 12px;
-                  color: var(--c-green-dark);
-                "
+                style="display: none; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--c-green-border); border-radius: 8px; background: var(--c-green-light); color: var(--c-green-dark)"
               >
                 <div data-i18n="caldav.appPwOnce">Copy it now — it is shown this once and never again.</div>
                 <code id="caldav-apppw-value" style="display: block; margin-top: 6px; font-size: 16px; letter-spacing: 1px; user-select: all"></code>
@@ -5073,7 +4862,7 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="caldav.howToConnect">How to connect</div>
-              <div style="font-size: 12px; color: var(--c-text-sec); line-height: 1.7">
+              <div class="fs-meta" style="color: var(--c-text-sec); line-height: 1.7">
                 <p data-i18n-html="caldav.howThunderbird">
                   <strong>Thunderbird / GNOME Calendar:</strong> Add a new "CalDAV" or "network calendar" and paste the
                   CalDAV URL above.
@@ -5090,7 +4879,7 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="caldav.howItWorks">How it works</div>
-              <div style="font-size: 12px; color: var(--c-text-sec); line-height: 1.7">
+              <div class="fs-meta" style="color: var(--c-text-sec); line-height: 1.7">
                 <p data-i18n-html="caldav.hiwShared">
                   <strong>Shared calendar (<code>meisterpilze</code>):</strong> All tasks, events and batch due dates
                   land here. Everyone on the farm sees this calendar.
@@ -5114,16 +4903,16 @@
           <div class="sp" id="sp-settings-duckdns">
             <div class="card">
               <div class="sec" data-i18n="duckdns.title">DuckDNS Dynamic DNS</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="duckdns.desc"
               >
                 Connect your server to a free DuckDNS domain for access over the internet. The public IP is updated
                 automatically every 5 minutes.
               </p>
-              <div
+              <div class="fs-meta"
                 id="duckdns-status-banner"
-                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none"
               ></div>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
@@ -5131,14 +4920,8 @@
                   <span data-i18n="duckdns.enable">Enable DuckDNS</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="duckdns.subdomain"
                     >Subdomain</label
                   >
@@ -5154,14 +4937,8 @@
                   </div>
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="duckdns.token"
                     >DuckDNS token</label
                   >
@@ -5171,8 +4948,8 @@
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     style="max-width: 350px; width: 100%"
                   />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n-html="duckdns.tokenHint"
                   >
                     You can find the token on
@@ -5185,31 +4962,24 @@
                     Update IP now
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="duckdns-ip-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
             </div>
             <div class="card">
               <div class="sec" data-i18n="le.title">Let's Encrypt TLS certificate</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="le.desc"
               >
                 Free, trusted TLS certificate from Let's Encrypt for your DuckDNS domain. Replaces the self-signed
                 certificate. Auto-renewed before expiry.
               </p>
-              <div
+              <div class="fs-meta"
                 id="le-cert-status"
-                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none"
               ></div>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
@@ -5221,20 +4991,13 @@
                     Request certificate now
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="le-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
               </div>
-              <div
-                style="margin-top: 12px; font-size: 11px; color: var(--c-text-muted); line-height: 1.6"
+              <div class="fs-xs"
+                style="margin-top: 12px; color: var(--c-text-muted); line-height: 1.6"
                 data-i18n="le.note"
               >
                 No extra software required — works on all operating systems (Linux, macOS, Windows).
@@ -5252,8 +5015,8 @@
           <div class="sp" id="sp-settings-harvestfeed">
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.title">Harvest feed</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="harvestFeed.desc"
               >
                 Push a summary of what you have harvested and what is coming to a URL you choose — your own website, a
@@ -5261,9 +5024,9 @@
                 the receiver may report pickups back, which show up under Pickups. No batch or bag ids, no customers, no
                 scan history.
               </p>
-              <div
+              <div class="fs-meta"
                 id="harvestfeed-status-banner"
-                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none"
               ></div>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
                 <input type="checkbox" id="harvestfeed-enabled" style="width: auto" />
@@ -5272,8 +5035,8 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.offerTitle">What is on offer</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="harvestFeed.offerDesc"
               >
                 The goods rather than the connection: how long a harvest counts as fresh, how far ahead a planned one is
@@ -5283,42 +5046,24 @@
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <div style="display: flex; gap: 14px; flex-wrap: wrap">
                   <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
+                    <label class="fs-meta"
+                      style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                       data-i18n="harvestFeed.freshDays"
                       >Counts as fresh for … days</label
                     >
                     <input type="number" id="harvestfeed-fresh" min="0" max="365" style="width: 90px" />
                   </div>
                   <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
+                    <label class="fs-meta"
+                      style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                       data-i18n="harvestFeed.plannedDays"
                       >Look ahead … days</label
                     >
                     <input type="number" id="harvestfeed-planned" min="0" max="365" style="width: 90px" />
                   </div>
                   <div>
-                    <label
-                      style="
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--c-text-sec);
-                        display: block;
-                        margin-bottom: 4px;
-                      "
+                    <label class="fs-meta"
+                      style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                       data-i18n="harvestFeed.leadDays"
                       >Lead time … days</label
                     >
@@ -5344,14 +5089,8 @@
                   with somebody else's ladder.
                 -->
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="harvestFeed.packSizes"
                     >Amounts handed out</label
                   >
@@ -5373,10 +5112,10 @@
                     <button id="harvestfeed-pack-add" class="btn btn-sm" data-i18n="harvestFeed.packAdd">
                       Add size
                     </button>
-                    <span id="harvestfeed-pack-msg" style="font-size: 11px; color: var(--c-red-dark)"></span>
+                    <span class="fs-xs" id="harvestfeed-pack-msg" style="color: var(--c-red-dark)"></span>
                   </div>
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="harvestFeed.packHint"
                   >
                     In grams, the same for every species. A shop offers these amounts and hides the ones a release no
@@ -5388,8 +5127,8 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="harvestFeed.connTitle">Where it goes</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="harvestFeed.connDesc"
               >
                 The address the messages are sent to and the key they are signed with — typed once and then left
@@ -5397,14 +5136,8 @@
               </p>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="harvestFeed.url"
                     >Receiver URL</label
                   >
@@ -5414,22 +5147,16 @@
                     placeholder="https://example.org/harvest"
                     style="max-width: 480px; width: 100%"
                   />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="harvestFeed.urlHint"
                   >
                     Must be https. http is allowed for localhost only, so you can try it against a local receiver first.
                   </div>
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="harvestFeed.secret"
                     >Shared secret</label
                   >
@@ -5439,8 +5166,8 @@
                       Generate
                     </button>
                   </div>
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="harvestFeed.secretHint"
                   >
                     The receiving side needs the same value. It signs every request, so the receiver can tell your
@@ -5448,14 +5175,8 @@
                   </div>
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="harvestFeed.interval"
                     >Every … minutes</label
                   >
@@ -5467,14 +5188,8 @@
                      Verbindung, weil er einer ist: der Schlüssel, an dem der
                      Empfänger den Absender erkennt, keine Angabe zur Ware. -->
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="harvestFeed.site"
                     >Name of this farm in the feed (optional)</label
                   >
@@ -5486,8 +5201,8 @@
                     data-i18n-placeholder="harvestFeed.sitePh"
                     placeholder="e.g. north-farm"
                   />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="harvestFeed.siteHint"
                   >
                     Only needed when several farms send to the same receiver: it rides along in every message and says
@@ -5499,8 +5214,8 @@
               </div>
             </div>
             <div class="card">
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="harvestFeed.saveHint"
               >
                 All three cards are one setting and are saved together.
@@ -5515,29 +5230,13 @@
                     Show what would be sent
                   </button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="harvestfeed-result"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
                 ></div>
-                <pre
+                <pre class="fs-xs"
                   id="harvestfeed-payload"
-                  style="
-                    font-size: 11px;
-                    max-height: 320px;
-                    overflow: auto;
-                    padding: 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                    margin: 0;
-                  "
+                  style="max-height: 320px; overflow: auto; padding: 10px; background: var(--c-bg); border-radius: 7px; display: none; margin: 0"
                 ></pre>
               </div>
             </div>
@@ -5551,8 +5250,8 @@
                 <div class="sec" style="margin: 0" data-i18n="pickupLoc.title">Abholorte</div>
                 <button class="btn btn-sm btn-p" id="pickuploc-add-btn" data-i18n="pickupLoc.add">+ Abholort</button>
               </div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="pickupLoc.desc"
               >
                 Orte, an denen Ware übergeben wird — die Halle, ein Marktstand, ein zweiter Standort. Ein Termin im
@@ -5567,16 +5266,16 @@
           <div class="sp" id="sp-settings-printer">
             <div class="card">
               <div class="sec" data-i18n="printer.title">Drucker &amp; Print-Bridge</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="printer.desc"
               >
                 Configure where labels are sent. On Windows the server prints directly. On Linux a small bridge service
                 running on a Windows PC forwards print jobs to the Zebra GK420d.
               </p>
-              <div
+              <div class="fs-meta"
                 id="printer-cfg-status"
-                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none"
               ></div>
               <div
                 style="
@@ -5600,14 +5299,8 @@
                   <span data-i18n="printer.enable">Enable print bridge</span>
                 </label>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="printer.bridgeUrl"
                     >Bridge URL</label
                   >
@@ -5617,19 +5310,13 @@
                     placeholder="https://192.168.1.50:9100"
                     style="max-width: 350px; width: 100%"
                   />
-                  <div style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px" data-i18n="printer.urlHint">
+                  <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 2px" data-i18n="printer.urlHint">
                     LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).
                   </div>
                 </div>
                 <div>
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="printer.bridgeToken"
                     >Bridge token (optional)</label
                   >
@@ -5640,8 +5327,8 @@
                     data-i18n-placeholder="printer.tokenPlaceholder"
                     style="max-width: 350px; width: 100%"
                   />
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 2px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 2px"
                     data-i18n="printer.tokenHint"
                   >
                     Shared token. Set the same value in PRINT_BRIDGE_TOKEN on the Windows side. Required on shared LANs.
@@ -5660,14 +5347,14 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="printer.setupTitle">Bridge setup (Windows PC)</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="printer.setupIntro"
               >
                 Run these once on the Windows PC that has the Zebra attached. The bridge then runs in the background
                 after every login.
               </p>
-              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0">
+              <ol class="fs-meta" style="line-height: 1.7; padding-left: 18px; margin: 0">
                 <li data-i18n="printer.step1">
                   Download <code>print-bridge.ps1</code> on the Windows PC, e.g. into
                   <code>C:\meistertracker-bridge\</code>.
@@ -5678,23 +5365,15 @@
                   Download print-bridge.ps1
                 </button>
               </div>
-              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="2">
+              <ol class="fs-meta" style="line-height: 1.7; padding-left: 18px; margin: 0" start="2">
                 <li data-i18n="printer.step2">
                   Open PowerShell on the Windows PC and run the installer. UAC will ask for admin rights — accept. This
                   sets up URL ACL, firewall rule, scheduled task, and starts the bridge.
                 </li>
               </ol>
               <div style="position: relative; margin: 6px 0 12px">
-                <pre
-                  style="
-                    background: var(--c-bg);
-                    border-radius: 6px;
-                    padding: 10px;
-                    padding-right: 70px;
-                    font-size: 11px;
-                    overflow-x: auto;
-                    margin: 0;
-                  "
+                <pre class="fs-xs"
+                  style="background: var(--c-bg); border-radius: 6px; padding: 10px; padding-right: 70px; overflow-x: auto; margin: 0"
                 ><code id="printer-setup-cmd-1">powershell -ExecutionPolicy Bypass -File "C:\meistertracker-bridge\print-bridge.ps1" -Install</code></pre>
                 <button
                   id="printer-copy-cmd-1"
@@ -5705,14 +5384,14 @@
                   Copy
                 </button>
               </div>
-              <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0" start="3">
+              <ol class="fs-meta" style="line-height: 1.7; padding-left: 18px; margin: 0" start="3">
                 <li data-i18n="printer.step3">
                   Enter the Windows PC's LAN IP and port above (e.g. <code>https://192.168.1.50:9100</code>), tick
                   <em>Enable</em>, click <strong>Save</strong>, then <strong>Send test label</strong>.
                 </li>
               </ol>
-              <div
-                style="font-size: 11px; color: var(--c-text-muted); margin-top: 14px; line-height: 1.6"
+              <div class="fs-xs"
+                style="color: var(--c-text-muted); margin-top: 14px; line-height: 1.6"
                 data-i18n="printer.manageHint"
               >
                 Useful management commands on the Windows PC:
@@ -5725,14 +5404,14 @@
           <div class="sp" id="sp-settings-mcp">
             <div class="card">
               <div class="sec" data-i18n="mcp.title">MCP Server</div>
-              <p
+              <p class="fs-meta"
                 id="mcp-desc"
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="mcp.desc"
               ></p>
-              <div
+              <div class="fs-meta"
                 id="mcp-status-banner"
-                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; display: none"
+                style="border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none"
               ></div>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
@@ -5740,49 +5419,28 @@
                   <span data-i18n="mcp.enable"></span>
                 </label>
                 <div id="mcp-url-section" style="display: none">
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="mcp.connectorUrl"
                   ></label>
                   <div style="display: flex; gap: 4px; align-items: center">
-                    <input
+                    <input class="fs-meta"
                       type="text"
                       id="mcp-url"
                       readonly
-                      style="flex: 1; background: var(--c-bg); font-family: monospace; font-size: 12px"
+                      style="flex: 1; background: var(--c-bg); font-family: monospace"
                     />
                     <button id="mcp-copy-url-btn" class="btn btn-sm" data-i18n="mcp.copy"></button>
                   </div>
                 </div>
                 <div id="mcp-token-section" style="display: none">
-                  <label
-                    style="
-                      font-size: 12px;
-                      font-weight: 600;
-                      color: var(--c-text-sec);
-                      display: block;
-                      margin-bottom: 4px;
-                    "
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
                     data-i18n="mcp.apiKey"
                   ></label>
-                  <div
+                  <div class="fs-meta"
                     id="mcp-token-display"
-                    style="
-                      display: none;
-                      font-family: monospace;
-                      font-size: 12px;
-                      padding: 8px;
-                      background: var(--c-bg);
-                      border-radius: 6px;
-                      word-break: break-all;
-                      margin-bottom: 6px;
-                    "
+                    style="display: none; font-family: monospace; padding: 8px; background: var(--c-bg); border-radius: 6px; word-break: break-all; margin-bottom: 6px"
                   ></div>
                   <div style="display: flex; gap: 6px; flex-wrap: wrap">
                     <button id="mcp-gen-token-btn" class="btn btn-sm btn-p" data-i18n="mcp.generateKey"></button>
@@ -5794,31 +5452,23 @@
                     ></button>
                     <button id="mcp-revoke-token-btn" class="btn btn-sm btn-d" data-i18n="mcp.revokeKey"></button>
                   </div>
-                  <div
-                    style="font-size: 11px; color: var(--c-text-muted); margin-top: 4px"
+                  <div class="fs-xs"
+                    style="color: var(--c-text-muted); margin-top: 4px"
                     data-i18n="mcp.keyHint"
                   ></div>
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
                   <button id="mcp-save-btn" class="btn btn-sm btn-p" data-i18n="mcp.save"></button>
                 </div>
-                <div
+                <div class="fs-meta"
                   id="mcp-status"
-                  style="
-                    font-size: 12px;
-                    color: var(--c-text-muted);
-                    padding: 6px 10px;
-                    background: var(--c-bg);
-                    border-radius: 7px;
-                    display: none;
-                    margin-top: 4px;
-                  "
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none; margin-top: 4px"
                 ></div>
               </div>
             </div>
             <div class="card" id="mcp-guide-card" style="display: none">
               <div class="sec" data-i18n="mcp.guideTitle"></div>
-              <div style="font-size: 12px; color: var(--c-text-sec); line-height: 1.7">
+              <div class="fs-meta" style="color: var(--c-text-sec); line-height: 1.7">
                 <p data-i18n="mcp.step1"></p>
                 <p data-i18n="mcp.step2"></p>
                 <p data-i18n="mcp.step3"></p>
@@ -5828,30 +5478,22 @@
             </div>
             <div class="card" id="mcp-diag-card" style="display: none">
               <div class="sec" data-i18n="mcp.diagTitle">Diagnostics</div>
-              <div
+              <div class="fs-meta"
                 id="mcp-diag-result"
-                style="font-size: 12px; color: var(--c-text-sec); line-height: 1.7; margin-bottom: 8px"
+                style="color: var(--c-text-sec); line-height: 1.7; margin-bottom: 8px"
               ></div>
               <button id="mcp-diag-btn" class="btn btn-sm" data-i18n="mcp.runDiag">Run Diagnostics</button>
             </div>
             <div class="card" id="mcp-oauth-card" style="display: none">
               <div class="sec" data-i18n="mcp.oauthTitle">Connected Clients</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="mcp.oauthDesc"
               ></p>
               <div id="oauth-client-list" style="margin-bottom: 12px"></div>
-              <div
+              <div class="fs-meta"
                 id="oauth-client-status"
-                style="
-                  font-size: 12px;
-                  color: var(--c-text-muted);
-                  padding: 6px 10px;
-                  background: var(--c-bg);
-                  border-radius: 7px;
-                  display: none;
-                  margin-top: 8px;
-                "
+                style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none; margin-top: 8px"
               ></div>
             </div>
           </div>
@@ -5859,7 +5501,7 @@
           <div class="sp" id="sp-settings-camera">
             <div class="card" style="background: var(--c-yellow-bg, #fef3c7); border-left: 4px solid #f59e0b">
               <div class="sec" style="color: #92400e" data-i18n="cam.wipTitle">Work in progress</div>
-              <div style="font-size: 12px; color: #78350f; line-height: 1.6" data-i18n="cam.wipDesc">
+              <div class="fs-meta" style="color: #78350f; line-height: 1.6" data-i18n="cam.wipDesc">
                 The camera service runs as an external Python process (<code>python -m mushroom_camera</code>). This
                 admin tab manages the cameras list, calibration values, and open flags. Calibration changes are stored
                 in the DB; the Python module currently reads env vars and will pick up DB-backed values in a future
@@ -5884,8 +5526,8 @@
 
             <div class="card">
               <div class="sec" data-i18n="cam.calibrationTitle">Calibration</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="cam.calibrationDesc"
               >
                 Tunes the detection thresholds and spatial scale of the camera pipeline. Defaults match the Python
@@ -5898,23 +5540,23 @@
                 </button>
                 <button id="cam-calib-reload" class="btn btn-sm" data-i18n="cam.reload">Reload</button>
               </div>
-              <div
+              <div class="fs-meta"
                 id="cam-calib-status"
-                style="font-size: 12px; color: var(--c-text-muted); margin-top: 8px; min-height: 16px"
+                style="color: var(--c-text-muted); margin-top: 8px; min-height: 16px"
               ></div>
             </div>
 
             <div class="card">
               <div class="sec" data-i18n="cam.pxCalibTitle">Pixel calibration helper</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="cam.pxCalibDesc"
               >
                 Upload a frame with a ruler in view. Click the two endpoints of a known distance, enter the real-world
                 length in mm, and the pixels-per-mm value will be computed and saved.
               </p>
               <div style="display: flex; flex-direction: column; gap: 10px">
-                <input id="cam-calib-image" type="file" accept="image/*" style="font-size: 12px" />
+                <input class="fs-meta" id="cam-calib-image" type="file" accept="image/*" />
                 <div style="position: relative; max-width: 100%; overflow: auto">
                   <canvas
                     id="cam-calib-canvas"
@@ -5927,9 +5569,9 @@
                     "
                   ></canvas>
                 </div>
-                <div id="cam-calib-px" style="font-size: 12px; color: var(--c-text-muted); display: none"></div>
+                <div class="fs-meta" id="cam-calib-px" style="color: var(--c-text-muted); display: none"></div>
                 <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
-                  <label style="font-size: 12px; margin: 0" data-i18n="cam.realDistanceMm">Real distance (mm)</label>
+                  <label class="fs-meta" style="margin: 0" data-i18n="cam.realDistanceMm">Real distance (mm)</label>
                   <input id="cam-calib-mm" type="number" step="0.1" min="0.1" style="width: 100px" value="100" />
                   <button id="cam-calib-apply" class="btn btn-sm btn-p" disabled data-i18n="cam.applyPxPerMm">
                     Apply px/mm
@@ -5940,12 +5582,12 @@
 
             <div class="card">
               <div class="sec" data-i18n="cam.flagsTitle">Open flags</div>
-              <div id="cam-flags" style="font-size: 12px; color: var(--c-text-sec); line-height: 1.6"></div>
+              <div class="fs-meta" id="cam-flags" style="color: var(--c-text-sec); line-height: 1.6"></div>
             </div>
 
             <div class="card">
               <div class="sec" data-i18n="cam.recentTitle">Recent measurements</div>
-              <div id="cam-recent" style="font-size: 12px; color: var(--c-text-sec)"></div>
+              <div class="fs-meta" id="cam-recent" style="color: var(--c-text-sec)"></div>
             </div>
           </div>
 
@@ -5955,27 +5597,27 @@
               <h3 id="cam-edit-title" data-i18n="cam.addCamera">Add camera</h3>
               <div style="display: flex; flex-direction: column; gap: 10px">
                 <div>
-                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldName">Name</label>
+                  <label class="fs-meta" style="font-weight: 600" data-i18n="cam.fieldName">Name</label>
                   <input id="cam-edit-name" type="text" maxlength="80" />
                 </div>
                 <div>
-                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldRtsp">RTSP URL</label>
-                  <input
+                  <label class="fs-meta" style="font-weight: 600" data-i18n="cam.fieldRtsp">RTSP URL</label>
+                  <input class="fs-meta"
                     id="cam-edit-rtsp"
                     type="text"
                     placeholder="rtsp://user:pass@host/stream1"
-                    style="font-family: monospace; font-size: 12px"
+                    style="font-family: monospace"
                   />
                 </div>
                 <div>
-                  <label style="font-size: 12px; font-weight: 600" data-i18n="cam.fieldZone">Zone</label>
+                  <label class="fs-meta" style="font-weight: 600" data-i18n="cam.fieldZone">Zone</label>
                   <select id="cam-edit-zone"></select>
                 </div>
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
                   <input id="cam-edit-enabled" type="checkbox" style="width: auto" checked />
                   <span data-i18n="cam.fieldEnabled">Enabled</span>
                 </label>
-                <div id="cam-edit-status" style="font-size: 12px; color: var(--c-red, #b91c1c); min-height: 16px"></div>
+                <div class="fs-meta" id="cam-edit-status" style="color: var(--c-red, #b91c1c); min-height: 16px"></div>
               </div>
               <div class="modal-btns">
                 <button id="cam-edit-cancel" class="btn" data-i18n="common.cancel">Cancel</button>
@@ -5998,8 +5640,8 @@
             </div>
             <div class="card">
               <div class="sec" data-i18n="server.updateRestart">Update &amp; restart</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
                 data-i18n="server.updateDesc"
               >
                 Pulls the latest code from GitHub and restarts the server. All users will be briefly disconnected.
@@ -6007,7 +5649,7 @@
               <button id="btn-server-restart" class="btn btn-r" data-i18n="server.updateBtn">
                 Update &amp; restart server
               </button>
-              <div id="server-restart-status" style="margin-top: 10px; font-size: 12px; display: none"></div>
+              <div class="fs-meta" id="server-restart-status" style="margin-top: 10px; display: none"></div>
             </div>
           </div>
 
@@ -6015,7 +5657,7 @@
 
         <!-- ══ INVENTORY ══ -->
         <div class="page" id="p-inv">
-          <div class="stabs">
+          <div class="stabs" data-stab-home="nav.inventory">
             <button class="stab active" id="st-inv-stock" data-i18n="inv.stock">Stock</button>
             <button class="stab" id="st-inv-delivery" data-i18n="inv.logDelivery">Log delivery</button>
             <button class="stab" id="st-inv-log" data-i18n="inv.usageLog">Usage log</button>
@@ -6027,8 +5669,8 @@
             <div id="inv-cards" class="g3" style="margin-bottom: 10px"></div>
             <div class="card">
               <div class="sec" data-i18n="inv.alertThresholds">Alert thresholds</div>
-              <p
-                style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px"
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px"
                 data-i18n="inv.alertThresholdsDesc"
               >
                 Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to
@@ -6053,15 +5695,9 @@
                       <option value="grain" data-i18n="inv.grain">Grain</option>
                     </select>
                   </div>
-                  <div
+                  <div class="fs-meta"
                     id="del-current"
-                    style="
-                      font-size: 12px;
-                      color: var(--c-text-muted);
-                      padding: 6px 10px;
-                      background: var(--c-bg);
-                      border-radius: 7px;
-                    "
+                    style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px"
                   ></div>
                   <div>
                     <label data-i18n="inv.amountReceived">Amount received (kg)</label>
@@ -6075,16 +5711,9 @@
                       autocomplete="off"
                     />
                   </div>
-                  <div
+                  <div class="fs-meta"
                     id="del-preview"
-                    style="
-                      display: none;
-                      font-size: 12px;
-                      color: var(--c-green-dark);
-                      background: var(--c-primary-light);
-                      border-radius: 7px;
-                      padding: 8px 10px;
-                    "
+                    style="display: none; color: var(--c-green-dark); background: var(--c-primary-light); border-radius: 7px; padding: 8px 10px"
                   ></div>
                   <div>
                     <label data-i18n="inv.supplierNote">Supplier / note (optional)</label
@@ -6100,8 +5729,8 @@
               </div>
               <div class="card">
                 <div class="sec" data-i18n="inv.manualAdj">Manual adjustment</div>
-                <p
-                  style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 10px"
+                <p class="fs-meta"
+                  style="color: var(--c-text-muted); margin-bottom: 10px"
                   data-i18n="inv.manualAdjDesc"
                 >
                   Use this to correct stock after a physical count, spoilage, or any discrepancy.
@@ -6116,15 +5745,9 @@
                       <option value="grain" data-i18n="inv.grain">Grain</option>
                     </select>
                   </div>
-                  <div
+                  <div class="fs-meta"
                     id="adj-current"
-                    style="
-                      font-size: 12px;
-                      color: var(--c-text-muted);
-                      padding: 6px 10px;
-                      background: var(--c-bg);
-                      border-radius: 7px;
-                    "
+                    style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px"
                   ></div>
                   <div class="g2">
                     <div>
@@ -6139,16 +5762,8 @@
                         autocomplete="off"
                       />
                     </div>
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        padding-top: 18px;
-                        font-size: 12px;
-                        color: var(--c-text-muted);
-                        font-style: italic;
-                      "
+                    <div class="fs-meta"
+                      style="display: flex; align-items: center; justify-content: center; padding-top: 18px; color: var(--c-text-muted); font-style: italic"
                       data-i18n="inv.orAddSubtract"
                     >
                       or add / subtract
@@ -6166,15 +5781,9 @@
                       autocomplete="off"
                     />
                   </div>
-                  <div
+                  <div class="fs-meta"
                     id="adj-preview"
-                    style="
-                      display: none;
-                      font-size: 12px;
-                      background: var(--c-bg);
-                      border-radius: 7px;
-                      padding: 8px 10px;
-                    "
+                    style="display: none; background: var(--c-bg); border-radius: 7px; padding: 8px 10px"
                   ></div>
                   <div>
                     <label data-i18n="inv.reason">Reason</label
@@ -6194,9 +5803,9 @@
           <!-- Usage log -->
           <div class="sp" id="sp-inv-log">
             <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="inv.usageHistory">Material usage history</div>
-                <select id="inv-log-filter" style="width: auto; font-size: 12px; padding: 4px 8px">
+              <div class="sec-head">
+                <div class="sec" data-i18n="inv.usageHistory">Material usage history</div>
+                <select class="head-select" id="inv-log-filter">
                   <option value="all" data-i18n="inv.allMaterials">All materials</option>
                   <option value="hardwood" data-i18n="inv.hardwood">Hardwood</option>
                   <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
@@ -6231,7 +5840,7 @@
                   + Add supplier
                 </button>
               </div>
-              <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px" data-i18n="inv.suppliersDesc">
+              <p class="fs-meta" style="color: var(--c-text-muted); margin-bottom: 12px" data-i18n="inv.suppliersDesc">
                 Manage suppliers for each material so you know where to reorder.
               </p>
               <div id="suppliers-list"></div>
@@ -6247,15 +5856,14 @@
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
               <div class="sec" data-i18n="zones.title" style="margin: 0">Zonen &amp; Racks</div>
               <button
-                class="btn btn-sm"
+                class="btn btn-sm fs-xs"
                 id="btn-print-all-zone-qr"
                 data-i18n="zones.printAllQr"
-                style="font-size: 11px"
               >
                 Alle QR-Codes drucken
               </button>
             </div>
-            <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px" data-i18n="zones.desc">
+            <p class="fs-meta" style="color: var(--c-text-muted); margin-bottom: 12px" data-i18n="zones.desc">
               Verwalte die Standorte deiner Farm. Zonen lassen sich nur löschen, wenn keine Bags darin sind.
             </p>
             <div id="zones-list"></div>
@@ -6335,8 +5943,8 @@
                which is a different and worse answer than "not yours to see". -->
           <div class="card" id="harvestrelease-card" style="display: none">
             <div class="sec" data-i18n="harvestFeed.releaseTitle">Released for sale</div>
-            <p
-              style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
+            <p class="fs-meta"
+              style="color: var(--c-text-muted); margin-bottom: 12px; line-height: 1.6"
               data-i18n="harvestFeed.releaseDesc"
             >
               How much of each species a shop may sell — a set-aside, not a stock level. Put that amount in its own
@@ -6350,9 +5958,9 @@
               where somebody reads them — the same banner in Settings is two
               pages away from the person acting on the figures.
             -->
-            <div id="harvestrelease-feed" style="display: none; font-size: 12px; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px"></div>
+            <div class="fs-meta" id="harvestrelease-feed" style="display: none; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px"></div>
             <div style="overflow-x: auto">
-              <table id="t-harvestrelease" style="min-width: 640px">
+              <table id="t-harvestrelease" class="t-cards">
                 <thead>
                   <tr>
                     <th data-i18n="harvestFeed.colSpecies">Species</th>
@@ -6378,7 +5986,7 @@
                 -->
                 <tfoot>
                   <tr id="harvestrelease-unattributed" style="display: none">
-                    <td colspan="7" style="font-size: 12px; color: var(--c-amber-dark)"></td>
+                    <td class="fs-meta" colspan="7" style="color: var(--c-amber-dark)"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -6403,30 +6011,22 @@
                 afterwards. The price of that is the edit somebody forgets, so
                 the count is put where the forgetting happens.
               -->
-              <span
+              <span class="fs-meta"
                 id="harvestrelease-pending"
-                style="font-size: 12px; color: var(--c-amber-dark); display: none"
+                style="color: var(--c-amber-dark); display: none"
               ></span>
               <button id="harvestrelease-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Save</button>
             </div>
-            <div
+            <div class="fs-meta"
               id="harvestrelease-result"
-              style="
-                font-size: 12px;
-                color: var(--c-text-muted);
-                padding: 6px 10px;
-                background: var(--c-bg);
-                border-radius: 7px;
-                display: none;
-                margin-top: 8px;
-              "
+              style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none; margin-top: 8px"
             ></div>
           </div>
           <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
               <div class="sec" data-i18n="pickups.title" style="margin: 0">Abholungen</div>
               <div style="display: flex; align-items: center; gap: 10px">
-                <span id="pickups-count" style="font-size: 12px; color: var(--c-text-muted)"></span>
+                <span class="fs-meta" id="pickups-count" style="color: var(--c-text-muted)"></span>
                 <!--
                   The list used to be everything, oldest first, capped at 200 —
                   so once enough collections had happened, next week's booking
@@ -6436,12 +6036,12 @@
                 <button class="btn btn-sm" id="pickups-past-btn" data-i18n="pickups.showPast">Vergangene zeigen</button>
               </div>
             </div>
-            <p style="font-size: 12px; color: var(--c-text-muted); margin-bottom: 12px" data-i18n="pickups.desc">
+            <p class="fs-meta" style="color: var(--c-text-muted); margin-bottom: 12px" data-i18n="pickups.desc">
               Abholtermine, die der Empfänger des Ernte-Feeds zurückgemeldet hat. Zeiten sind Ortszeit des jeweiligen
               Abholorts. Diese Liste wird hier nicht bearbeitet.
             </p>
             <div style="overflow-x: auto">
-              <table id="t-pickups">
+              <table id="t-pickups" class="t-cards">
                 <thead>
                   <tr>
                     <th data-i18n="pickups.th.when">Wann</th>
@@ -6489,44 +6089,6 @@
       </svg>
       <span class="bell-badge" id="bell-badge" hidden>0</span>
     </button>
-    <!-- Floating + action speed-dial (mobile/tablet only) — bottom-left FAB
-         that opens a vertical menu with the three primary creation actions
-         (New batch / Lab work / Log harvest). Mirrors what the dashboard
-         quick-actions card offers, but reachable from any page. -->
-    <div class="action-fab-wrap no-print" id="action-fab-wrap">
-      <div class="action-fab-menu" id="action-fab-menu" hidden>
-        <button class="action-fab-item" id="action-fab-newbatch" type="button">
-          <span class="action-fab-item-label" data-i18n="dash.actionNewBatch">+ New batch</span>
-        </button>
-        <button class="action-fab-item" id="action-fab-labwork" type="button">
-          <span class="action-fab-item-label" data-i18n="dash.actionLabWork">+ Lab work</span>
-        </button>
-        <button class="action-fab-item" id="action-fab-harvest" type="button">
-          <span class="action-fab-item-label" data-i18n="dash.actionHarvest">+ Log harvest</span>
-        </button>
-      </div>
-      <button
-        class="action-fab"
-        id="action-fab"
-        type="button"
-        aria-haspopup="true"
-        aria-expanded="false"
-        data-i18n-aria-label="aria.actionSpeedDial"
-        aria-label="Quick actions"
-      >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
-    </div>
 
     <!-- Floating camera FAB (mobile/tablet only) -->
     <button

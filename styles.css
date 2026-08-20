@@ -55,6 +55,152 @@
   --radius-sm: 8px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+  /* ── SIZE / SPACE / TYPE ─────────────────────────────────────────────────
+     These values are the PHONE. The desktop is the override below.
+
+     It used to run the other way: the base was the desktop and each phone rule
+     subtracted from it, which is how a 480 px viewport ended up with a smaller
+     primary button than a 27" monitor. Nobody decided that; it is just what you
+     get when "mobile" means "the same thing, tighter". The lab works standing,
+     gloved, one-handed, so the phone gets the generous end of every pair and
+     the desk has to ask for the tight one.
+
+     Rule for adding to this block: a token's :root value is what a phone should
+     get. If that is also what the desktop should get, it does not need a line
+     in the override. */
+  --fs-xs: 13px;
+  --fs-sm: 15px;
+  --fs-base: 17px;
+  /* 12px is the single most common inline size in this app — filter selects,
+     status lines, card blurbs, preview boxes. --fs-xs cannot absorb them: it is
+     11px on a desktop and would drop every one of them by a pixel. So it gets
+     its own pair, phone at the floor and desktop where it already was. */
+  --fs-meta: 13px;
+  /* And the same for 10px, the size id chips and timestamps were written at.
+     Three pairs cover 497 of the 497 inline sizes in this app; the six
+     fractional ones in between are named where they are used. */
+  --fs-micro: 13px;
+  /* The floor, as a sentinel rather than a size. 104 rules in this stylesheet
+     set a font-size below --fs-xs and serve both devices from that one number:
+     `.sec` at 12px, `.sb-group-label` at 10px, `.chip-l` at 9px. Every one of
+     those numbers is a considered DESKTOP value, so none of them may move.
+
+     `font-size: max(12px, var(--fs-min))` says both things at once. On a phone
+     the floor wins and the text is 13px; on a desk --fs-min is 0 and max() gives
+     back exactly the 12px that was written, byte for byte. The desktop cannot
+     move here — not "was checked and did not", cannot — because the value is
+     never replaced, only floored on the device that needs a floor.
+
+     The alternative was five paired tokens, one per distinct desktop value
+     (9, 10, 11.5, 12, 12.5). Rejected: five hand-written pairs is five chances
+     to type the wrong desktop number, and test/desktop-baseline.json watches 31
+     selectors out of the 104 rules — it is a tripwire, not a proof, and this is
+     exactly the shape of change it cannot see.
+
+     Same trick as --tap: auto below, and for the same reason — the desktop's
+     honest answer is "no constraint", not "a different constraint". */
+  --fs-min: 13px;
+  /* 44px is WCAG 2.5.5 AAA. 56 is the deliberate step past it for gloves — and
+     it is not a new number here: .bottom-nav-btn already chose 56px the one
+     time this codebase sat down and thought about a touch target. */
+  --tap: 56px;
+  --tap-sm: 48px;
+  /* The touch floor, as a sentinel — the --fs-min idea applied to height.
+     Rules all over the app already chose a minimum and chose it thoughtfully:
+     44px on the flow's footer buttons, 46px on its batch rows, 48px on its zone
+     buttons. Those are WCAG-correct numbers for a mouse and a considered
+     desktop layout, and replacing them would move three desktop values to buy
+     nothing.
+
+       min-height: max(46px, var(--tap-min));
+
+     reads as "46, and at least 56 in a hand". --tap itself cannot do this job:
+     its desktop value is `auto`, which is not a length, and max() with a
+     keyword is invalid. So this is the numeric twin — 0 on a desktop, which
+     computes identically to `auto` for min-height (the fixture records 0px for
+     every --tap consumer). */
+  --tap-min: 56px;
+  /* And the same sentinel for the other floor, because §9 chose two. --tap-min
+     is 56px for a gloved hand on a Feld screen; this is the 48px one, and the
+     rule for picking is which kind of screen the control lives on. Chrome that
+     rides along on every screen — the topbar bell, the drawer toggle, the undo
+     toast — takes this one: it clears the 44px minimum every guideline agrees
+     on without spending 56px of a phone's height on furniture. Having only the
+     Feld floor as a sentinel is what left that chrome at 26–36px through four
+     phases; there was nothing to floor it with that did not also make it huge. */
+  --tap-sm-min: 48px;
+  --pad-page: 16px;
+  --pad-card: 16px;
+  --pad-btn: 13px 18px;
+  --pad-stab: 11px 18px;
+  --pad-sb: 12px 14px;
+  --pad-modal: 16px 14px;
+  /* Where the floating chrome sits above the bottom edge. On a phone the 56px
+     bottom nav is in the way; on a desk there is no bar — same inversion as
+     everything above. Three pieces of floating chrome used to carry three
+     unrelated numbers here — a 72px shelf, the 24px .cam-fab was born with, and
+     an .undo-bar offset derived by hand from the second. One token now, and the
+     derivation stays visible. */
+  --fab-bottom: 72px;
+  /* The launcher's tiles. A pair rather than a max() floor, because this is not
+     a floor: 14.5px already clears --fs-min, and 17px on a phone is a decision
+     about what the first screen a worker meets should look like, not a rescue.
+     max() is for "never smaller than"; a pair is for "this size here, that size
+     there", and keeping the two apart is what stops either from becoming the
+     answer to everything. The padding grows with the type — the title gains
+     2.5px inside a box that would otherwise stay the same size. */
+  --fs-tile: 17px;
+  --pad-tile: 18px 18px 20px;
+}
+
+/* The desktop override restores today's values exactly — every number below was
+   read off the computed styles before the conversion, and test/desktop-baseline.json
+   plus scripts/capture-desktop-baseline.js exist to prove it stayed that way.
+
+   `hover: hover` is doing real work in this query, not decoration. The reason
+   for a big touch target is the input device, not the viewport width: a tablet
+   held in a gloved hand is 1024 px wide and still needs the phone's numbers.
+   Coarse-pointer devices therefore keep the :root values at any width, which is
+   also what the old `@media (pointer: coarse)` .sb-btn block was reaching for
+   before the tokens absorbed it. A touchscreen laptop reports hover: hover for
+   its mouse and lands on the desktop side, correctly.
+
+   `auto` for the tap tokens is not a placeholder — it means "intrinsic height,
+   exactly as before", so min-height contributes nothing on a desktop. */
+/* …and print, which is neither a phone nor a desk but is much closer to the
+   desk. A printed page has no pointer at all, so `hover: hover` is false for
+   it and every token above resolved to the value chosen for a gloved hand:
+   13px floors on a barcode label, and `min-height: max(46px, var(--tap-min))`
+   putting 56px of white space under every control that reached paper. Nothing
+   read a token from inside @media print, so this was latent rather than
+   broken — until the inline sizes moved onto classes that do. */
+@media (min-width: 769px) and (hover: hover), print {
+  :root {
+    --fs-xs: 11px;
+    --fs-sm: 13px;
+    --fs-base: 15px;
+    --fs-meta: 12px;
+    --fs-micro: 10px;
+    /* 0, so every max() in the sheet returns the literal beside it unchanged. */
+    --fs-min: 0px;
+    --tap: auto;
+    --tap-sm: auto;
+    --tap-min: 0px;
+    --tap-sm-min: 0px;
+    --pad-page: 24px;
+    --pad-card: 20px;
+    --pad-btn: 9px 16px;
+    --pad-stab: 7px 16px;
+    --pad-sb: 9px 12px;
+    --pad-modal: 28px;
+    /* No bottom nav here, so the chrome sits where it always did. Both FABs are
+       display:none on a desktop anyway; only .undo-bar reads this off-phone,
+       and its own rule keeps it out of the way. */
+    --fs-tile: 14.5px;
+    --pad-tile: 15px 15px 16px;
+    --fab-bottom: 24px;
+  }
 }
 
 * {
@@ -70,7 +216,7 @@ body {
     sans-serif;
   background: var(--c-bg);
   color: var(--c-text);
-  font-size: 15px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   overflow-x: hidden;
 }
@@ -119,7 +265,7 @@ body {
 .sb-logo-text small {
   font-weight: 400;
   color: var(--c-text-sec);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .sb-toggle {
   background: none;
@@ -133,6 +279,10 @@ body {
   justify-content: center;
   transition: background 0.15s;
   flex-shrink: 0;
+  /* 18px of icon in 4px of padding is a 26px target. The floor is a phone-only
+     0-on-desktop sentinel, so the header keeps its desktop geometry exactly. */
+  min-width: var(--tap-sm-min);
+  min-height: var(--tap-sm-min);
 }
 .sb-toggle:hover {
   background: var(--c-border-light);
@@ -146,7 +296,7 @@ body {
   padding: 12px 10px;
 }
 .sb-group-label {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -161,12 +311,13 @@ body {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: var(--pad-sb);
+  min-height: var(--tap-sm);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--c-text-sec);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -182,12 +333,10 @@ body {
 /* Touch-device sidebar items: bump to 48 px min-height + 15 px font so the
    drawer (opened via the hamburger on mobile) has finger-friendly targets.
    Defaults below stay at 38 px for desktop where a mouse cursor is precise. */
+/* The size half of this block is gone — --tap-sm, --fs-sm and --pad-sb now say
+   the same thing for every coarse pointer, at any width. The icon is not a
+   token, so it stays. */
 @media (pointer: coarse) {
-  .sb-btn {
-    min-height: 48px;
-    font-size: 15px;
-    padding: 11px 14px;
-  }
   .sb-btn svg {
     width: 20px;
     height: 20px;
@@ -219,23 +368,28 @@ body {
   border-top: 1px solid var(--c-border-light);
   padding: 10px;
 }
-/* Admin navigation — the Admin section borrows the sidebar.
+/* Admin navigation — on a desktop the Admin section borrows the sidebar.
    Fourteen sub-tabs do not fit one horizontal strip: .stabs has neither wrap
-   nor scroll outside the mobile rules, so on a desktop the pills squeeze until
-   their labels break. A vertical, grouped list has no such ceiling, and
-   .sb-nav already scrolls.
-   The drawer swaps the same way: on a phone Admin is a drill-down, not a
-   departure, so the menu stays open and shows the sub-tabs instead of closing
-   on the way out. The strip stays there too, as the quick switcher — changing
-   sub-tab is one swipe rather than hamburger → tap → drawer-closes. */
+   nor scroll outside the mobile rules, so the pills squeeze until their labels
+   break. A vertical, grouped list has no such ceiling, and .sb-nav already
+   scrolls.
+
+   Desktop only, and the min-width is the whole point. The drawer used to swap
+   the same way and stay open on a phone, because closing it left the section
+   with nothing to navigate by. The strip is now a drill-down list on the page
+   itself, so a swapped drawer would lay the same thirteen entries over the
+   thirteen behind it — and take the screen with them. Below 769px the drawer
+   keeps the main navigation, which is what a phone opens it for. */
 .sb-admin-nav {
   display: none;
 }
-body.admin-mode .sb-nav {
-  display: none;
-}
-body.admin-mode .sb-admin-nav {
-  display: block;
+@media (min-width: 769px) {
+  body.admin-mode .sb-nav {
+    display: none;
+  }
+  body.admin-mode .sb-admin-nav {
+    display: block;
+  }
 }
 /* The footer button is the door, and one door needs one place: the same spot
    leads in and back out again. Solid green while inside says which side of it
@@ -276,7 +430,7 @@ body.admin-mode #n-settings .sb-ico-back {
    on a timer. min-width: 0 is what lets a flex child shrink far enough to
    ellipsize instead of forcing the row wider. */
 .sb-sync-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   flex: 1;
   min-width: 0;
@@ -286,7 +440,7 @@ body.admin-mode #n-settings .sb-ico-back {
 }
 .sb-lang-sel {
   width: auto;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 3px 6px;
   border: 1px solid var(--c-border);
   border-radius: 6px;
@@ -408,12 +562,24 @@ body.has-worktree-banner .mobile-topbar {
   display: block;
   opacity: 1;
 }
-/* Both thumb-zone buttons sit at z-index 850, far above the sidebar's 120, so
-   with the drawer open they float over its footer and bury the Admin entry and
-   the language picker. The drawer is a modal surface; neither button acts on
-   it, and the overlay behind them is already swallowing taps. */
-body.sb-mobile-open .cam-fab,
-body.sb-mobile-open .action-fab-wrap {
+/* The scan button sits at z-index 850, far above the sidebar's 120, so with the
+   drawer open it floats over the drawer's footer and buries the Admin entry and
+   the language picker. The drawer is a modal surface; the button does not act on
+   it, and the overlay behind it is already swallowing taps. */
+body.sb-mobile-open .cam-fab {
+  display: none;
+}
+/* Same argument, one layer up: a dialog's backdrop is z-index 200 against the
+   button's 850, so it floats over all 25 of them — and not merely visibly.
+   elementFromPoint at its centre returns the button while a dialog is open, so
+   a thumb aiming at the bottom of a form opens the scanner instead. Found while
+   measuring the guided flow at 375px, where it overlapped the modal's corner.
+
+   :has() rather than a body class from JS, because every dialog in this app
+   opens the same way — .modal-bg gains .open — so one selector covers all of
+   them and the next one too. The pattern is already in the sheet
+   (.notif-fab:has(.bell-badge:not([hidden]))). */
+body:has(.modal-bg.open) .cam-fab {
   display: none;
 }
 
@@ -487,8 +653,8 @@ body.sb-mobile-open .action-fab-wrap {
   cursor: pointer;
   color: var(--c-text-muted);
   line-height: 1;
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -504,8 +670,8 @@ body.sb-mobile-open .action-fab-wrap {
    inherits modal text colour, neutral hover. Used in place of the text-pill
    close that workers struggled to hit one-handed on a phone. */
 .modal-close-icon {
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -574,7 +740,11 @@ body.sb-mobile-open .action-fab-wrap {
   border: none;
   border-bottom: 2px solid transparent;
   padding: 10px 16px;
-  font-size: 13px;
+  /* --fs-sm's desktop value is 13px, exactly what this had, and --tap resolves
+     to auto there — so both of these are phone-only in effect. The fixture
+     records fontSize 13px / minHeight 0px for .scan-tab and still does. */
+  min-height: var(--tap);
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text-muted);
   cursor: pointer;
@@ -605,7 +775,7 @@ body.sb-mobile-open .action-fab-wrap {
   border-radius: 9px;
   background: var(--c-border);
   color: var(--c-text-muted);
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 700;
 }
 .scan-tab.active .scan-tab-count {
@@ -659,12 +829,12 @@ body.sb-mobile-open .action-fab-wrap {
   background: var(--c-bg);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .scan-success-time {
   color: var(--c-text-muted);
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-success-body {
@@ -679,15 +849,20 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .scan-success-loc {
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
 }
 .scan-success-undo {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  /* 4px of vertical padding and nothing else: the target was as tall as its
+     own text. This is the button that takes back a wrong scan, and it appears
+     on a flash that is already going away. */
+  min-height: var(--tap);
+  min-width: var(--tap);
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   flex-shrink: 0;
   transition: all 0.15s;
@@ -714,7 +889,7 @@ body.sb-mobile-open .action-fab-wrap {
     box-shadow 0.2s;
 }
 .chip-l {
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1;
   text-transform: uppercase;
@@ -732,7 +907,7 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .chip-last-scan .chip-v {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
 }
 /* Chip pulse animation for missing input hints */
 .chip-pulse {
@@ -757,7 +932,7 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .btn-xs {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -836,7 +1011,7 @@ body.sb-mobile-open .action-fab-wrap {
   flex: 1;
   min-height: 120px;
   overflow-y: auto;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   display: flex;
   flex-direction: column-reverse;
@@ -869,7 +1044,7 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .scan-log-entry .sle-time {
   color: var(--c-text-muted);
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-log-entry .sle-msg {
@@ -881,7 +1056,7 @@ body.sb-mobile-open .action-fab-wrap {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   cursor: pointer;
   color: var(--c-text-muted);
   flex-shrink: 0;
@@ -896,13 +1071,15 @@ body.sb-mobile-open .action-fab-wrap {
   border-color: #fca5a5;
 }
 /* Touch devices have no :hover — always show the undo button and bump it to a
-   real tap target so workers can undo a mis-scan from the phone. */
+   real tap target so workers can undo a mis-scan from the phone. It said that
+   and then gave it 36px and 12px, both below the floors, on the one control
+   that exists to correct a mistake made while scanning. */
 @media (pointer: coarse) {
   .scan-log-entry .sle-undo {
     display: inline-flex;
-    min-height: 36px;
+    min-height: var(--tap);
     padding: 8px 12px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
 }
 
@@ -937,12 +1114,12 @@ body.sb-mobile-open .action-fab-wrap {
   color: var(--c-text);
 }
 .scan-summary-stat .ss-lbl {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-transform: uppercase;
 }
 .scan-summary-batches {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 12px;
 }
@@ -1060,7 +1237,7 @@ body.sb-mobile-open .action-fab-wrap {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 99px;
@@ -1072,7 +1249,7 @@ body.sb-mobile-open .action-fab-wrap {
     transform 0.15s;
 }
 .cam-chip-l {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 400;
   opacity: 0.6;
   text-transform: uppercase;
@@ -1121,8 +1298,8 @@ body.sb-mobile-open .action-fab-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--tap-min));
+  height: max(44px, var(--tap-min));
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.15);
@@ -1143,11 +1320,6 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .cam-hud-btn.torch-on:active {
   background: rgba(250, 204, 21, 0.6);
-}
-.cam-hud-close {
-  font-size: 24px;
-  font-weight: 300;
-  line-height: 1;
 }
 .cam-hud-done {
   background: #16a34a;
@@ -1173,7 +1345,7 @@ body.sb-mobile-open .action-fab-wrap {
 .cam-fab {
   display: none;
   position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--fab-bottom) + env(safe-area-inset-bottom, 0px));
   right: calc(24px + env(safe-area-inset-right, 0px));
   z-index: 850;
   gap: 9px;
@@ -1208,103 +1380,6 @@ body.sb-mobile-open .action-fab-wrap {
   }
 }
 
-/* ═══ ACTION SPEED-DIAL FAB (mobile/tablet only) ═════════════
-   Bottom-left counterpart to the cam-fab. Tapping the round + button
-   reveals a vertical stack of pill buttons above it — primary
-   creation flows reachable from any page in the thumb zone. Sits
-   just above the bottom-nav (z-index 850 vs nav's 100). */
-.action-fab-wrap {
-  display: none;
-  position: fixed;
-  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-  left: calc(16px + env(safe-area-inset-left, 0px));
-  z-index: 850;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-@media (pointer: coarse) and (hover: none) {
-  .action-fab-wrap {
-    display: flex;
-  }
-}
-.action-fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: var(--c-primary, #16a34a);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.15s;
-  -webkit-tap-highlight-color: transparent;
-  align-self: flex-start;
-}
-.action-fab:active {
-  transform: scale(0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-.action-fab[aria-expanded='true'] {
-  transform: rotate(45deg);
-  background: var(--c-text, #1a1a1a);
-}
-.action-fab-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
-  /* Hidden via [hidden] until JS toggles it open */
-}
-.action-fab-menu[hidden] {
-  display: none;
-}
-.action-fab-item {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  border-radius: 999px;
-  padding: 10px 16px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  -webkit-tap-highlight-color: transparent;
-  /* Slide-up entrance animation when the menu opens */
-  animation: action-fab-pop 0.18s ease-out backwards;
-  min-height: 44px;
-}
-.action-fab-item:nth-child(1) {
-  animation-delay: 0.04s;
-}
-.action-fab-item:nth-child(2) {
-  animation-delay: 0.08s;
-}
-.action-fab-item:nth-child(3) {
-  animation-delay: 0.12s;
-}
-.action-fab-item:active {
-  background: var(--c-bg);
-  transform: translateY(1px);
-}
-@keyframes action-fab-pop {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* -- Harvest panel -- */
 #harvest-panel {
   padding: 12px 24px;
@@ -1323,7 +1398,7 @@ body.sb-mobile-open .action-fab-wrap {
 
 /* ═══ LAYOUT ════════════════════════════════════════════════════ */
 .main {
-  padding: 24px;
+  padding: var(--pad-page);
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -1337,12 +1412,129 @@ body.sb-mobile-open .action-fab-wrap {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: var(--pad-card);
   margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
+/* A .sec heading on the left, controls on the right — twenty-three of these in
+   index.html, all spelled out inline, and eighteen without a wrap. On a desktop
+   the wrap never fires because everything fits; at 375px the culture library's
+   two filters and its Check button came to 366px beside a 101px heading and
+   pushed the whole page to 467. Measured, not guessed: scripts/measure-mobile.js.
+
+   The tools group wraps too. Wrapping only the outer row moved the page from
+   467 to 399 and left it still overflowing, because the group by itself is
+   wider than the card's 311px content box.
+
+   Named for the heading it carries and not the card it sits in, because
+   `.card-head` is already the illustrated header the work tiles use — same
+   words, unrelated job, and two rules with one name would have fought over
+   display, padding and margin at a distance of 4500 lines. */
+.sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sec-head .sec {
+  margin: 0;
+}
+.sec-head-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* The size utilities, and why this app has three of them when it otherwise
+   names things after what they are.
+
+   §10 of MOBILE_REDESIGN.md draws the line: colours, widths and margins stay
+   inline, only the font sizes come out. That is not squeamishness — the size
+   is the one inline property that has a token, and it is the only one that was
+   wrong on a phone. So these three are the token layer reaching markup that a
+   stylesheet could not otherwise touch, not the start of a utility system.
+
+   Each is a pair: the floor in a hand, the number that was already there on a
+   desk. --fs-meta 13/12, --fs-xs 13/11, --fs-micro 13/10.
+
+   They are what lets the §6 bridge go. That block matches `[style*=
+   'font-size:11px']` and lifts it with !important, which works and costs an
+   attribute-substring match against every element in the document; a class
+   costs nothing and can be read in the markup.
+
+   The class name is doubled, and that is the load-bearing part. An inline
+   style outranks every normal rule, so moving one onto a plain class quietly
+   hands the element back to whatever component rule it was overriding. That
+   is not hypothetical: the first version of this measured thirteen elements
+   changing size at 1440px — four hints under `.modal p` going 12px to 14px,
+   six buttons under `.btn-sm` going 11px to 12px. Doubling reaches (0,2,0),
+   which outranks the descendant and component rules these replace.
+
+   !important would also have worked and is deliberately not used: the iOS
+   anti-zoom rule below is `input, select, textarea { font-size: 16px
+   !important }` at (0,0,3), and an important utility at (0,1,0) would beat it
+   — handing Safari a 13px field to zoom into on every form control that used
+   to carry an inline size. A doubled class loses to it, which is correct. */
+/* A <canvas> with no width attribute is 300px wide, and that is wider than a
+   card's content box on a 320px phone — measured at 320, where two harvest
+   charts hang 13px off the edge and take the page to 333.
+
+   Honest about what that measurement is: the page it was taken on has its
+   scripts stripped, so Chart.js never ran, and Chart.js in responsive mode
+   sizes the canvas to its container itself. So this is the pre-initialisation
+   state rather than proof of a permanent defect. It is still worth a rule —
+   it covers the flash before the first draw, and any container Chart.js cannot
+   measure — and one line is cheaper than finding out which.
+
+   The one canvas that is not a chart — #pa-canvas, the photo annotation
+   surface — was going to be excluded from this, until a check showed it sets
+   max-width: 100% for itself two thousand lines further down. So there is
+   nothing to exclude, and the rule says the plain thing. */
+canvas {
+  max-width: 100%;
+}
+
+.fs-meta.fs-meta {
+  font-size: var(--fs-meta);
+}
+.fs-xs.fs-xs {
+  font-size: var(--fs-xs);
+}
+.fs-micro.fs-micro {
+  font-size: var(--fs-micro);
+}
+/* And a fourth for the sizes that are not on the scale at all: 10.5px on a
+   fruiting target, 11.5px on a week strip, 9px on a bag chip, 8px on a bag
+   label. Sixteen of them across eight components, no two the same, none of
+   them a considered step — they are what somebody typed to make a row fit.
+
+   Rounding them to the nearest of the three above would have moved sixteen
+   desktop values by up to 2px to save a class, and "the desktop does not move"
+   is the promise this whole project rests on. So the number stays where it
+   was, on the element, as a custom property — and gains the floor through the
+   same max() the base rules use. `--fs-own: 10.5px` reads 10.5px on a desk and
+   13px in a hand, and the ratchet stops counting it because it is no longer a
+   font-size the cascade cannot reach. */
+.fs-floor.fs-floor {
+  /* The fallback is not decoration. `var(--fs-own)` with nothing to resolve is
+     invalid at computed-value time, which does not fall back to the previous
+     declaration — it makes the element inherit, silently, at whatever size its
+     parent happens to be. A class whose whole job is to pin a size would then
+     do the opposite of its job. --fs-xs is the nearest thing to "the size you
+     probably meant", and an assertion in test/mobile-tokens.test.js fails if
+     any element wearing this class arrives without its number. */
+  font-size: max(var(--fs-own, var(--fs-xs)), var(--fs-min));
+}
+
+/* A filter that sizes to its own content rather than the form grid. */
+.head-select {
+  width: auto;
+  font-size: var(--fs-meta);
+  padding: 4px 8px;
+}
 .sec {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1359,9 +1551,13 @@ body.sb-mobile-open .action-fab-wrap {
   padding-bottom: 10px;
 }
 .stab {
-  padding: 7px 16px;
+  padding: var(--pad-stab);
+  /* --tap-sm, not --tap: these are secondary navigation, and Phase 1 replaces
+     the strip with a drill-down list on a phone anyway. 56px pills would be
+     enormous for something on its way out. */
+  min-height: var(--tap-sm);
   border-radius: 99px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -1383,6 +1579,119 @@ body.sb-mobile-open .action-fab-wrap {
 .sp.active {
   display: block;
 }
+/* The back row belongs to the drill-down below; on a desktop there is nothing
+   to go back from, so it never appears. */
+.stab-back {
+  display: none;
+}
+
+/* ── Sub-tabs on a phone: a drill-down, not a strip ────────────────────────
+   A row of pills has no good answer to "there are thirteen of them". The two
+   it had were both treatments of the symptom: wrap to a second line on the
+   work pages, sideways scroll with a fade edge on Admin — the first eats a
+   third of a short screen, the second hides the far end from anyone who does
+   not think to swipe a thing that does not look swipeable.
+
+   So below 769px the strip is the page's index: full width, one per line,
+   chevron on the right. Picking one shows that sub-page alone, with a back
+   row above it. `stab-drilled` on the .page element is which of the two
+   states the page is in; above 769px nothing reads the class and the pills
+   are untouched.
+
+   Landing goes straight to the sub-page the page defaults to, so the common
+   case — Chargen opens on the batch list — still costs no tap. The one page
+   that opens on its index instead falls out of the same rule rather than a
+   name: Admin's default tab is display:none, so there is no sub-page to land
+   on, and the list is what you get. */
+@media (max-width: 768px) {
+  .stabs {
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 0;
+    margin-bottom: 12px;
+    border-bottom: none;
+  }
+  .stab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    /* --tap, not --tap-sm: on a phone this is the page's navigation, which is
+       the argument the base rule makes for keeping it small in reverse. */
+    min-height: var(--tap);
+    border-radius: 0;
+    border-bottom: 1px solid var(--c-border-light);
+    text-align: left;
+    font-size: var(--fs-base);
+    color: var(--c-text);
+  }
+  /* A full-width green bar for "you were last here" would read as the page's
+     primary action. In a list, the mark is the label. */
+  .stab.active {
+    background: transparent;
+    color: var(--c-primary);
+    font-weight: 600;
+  }
+  .stab:hover:not(.active) {
+    background: transparent;
+  }
+  /* Drawn, not typed: a › from the font renders at a different size and
+     baseline in every fallback, and this one has to line up with the others. */
+  .stab::after {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-right: 2px solid var(--c-text-muted);
+    border-bottom: 2px solid var(--c-text-muted);
+    transform: rotate(-45deg);
+  }
+  .stab.active::after {
+    border-color: var(--c-primary);
+  }
+  .page.stab-drilled > .stabs {
+    display: none;
+  }
+  .page.stab-drilled > .stab-back {
+    display: flex;
+  }
+  .stab-back {
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 4px;
+    margin-bottom: 12px;
+    border: none;
+    border-bottom: 1px solid var(--c-border-light);
+    background: transparent;
+    color: var(--c-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .stab-back-ico {
+    font-size: 20px;
+    line-height: 1;
+  }
+  /* On the index there is no sub-page. The .active panel keeps its class, so
+     going back into it needs no state of its own — this rule outranks
+     `.sp.active` on specificity alone (0,4,0 against 0,2,0).
+
+     `.stab-drill` is not decoration: it is added by stabDrillInit(), so this
+     reaches only the pages that were given a back row. Without it the rule also
+     hides the sub-pages of Bestellungen — whose strip is display:none on every
+     device, so it is never drilled and never can be — and that page renders
+     blank on a phone. It also means the whole mechanism is inert if the script
+     does not run, which is the right way round. */
+  .page.stab-drill:not(.stab-drilled) .sp {
+    display: none;
+  }
+}
 
 /* ═══ ORDER HUB ═════════════════════════════════════════════════ */
 .oh-banner {
@@ -1400,7 +1709,7 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .oh-ch {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   border-radius: 6px;
   padding: 1px 7px;
@@ -1424,7 +1733,7 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .oh-st {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   border-radius: 999px;
   padding: 2px 9px;
@@ -1458,7 +1767,7 @@ body.sb-mobile-open .action-fab-wrap {
   color: var(--c-red-dark);
 }
 .oh-fchip {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -1466,6 +1775,26 @@ body.sb-mobile-open .action-fab-wrap {
   padding: 5px 12px;
   cursor: pointer;
   color: var(--c-text-sec);
+  /* 27.5px, and there are four of them in a row: the smallest targets left in
+     the app after the chrome pass. A pill's whole job is to be tapped. */
+  min-height: var(--tap-sm-min);
+}
+/* The worklist dialog's "group by" pair. Spelled out inline on both buttons,
+   nine declarations each and identical apart from the label, which is why
+   neither could pick up a touch floor: there was nothing to put it on. */
+.wl-group-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  background: transparent;
+  /* --fs-sm and not --fs-xs: the inline value was a flat 13px, and --fs-xs is
+     11px on a desktop, so the obvious-looking token would have shrunk it
+     there. --fs-sm is 13px on a desktop — unchanged — and 15px in a hand. */
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: var(--tap-sm-min);
 }
 .oh-fchip.active {
   background: var(--c-primary);
@@ -1502,16 +1831,31 @@ body.sb-mobile-open .action-fab-wrap {
 }
 .oh-comp-row input,
 .oh-comp-row select {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   color: var(--c-text-sec);
   display: block;
   margin-bottom: 4px;
+}
+/* A <summary> is a button that does not look like one, and every one in this
+   app was the height of its own line — 19.5px. Floored generically rather than
+   per instance, because the next <details> someone writes has the same problem
+   and no reason to know about it.
+
+   min-height and not display:flex, deliberately: flex on a summary drops the
+   disclosure triangle in every engine, and the triangle is the only thing that
+   says the row opens. align-content centres the text inside the taller box on
+   anything from 2024 on; where it is not supported the text sits at the top of
+   the box, which is untidy and still hits the floor — the target is correct
+   either way, which is the half that matters. */
+summary {
+  min-height: var(--tap-sm-min);
+  align-content: center;
 }
 input,
 select,
@@ -1539,9 +1883,10 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 .btn {
-  padding: 9px 16px;
+  padding: var(--pad-btn);
+  min-height: var(--tap);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--c-border);
@@ -1576,40 +1921,66 @@ textarea:focus {
 }
 .btn-sm {
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 /* Touch-device tap targets — covers phones AND tablets in landscape, which the
    old (max-width:768px) breakpoint missed. Applies to every .btn-xs / .btn-sm
    site-wide so post-scan actions, scan-modal controls, and table action columns
    all clear the 44px minimum. */
+/* Two literals here quietly outranked the token layer: this block is later than
+   `.btn` at the same specificity, so 44px beat var(--tap) and 14px beat
+   var(--fs-sm) on every coarse pointer — which is every device the tokens were
+   written for. It never applies while the baseline is captured (the fixture
+   records minHeight 0px for .btn.btn-sm), so saying it in tokens moves nothing. */
 @media (pointer: coarse) {
   .btn-xs,
   .btn-sm {
-    min-height: 44px;
+    min-height: var(--tap-sm);
     padding: 10px 14px;
-    font-size: 14px;
+    font-size: var(--fs-sm);
   }
 }
 
 /* ═══ GRID ══════════════════════════════════════════════════════ */
+/* minmax(0, 1fr) and not 1fr, on every one of these. A bare `1fr` is
+   `minmax(auto, 1fr)`, and `auto` there is the track's min-content — so one
+   child that cannot shrink drags the whole column past its share and the page
+   with it. On Pilzsorten that child is a <select> whose longest option reads
+   "— Rezept von anderer Sorte übernehmen —": a select is at least as wide as
+   its widest option, 363px of it, inside a 343px grid. The page scrolled to
+   443px at 375px wide. With the minimum pinned to 0 the track keeps its share
+   and the select shrinks like everything else. */
 .g2 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 .g3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .g4 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 .g5 {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+/* Six, for the one place that needs six: the average-composition row in
+   Inventory. It was an inline `repeat(6,1fr)` written straight into
+   renderThresholds(), and a bare 1fr is minmax(auto, 1fr) — the track cannot
+   go below its content's min-content width, and an <input> has a wide one. Six
+   of them held a 285px container open to 486px, so the Inventory page scrolled
+   sideways by 111px at 375px. Nothing could see it: the grid is a template
+   string in app.js, so the source census reads it as text and measure-mobile.js
+   serves the page with the scripts stripped. */
+.g6 {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1629,7 +2000,7 @@ textarea:focus {
   border-left: 4px solid var(--c-primary);
 }
 .met-l {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 4px;
   font-weight: 500;
@@ -1650,7 +2021,7 @@ textarea:focus {
 /* ═══ BADGES ════════════════════════════════════════════════════ */
 .badge {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 3px 9px;
   border-radius: 99px;
@@ -1755,7 +2126,7 @@ table {
   font-size: 13px;
 }
 th {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1778,7 +2149,7 @@ th.sortable {
   }
 }
 th.sortable .arrow {
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   opacity: 0.35;
   margin-left: 3px;
 }
@@ -1834,8 +2205,15 @@ tr:hover td {
   border: 1.5px solid rgba(255, 255, 255, 0.8);
   margin-right: 4px;
 }
+/* No `display` here on purpose — see the .t-cards .sub-tag rule in the phone
+   block. As a bare inline box this pill splits across line boxes when it
+   wraps, which is a real blemish on the desktop table too, but the desktop
+   Substrat column is ~63px wide: making the pill a box there wraps it into
+   three lines of padded box and takes #t-batches from 760px to 1093px tall.
+   That is a desktop layout change, not a phone fix, and it needs the column
+   widths looked at rather than a display keyword. */
 .sub-tag {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   background: var(--c-bg);
   color: var(--c-text-sec);
   padding: 3px 8px;
@@ -1892,7 +2270,7 @@ tr:hover td {
   grid-row: 2;
   grid-column: var(--col);
   min-width: 0;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   /* A rule between the days, not just a gap. Seven columns of similar-looking
      rows run together without one, and the eye loses which day it is reading.
      Left edge on every column but the first, so the outer edges stay clean. */
@@ -1987,7 +2365,7 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 9px;
+  font-size: max(9px, var(--fs-min));
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, monospace;
   line-height: 1;
@@ -2033,7 +2411,7 @@ tr:hover td {
 }
 .tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 2px 8px;
   border-radius: 99px;
   margin-left: 4px;
@@ -2245,7 +2623,7 @@ tr:hover td {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 14px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   padding: 8px 12px;
   background: var(--c-surface);
@@ -2304,7 +2682,7 @@ tr:hover td {
 .cal-hdr {
   background: var(--c-bg);
   text-align: center;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   padding: 10px 4px;
@@ -2361,7 +2739,7 @@ tr:hover td {
   color: #fff;
 }
 .cal-event {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: #fff;
   padding: 2px 7px;
   border-radius: 4px;
@@ -2402,7 +2780,7 @@ tr:hover td {
   }
 }
 .cal-ev-assignees {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   opacity: 0.85;
   display: inline;
   white-space: nowrap;
@@ -2411,7 +2789,7 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   padding: 1px 8px;
   background: #eee;
   border-radius: 12px;
@@ -2428,13 +2806,13 @@ tr:hover td {
   display: block;
   padding: 4px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 #cal-ev-assignee-dropdown label:hover {
   background: #f0f0f0;
 }
 .cal-more {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-primary);
   cursor: pointer;
   padding: 2px 7px;
@@ -2468,7 +2846,7 @@ tr:hover td {
 .cal-week-hdr-cell {
   text-align: center;
   padding: 10px 4px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -2496,7 +2874,7 @@ tr:hover td {
   min-height: 36px;
 }
 .cal-week-allday-label {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   padding: 6px;
   display: flex;
@@ -2521,7 +2899,7 @@ tr:hover td {
   overflow-y: auto;
 }
 .cal-week-time {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px 0 0;
@@ -2554,7 +2932,7 @@ tr:hover td {
   right: 2px;
   border-radius: 5px;
   padding: 2px 6px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -2614,14 +2992,14 @@ tr:hover td {
 }
 .cal-day-allday .sec {
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--c-text-muted);
   font-weight: 700;
 }
 .cal-day-allday-empty {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
 }
@@ -2633,7 +3011,7 @@ tr:hover td {
   position: relative;
 }
 .cal-day-time {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px;
@@ -2662,7 +3040,7 @@ tr:hover td {
   right: 4px;
   border-radius: 5px;
   padding: 3px 8px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -2725,20 +3103,114 @@ tr:hover td {
   pointer-events: none;
 }
 
-/* Calendar empty state */
-.cal-empty-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
+/* Eight columns of numbers that mean nothing squashed. The width was inline on
+   the table, which is why it survived into the card layout and forced a 640px
+   scroll on a phone that no longer has a table to scroll. Stated where it is
+   true instead: above the breakpoint, where this is still a table. */
+@media (min-width: 769px) {
+  #t-harvestrelease {
+    min-width: 640px;
+  }
 }
-.cal-empty-hint span {
-  font-size: 12px;
+
+/* ═══ CALENDAR — AGENDA VIEW ═══════════════════════════════════
+   The calendar below 769px. Not a fourth tab: a month cell at 375px is 47.9px
+   wide and gives an event label 29.9px of text, four glyphs and an ellipsis,
+   and week view is worse at 40.7px per column. Seven columns cannot be made to
+   work by making rows taller — the constraint is horizontal.
+
+   A list has the opposite shape: one column, full width, as many rows as the
+   month has entries. Everything the grid had to abbreviate fits here in words. */
+.cal-agenda-day {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--c-border);
+}
+.cal-agenda-day:first-child {
+  border-top: 0;
+}
+/* The date column is fixed so every row's text starts on the same line, which
+   is what makes a list scannable rather than merely short. */
+.cal-agenda-date {
+  flex: 0 0 40px;
+  text-align: center;
+  padding-top: 2px;
+}
+.cal-agenda-num {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.cal-agenda-dow {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.cal-agenda-day.today .cal-agenda-num {
+  color: var(--c-primary);
+}
+.cal-agenda-rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* A button, not a div: this opens the same editor the month grid opens, and
+   the row is the target — 56px of it, the Feld floor, because the calendar is
+   read walking between tents. */
+.cal-agenda-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.cal-agenda-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+.cal-agenda-when {
+  flex: 0 0 auto;
+  color: var(--c-text-sec);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cal-agenda-what {
+  flex: 1;
+  min-width: 0;
+}
+.cal-agenda-label {
+  display: block;
+  font-weight: 600;
+}
+.cal-agenda-meta,
+.cal-agenda-desc {
+  display: block;
+  color: var(--c-text-muted);
+}
+.cal-agenda-who::before {
+  content: ' · ';
+}
+.cal-agenda-empty {
+  padding: 24px 0;
+  text-align: center;
   color: var(--c-text-muted);
   font-style: italic;
-  opacity: 0.7;
 }
 
 /* ═══ DASHBOARD LOCATION OVERVIEW ══════════════════════════════ */
@@ -2794,7 +3266,7 @@ tr:hover td {
   flex-shrink: 0;
 }
 .location-section-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -2831,7 +3303,7 @@ tr:hover td {
   color: var(--c-text);
 }
 .rack-card-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -2876,7 +3348,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 .batch-card-species {
   font-weight: 600;
@@ -2886,12 +3358,12 @@ tr:hover td {
   gap: 4px;
 }
 .batch-card-count {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
 .batch-card-meta {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 3px;
   display: flex;
@@ -2914,7 +3386,7 @@ tr:hover td {
   display: flex;
 }
 .bag-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   padding: 4px 8px;
   border-radius: 6px;
@@ -2948,7 +3420,7 @@ tr:hover td {
   gap: 6px;
 }
 .tent-column-empty {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
   text-align: center;
@@ -2979,7 +3451,7 @@ tr:hover td {
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 .action-bar-sticky .action-bar-count {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
 }
@@ -3008,6 +3480,7 @@ tr:hover td {
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  min-height: var(--tap-sm-min);
 }
 .dash-view-btn.active {
   background: var(--c-surface);
@@ -3034,7 +3507,7 @@ tr:hover td {
   border-radius: 8px;
   background: transparent;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -3056,7 +3529,7 @@ tr:hover td {
 }
 .dash-search-inline {
   width: 200px;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   padding: 6px 10px;
   border: 2px solid var(--c-border-strong, #94a3b8);
   border-radius: var(--radius-sm);
@@ -3083,7 +3556,7 @@ tr:hover td {
   border-radius: var(--radius);
   background: var(--c-surface, var(--c-card));
   border: 1px solid var(--c-border);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -3130,7 +3603,7 @@ tr:hover td {
   margin-bottom: 8px;
 }
 .metrics-total-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -3174,7 +3647,7 @@ tr:hover td {
 
 /* ═══ OVERVIEW KPI CARDS ════════════════════════════════════════ */
 .ov-kpi-group-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3215,7 +3688,7 @@ tr:hover td {
   margin-bottom: 2px;
 }
 .ov-kpi-label {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -3223,7 +3696,7 @@ tr:hover td {
   text-overflow: ellipsis;
 }
 .ov-kpi-sub {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 1px;
   white-space: nowrap;
@@ -3239,7 +3712,7 @@ tr:hover td {
   border: 1px solid var(--c-border-light);
 }
 .rack-detail-inline .rack-detail-close {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   cursor: pointer;
   color: var(--c-text-muted);
 }
@@ -3277,7 +3750,7 @@ tr:hover td {
 .modal {
   background: var(--c-surface);
   border-radius: 16px;
-  padding: 28px;
+  padding: var(--pad-modal);
   width: 92%;
   max-width: 480px;
   max-height: 92vh;
@@ -3308,10 +3781,14 @@ tr:hover td {
 }
 
 /* Destination chips open the shared zone picker (for when a location barcode
-   can't be scanned), so they need to read as tappable. */
+   can't be scanned), so they need to read as tappable — and be tappable. They
+   carried a cursor and nothing else, which is a mouse affordance on a control
+   whose whole purpose is the case where scanning failed and a gloved hand has
+   to pick the zone by hand. */
 #chip-to,
 #cam-chip-to {
   cursor: pointer;
+  min-height: var(--tap);
 }
 
 /* ═══ STOCKTAKE SCAN FLASH ═════════════════════════════════════
@@ -3395,14 +3872,22 @@ tr:hover td {
   padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
+  /* 31.5px, on the control that takes back a scan that went to the wrong zone.
+     Chrome floor rather than the Feld one: the bar is a transient overlay and
+     56px of it would cover a row of whatever is underneath. */
+  min-height: var(--tap-sm-min);
+  padding-inline: 18px;
 }
 .undo-bar #undo-btn:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-/* On phones the camera scan FAB sits bottom-right — lift the undo bar above it. */
+/* On phones the camera scan FAB sits bottom-right — lift the undo bar above it.
+   56px is the FAB's height and 12px the gap, so this tracks --fab-bottom instead
+   of restating a number derived from it: when the shelf moved to clear the
+   bottom nav, the hand-computed 92px did not, and the toast landed on the FAB. */
 @media (pointer: coarse) and (hover: none) {
   .undo-bar {
-    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--fab-bottom) + 56px + 12px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -3423,8 +3908,9 @@ tr:hover td {
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .g4,
-  .g5 {
-    grid-template-columns: repeat(3, 1fr);
+  .g5,
+  .g6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .rack-grid-inc {
     grid-template-columns: repeat(3, 1fr) !important;
@@ -3461,8 +3947,11 @@ tr:hover td {
     margin-left: 0;
   }
   /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px).
-     !important is required to override inline style="font-size:12px" that several
-     compact filter/search inputs still carry from desktop layout work. */
+     !important is still required, for a different reason than when this was
+     written: the inline style="font-size:12px" it used to fight is gone from
+     every compact filter and search field, but the .fs-meta class that replaced
+     it is (0,2,0) and this selector is (0,0,3). Drop the !important and Safari
+     gets a 13px field to zoom into on the pages that were just cleaned up. */
   input,
   select,
   textarea {
@@ -3472,12 +3961,6 @@ tr:hover td {
   input[style*='width:'],
   select[style*='width:'] {
     max-width: 100%;
-  }
-  .scan-float {
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    right: calc(10px + env(safe-area-inset-right, 0px));
-    left: calc(10px + env(safe-area-inset-left, 0px));
-    max-width: none;
   }
   /* WCAG-size touch targets for calendar toolbar on mobile */
   .cal-nav-btn,
@@ -3510,39 +3993,21 @@ tr:hover td {
     max-height: 40vh;
     max-height: 40dvh;
   }
+  /* Narrower side padding so four tabs fit; the size stays where the token put
+     it. Shrinking type at a narrow breakpoint is the exact move the token layer
+     replaced — and this one was on the tab strip of the screen that is only
+     ever read at arm's length. */
   .scan-tab {
     padding: 10px 10px;
-    font-size: 12px;
-  }
-  .main {
-    padding: 12px;
-  }
-  .card {
-    padding: 14px;
   }
   .g3,
   .g4,
-  .g5 {
-    grid-template-columns: repeat(2, 1fr);
+  .g5,
+  .g6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .g2 {
-    grid-template-columns: 1fr;
-  }
-  /* Umbrechen statt schieben: auf den Arbeitsseiten sind es vier Reiter, die
-     nebeneinander nicht passen — in zwei Zeilen aber vollständig sichtbar sind.
-     Ein seitlich scrollender Streifen versteckt die hinteren, und wer sie nicht
-     sieht, sucht sie nicht. Die Einstellungen behalten den Streifen (unten),
-     weil fünfzehn Reiter umgebrochen eine halbe Seite hoch wären. */
-  .stabs {
-    flex-wrap: wrap;
-    gap: 4px;
-    padding-bottom: 8px;
-  }
-  .stab {
-    flex-shrink: 0;
-  }
-  table {
-    font-size: 12px;
+    grid-template-columns: minmax(0, 1fr);
   }
   th,
   td {
@@ -3576,16 +4041,29 @@ tr:hover td {
     font-size: 13px;
   }
   .cal-event {
-    font-size: 10px;
     padding: 1px 5px;
   }
   .cal-week-hdr-cell .wk-day-num {
     font-size: 16px;
   }
+  /* The drawer stops repeating the bottom bar. app.js marks these from the same
+     list that wires the bar's buttons, so the two cannot drift apart: 19 rows
+     and 868px of content in a 655px viewport becomes 14 rows that fit, and the
+     five destinations that were pushed below the fold were the five the bar
+     shows permanently anyway. A group heading whose entries are all in the bar
+     is marked too, or "Arbeiten" would sit alone over the gap. */
+  .sb-in-bottom-nav {
+    display: none;
+  }
+  /* Both of these describe the grids, and below this breakpoint there are no
+     grids. The toggle would offer three views that all render the agenda; the
+     legend is eight colour keys for dots whose meaning every agenda row spells
+     out in words next to the label. Hidden rather than shrunk — the eight
+     legend spans were the last sub-floor type in the app at 11px, and the
+     honest fix for a key nobody needs is not a bigger key. */
+  .cal-view-toggle,
   .cal-legend {
-    padding: 6px 10px;
-    gap: 10px;
-    font-size: 11px;
+    display: none;
   }
   .dash-top-row {
     flex-direction: column;
@@ -3605,7 +4083,6 @@ tr:hover td {
   }
   .modal {
     width: 96%;
-    padding: 20px;
   }
   .scan-modal {
     width: 95vw;
@@ -3639,28 +4116,15 @@ tr:hover td {
   .dmp-stage-count {
     font-size: 15px;
   }
-  .main {
-    padding: 8px;
-  }
   .card {
-    padding: 12px;
     border-radius: var(--radius-sm);
-  }
-  /* Tighten modal padding further on phones — 28 px (default) eats 56 px
-     of horizontal space on a 360 px viewport, and the 768 px override still
-     leaves 20 px which is also too much when bag-info action buttons need
-     to wrap. 14 / 12 px gives the content room to breathe without scroll. */
-  .modal {
-    padding: 14px 12px;
   }
   .g2,
   .g3,
   .g4,
-  .g5 {
-    grid-template-columns: 1fr;
-  }
-  .cal-grid {
-    font-size: 10px;
+  .g5,
+  .g6 {
+    grid-template-columns: minmax(0, 1fr);
   }
   .cal-cell {
     min-height: 60px;
@@ -3669,10 +4133,6 @@ tr:hover td {
   .todo-row {
     padding: 10px;
     gap: 8px;
-  }
-  .btn {
-    padding: 8px 12px;
-    font-size: 12px;
   }
   .scan-modal {
     padding: 12px;
@@ -3719,7 +4179,6 @@ tr:hover td {
 @media print {
   .sidebar,
   .mobile-topbar,
-  .scan-float,
   .scan-toast,
   #harvest-panel,
   .no-print,
@@ -3976,7 +4435,7 @@ tr:hover td {
   margin-top: 6px;
 }
 .zone-rack-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-family: monospace;
   padding: 2px 8px;
   border-radius: 4px;
@@ -3987,12 +4446,12 @@ tr:hover td {
 }
 .zone-rack-del {
   padding: 1px 4px !important;
-  font-size: 9px !important;
+  font-size: max(9px, var(--fs-min)) !important;
   margin-left: 4px;
   line-height: 1;
 }
 .zone-group-header {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4038,7 +4497,7 @@ tr:hover td {
 .zone-direct-badge {
   background: var(--c-red) !important;
   color: #fff !important;
-  font-size: 12px !important;
+  font-size: max(12px, var(--fs-min)) !important;
   font-weight: 700 !important;
   padding: 4px 10px !important;
   border-radius: 6px !important;
@@ -4067,7 +4526,7 @@ tr:hover td {
   gap: 4px;
 }
 .zone-qr-label {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   font-family: monospace;
   color: var(--c-text-sec);
@@ -4144,7 +4603,6 @@ tr:hover td {
   .chip-pulse,
   .count-bump .chip-v,
   .cam-chip.ch-pulse,
-  .action-fab-item,
   .batch-row-flash > td {
     animation: none !important;
   }
@@ -4159,7 +4617,7 @@ tr:hover td {
   border-radius: 9px;
   background: #ef4444;
   color: #fff;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   line-height: 18px;
   text-align: center;
@@ -4183,6 +4641,13 @@ tr:hover td {
   cursor: pointer;
   margin-left: auto;
   padding: 0;
+  /* 36px is a phone value in a rule the phone is the only reader of — the bell
+     is display:none until 768px. The floor lifts it to 48 there and leaves the
+     literal alone above, where nothing renders it anyway. The topbar's own
+     padding drops by the same 12px (see the 768px block), so the bar stays the
+     height it is and only the target grows. */
+  min-width: max(36px, var(--tap-sm-min));
+  min-height: max(36px, var(--tap-sm-min));
 }
 .mobile-bell:hover {
   background: var(--c-border-light);
@@ -4226,7 +4691,7 @@ tr:hover td {
   color: var(--c-text);
 }
 .notif-mark-read {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-primary);
   background: transparent;
   border: none;
@@ -4283,19 +4748,19 @@ tr:hover td {
   flex-shrink: 0;
 }
 .notif-item-body {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 3px;
 }
 .notif-item-time {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .notif-empty {
   padding: 24px 14px;
   text-align: center;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 @media (max-width: 768px) {
@@ -4305,6 +4770,12 @@ tr:hover td {
   }
   .mobile-bell {
     display: inline-flex;
+  }
+  /* Paid for out of the bar's own padding rather than the screen: 10px around a
+     36px bell and 4px around a 48px one are both 56px tall. */
+  .mobile-topbar {
+    padding-block: 4px;
+    padding-top: calc(4px + env(safe-area-inset-top, 0px));
   }
   .notif-dropdown {
     left: 8px;
@@ -4347,7 +4818,7 @@ tr:hover td {
   background: none;
   border: none;
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -4376,19 +4847,68 @@ tr:hover td {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
   }
 
-  /* ── Batches table — mobile card mode ────────────────────────
-     The 12-column batches table is unusable on a 360 px viewport
-     (Actions column ends up ~700 px off-screen). Below we transform
-     the rows into stacked cards via display:block; row labels come
-     from data-mlabel="..." that renderBatches() sets per <td>. */
-  #t-batches {
+  /* ── The touch floor, once, for everything that takes a tap ──
+     Every other touch rule in this file names a component: .btn-sm and
+     .btn-xs get one under (pointer: coarse), .sb-btn another, .sle-undo
+     a third. That works exactly as far as the list someone remembered,
+     and rendering the app against a seeded backend at 375px found five
+     shapes that were never on it — the column-sort buttons in the batch
+     table at 21px, the "Prüfen" buttons on the zone sections at 28px,
+     the collapsed-group toggles at 27px, and "Wochenrhythmus bearbeiten"
+     on the dashboard at 15px. All five carry one of the .fs-* utilities
+     and nothing else, which is what made them look styled.
+
+     So this stops enumerating components. 347 buttons render on a phone;
+     this moves 12 of them, and every one it moves was under the floor or
+     (three calendar buttons) at the universal 44px minimum rather than
+     the 48px §9 chose for Büro work. Nothing already above it changes.
+
+     A <div> with an onclick is a control the markup does not declare, so
+     no selector can find it in general. .location-section-header is the
+     one this app has. */
+  button,
+  [role='button'],
+  .location-section-header {
+    min-height: var(--tap-sm-min);
+  }
+  /* min-height alone makes a taller box with the label at the top of it
+     when the button sets its own display; the UA's centring only applies
+     to the default one. */
+  button,
+  [role='button'] {
+    align-content: center;
+  }
+
+  /* ── Tables as cards ────────────────────────────────────────
+     A 12-column table on a 360px viewport puts its Actions column
+     roughly 700px off-screen. Below this breakpoint the rows become
+     stacked cards: thead off, tr a card, td a label/value row, and the
+     label read from the data-mlabel the renderer already writes.
+
+     One mechanism, applied by class. Four tables had this spelled out
+     separately — #t-batches, #t-cultures, #t-log, #t-harvest — in four
+     blocks that were the same rules under different ids, 306 lines of
+     it. The cost of that shape was never the duplication: #t-grain is
+     filled by batchRowHtml(), the *same function* that fills
+     #t-batches, so every one of its cells already carried a
+     data-mlabel — and it still got a sideways-scrolling table, because
+     the fifth copy of the block was never written.
+
+     Two structural facts now do the work four ids used to:
+       - the card header is the first cell, in all four tables and by
+         construction — batch id, culture id, log time, harvest date;
+       - the actions cell is the one with no data-mlabel, because a row
+         of buttons has nothing to label. That is what distinguishes it
+         from a last cell that *is* data, which is what #t-harvest has
+         and why :last-child would have been wrong. */
+  .t-cards {
     border: 0;
     width: 100%;
   }
-  #t-batches > thead {
+  .t-cards > thead {
     display: none;
   }
-  #t-batches > tbody > tr {
+  .t-cards > tbody > tr {
     display: block;
     border: 1px solid var(--c-border);
     border-radius: 10px;
@@ -4397,51 +4917,83 @@ tr:hover td {
     padding: 12px 14px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   }
-  /* Empty/no-matches row keeps a centred full-row look */
-  #t-batches > tbody > tr > td.empty {
+  .t-cards > tbody > tr > td {
     display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  /* Sub-row injected by toggleBatchBags() — leave its full-width layout
-     for the bag chips, just retint to look like a connected detail panel. */
-  #t-batches > tbody > tr[id^='brow-'] {
-    border: 1px dashed var(--c-border);
-    padding: 10px 12px;
-    background: var(--c-bg);
-  }
-  #t-batches > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
     padding: 4px 0;
     border: 0;
     font-size: 13px;
     line-height: 1.4;
+    /* The card carries the background now, not the cell. Two table rules
+       still target these cells — `tr:nth-child(even) td` and `tr:hover td`
+       — and both outlive the layout they were written for: zebra striping
+       tints every second *card* grey instead of every second row, and a
+       tap on a coarse pointer leaves the hover tint stuck on. Neither was
+       introduced by the card mode; neither had been looked at since it
+       arrived. */
+    background: none;
   }
-  #t-batches > tbody > tr > td[data-mlabel]::before {
+  /* Label in a gutter, value in normal flow.
+
+     This cell was `display: flex` with the label as its first item, which
+     reads correctly and is wrong: making the cell a flex container makes
+     *every* element child a flex item, so the layout silently depended on
+     each cell holding exactly one. #t-batches' Substrat cell holds three —
+     batchRowHtml() writes one .sub-tag per material — and they became three
+     competing items on a nowrap line, each shrunk until "HW 60% WB 20%"
+     wrapped to four lines inside a 99px-radius pill. Eight cards, every
+     batch, and no count could see it: the chips do not exist until the
+     renderer runs, so both the source census and measure-mobile.js (which
+     serves the page with the scripts stripped) looked straight past them.
+
+     Normal flow is also what these chips get from the desktop table cell
+     they were written for, so the two layouts now differ in where the label
+     sits and not in how the value is laid out. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child) {
+    position: relative;
+    padding-left: 92px;
+  }
+  /* The label was 10–11px here, which is the size this whole project
+     exists to stop shipping. Uppercase, 600 and muted already say
+     "this is a label" without help from a size below the floor.
+     84px fits every label the renderers emit except "Chargen-ID" at 87px,
+     which is a first cell and hidden; the rest top out at 72px. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child)::before {
     content: attr(data-mlabel);
-    flex: 0 0 84px;
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 84px;
     color: var(--c-text-muted);
-    font-size: 11px;
+    font-size: var(--fs-xs);
     font-weight: 600;
+    line-height: 1.4;
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  /* Promote the batch ID to a card header */
-  #t-batches > tbody > tr > td.bt-id {
-    font-size: 15px !important;
-    font-weight: 600;
+  /* The other half of the same cell. Normal flow fixed the three chips
+     competing as flex items; it does not fix each chip being an inline box,
+     which splits its background and its 99px radius across two line boxes the
+     moment it wraps — "RH 63%" came out as a 155×39 smear. A pill has to be a
+     box. Scoped to the card because the desktop table's Substrat column is
+     ~63px wide, where the same keyword wraps every chip into a padded stack
+     and takes #t-batches from 760px to 1093px tall. Same defect, different
+     fix: the desktop needs its column widths looked at. */
+  .t-cards .sub-tag {
+    display: inline-block;
+  }
+  /* First cell: the card's header. What it looks like is per table — an
+     id wants to be big, a timestamp wants to be a quiet subtitle — so
+     this sets only what they share. Its label is not hidden here but never
+     written: the :not(:first-child) above is what keeps 184 of the 189
+     first cells from indenting 92px around a label nobody wants to see. */
+  .t-cards > tbody > tr > td:first-child {
     padding-bottom: 6px;
     margin-bottom: 6px;
     border-bottom: 1px solid var(--c-border-light);
   }
-  #t-batches > tbody > tr > td.bt-id::before {
-    display: none;
-  }
-  /* Actions row — full width, buttons share the row equally. The
-     (pointer:coarse) rule near .btn-sm already gives us 44px height. */
-  #t-batches > tbody > tr > td.bt-actions {
+  /* Actions row — full width, buttons share it equally. The
+     (pointer: coarse) rule near .btn-sm already gives them 44px. */
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):not(.empty) {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -4450,226 +5002,65 @@ tr:hover td {
     border-top: 1px solid var(--c-border-light);
     white-space: normal !important;
   }
-  #t-batches > tbody > tr > td.bt-actions::before {
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):empty {
     display: none;
   }
-  #t-batches > tbody > tr > td.bt-actions .btn-sm {
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-sm,
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-xs {
     flex: 1 1 auto;
     min-width: 0;
     margin: 0 !important;
     text-align: center;
   }
-
-  /* ── Cultures table — mobile card mode ──────────────────────
-     Same pattern as #t-batches: thead hidden, tr -> card, td -> flex
-     row with data-mlabel pseudo-prefix. The status <select> and the
-     Print / ✕ buttons in the action row keep their inline styling. */
-  #t-cultures {
-    border: 0;
-    width: 100%;
-  }
-  #t-cultures > thead {
-    display: none;
-  }
-  #t-cultures > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 10px;
-    padding: 12px 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  }
-  #t-cultures > tbody > tr > td.empty {
+  /* Empty/no-matches row keeps a centred full-row look. */
+  .t-cards > tbody > tr > td.empty {
     display: block;
     text-align: center;
     padding: 18px 0;
+    border-bottom: 0;
+    margin-bottom: 0;
   }
-  #t-cultures > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 4px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-cultures > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 84px;
-    color: var(--c-text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Promote the culture ID to a card header */
+
+  /* ── Per table, only what is genuinely its own ───────────────── */
+
+  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  #t-batches > tbody > tr > td.bt-id,
+  #t-grain > tbody > tr > td.bt-id,
   #t-cultures > tbody > tr > td.cu-id {
-    font-size: 14px !important;
+    font-size: 15px !important;
     font-weight: 600;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid var(--c-border-light);
   }
-  #t-cultures > tbody > tr > td.cu-id::before {
-    display: none;
-  }
-  /* Action row spans full width with the status <select> + Print + ✕ */
-  #t-cultures > tbody > tr > td.cu-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--c-border-light);
-    white-space: normal !important;
-    align-items: center;
-  }
-  #t-cultures > tbody > tr > td.cu-actions::before {
-    display: none;
-  }
-  #t-cultures > tbody > tr > td.cu-actions select {
-    flex: 1 1 auto;
-    min-height: 40px;
-    padding: 6px 10px !important;
-  }
-  #t-cultures > tbody > tr > td.cu-actions .btn-sm {
-    margin: 0 !important;
-    text-align: center;
-    padding: 8px 12px !important;
-  }
-
-  /* ── Scan log table — mobile card mode ──────────────────────
-     9-column scan log forces 700+px scroll on phone. Same pattern
-     as #t-batches: thead off, tr -> card, td -> flex row. The Time
-     cell is promoted to a header; the delete (✕) action right-aligns
-     and disappears for older entries that don't get the button. */
-  #t-log {
-    border: 0;
-    width: 100%;
-  }
-  #t-log > thead {
-    display: none;
-  }
-  #t-log > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  }
-  #t-log > tbody > tr > td.empty {
-    display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  #t-log > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 3px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-log > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 64px;
-    color: var(--c-text-muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Time row promoted to card header */
-  #t-log > tbody > tr > td.lg-time {
-    font-size: 12px !important;
+  /* The scan log and the harvest log lead with a time, which is not a
+     name — it dates the row rather than titling it. */
+  #t-log > tbody > tr > td.lg-time,
+  #t-harvest > tbody > tr > td.hv-date {
+    font-size: max(12px, var(--fs-min)) !important;
     color: var(--c-text-sec) !important;
     padding-bottom: 4px;
     margin-bottom: 4px;
-    border-bottom: 1px solid var(--c-border-light);
   }
-  #t-log > tbody > tr > td.lg-time::before {
-    display: none;
+  /* Sub-row injected by toggleBatchBags() — keep its full-width layout
+     for the bag chips, just retint it as a connected detail panel. */
+  #t-batches > tbody > tr[id^='brow-'],
+  #t-grain > tbody > tr[id^='brow-'] {
+    border: 1px dashed var(--c-border);
+    padding: 10px 12px;
+    background: var(--c-bg);
   }
-  /* Action delete (✕) — bottom-right, only present on entries <24h */
-  #t-log > tbody > tr > td.lg-actions {
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
-  #t-log > tbody > tr > td.lg-actions:empty {
-    display: none;
-  }
-  #t-log > tbody > tr > td.lg-actions::before {
-    display: none;
-  }
-  #t-log > tbody > tr > td.lg-actions .btn-xs {
-    padding: 6px 12px !important;
-    font-size: 12px !important;
-  }
-
-  /* ── Harvests table — mobile card mode ──────────────────────
-     7-column harvest log. The audit notes "Date / Bag / Grams trio
-     is the only thing a phone user wants" — so we promote Date to
-     header, push Grams to a prominent right-aligned big number, and
-     keep the rest as plain label/value rows. */
-  #t-harvest {
-    border: 0;
+  /* The status dropdown in the cultures action row is a control, not a
+     button; stretching it to share the row makes it unreadable. */
+  #t-cultures > tbody > tr > td.cu-actions select {
+    flex: 1 1 100%;
     width: 100%;
   }
-  #t-harvest > thead {
-    display: none;
-  }
+  /* Harvest cards: grams pinned top-right as a big amber number, the
+     most-scanned value when reading a harvest log on a phone. */
   #t-harvest > tbody > tr {
-    display: block;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: var(--c-surface);
-    margin-bottom: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
     position: relative;
   }
-  #t-harvest > tbody > tr > td.empty {
-    display: block;
-    text-align: center;
-    padding: 18px 0;
-  }
-  #t-harvest > tbody > tr > td {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 3px 0;
-    border: 0;
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  #t-harvest > tbody > tr > td[data-mlabel]::before {
-    content: attr(data-mlabel);
-    flex: 0 0 64px;
-    color: var(--c-text-muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Date promoted to small muted card header */
   #t-harvest > tbody > tr > td.hv-date {
-    font-size: 12px !important;
-    color: var(--c-text-sec) !important;
-    padding-bottom: 4px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--c-border-light);
-    /* Reserve room for the absolute-positioned grams badge */
     padding-right: 96px;
   }
-  #t-harvest > tbody > tr > td.hv-date::before {
-    display: none;
-  }
-  /* Grams pinned to the top-right of the card as a big amber number —
-     the most-scanned value when reviewing a harvest log on phone. */
   #t-harvest > tbody > tr > td.hv-grams {
     position: absolute;
     top: 8px;
@@ -4684,12 +5075,12 @@ tr:hover td {
   }
 }
 
-/* Clearance for the two thumb-zone buttons. They are gated on the pointer, not
-   on width, so the 56 px reserved above for the bottom-nav misses them twice:
-   on a phone they reach higher than the bar, and on a coarse-pointer tablet
-   past 768 px there is no bar and no reserve at all. The speed-dial governs —
-   it sits 72 px up and stands 56 px tall, so its top edge is 128 px above the
-   bottom. Without this the last stretch of any long page hides underneath;
+/* Clearance for the floating scan button. It is gated on the pointer, not on
+   width, so the 56 px reserved above for the bottom-nav misses it twice: on a
+   phone it reaches higher than the bar, and on a coarse-pointer tablet past
+   768 px there is no bar and no reserve at all. It sits --fab-bottom (72 px) up
+   and stands 56 px tall, so its top edge is 128 px above the bottom. Without
+   this the last stretch of any long page hides underneath;
    Admin → Kanäle put its "Jetzt synchronisieren" button there.
    Must stay after the bottom-nav rule: same specificity, later wins. */
 @media (pointer: coarse) and (hover: none) {
@@ -4704,7 +5095,7 @@ tr:hover td {
    resize at 1280px / quality 0.8). */
 .cr-label {
   display: block;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -4795,7 +5186,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   cursor: pointer;
   overflow: hidden;
@@ -4844,7 +5235,7 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
 }
 
 /* ═══ PHOTO ANNOTATION MODAL ══════════════════════════════════
@@ -4897,7 +5288,7 @@ tr:hover td {
 }
 .pa-hint {
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   text-align: center;
   border-top: 1px solid var(--c-border-light);
@@ -4962,11 +5353,11 @@ tr:hover td {
 }
 .contam-list-batch {
   font-family: monospace;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .contam-list-when {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -4976,7 +5367,7 @@ tr:hover td {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   background: rgba(0, 0, 0, 0.04);
 }
@@ -4986,7 +5377,7 @@ tr:hover td {
   border-radius: 50%;
 }
 .contam-sev-badge {
-  font-size: 10px;
+  font-size: max(10px, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -5006,7 +5397,7 @@ tr:hover td {
   color: #991b1b;
 }
 .contam-resolved-badge {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -5014,7 +5405,7 @@ tr:hover td {
   color: #14532d;
 }
 .contam-open-badge {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -5042,7 +5433,7 @@ tr:hover td {
   border-top: 1px solid var(--c-border-light);
 }
 .contam-list-notes {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-sec);
   white-space: nowrap;
   overflow: hidden;
@@ -5059,7 +5450,7 @@ tr:hover td {
 }
 .cd-meta-grid .label {
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5122,7 +5513,7 @@ tr:hover td {
   margin-bottom: 4px;
 }
 .wk-sub {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   color: var(--c-text-muted);
   margin-top: 3px;
 }
@@ -5136,12 +5527,15 @@ tr:hover td {
   color: var(--c-amber-dark);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   margin: 12px 0 14px;
 }
 .wk-todo-strip .btn {
   margin-left: auto;
+  /* (0,2,0) — beats the site-wide `.btn-sm` coarse rule below, so the one
+     button on the landing page gets the full --tap rather than 44. */
+  min-height: var(--tap);
   border-color: var(--c-amber-dark);
   color: var(--c-amber-dark);
 }
@@ -5158,12 +5552,18 @@ tr:hover td {
 .wk-tiles-row2 {
   margin-top: 12px;
 }
+/* 769–900px: a narrow desk window or a tablet in portrait. Below 769 the rule
+   under this one takes over with a single column. */
 @media (max-width: 900px) {
   .wk-tiles {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 520px) {
+/* One column on every phone, not only the narrow ones. 520px was a guess at
+   where two tiles stop fitting; the answer is that two tiles never fit next to
+   a title at 17px and a when-line at 13px, and 768 is where the rest of the
+   app already draws the line. */
+@media (max-width: 768px) {
   .wk-tiles {
     grid-template-columns: 1fr;
   }
@@ -5179,7 +5579,7 @@ tr:hover td {
   background: linear-gradient(150deg, var(--wk-cl) 0%, var(--c-surface) 62%);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
-  padding: 15px 15px 16px;
+  padding: var(--pad-tile);
   min-height: 156px;
   cursor: pointer;
   font: inherit;
@@ -5231,7 +5631,7 @@ tr:hover td {
 .wk-tile-t {
   position: relative;
   z-index: 2;
-  font-size: 14.5px;
+  font-size: var(--fs-tile);
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.25;
@@ -5240,7 +5640,7 @@ tr:hover td {
 .wk-tile-when {
   position: relative;
   z-index: 2;
-  font-size: 11.5px;
+  font-size: max(11.5px, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1.4;
   max-width: 64%;
@@ -5265,7 +5665,7 @@ tr:hover td {
   margin-bottom: 14px;
 }
 .wkf-chip {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -5282,11 +5682,6 @@ tr:hover td {
   color: #fff;
   background: var(--c-primary);
   border-color: var(--c-primary);
-}
-.wkf-hint {
-  font-size: 13px;
-  color: var(--c-text-sec);
-  margin-bottom: 10px;
 }
 .wkf-empty {
   font-size: 13px;
@@ -5308,7 +5703,11 @@ tr:hover td {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 46vh;
+  /* dvh, not vh: with the on-screen keyboard up, vh still measures the window
+     as if it were not there, so a list sized in vh keeps its full height and
+     pushes the footer buttons off the bottom. This list is step 1 of every
+     flow and the field below it is what opens the keyboard. */
+  max-height: 46dvh;
   overflow-y: auto;
 }
 .wkf-row {
@@ -5324,7 +5723,7 @@ tr:hover td {
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
-  min-height: 46px;
+  min-height: max(46px, var(--tap-min));
 }
 .wkf-row:hover {
   border-color: var(--c-primary);
@@ -5332,15 +5731,15 @@ tr:hover td {
 }
 .wkf-row-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   font-weight: 700;
 }
 .wkf-row-meta {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-row-zone {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   font-weight: 700;
   color: var(--c-green-dark);
   background: var(--c-green-light);
@@ -5356,16 +5755,8 @@ tr:hover td {
   gap: 9px;
   margin-bottom: 10px;
 }
-.wkf-bar label {
-  font-size: 12px;
-  color: var(--c-text-sec);
-  margin: 0;
-}
-.wkf-bar input {
-  width: 76px;
-}
 .wkf-bar-sp {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -5373,7 +5764,8 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  min-height: var(--tap);
+  font-size: max(12.5px, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 10px;
 }
@@ -5384,14 +5776,17 @@ tr:hover td {
 .wkf-bags {
   display: flex;
   flex-direction: column;
-  max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
 }
 .wkf-bag {
   display: grid;
-  grid-template-columns: 1fr auto 92px auto;
+  /* minmax(0, 1fr), not 1fr: a grid track's default minimum is min-content, so
+     a long bag id widens the track instead of ellipsing inside it, and the row
+     pushes the modal sideways. */
+  grid-template-columns: minmax(0, 1fr) auto 92px auto;
   gap: 9px;
   align-items: center;
   padding: 7px 11px;
@@ -5402,11 +5797,11 @@ tr:hover td {
 }
 .wkf-bag-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   font-weight: 650;
 }
 .wkf-prev {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   white-space: nowrap;
 }
@@ -5415,7 +5810,7 @@ tr:hover td {
   font-weight: 700;
 }
 .wkf-unit {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-sum {
@@ -5431,7 +5826,7 @@ tr:hover td {
   font-weight: 800;
 }
 .wkf-sum span {
-  font-size: 12px;
+  font-size: max(12px, var(--fs-min));
   color: var(--c-text-muted);
 }
 
@@ -5453,7 +5848,7 @@ tr:hover td {
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
-  min-height: 48px;
+  min-height: max(48px, var(--tap-min));
 }
 .wkf-zone.sel {
   border-color: var(--c-primary);
@@ -5517,18 +5912,56 @@ tr:hover td {
   flex: none;
 }
 
-@media (max-width: 560px) {
+/* The flow on a phone. It used to answer three different questions at three
+   invented widths — 460 for the two-up field pairs, 520 for the launcher tiles,
+   560 for the list rows — none of which is where anything actually stops
+   fitting. One breakpoint, at the 768 the rest of the app already uses. */
+@media (max-width: 768px) {
   .wkf-row {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .wkf-row-meta {
     grid-column: 1 / -1;
   }
+  .wkf-two,
+  .wkf-zones {
+    grid-template-columns: 1fr;
+  }
+  /* Three columns and four children, placed rather than left to auto-flow: id,
+     field and unit on one line, and what the bag already gave on the next.
+     The 560px rule hid that line instead — which is the number a worker needs
+     to decide whether this bag is worth weighing at all. */
   .wkf-bag {
-    grid-template-columns: 1fr 84px auto;
+    grid-template-columns: minmax(0, 1fr) 84px auto;
+  }
+  .wkf-bag-id {
+    grid-area: 1 / 1 / 2 / 2;
+  }
+  .wkf-g {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+  .wkf-unit {
+    grid-area: 1 / 3 / 2 / 4;
   }
   .wkf-prev {
-    display: none;
+    grid-area: 2 / 1 / 3 / 4;
+  }
+  /* Label above value instead of beside it — a 116px label column leaves 200px
+     for a zone name on a 375px screen. */
+  .wkf-r-lines div {
+    flex-wrap: wrap;
+  }
+  .wkf-r-k {
+    min-width: 100%;
+  }
+  /* §5.2: one primary action, full width, in the bottom third. The primary is
+     the last child, so a column puts it closest to the thumb; a row put it in
+     the far corner at whatever width its label happened to be. */
+  .wkf-foot {
+    flex-direction: column;
+  }
+  .wkf-foot .btn {
+    width: 100%;
   }
 }
 
@@ -5571,24 +6004,23 @@ tr:hover td {
   margin-bottom: 10px;
 }
 .wkf-field > label {
-  font-size: 11.5px;
+  font-size: max(11.5px, var(--fs-min));
   color: var(--c-text-sec);
   font-weight: 600;
   margin: 0;
 }
+/* Outranks the app-wide `input, select, textarea { min-height: 64px }` on
+   specificity, so before the floor this rule made the flow's fields SMALLER
+   than every other field in the app — 44px against 64px — on the one screen
+   that is filled in wearing gloves. */
 .wkf-field input,
 .wkf-field select {
-  min-height: 44px;
+  min-height: max(44px, var(--tap-min));
 }
 .wkf-two {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-@media (max-width: 460px) {
-  .wkf-two {
-    grid-template-columns: 1fr;
-  }
 }
 .wkf-chipsrow {
   display: flex;
@@ -5600,7 +6032,7 @@ tr:hover td {
   background: var(--c-surface);
   border-radius: 8px;
   padding: 0 12px;
-  min-height: 44px;
+  min-height: max(44px, var(--tap-min));
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -5618,7 +6050,7 @@ tr:hover td {
   color: var(--c-green-dark);
   border-radius: 9px;
   padding: 10px 12px;
-  font-size: 12.5px;
+  font-size: max(12.5px, var(--fs-min));
   line-height: 1.6;
   margin-bottom: 10px;
 }
@@ -5657,7 +6089,7 @@ tr:hover td {
   flex-wrap: wrap;
 }
 .wkf-hint {
-  font-size: 11px;
+  font-size: max(11px, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 10px;
 }
@@ -5691,20 +6123,9 @@ tr:hover td {
 }
 
 /* Die Fußknöpfe der Abläufe sind die Hauptaktion und werden im Labor mit dem
-   Finger getroffen — 34 px reichten dafür nicht. */
+   Finger getroffen — 34 px reichten dafür nicht. 44 reichen für die Maus, für
+   den Handschuh nicht; max() hebt sie am Gerät an und lässt sie am Schreibtisch
+   stehen. */
 .wkf-foot .btn {
-  min-height: 44px;
-}
-
-/* Fünfzehn Reiter brechen nicht sinnvoll um: die Einstellungen behalten den
-   seitlich schiebbaren Streifen samt Auslauf-Kante als Hinweis. Die Arbeitsseiten
-   mit ihren vier Reitern brechen dagegen um (Regel weiter oben). */
-@media (max-width: 768px) {
-  #p-settings > .stabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
-    mask-image: linear-gradient(to right, black 0, black calc(100% - 24px), transparent 100%);
-  }
+  min-height: max(44px, var(--tap-min));
 }
