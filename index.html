@@ -1336,7 +1336,13 @@
             <path d="M9 15l2 2 4-4" /></svg
           ><span data-i18n="nav.pickups">Abholungen</span>
         </button>
-        <button class="sb-btn" id="n-orders-inbox">
+        <!-- One entry, five views. The five that used to stand here all called
+             go('orders', ...) and then openStab() on the same page — sub-tabs promoted to
+             the top level, while Admin's thirteen stayed nested behind one. The sidebar
+             paid for the inconsistency: at 1366x768 it needed 778px and had 611, so Kunden
+             and Versand were off the screen with nothing to say they existed. The strip
+             below #p-orders is the list now, on both devices — see USABILITY_PLAN.md. -->
+        <button class="sb-btn" id="n-orders">
           <svg
             width="18"
             height="18"
@@ -1351,75 +1357,7 @@
             <path
               d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
             /></svg
-          ><span data-i18n="nav.ordersInbox">Bestellungen</span>
-        </button>
-        <button class="sb-btn" id="n-orders-demand">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" /></svg
-          ><span data-i18n="nav.ordersDemand">Was muss ich machen</span>
-        </button>
-        <button class="sb-btn" id="n-orders-mapping">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-            <line x1="7" y1="7" x2="7.01" y2="7" /></svg
-          ><span data-i18n="nav.ordersMapping">Produkte</span>
-        </button>
-        <button class="sb-btn" id="n-orders-customers">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 00-3-3.87" />
-            <path d="M16 3.13a4 4 0 010 7.75" /></svg
-          ><span data-i18n="nav.ordersCustomers">Kunden</span>
-        </button>
-        <button class="sb-btn" id="n-orders-versand">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="1" y="3" width="15" height="13" />
-            <path d="M16 8h4l3 3v5h-7V8z" />
-            <circle cx="5.5" cy="18.5" r="2.5" />
-            <circle cx="18.5" cy="18.5" r="2.5" /></svg
-          ><span data-i18n="nav.ordersVersand">Versand</span>
+          ><span data-i18n="nav.orders">Bestellungen</span>
         </button>
       </nav>
       <!-- Admin navigation — takes the sidebar over while the Admin section is open, on a
@@ -3173,10 +3111,10 @@
 
         <!-- ══ LAB ══ -->
         <div class="page" id="p-orders">
-          <!-- Sub-tab bar hidden: the four views are now top-level "Verkauf" sidebar entries
-               that deep-link via openStab. The stab buttons stay in the DOM (their render
-               hooks fire through openStab) but are not shown. -->
-          <div class="stabs" style="display: none">
+          <!-- The strip is the section's own list again, on both devices: five pills on a
+               desk, a drill-down index in a hand. It was hidden while the five views were
+               top-level sidebar entries, which cost the sidebar more room than it had. -->
+          <div class="stabs" data-stab-home="nav.orders">
             <button class="stab active" id="st-orders-inbox" data-i18n="orders.inbox">Bestellungen</button>
             <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>

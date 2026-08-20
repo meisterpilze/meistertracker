@@ -27,10 +27,6 @@ window.LANG['de'] = {
   'nav.calendar': 'Kalender',
   'nav.orders': 'Bestellungen',
   'nav.sales': 'Verkauf',
-  'nav.ordersInbox': 'Bestellungen',
-  'nav.ordersDemand': 'Was muss ich machen',
-  'nav.ordersMapping': 'Produkte',
-  'nav.ordersCustomers': 'Kunden',
   'nav.pickups': 'Abholungen',
   'nav.adminBack': 'Zur\u00fcck',
   'nav.backToList': 'Zur\u00fcck zur \u00dcbersicht',
@@ -344,7 +340,6 @@ window.LANG['de'] = {
   'msq.grainKg': 'kg pro Beutel',
   'msq.grainPreview': '{n} Beutel Körnerbrut werden angelegt.',
   // Versand (Phase 4)
-  'nav.ordersVersand': 'Versand',
   'orders.versandTab': 'Versand',
   'orders.th.orderId': 'Bestell-ID',
   'settings.tabVersand': 'Versand',

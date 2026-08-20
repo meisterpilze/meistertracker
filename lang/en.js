@@ -27,10 +27,6 @@ window.LANG['en'] = {
   'nav.calendar': 'Calendar',
   'nav.orders': 'Orders',
   'nav.sales': 'Sales',
-  'nav.ordersInbox': 'Orders',
-  'nav.ordersDemand': 'To make',
-  'nav.ordersMapping': 'Products',
-  'nav.ordersCustomers': 'Customers',
   'nav.pickups': 'Pickups',
   'nav.adminBack': 'Back',
   'nav.backToList': 'Back to the list',
@@ -342,7 +338,6 @@ window.LANG['en'] = {
   'msq.grainKg': 'kg per bag',
   'msq.grainPreview': '{n} grainspawn bag(s) will be created.',
   // Versand (Phase 4)
-  'nav.ordersVersand': 'Shipping',
   'orders.versandTab': 'Shipping',
   'orders.th.orderId': 'Order ID',
   'settings.tabVersand': 'Shipping',

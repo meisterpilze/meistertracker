@@ -976,7 +976,7 @@ const PAGES = {
   cal: 'n-cal',
   settings: 'n-settings',
   strains: 'n-strains',
-  orders: 'n-orders-inbox',
+  orders: 'n-orders',
   pickups: 'n-pickups'
 };
 // ─── UNSAVED WORK ────────────────────────────────────────────────────────────
@@ -1092,7 +1092,14 @@ function go(page, btnId) {
     if (stab) stab.click();
   }
   if (page === 'strains') renderStrains();
-  if (page === 'orders') renderOrders();
+  // Same rule as Admin above, and for the same reason: the strip handler already
+  // knows what its panel needs. Rendering the inbox here instead drew a list the
+  // user may not have asked for, every time — the four other views then drew
+  // over it from openStab().
+  if (page === 'orders') {
+    const stab = document.querySelector('#p-orders .stab.active');
+    if (stab) stab.click();
+  }
   if (page === 'pickups') renderPickups();
   updateTodoBadge();
   // Every page, Admin included, is somewhere the user has now arrived, so the
@@ -1193,8 +1200,9 @@ function stabLandable(stab) {
 // look like; this only sets the class, so above 769px it is inert.
 function stabDrillInit() {
   document.querySelectorAll('.page > .stabs').forEach((strip) => {
-    // Bestellungen navigates from the sidebar and hides its strip on every
-    // device, so it has no index to go back to.
+    // A strip that is hidden is not an index anyone can go back to, so a page
+    // carrying one gets no back row. Nothing hides one today — Bestellungen was
+    // the last, and its five views were sidebar entries at the time.
     if (strip.style.display === 'none') return;
     const page = strip.parentElement;
     const home = strip.dataset.stabHome;
@@ -20530,28 +20538,11 @@ function initEventListeners() {
     pickupsPast = false;
     go('pickups', 'n-pickups');
   });
-  // "Verkauf" group: four top-level entries that open the orders page at the
-  // matching view (the sub-tab bar is hidden; openStab still fires the render).
-  $('n-orders-inbox').addEventListener('click', () => {
-    go('orders', 'n-orders-inbox');
-    openStab('orders', 'inbox');
-  });
-  $('n-orders-demand').addEventListener('click', () => {
-    go('orders', 'n-orders-demand');
-    openStab('orders', 'tomake');
-  });
-  $('n-orders-mapping').addEventListener('click', () => {
-    go('orders', 'n-orders-mapping');
-    openStab('orders', 'mapping');
-  });
-  $('n-orders-customers').addEventListener('click', () => {
-    go('orders', 'n-orders-customers');
-    openStab('orders', 'customers');
-  });
-  $('n-orders-versand').addEventListener('click', () => {
-    go('orders', 'n-orders-versand');
-    openStab('orders', 'versand');
-  });
+  // One entry for the section, and the view it lands on is decided the way Admin
+  // decides it — by clicking the strip's own active pill, inside go(). Five
+  // entries each naming their own sub-tab was the same wiring written five
+  // times, and it is what pushed two of them off a 1366x768 sidebar.
+  $('n-orders').addEventListener('click', () => go('orders', 'n-orders'));
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
   $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
   $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
