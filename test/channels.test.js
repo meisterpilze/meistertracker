@@ -10,6 +10,16 @@ const os = require('os');
 const db = require('../db.js');
 const channels = require('../channels.js');
 
+// A copy of channels.js with its module-level caches empty. _billbeeCarriers is
+// filled once per process, so a test about how that cache is *filled* has to have
+// one that is not filled yet.
+function freshChannels() {
+  delete require.cache[require.resolve('../channels.js')];
+  const fresh = require('../channels.js');
+  delete require.cache[require.resolve('../channels.js')];
+  return fresh;
+}
+
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_chan_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
   return { path: p, db: db.openDb(p) };
@@ -609,22 +619,78 @@ describe('Billbee: orders in', () => {
     }
   });
 
-  it('still sends the tracking number when the carrier list is unreachable', async () => {
+  it('picks the carrier by the longest name, not by list order', async () => {
+    const fresh = freshChannels();
     let post = null;
     const restore = mockFetch(async (url, opts) => {
-      if (url.includes('/enums/shippingcarriers')) return jsonRes(500, {});
+      if (url.includes('/enums/shippingcarriers'))
+        return jsonRes(200, {
+          Data: [
+            { Id: 3, Name: 'Post' },
+            { Id: 17, Name: 'Deutsche Post' }
+          ]
+        });
       post = JSON.parse(opts.body);
       return jsonRes(200, {});
     });
     try {
-      await channels.billbee.pushTracking(cfg, {
+      await fresh.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 9 },
+        trackingNumber: 'TRK7',
+        carrier: 'Deutsche Post'
+      });
+      // .find() answered with whichever overlapped first, so the shipment was
+      // filed under "Post" and the buyer got a tracking link that never resolves.
+      assert.equal(post.CarrierId, 17);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still sends the tracking number when the carrier list is unreachable', async () => {
+    // A fresh copy of the module on purpose: _billbeeCarriers is cached for the
+    // life of the process and the tests above have filled it, so against the
+    // shared copy this passed without the carrier request ever being made — the
+    // one thing it exists to exercise.
+    const fresh = freshChannels();
+    let asked = 0;
+    let post = null;
+    const restore = mockFetch(async (url, opts) => {
+      if (url.includes('/enums/shippingcarriers')) {
+        asked++;
+        return jsonRes(500, {});
+      }
+      post = JSON.parse(opts.body);
+      return jsonRes(200, {});
+    });
+    try {
+      await fresh.billbee.pushTracking(cfg, {
         raw: { BillBeeOrderId: 8 },
         trackingNumber: 'TRK9',
         carrier: 'Hermes'
       });
+      assert.equal(asked, 1, 'the carrier list was really asked for, and really failed');
       assert.equal(post.ShippingId, 'TRK9');
       assert.equal(post.CarrierId, undefined, 'no id rather than a wrong one');
       assert.ok(post.Comment.includes('Hermes'), 'the name still travels');
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses a credential shape Billbee cannot use, before calling out', async () => {
+    let called = 0;
+    const restore = mockFetch(async () => {
+      called++;
+      return jsonRes(200, {});
+    });
+    try {
+      await assert.rejects(
+        () => channels.billbee.fetchOrders({ ...cfg, clientSecret: 'gehei:mnis' }, {}),
+        /Doppelpunkt/
+      );
+      await assert.rejects(() => channels.billbee.fetchOrders({ ...cfg, clientId: 'a:b' }, {}), /Doppelpunkt/);
+      assert.equal(called, 0, 'a colon arrives as a plain 401, which reads as "the key was never approved"');
     } finally {
       restore();
     }
@@ -677,6 +743,75 @@ describe('Billbee: stock out', () => {
       assert.equal(r.pushed, 1);
       assert.equal(r.failed, 1);
       assert.equal(r.results[1].message, 'SKU unbekannt');
+    } finally {
+      restore();
+    }
+  });
+
+  it('counts a failure Billbee reports inside Data as failed', async () => {
+    // Billbee puts the per-article failure in either field depending on the kind.
+    // Reading one and counting the other reported "2 of 2 sent" over an article
+    // that never moved.
+    const restore = mockFetch(async () =>
+      jsonRes(200, [{ Data: { SKU: 'A' } }, { Data: { SKU: 'B', Message: 'SKU unbekannt' } }])
+    );
+    try {
+      const r = await channels.billbee.pushStock(cfg, [
+        { sku: 'A', qty: 1 },
+        { sku: 'B', qty: 2 }
+      ]);
+      assert.equal(r.pushed, 1);
+      assert.equal(r.failed, 1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('counts articles Billbee answered nothing about as failed', async () => {
+    const restore = mockFetch(async () => jsonRes(200, [{ Data: { SKU: 'A' } }]));
+    try {
+      const r = await channels.billbee.pushStock(cfg, [
+        { sku: 'A', qty: 1 },
+        { sku: 'B', qty: 2 },
+        { sku: 'C', qty: 3 }
+      ]);
+      assert.equal(r.pushed, 1);
+      assert.equal(r.failed, 2, 'silence about an article is not a push');
+      assert.equal(r.results[2].message, 'keine Antwort');
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps what a broken run already sent, and says where it stopped', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ sku: 'S' + i, qty: i }));
+    let calls = 0;
+    const restore = mockFetch(async () => {
+      calls++;
+      if (calls === 2) throw new Error('socket hang up');
+      return jsonRes(
+        200,
+        Array.from({ length: 50 }, (_, i) => ({ Data: { SKU: 'S' + i } }))
+      );
+    });
+    try {
+      const r = await channels.billbee.pushStock(cfg, many);
+      // Throwing would have reported the whole push as failed and left nobody
+      // able to say which half of the catalogue carries the new numbers.
+      assert.equal(r.pushed, 50);
+      assert.match(r.error, /socket hang up/);
+      assert.equal(r.results.length, 50);
+    } finally {
+      restore();
+    }
+  });
+
+  it('but throws when the very first chunk fails, so a wrong key looks wrong', async () => {
+    const restore = mockFetch(async () => {
+      throw new Error('401');
+    });
+    try {
+      await assert.rejects(() => channels.billbee.pushStock(cfg, [{ sku: 'A', qty: 1 }]), /401/);
     } finally {
       restore();
     }

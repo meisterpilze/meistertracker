@@ -611,6 +611,15 @@ function _billbeeGate(fn) {
   return run;
 }
 
+/** The one credential shape Billbee cannot be given. Returns a reason, or null. */
+function billbeeCredentialProblem(cfg) {
+  if (cfg && String(cfg.clientId || '').includes(':')) return 'Billbee-Benutzer darf keinen Doppelpunkt enthalten';
+  if (cfg && String(cfg.clientSecret || '').includes(':'))
+    return 'Billbee API-Passwort darf keinen Doppelpunkt enthalten';
+  return null;
+}
+const _billbeeColon = billbeeCredentialProblem;
+
 function _billbeeHeaders(cfg, hasBody) {
   const h = {
     'X-Billbee-Api-Key': cfg.apiKey,
@@ -624,6 +633,12 @@ function _billbeeHeaders(cfg, hasBody) {
 async function _billbeeFetch(cfg, pathAndQuery, opts = {}, label = 'Billbee') {
   if (!cfg.apiKey) throw new Error('Billbee API-Key fehlt');
   if (!cfg.clientId || !cfg.clientSecret) throw new Error('Billbee Benutzer + API-Passwort erforderlich');
+  // Basic auth splits user from password on the first colon, so a colon in the
+  // login breaks the header outright — and Billbee's own documentation says a
+  // colon in the API password breaks the connection at their end too. Both would
+  // otherwise arrive as a plain 401, which reads as "the key was never approved"
+  // and sends somebody off requesting a new one.
+  if (_billbeeColon(cfg)) throw new Error(_billbeeColon(cfg));
   const url = BILLBEE_API + pathAndQuery;
   const init = { ...opts, headers: _billbeeHeaders(cfg, !!opts.body) };
   let res = await _billbeeGate(() => tfetch(url, init));
@@ -665,11 +680,19 @@ async function _billbeeCarrierId(cfg, carrier) {
       : Object.entries(data).map(([k, v]) => ({ id: Number(k), name: String(v == null ? '' : v) }));
     _billbeeCarriers = rows.filter((r) => Number.isFinite(r.id) && r.name);
   }
-  const hit = _billbeeCarriers.find((c) => {
+  const exact = _billbeeCarriers.find((c) => c.name.toLowerCase() === want);
+  if (exact) return exact.id;
+  // Otherwise the *longest* name that overlaps, not the first one in Billbee's
+  // list: for 'deutsche post', a list holding both "Post" and "Deutsche Post"
+  // used to answer with whichever came first, so the shipment could be filed
+  // under the wrong carrier and the buyer got a tracking link that never resolves.
+  let best = null;
+  for (const c of _billbeeCarriers) {
     const n = c.name.toLowerCase();
-    return want === n || want.includes(n) || n.includes(want);
-  });
-  return hit ? hit.id : null;
+    if (!want.includes(n) && !n.includes(want)) continue;
+    if (!best || n.length > best.name.length) best = { id: c.id, name: n };
+  }
+  return best ? best.id : null;
 }
 
 // Billbee's OrderStateEnum: 4 = shipped, 6 = deleted, 7 = closed, 8 = cancelled.
@@ -831,14 +854,17 @@ const billbee = {
    * about this lab's releases, so db.billbeeStockLevels() answers it and this only
    * carries the answer.
    *
-   * Returns `{ pushed, failed, results }`; a per-article error from Billbee is
-   * reported, never thrown, so one unknown SKU cannot stop the rest of a push.
+   * Returns `{ pushed, failed, results, error }`; a per-article error from Billbee
+   * is reported, never thrown, so one unknown SKU cannot stop the rest of a push.
+   * A transport error stops the run, but only throws while nothing has gone out
+   * yet — see the catch below.
    */
   async pushStock(cfg, items) {
     const list = (items || []).filter((i) => i && i.sku);
     const results = [];
     let pushed = 0;
     let failed = 0;
+    let error = null;
     for (let i = 0; i < list.length; i += BILLBEE_STOCK_CHUNK) {
       const slice = list.slice(i, i + BILLBEE_STOCK_CHUNK);
       const body = slice.map((it) => ({
@@ -850,25 +876,44 @@ const billbee = {
         // shop even after 1.5 kg of it had already been sold through one of them.
         AutosubtractReservedAmount: true
       }));
-      const j = await _billbeeFetch(
-        cfg,
-        '/products/updatestockmultiple',
-        { method: 'POST', body: JSON.stringify(body) },
-        'Billbee Bestand'
-      );
+      let j;
+      try {
+        j = await _billbeeFetch(
+          cfg,
+          '/products/updatestockmultiple',
+          { method: 'POST', body: JSON.stringify(body) },
+          'Billbee Bestand'
+        );
+      } catch (e) {
+        // Chunks already sent are live at Billbee. Throwing here would report the
+        // whole push as failed and leave nobody able to say which half of the
+        // catalogue carries new numbers. The first chunk is the exception:
+        // nothing is out yet, and a wrong key or a dead network has to reach the
+        // caller as an error rather than as a tidy "0 of 120 sent".
+        if (!results.length) throw e;
+        error = e.message || String(e);
+        break;
+      }
       const rows = Array.isArray(j) ? j : [j];
       rows.forEach((r, n) => {
         const data = (r && r.Data) || {};
+        // Billbee answers 200 with a per-article failure for the ordinary case —
+        // an SKU it does not know — and puts it in either field depending on the
+        // kind. Reading one and counting the other reported "50 of 50 sent" over
+        // articles that never moved.
         const err = (r && r.ErrorMessage) || data.Message || null;
         const sku = data.SKU || (slice[n] && slice[n].sku) || null;
-        // Billbee answers 200 with an ErrorMessage per article for the ordinary
-        // failure — an SKU it does not know. That is a failure, not a push.
-        if (r && r.ErrorMessage) failed++;
+        if (err) failed++;
         else pushed++;
         results.push({ sku, qty: slice[n] ? slice[n].qty : null, stock: data.CurrentStock, message: err });
       });
+      // A short answer means articles nobody reported on. They are not pushes.
+      for (let n = rows.length; n < slice.length; n++) {
+        failed++;
+        results.push({ sku: slice[n].sku, qty: slice[n].qty, stock: undefined, message: 'keine Antwort' });
+      }
     }
-    return { pushed, failed, results };
+    return { pushed, failed, results, error };
   }
 };
 
@@ -889,6 +934,7 @@ module.exports = {
   etsy,
   ebay,
   billbee,
+  billbeeCredentialProblem,
   _normalizeWix,
   _normalizeEtsy,
   _normalizeEbay,

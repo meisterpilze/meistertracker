@@ -9201,6 +9201,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             if (data[k] === '' || data[k] == null) delete data[k];
           }
         );
+        // Caught while somebody is still looking at the field they typed it in.
+        // A colon breaks basic auth outright in the login, and Billbee documents
+        // it as breaking the connection in the API password — either way it
+        // arrives as a plain 401 that reads as "the key was never approved".
+        if (chanCfgMatch[1] === 'billbee') {
+          const bad = channels.billbeeCredentialProblem(data);
+          if (bad) {
+            jsonErr(res, 400, bad);
+            return;
+          }
+        }
         db.updateChannelConfig(database, chanCfgMatch[1], data);
         broadcastSSE(res);
         jsonOk(res, { channels: db.listChannelConfigs(database) });
