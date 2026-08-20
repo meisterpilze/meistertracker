@@ -695,9 +695,6 @@ window.LANG['pt'] = {
   'todo.dueToday': 'Vence hoje',
   // Days
   // Team
-  'team.membersDesc':
-    'Adicione membros da equipe para atribuir tarefas individualmente. Cada membro pode ter seu pr\u00f3prio calend\u00e1rio CalDAV.',
-  'team.empty': 'Ainda n\u00e3o h\u00e1 membros na equipe. Adicione seu primeiro membro abaixo.',
   // CalDAV
   'caldav.title': 'Servidor de calend\u00e1rio CalDAV',
   'caldav.desc':

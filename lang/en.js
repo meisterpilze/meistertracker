@@ -847,9 +847,6 @@ window.LANG['en'] = {
   'todo.dueToday': 'Due today',
   // Days
   // Team
-  'team.membersDesc':
-    'Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.',
-  'team.empty': 'No team members yet. Add your first member below.',
   // CalDAV
   'caldav.title': 'CalDAV calendar server',
   'caldav.desc':
