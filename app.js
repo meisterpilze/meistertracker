@@ -6604,8 +6604,10 @@ function nbTypeChange() {
 // setting the same value, and nothing said which one counted. The buttons now
 // carry the two sizes actually used; the field only appears for a weight that
 // is neither of them, and says so by being labelled "anderes".
-function setBagWeight(kg, keepField) {
-  document.getElementById('nb-weight').value = kg;
+function setBagWeight(kg) {
+  const field = document.getElementById('nb-weight');
+  if (!field) return;
+  field.value = kg;
   ['wbtn-3', 'wbtn-5'].forEach((id) => {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -6613,10 +6615,9 @@ function setBagWeight(kg, keepField) {
     btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
   });
   const other = document.getElementById('wbtn-other');
-  const field = document.getElementById('nb-weight');
   const preset = kg === 3 || kg === 5;
   if (other) other.className = 'btn btn-sm' + (preset ? '' : ' btn-p');
-  if (field && !keepField) field.style.display = preset ? 'none' : '';
+  field.style.display = preset ? 'none' : '';
   nbPreview();
 }
 // "anderes": show the field and let the worker type, whatever it says now.
@@ -7267,8 +7268,9 @@ function createBatch() {
       .join('');
     const _res = document.getElementById('nb-result');
     _res.dataset.batchId = batchObj.batchId;
-    _res.style.display = 'block';
-    _res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const kopf = document.getElementById('nbp-head');
+    if (kopf) kopf.textContent = t('batch.printFor', { id: batchObj.batchId, n: bags.length });
+    nbpOpen();
   });
 }
 // ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
@@ -7426,10 +7428,18 @@ async function refreshSubstrateBatches(fromPayload) {
   renderSubstrateTab();
 }
 
+// Die einzige Antwort auf "aus welchem Ansatz lässt sich noch ziehen": genug
+// Restmenge und nicht abgeschrieben. Die zweite Bedingung fehlte in der Auswahl
+// und im geführten Ablauf, so dass ein als verdorben abgeschriebener Ansatz mit
+// Restmenge sich weiter bebuchen ließ.
+function wkOpenMixes() {
+  return (_sbList || []).filter((x) => x.status === 'open' && x.remainingKg > 0.0001);
+}
+
 function renderSubstrateList() {
   const el = document.getElementById('sb-list');
   if (!el) return;
-  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  const open = wkOpenMixes();
   if (!open.length) {
     el.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
     return;
@@ -7466,7 +7476,7 @@ function renderSubstrateList() {
 function fillSubstrateSelect() {
   const sel = document.getElementById('nb-substrate-batch');
   if (!sel) return;
-  const open = _sbList.filter((s) => s.remainingKg > 0.0001);
+  const open = wkOpenMixes();
   const opts =
     '<option value="">' +
     t('sub.selectNone') +
@@ -7820,6 +7830,17 @@ function writeOffSubstrate(subId, leftKg) {
 // "Druckoptionen…" button still opens the full Print page for ranges/formats.
 // Falls back to a ZPL download (same as printBagLabels) when the printer is
 // unreachable.
+// Der Etiketten-Dialog. Er kommt von selbst, sobald eine Charge steht — die
+// Etiketten sind der nächste Handgriff, und vorher lagen sie am Seitenende.
+function nbpOpen() {
+  const m = document.getElementById('m-batch-print');
+  if (m) m.classList.add('open');
+}
+function nbpClose() {
+  const m = document.getElementById('m-batch-print');
+  if (m) m.classList.remove('open');
+}
+
 async function printBatchLabelsInline() {
   const res = document.getElementById('nb-result');
   const id = res ? res.dataset.batchId : null;
@@ -7844,6 +7865,7 @@ async function printBatchLabelsInline() {
     a.click();
   } else {
     setFb('ok', t('print.printedBatch', { n: b.bags.length, id: b.batchId }));
+    nbpClose();
   }
 }
 function goToPrintBatch() {
@@ -13320,12 +13342,10 @@ function msQuickConfirm() {
   // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
   // leak into the next batch — so carry it over the close explicitly.
   const _inocPicked = _inoc.slice();
-  // Land on the Charge page BEFORE prefilling. createBatch's success panel
-  // (nb-result, with the print buttons) lives inside sp-batch-new, so creating
-  // from the dashboard shortcut used to reveal it on a page the worker was not
-  // looking at — the batch appeared, the labels did not. Order matters: opening
-  // the sub-tab can run nbApplyDefaults() on first visit, which would overwrite
-  // every field the recipe is about to set.
+  // Land on the Charge page BEFORE prefilling. Der Etiketten-Dialog kommt
+  // inzwischen von selbst hoch, egal wo man steht — aber die Reihenfolge bleibt:
+  // openStab() ruft beim ersten Besuch einer Sitzung nbApplyDefaults(), und das
+  // überschriebe jedes Feld, das das Rezept gleich setzt.
   msQuickClose();
   go('batch', 'n-batch');
   openStab('batch', 'new');
@@ -19874,6 +19894,7 @@ document.addEventListener('keydown', function (e) {
     'm-baginfo',
     'm-addbags',
     'm-batchadd',
+    'm-batch-print',
     'm-note',
     'm-prompt',
     // m-move-batch before the two list modals below: the zone picker opens on
@@ -19888,6 +19909,10 @@ document.addEventListener('keydown', function (e) {
       // Placement gate: Escape must not strand a freshly created batch.
       if (id === 'm-move-batch' && _zpMandatory()) return;
       if (id === 'm-bagselect') bsClose();
+      // Dasselbe für die Arbeitsgang-Hülle: ohne wkfClose() bleibt WKF.kind
+      // stehen, und ein spät zurückkommender Ansatz malt seine Quittung in ein
+      // Fenster, das niemand mehr sieht.
+      else if (id === 'm-work-flow') wkfClose();
       // closeCamScan() stops the MediaStream + decode loop; just removing the
       // 'open' class would leave the camera live (LED on, battery drain,
       // barcodes still firing processScan) behind a hidden modal.
@@ -20852,7 +20877,15 @@ function initEventListeners() {
   const strainShortcut = document.getElementById('nb-create-strain-btn');
   if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
   $('prt-25').addEventListener('click', printBatchLabelsInline);
-  $('prt-25-opts').addEventListener('click', goToPrintBatch);
+  $('prt-25-opts').addEventListener('click', () => {
+    nbpClose();
+    goToPrintBatch();
+  });
+  $('nbp-later').addEventListener('click', nbpClose);
+  $('nbp-close').addEventListener('click', nbpClose);
+  document.getElementById('m-batch-print').addEventListener('click', (e) => {
+    if (e.target.id === 'm-batch-print') nbpClose();
+  });
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
@@ -21330,7 +21363,10 @@ const WKF = {
   step: null, // 'pick' | 'detail' | 'done'
   batchId: null,
   grams: {}, // bagId -> raw input string (harvest)
-  flush: 1,
+  // Leer: jeder Beutel bekommt seinen eigenen nächsten Flush. Eine Zahl gilt
+  // für alle Beutel dieses Durchgangs — für Wellen, die über mehrere Tage
+  // gepflückt werden und trotzdem eine Welle sind.
+  flushOverride: null,
   releaseAll: false,
   dest: null, // destination zone id (move)
   receipt: null
@@ -21366,6 +21402,14 @@ function wkBagHarvested(bagId) {
 // liefert Flush 1 — unabhängig davon, wie oft seine Nachbarn schon dran waren.
 function wkBagFlush(bag) {
   return (wkBagHarvested(bag).lastFlush || 0) + 1;
+}
+
+// Der Flush, der für diesen Beutel gebucht wird. `lastFlush` reicht wkLiveBags()
+// schon herum — ohne das Argument liest diese Funktion alle Ernten noch einmal,
+// und das je Zeile der Liste.
+function wkfBagFlush(bag, lastFlush) {
+  if (WKF.flushOverride) return WKF.flushOverride;
+  return lastFlush != null ? lastFlush + 1 : wkBagFlush(bag);
 }
 
 // Batches that still have bags standing somewhere, newest first. `roles` limits
@@ -21417,7 +21461,7 @@ function wkfOpen(kind) {
   WKF.step = 'pick';
   WKF.batchId = null;
   WKF.grams = {};
-  WKF.flush = 1;
+  WKF.flushOverride = null;
   WKF.releaseAll = false;
   WKF.dest = null;
   WKF.receipt = null;
@@ -21429,6 +21473,7 @@ function wkfClose() {
   wkf('m-work-flow').classList.remove('open');
   WKF.kind = null;
   WKF.step = null;
+  WKF.receipt = null;
 }
 
 // Der Kopf-Knopf gehört allen vier Abläufen, aber jeder hat seinen eigenen
@@ -21485,7 +21530,10 @@ function wkfStepChips() {
 }
 
 function wkfRender() {
-  if (!WKF.kind) return;
+  // Nur die drei Abläufe, die diese Hülle selbst zeichnet. Der Assistent und
+  // das Mischen bringen ihre eigenen Renderer mit — ein später Rückruf darf
+  // deren Bildschirm nicht durch einen Umzugsbildschirm ersetzen.
+  if (WKF.kind !== 'harvest' && WKF.kind !== 'move' && WKF.kind !== 'contam') return;
   wkf('wkf-title').textContent = wkfTitle();
   wkf('wkf-back').hidden = WKF.step !== 'detail';
   wkf('wkf-steps').innerHTML = WKF.step === 'done' ? '' : wkfStepChips();
@@ -21546,6 +21594,10 @@ function wkfPickBatch(batchId) {
     // siehe wkBagFlush(). Ein Durchgang kann Erst- und Zweiternte mischen,
     // und genau das kam vorher falsch heraus.
     WKF.grams = {};
+    // Übersteuerung und Freigabe gelten für die Charge, für die sie gewählt
+    // wurden. „Alle freigeben" hat vorher jede weitere Charge mit abgeräumt.
+    WKF.flushOverride = null;
+    WKF.releaseAll = false;
   }
   WKF.step = 'detail';
   wkfRender();
@@ -21558,7 +21610,7 @@ function wkfRenderHarvest() {
   const b = batches.find((x) => x.batchId === WKF.batchId);
   if (!bags.length) {
     wkf('wkf-body').innerHTML = `<div class="wkf-empty">${esc(t('work.noBagsInZone'))}</div>`;
-    wkf('wkf-foot').innerHTML = `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>`;
+    wkf('wkf-foot').innerHTML = `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>`;
     return;
   }
   const relRow = harvestRelease.on
@@ -21568,6 +21620,10 @@ function wkfRenderHarvest() {
   wkf('wkf-body').innerHTML =
     `<div class="wkf-hint">${esc(t('work.gramsHint'))}</div>
      <div class="wkf-bar">
+       <label for="wkf-flush">${esc(t('harvest.flush'))}</label>
+       <input type="number" id="wkf-flush" min="1" inputmode="numeric"
+              value="${WKF.flushOverride || ''}" placeholder="${esc(t('work.flushAuto'))}"
+              onchange="WKF.flushOverride = Math.max(0, parseInt(this.value, 10) || 0) || null; wkfRender()" />
        <span class="wkf-bar-sp">${esc(b ? b.species || '' : '')}</span>
      </div>
      ${relRow}
@@ -21576,9 +21632,10 @@ function wkfRenderHarvest() {
       .map((x) => {
         // Was der Beutel bisher brachte, und welcher Flush jetzt gebucht wird —
         // beides an der Zeile, weil beides je Beutel verschieden sein kann.
+        const fl = esc(t('work.flushN', { n: wkfBagFlush(x.bag, x.lastFlush) }));
         const prev = x.grams
-          ? `<span class="wkf-prev">${esc(t('work.already', { g: Math.round(x.grams) }))} · ${esc(t('work.flushN', { n: wkBagFlush(x.bag) }))}</span>`
-          : `<span class="wkf-prev">${esc(t('work.flushN', { n: wkBagFlush(x.bag) }))}</span>`;
+          ? `<span class="wkf-prev">${esc(t('work.already', { g: Math.round(x.grams) }))} · ${fl}</span>`
+          : `<span class="wkf-prev">${fl}</span>`;
         const val = WKF.grams[x.bag] != null ? esc(String(WKF.grams[x.bag])) : '';
         return `<div class="wkf-bag">
           <span class="wkf-bag-id">${esc(x.bag)}</span>
@@ -21592,7 +21649,7 @@ function wkfRenderHarvest() {
     '</div>' +
     `<div class="wkf-sum"><b id="wkf-total">0</b> <span id="wkf-total-sub">${esc(t('work.sumEmpty'))}</span></div>`;
   wkf('wkf-foot').innerHTML =
-    `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>` +
+    `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>` +
     `<button class="btn btn-p" id="wkf-book" data-wk="book-harvest">${esc(t('work.book'))}</button>`;
   wkfUpdateTotal();
 }
@@ -21631,6 +21688,12 @@ function wkfBookHarvest() {
     if (g && g > 0) picked.push({ bag, grams: g });
   }
   if (!picked.length) return;
+  // Einmal lesen, zweimal benutzen: für den Flush je Beutel und für die Frage,
+  // was nach diesem Durchgang noch steht. Sonst läuft wkBagHarvested() je Beutel
+  // noch einmal durch alle Ernten.
+  const standing = wkLiveBags(WKF.batchId, ['fruiting']);
+  const lastFlushByBag = {};
+  for (const x of standing) lastFlushByBag[x.bag] = x.lastFlush;
   const time = new Date().toISOString();
   let total = 0;
   const entries = picked.map((p) => {
@@ -21642,9 +21705,27 @@ function wkfBookHarvest() {
       species: b.species,
       strain: b.strain,
       grams: p.grams,
-      flush: wkBagFlush(p.bag)
+      flush: wkfBagFlush(p.bag, lastFlushByBag[p.bag])
     };
   });
+  const left = standing.filter((x) => !WKF.grams[x.bag] || !parseDecimal(WKF.grams[x.bag]));
+  // Zuerst der Zettel, dann die Buchungen: so hat jede Antwort einen festen
+  // Adressaten für ihren Fehler, auch wenn der Arbeiter inzwischen weiter ist.
+  const receipt = {
+    batchId: b.batchId,
+    species: b.species || '',
+    by: (currentUser && currentUser.username) || '—',
+    grams: total,
+    bags: picked.length,
+    bagsTotal: (b.bags || []).length,
+    released: WKF.releaseAll,
+    releaseFailed: 0,
+    next: left.length ? { label: t('work.nextHarvest', { n: left.length }), action: 'harvest-again' } : null
+  };
+  wkfHarvestReceiptText(receipt);
+  WKF.receipt = receipt;
+  WKF.step = 'done';
+  wkfRender();
   // Mirror the single-bag panel: push locally so the totals update at once, and
   // roll the entry back if the server refuses it.
   entries.forEach((e) => {
@@ -21654,13 +21735,20 @@ function wkfBookHarvest() {
       if (r && r.error) {
         const i = harvests.lastIndexOf(e);
         if (i >= 0) harvests.splice(i, 1);
-        // Nicht in einen Toast hinter der geschlossenen Scan-Hülle: der Arbeiter
-        // schaut auf die Quittung, also muss der Fehler dort stehen.
-        wkfReceiptProblem(t('work.bookFailed', { bag: e.bag, err: r.error }));
+        // Die Kopfzeile darf die abgelehnten Gramm nicht weiter mitzählen.
+        receipt.grams -= e.grams;
+        receipt.bags--;
+        wkfHarvestReceiptText(receipt);
+        wkfReceiptProblem(t('work.bookFailed', { bag: e.bag, err: r.error }), receipt);
         if (typeof renderHarvests === 'function') renderHarvests();
         return;
       }
-      if (r && r.releaseError) wkfReceiptProblem(t('harvest.releaseFailed', { bag: e.bag }) + ': ' + r.releaseError);
+      if (r && r.releaseError) {
+        // Freigegeben stimmt dann nur noch für einen Teil.
+        receipt.releaseFailed++;
+        wkfHarvestReceiptText(receipt);
+        wkfReceiptProblem(t('harvest.releaseFailed', { bag: e.bag }) + ': ' + r.releaseError, receipt);
+      }
     });
     const sEntry = {
       time,
@@ -21679,22 +21767,6 @@ function wkfBookHarvest() {
     if (!sessionStartTime) sessionStartTime = Date.now();
     sessionEntries.push(sEntry);
   });
-  const left = wkLiveBags(WKF.batchId, ['fruiting']).filter((x) => !WKF.grams[x.bag] || !parseDecimal(WKF.grams[x.bag]));
-  WKF.receipt = {
-    headline: t('work.receiptHarvest', {
-      kg: total >= 1000 ? (total / 1000).toFixed(2) + ' kg' : Math.round(total) + ' g',
-      species: b.species || ''
-    }),
-    lines: [
-      [t('work.rBatch'), b.batchId],
-      [t('work.rBags'), t('work.rBagsVal2', { n: picked.length, total: (b.bags || []).length })],
-      [t('work.rReleased'), WKF.releaseAll ? t('work.rReleasedYes') : t('work.rReleasedNo')],
-      [t('work.rBy'), (currentUser && currentUser.username) || '—']
-    ],
-    next: left.length ? { label: t('work.nextHarvest', { n: left.length }), action: 'harvest-again' } : null
-  };
-  WKF.step = 'done';
-  wkfRender();
   if (typeof renderHarvests === 'function') renderHarvests();
   if (typeof updateSD === 'function') updateSD();
   if (typeof renderStatus === 'function') renderStatus();
@@ -21703,17 +21775,20 @@ function wkfBookHarvest() {
 // ─── Step 2b: move — where to ────────────────────────────────────────────────
 
 function wkfRenderMove() {
-  const b = batches.find((x) => x.batchId === WKF.batchId);
   const bags = wkLiveBags(WKF.batchId, null);
   // Vor dem Aufbau, nicht danach: vorher wurde die Fußzeile mit einem aktiven
   // „Buchen" geschrieben und erst anschließend der Körper durch den Leerfall
   // ersetzt — der Knopf blieb stehen und buchte auf eine Charge ohne Beutel.
-  if (b && !bags.length) {
+  // Die Charge selbst wird nicht mehr mitgeprüft: ist sie zwischen Auswahl und
+  // Anzeige verschwunden, liefert wkLiveBags() ohnehin nichts, und der Leerfall
+  // muss dann erst recht greifen — sonst steht ein Buchen-Knopf da, den
+  // wkfBookMove() anschließend wortlos verweigert.
+  if (!bags.length) {
     wkf('wkf-body').innerHTML = `<div class="wkf-empty">${esc(t('work.noBagsStanding'))}</div>`;
     wkf('wkf-foot').innerHTML = `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>`;
     return;
   }
-  const here = bags.length ? bags[0].zoneId : null;
+  const here = bags[0].zoneId;
   const targets = zones.filter((z) => z.id !== here);
   wkf('wkf-body').innerHTML =
     `<div class="wkf-hint">${esc(t('work.moveHint', { n: bags.length, batch: WKF.batchId }))}</div>` +
@@ -21729,9 +21804,8 @@ function wkfRenderMove() {
       .join('') +
     '</div>';
   wkf('wkf-foot').innerHTML =
-    `<button class="btn" onclick="wkfBack()">${esc(t('work.back'))}</button>` +
+    `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>` +
     `<button class="btn btn-p" data-wk="book-move" ${WKF.dest ? '' : 'disabled'}>${esc(t('work.book'))}</button>`;
-
 }
 
 function wkfBookMove() {
@@ -21762,12 +21836,41 @@ function wkfBookMove() {
 // booked, what it changed, and what the obvious next move is — otherwise the
 // only feedback is a form that closed.
 
-// Ein Fehler, der eintrifft, nachdem die Quittung schon steht. Er wird an die
-// Quittung gehängt statt in einen Toast geschrieben, den niemand sieht.
-function wkfReceiptProblem(msg) {
-  if (!WKF.receipt) return;
-  WKF.receipt.problems = (WKF.receipt.problems || []).concat(msg);
-  if (WKF.kind === 'harvest' && WKF.step === 'done') wkfRenderReceipt();
+// Kopfzeile und Beutelzeile der Ernte-Quittung, gerechnet aus den Zahlen, die
+// wirklich gebucht sind. Lehnt der Server hinterher eine Zeile ab, wird das hier
+// noch einmal aufgerufen — vorher blieb die Kopfzeile auf dem Wunschwert stehen.
+function wkfHarvestReceiptText(r) {
+  r.headline = t('work.receiptHarvest', {
+    kg: r.grams >= 1000 ? (r.grams / 1000).toFixed(2) + ' kg' : Math.round(r.grams) + ' g',
+    species: r.species
+  });
+  r.lines = [
+    [t('work.rBatch'), r.batchId],
+    [t('work.rBags'), t('work.rBagsVal2', { n: r.bags, total: r.bagsTotal })],
+    [
+      t('work.rReleased'),
+      !r.released
+        ? t('work.rReleasedNo')
+        : r.releaseFailed
+          ? t('work.rReleasedPartial', { n: r.releaseFailed })
+          : t('work.rReleasedYes')
+    ],
+    [t('work.rBy'), r.by]
+  ];
+}
+
+// Ein Fehler, der eintrifft, nachdem die Quittung schon steht. Er geht immer
+// durch setFb — das zählt ihn mit, schreibt ihn ins Scan-Protokoll und piept —
+// und zusätzlich auf seinen Zettel. Vorher ging er restlos verloren, sobald der
+// Arbeiter die Quittung geschlossen oder die nächste Ernte begonnen hatte.
+// `owner` ist der Zettel, zu dem die Buchung gehört: ohne ihn hängt eine späte
+// Meldung an der Quittung eines ganz anderen Durchgangs.
+function wkfReceiptProblem(msg, owner) {
+  setFb('err', msg, { noModal: true });
+  const r = owner || WKF.receipt;
+  if (!r) return;
+  r.problems = (r.problems || []).concat(msg);
+  if (WKF.receipt === r && WKF.step === 'done') wkfRenderReceipt();
 }
 
 function wkfRenderReceipt() {
@@ -21904,12 +22007,6 @@ function wkbRecipe() {
     days: WKB.days != null ? WKB.days : (ms && ms.recIncDays) || 14
   };
 }
-// Nur Ansätze, aus denen sich noch etwas ziehen lässt — dieselbe Schwelle wie
-// fillSubstrateSelect() und renderSubstrateList(). Ohne sie stand ein leerer
-// Ansatz vorausgewählt in der Auswahl und ließ sich bebuchen.
-function wkOpenMixes() {
-  return (_sbList || []).filter((x) => x.remainingKg > 0.0001);
-}
 function wkbMix() {
   return wkOpenMixes().find((x) => x.subId === WKB.subId) || null;
 }
@@ -21934,6 +22031,9 @@ function wkbOpen() {
 }
 
 function wkbBack() {
+  // Erst lesen, dann zurück: der Fußknopf tut das seit jeher, der Kopfknopf
+  // warf die Notiz und das geänderte Rezept weg.
+  wkbReadStep();
   if (WKB.step > 1) {
     WKB.step--;
     wkbRender();
@@ -22111,15 +22211,31 @@ function wkbCreateFromShelf() {
   // zum Wert passen — ein direkt gesetztes Gewicht bleibt sonst unsichtbar.
   if (typeof setBagWeight === 'function') setBagWeight(WKB.bagKg);
   else set('nb-weight', String(WKB.bagKg));
-  set('nb-hw', String(r.hw));
-  set('nb-wb', String(r.wb));
+  // Dieselbe Ableitung wie im Schnelldialog (msQuickConfirm): eine CVG-Sorte hat
+  // ihre ganze Masse im Kokos, eine All-in-One ihre Körnerbrut. Hart auf 0
+  // gesetzt legt der Assistent sie an, ohne ein Gramm abzubuchen — createBatch
+  // fragt dann sogar noch „bucht kein Material?" und nbSaveDefaults schreibt die
+  // Nullen anschließend in die gemerkten Vorgaben des langen Formulars.
+  const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
+  set('nb-hw', String(isCvg ? 0 : r.hw));
+  set('nb-wb', String(isCvg ? 0 : r.wb));
   set('nb-rh', String(r.rh));
   set('nb-days', String(r.days));
+  set('nb-coir', String(isCvg ? ms.recCoirPct || 100 : 0));
+  set('nb-grainkg', String(ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0));
+  set('nb-grainrh', String(ms.recGrainRhPct != null ? ms.recGrainRhPct : 52));
   // Felder, die createBatch ebenfalls liest und die sonst mit Altwerten aus
   // einer früheren Eingabe oder den gemerkten Vorgaben mitgebucht würden.
-  set('nb-coir', '0');
-  set('nb-grainkg', '0');
   set('nb-strain-text', '');
+  // Der Gips-Haken überlebt über nbSaveDefaults/nbApplyDefaults jede Sitzung,
+  // die Kultur eine abgebrochene Vorbelegung. Beide würden sonst mitgebucht,
+  // und eine stehengebliebene G2G-/GS-Kultur wird zusätzlich als verbraucht
+  // abgeschrieben.
+  const gyp = document.getElementById('nb-gyp');
+  if (gyp) gyp.checked = !!ms.recGypsum;
+  set('nb-culture', '');
+  _inoc = [];
+  if (typeof inocRender === 'function') inocRender('nb');
   set('nb-notes', WKB.notes.trim());
   createBatch();
 }
@@ -22129,6 +22245,16 @@ function wkbCreate() {
   const ms = wkbStrain();
   const mix = wkbMix();
   if (!ms) return;
+  // Ein gewählter Ansatz, der inzwischen leer ist, ist kein "ohne Ansatz":
+  // _sbList wird im Hintergrund aufgefrischt, und derselbe Tipp buchte sonst
+  // klammheimlich Pellets und Kleie vom Lager statt aus dem Ansatz.
+  if (!mix && WKB.subId) {
+    alert(t('work.bMixGone', { id: WKB.subId }));
+    WKB.subId = '';
+    WKB.step = 2;
+    wkbRender();
+    return;
+  }
   if (!mix) return wkbCreateFromShelf();
   const r = wkbRecipe();
   const batchId = genBatchId(ms.name);
@@ -22138,6 +22264,13 @@ function wkbCreate() {
   createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, 'XXX', '', {
     notes: WKB.notes.trim(),
     onDone: (res) => {
+      // Der Ablauf kann inzwischen verlassen oder ein anderer geöffnet worden
+      // sein. Dann gehört WKF nicht mehr uns — die Bestätigung sagt es dem
+      // Fenster, statt den fremden Bildschirm mit unserer Quittung zu ersetzen.
+      if (WKF.kind !== 'batch') {
+        alert(t('work.bDone', { n: WKB.qty, name: ms.name }));
+        return;
+      }
       WKF.receipt = {
         headline: t('work.bDone', { n: WKB.qty, name: ms.name }),
         lines: [
@@ -22219,7 +22352,14 @@ function wkbCreate() {
 // Ausreißer. Ein Bildschirm reicht: Rezept, Menge, was dabei herauskommt, und
 // ob das Lager es trägt. Gebucht wird über denselben Aufruf wie im Formular.
 
-const WKM = { strainId: null, kg: 200, notes: '', preview: null, laedt: false, fehler: '' };
+// `previewKey` sagt, zu welchem Rezept und welcher Menge die Vorschau gehört —
+// ohne das lässt sich nicht erkennen, ob sie noch gilt. `bucht` sperrt den
+// Knopf für die Dauer der Buchung, nicht für die Dauer der Rechnerei.
+const WKM = { strainId: null, kg: 200, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+
+function wkmKey() {
+  return String(WKM.strainId) + '|' + WKM.kg;
+}
 
 function wkmStock() {
   return (inventory && inventory.stock) || {};
@@ -22245,10 +22385,14 @@ function wkmShortfalls() {
 // ein anderes Rezept als die Auswahl.
 let _wkmSeq = 0;
 async function wkmLoadPreview() {
+  // Nichts geändert, Vorschau gilt noch: dann auch keine Anfrage. Das Feld
+  // meldet ein change auch beim Verlassen ohne Änderung.
+  if (WKM.preview && WKM.previewKey === wkmKey()) return;
   const seq = ++_wkmSeq;
   // Die alte Vorschau gilt ab jetzt nicht mehr: sie beschreibt eine andere
   // Menge. Sichtbar leeren, statt eine überholte Tabelle stehen zu lassen.
   WKM.preview = null;
+  WKM.previewKey = '';
   WKM.fehler = '';
   if (!WKM.strainId || !(WKM.kg > 0)) {
     WKM.laedt = false;
@@ -22268,6 +22412,7 @@ async function wkmLoadPreview() {
     WKM.fehler = t('sub.noRecipe');
   } else {
     WKM.preview = r;
+    WKM.previewKey = wkmKey();
   }
   wkmRenderOut();
   wkmUpdateButton();
@@ -22333,9 +22478,11 @@ function wkmRenderOut() {
 // Anlegen erst, wenn eine Mischung berechnet ist.
 function wkmUpdateButton() {
   const b = document.querySelector('[data-wkm="create"]');
-  // Auch während gerechnet wird gesperrt: sonst bucht ein Tipp die Menge, die
-  // gerade noch auf dem Bildschirm stand.
-  if (b) b.disabled = WKM.laedt || !(WKM.preview && WKM.preview.mix);
+  // Nicht während der Rechnerei sperren: ein Tipp auf den Knopf nimmt dem
+  // Mengenfeld den Fokus, dessen change startet die Rechnerei — und die Sperre
+  // schluckte dann genau den Tipp, der sie ausgelöst hatte. wkmCreate() wartet
+  // die Vorschau selbst ab. Gesperrt wird, solange gebucht wird.
+  if (b) b.disabled = WKM.bucht || !(WKM.preview && WKM.preview.mix);
 }
 
 function wkmRender() {
@@ -22382,11 +22529,14 @@ function wkmRender() {
   wkmUpdateButton();
 }
 
-function wkmCreate() {
+async function wkmCreate() {
+  if (WKM.bucht) return;
   wkmRead();
-  // Nach wkmRead() kann die Vorschau zu einer anderen Menge gehören als die,
-  // die gerade im Feld steht. Dann erst rechnen lassen, nicht buchen.
-  if (!WKM.preview || WKM.laedt) return wkmLoadPreview();
+  // Gehört die Vorschau zu einer anderen Menge als der, die im Feld steht,
+  // erst rechnen lassen — und dann weitermachen, statt den Tipp verfallen zu
+  // lassen. Sonst muss der Arbeiter nach jeder Mengenänderung zweimal tippen.
+  if (!WKM.preview || WKM.previewKey !== wkmKey()) await wkmLoadPreview();
+  if (!WKM.preview) return;
   const kurz = wkmShortfalls();
   const subId = sbGenId();
   const kg = WKM.kg;
@@ -22403,42 +22553,64 @@ function wkmCreate() {
 }
 
 function wkmSubmit(subId, kg, label) {
+  // Der Knopf bleibt sonst die ganze Runde über anfassbar: POST, loadData und
+  // refreshSubstrateBatches dauern, auf dem Bildschirm ändert sich nichts, und
+  // ein zweiter Tipp legt einen zweiten Ansatz an.
+  WKM.bucht = true;
+  wkmUpdateButton();
   apiPost('/api/substrate-batches', {
     subId,
     recipeStrainId: WKM.strainId,
     targetKg: kg,
     notes: WKM.notes.trim()
-  }).then(async (r) => {
-    if (!r || r.error) {
-      WKM.fehler = (r && r.error) || '?';
+  })
+    .then(async (r) => {
+      if (!r || r.error) {
+        const err = (r && r.error) || '?';
+        // Auch der Fehlschlag braucht ein Zuhause: ist der Ablauf schon zu, malt
+        // wkmRender() ins Leere und der Arbeiter hielte den Ansatz für angelegt.
+        if (WKF.kind !== 'mix') {
+          alert(t('common.error') + ': ' + err);
+          return;
+        }
+        WKM.fehler = err;
+        wkmRender();
+        return;
+      }
+      await loadData();
+      await refreshSubstrateBatches();
+      // Der Ablauf kann inzwischen verlassen oder ein anderer geöffnet worden
+      // sein. Dann gehört WKF nicht mehr uns: die Bestätigung geht ins Fenster,
+      // statt den fremden Bildschirm zu überschreiben oder still zu verpuffen.
+      if (WKF.kind !== 'mix') {
+        alert(t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }) + ' — ' + (r.subId || subId));
+        return;
+      }
+      // Die Vorschau kann inzwischen ersetzt worden sein; die Quittung nennt dann
+      // nur, was sicher stimmt, statt an einer leeren Referenz abzustürzen.
+      const m = (WKM.preview && WKM.preview.mix) || null;
+      WKF.receipt = {
+        headline: t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }),
+        lines: [[t('work.mId'), r.subId || subId]]
+          .concat(
+            m
+              ? [
+                  [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
+                  [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
+                  [t('sub.water'), fmtKg(m.waterL, 1) + ' L']
+                ]
+              : []
+          )
+          .concat(WKM.notes.trim() ? [[t('work.bNote'), WKM.notes.trim()]] : []),
+        next: null
+      };
+      WKF.step = 'done';
       wkmRender();
-      return;
-    }
-    await loadData();
-    await refreshSubstrateBatches();
-    // Die Vorschau kann inzwischen ersetzt worden sein; die Quittung nennt dann
-    // nur, was sicher stimmt, statt an einer leeren Referenz abzustürzen.
-    const m = (WKM.preview && WKM.preview.mix) || null;
-    WKF.receipt = {
-      headline: t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }),
-      lines: [
-        [t('work.mId'), r.subId || subId]
-      ]
-        .concat(
-          m
-            ? [
-                [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
-                [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
-                [t('sub.water'), fmtKg(m.waterL, 1) + ' L']
-              ]
-            : []
-        )
-        .concat(WKM.notes.trim() ? [[t('work.bNote'), WKM.notes.trim()]] : []),
-      next: null
-    };
-    WKF.step = 'done';
-    wkmRender();
-  });
+    })
+    .finally(() => {
+      WKM.bucht = false;
+      wkmUpdateButton();
+    });
 }
 
 (function wireMixFlow() {

@@ -8,6 +8,10 @@
 // die Ansatz-Auswahl bot leergezogene Ansätze an; und der Kilo-Formatierer
 // wurde eingeführt, weil "13.650 kg" auf Deutsch dreizehntausend heißt.
 //
+// Die zweite Nachprüfung fand die nächste Schicht: ein abgeschriebener Ansatz
+// stand weiter zur Auswahl, der Flush ließ sich gar nicht mehr berichtigen, und
+// die Quittung zählte abgelehnte Gramm weiter mit. Auch das steht jetzt hier.
+//
 // Gleiches Vorgehen wie substrate-draw-ui.test.js: app.js hat keine Modulgrenze,
 // also hebt der Test die Funktionen aus der Quelle und lässt sie gegen Attrappen
 // laufen. Der Browser steht nicht unter Test, die Zahlen schon.
@@ -22,11 +26,19 @@ const SRC = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 // Benannt, damit ein Fehlschlag sagt, welche Funktion umgezogen ist, statt
 // "unexpected token".
 // Die Quelle hat CRLF-Zeilenenden, ein Block endet also auf \r\n} statt \n}.
-// wkmStock() steht vor wkmShortfalls(), weil letztere es aufruft.
+// wkmStock() steht vor wkmShortfalls(), weil letztere es aufruft; wkBagHarvested
+// vor wkBagFlush vor wkfBagFlush aus demselben Grund.
+//
+// LOCALE_MAP wird mitgehoben, nicht nachgebaut: es ist das Einzige, was das
+// Ergebnis von fmtKg bestimmt. Eine Kopie im Test hätte genau die Änderung
+// durchgelassen, gegen die die drei Sprachtests unten schützen sollen.
 const TEILE = [
+  [/^const LOCALE_MAP = .*$/m, 'LOCALE_MAP'],
   [/^const fmtKg = .*$/m, 'fmtKg'],
   [/^function wkBagHarvested\(bagId\) \{[\s\S]*?\r?\n\}/m, 'wkBagHarvested()'],
   [/^function wkBagFlush\(bag\) \{[\s\S]*?\r?\n\}/m, 'wkBagFlush()'],
+  [/^function wkfBagFlush\(bag, lastFlush\) \{[\s\S]*?\r?\n\}/m, 'wkfBagFlush()'],
+  [/^function wkfHarvestReceiptText\(r\) \{[\s\S]*?\r?\n\}/m, 'wkfHarvestReceiptText()'],
   [/^function wkOpenMixes\(\) \{[\s\S]*?\r?\n\}/m, 'wkOpenMixes()'],
   [/^function wkmStock\(\) \{[\s\S]*?\r?\n\}/m, 'wkmStock()'],
   [/^function wkmShortfalls\(\) \{[\s\S]*?\r?\n\}/m, 'wkmShortfalls()']
@@ -41,22 +53,30 @@ function lift() {
   }
   return out.join('\n');
 }
+// Einmal aus der Quelle heben, nicht je Attrappe: app.js ist knapp ein Megabyte,
+// und der gehobene Text ist bei jedem Aufbau derselbe.
+const TEILE_SRC = lift();
 
 // Die Attrappen: nur das, was die gehobenen Funktionen wirklich anfassen.
-function bauen({ harvests = [], sbList = [], preview = null, stock = {}, lang = 'de' } = {}) {
+// t() gibt die Platzhalter mit zurück, damit die Quittungstests sehen, mit
+// welchen Zahlen die Zeile geschrieben wurde.
+function bauen({ harvests = [], sbList = [], preview = null, stock = {}, lang = 'de', flushOverride = null } = {}) {
   const quelle = `
-    const LOCALE_MAP = { en: 'en-GB', de: 'de-DE', pt: 'pt-BR' };
     let currentLang = ${JSON.stringify(lang)};
     const harvests = ${JSON.stringify(harvests)};
     const _sbList = ${JSON.stringify(sbList)};
     const inventory = { stock: ${JSON.stringify(stock)} };
     const WKM = { preview: ${JSON.stringify(preview)} };
-    const t = (k) => k;
-    ${lift()}
-    return { fmtKg, wkBagHarvested, wkBagFlush, wkOpenMixes, wkmShortfalls };
+    const WKF = { flushOverride: ${JSON.stringify(flushOverride)} };
+    const t = (k, p) => (p ? k + ' ' + JSON.stringify(p) : k);
+    ${TEILE_SRC}
+    return { fmtKg, wkBagHarvested, wkBagFlush, wkfBagFlush, wkfHarvestReceiptText, wkOpenMixes, wkmShortfalls, WKF };
   `;
   return new Function(quelle)();
 }
+
+const DE = bauen({ lang: 'de' });
+const EN = bauen({ lang: 'en' });
 
 describe('Arbeitsgänge — Ernte', () => {
   it('gibt einem nie geernteten Beutel Flush 1, auch wenn Nachbarn schon dran waren', () => {
@@ -92,21 +112,115 @@ describe('Arbeitsgänge — Ernte', () => {
   });
 });
 
+describe('Arbeitsgänge — der Flush lässt sich berichtigen', () => {
+  it('nimmt ohne Eingriff den nächsten Flush des Beutels', () => {
+    const w = bauen({ harvests: [{ bag: 'BO-1-01', grams: 200, flush: 1 }] });
+    assert.equal(w.wkfBagFlush('BO-1-01'), 2);
+    assert.equal(w.wkfBagFlush('BO-1-09'), 1);
+  });
+
+  it('lässt eine eingetragene Zahl für alle Beutel gelten', () => {
+    // Eine Welle wird über zwei, drei Tage gepflückt. Ohne dieses Feld zählte
+    // Mittwoch als Flush 2 und Freitag als Flush 3 desselben Beutels — und die
+    // Kennzahl "Beutel in zweiter Welle" stieg mit jedem Pflücktag.
+    const w = bauen({
+      harvests: [{ bag: 'BO-1-01', grams: 200, flush: 1 }],
+      flushOverride: 1
+    });
+    assert.equal(w.wkfBagFlush('BO-1-01'), 1, 'die Übersteuerung schlägt die Vorgeschichte');
+    assert.equal(w.wkfBagFlush('BO-1-09'), 1);
+  });
+
+  it('nimmt den mitgereichten Wert, statt alle Ernten noch einmal zu lesen', () => {
+    // wkLiveBags() hat die Vorgeschichte schon gelesen. Der zweite Durchlauf je
+    // Zeile kostete bei tausenden Ernten sichtbar Zeit.
+    const w = bauen({ harvests: [] });
+    assert.equal(w.wkfBagFlush('BO-1-01', 2), 3, 'der übergebene Wert zählt');
+    assert.equal(w.wkfBagFlush('BO-1-01', 0), 1, 'auch die 0 zählt, sie ist kein "nicht gesetzt"');
+  });
+});
+
+describe('Arbeitsgänge — die Quittung rechnet nach', () => {
+  const zettel = () => ({
+    batchId: 'BO-260819-01',
+    species: 'Austernpilz',
+    by: 'jonas',
+    grams: 2500,
+    bags: 5,
+    bagsTotal: 40,
+    released: false,
+    releaseFailed: 0
+  });
+
+  it('schreibt die Kopfzeile aus den Gramm, die wirklich gebucht sind', () => {
+    const w = bauen({});
+    const r = zettel();
+    w.wkfHarvestReceiptText(r);
+    assert.match(r.headline, /2\.50 kg/, 'über einem Kilo in Kilo');
+    // Der Server lehnt einen Beutel ab: die Kopfzeile muss mitgehen, sonst steht
+    // "2,50 kg geerntet" über einer Zeile, die das Gegenteil sagt.
+    r.grams -= 500;
+    r.bags--;
+    w.wkfHarvestReceiptText(r);
+    assert.match(r.headline, /2\.00 kg/);
+    assert.match(r.lines[1][1], /"n":4/, 'die Beutelzahl geht mit');
+  });
+
+  it('schreibt unter einem Kilo in Gramm', () => {
+    const w = bauen({});
+    const r = zettel();
+    r.grams = 840;
+    w.wkfHarvestReceiptText(r);
+    assert.match(r.headline, /840 g/);
+  });
+
+  it('sagt bei der Freigabe, wenn nur ein Teil durchging', () => {
+    const w = bauen({});
+    const r = zettel();
+    r.released = true;
+    w.wkfHarvestReceiptText(r);
+    assert.equal(r.lines[2][1], 'work.rReleasedYes');
+    r.releaseFailed = 2;
+    w.wkfHarvestReceiptText(r);
+    assert.match(r.lines[2][1], /rReleasedPartial/, 'ein Teilerfolg darf nicht als voller Erfolg dastehen');
+    r.released = false;
+    w.wkfHarvestReceiptText(r);
+    assert.equal(r.lines[2][1], 'work.rReleasedNo');
+  });
+});
+
 describe('Arbeitsgänge — Substrat-Ansätze', () => {
   it('bietet nur Ansätze an, aus denen noch etwas zu ziehen ist', () => {
     // Vorher stand ein leergezogener Ansatz vorausgewählt in der Auswahl und
     // ließ sich bebuchen.
     const w = bauen({
       sbList: [
-        { subId: 'SUB-01', remainingKg: 0 },
-        { subId: 'SUB-02', remainingKg: 240 },
-        { subId: 'SUB-03', remainingKg: 0.00001 }
+        { subId: 'SUB-01', status: 'open', remainingKg: 0 },
+        { subId: 'SUB-02', status: 'open', remainingKg: 240 },
+        { subId: 'SUB-03', status: 'open', remainingKg: 0.00001 }
       ]
     });
     assert.deepEqual(
       w.wkOpenMixes().map((x) => x.subId),
       ['SUB-02'],
       'weder der leere noch der praktisch leere Ansatz gehört in die Liste'
+    );
+  });
+
+  it('lässt einen abgeschriebenen Ansatz draußen, auch wenn noch Kilo drauf sind', () => {
+    // Die Übersicht verlangte status === 'open', die Auswahl und der geführte
+    // Ablauf nicht — ein als verdorben abgeschriebener Ansatz ließ sich weiter
+    // zu einer Charge verarbeiten.
+    const w = bauen({
+      sbList: [
+        { subId: 'SUB-10', status: 'written_off', remainingKg: 180 },
+        { subId: 'SUB-11', status: 'used', remainingKg: 5 },
+        { subId: 'SUB-12', status: 'open', remainingKg: 180 }
+      ]
+    });
+    assert.deepEqual(
+      w.wkOpenMixes().map((x) => x.subId),
+      ['SUB-12']
     );
   });
 
@@ -138,23 +252,18 @@ describe('Arbeitsgänge — Kilo in der Sprache des Benutzers', () => {
   it('schreibt deutsch mit Komma und englisch mit Punkt', () => {
     // Der Grund für fmtKg: toFixed liefert immer einen Punkt, und "13.650 kg"
     // liest sich auf Deutsch als dreizehntausend.
-    const de = bauen({ lang: 'de' });
-    const en = bauen({ lang: 'en' });
-    assert.equal(de.fmtKg(13.65, 2), '13,65');
-    assert.equal(en.fmtKg(13.65, 2), '13.65');
+    assert.equal(DE.fmtKg(13.65, 2), '13,65');
+    assert.equal(EN.fmtKg(13.65, 2), '13.65');
   });
 
   it('trennt Tausender nach den Regeln der jeweiligen Sprache', () => {
-    const de = bauen({ lang: 'de' });
-    const en = bauen({ lang: 'en' });
-    assert.equal(de.fmtKg(1003.5, 1), '1.003,5');
-    assert.equal(en.fmtKg(1003.5, 1), '1,003.5');
+    assert.equal(DE.fmtKg(1003.5, 1), '1.003,5');
+    assert.equal(EN.fmtKg(1003.5, 1), '1,003.5');
   });
 
   it('hält die verlangte Zahl an Nachkommastellen ein', () => {
-    const de = bauen({ lang: 'de' });
-    assert.equal(de.fmtKg(100, 0), '100');
-    assert.equal(de.fmtKg(56.5, 1), '56,5');
-    assert.equal(de.fmtKg(2, 2), '2,00');
+    assert.equal(DE.fmtKg(100, 0), '100');
+    assert.equal(DE.fmtKg(56.5, 1), '56,5');
+    assert.equal(DE.fmtKg(2, 2), '2,00');
   });
 });
