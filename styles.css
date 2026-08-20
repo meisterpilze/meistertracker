@@ -5971,6 +5971,27 @@ tr:hover td {
   }
 }
 
+/* Knopfreihe des Etiketten-Dialogs: die Hauptsache zuerst und breit, damit sie
+   am Tablet mit dem Daumen zu treffen ist, ohne die Beschriftung umzubrechen. */
+.nbp-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.nbp-btns > .btn {
+  justify-content: center;
+  padding: 12px 16px;
+}
+.nbp-sub {
+  display: flex;
+  gap: 8px;
+}
+.nbp-sub .btn {
+  flex: 1;
+  justify-content: center;
+}
+
 /* The bag chip in an expanded batch row is the click path into the bag sheet. */
 .bag-open-chip:hover {
   border-color: var(--c-primary) !important;

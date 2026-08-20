@@ -1928,5 +1928,8 @@ window.LANG['en'] = {
   'work.bookFailed': '{bag} could not be booked: {err}',
   'work.flushAuto': 'per bag',
   'work.rReleasedPartial': 'yes — {n} failed',
-  'work.bMixGone': 'There is nothing left to draw from {id}. Please pick another mix.'
+  'work.bMixGone': 'There is nothing left to draw from {id}. Please pick another mix.',
+  'batch.printTitle': 'Print labels',
+  'batch.printLater': 'Later',
+  'batch.printFor': '{id} — {n} bags placed'
 };

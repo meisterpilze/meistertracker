@@ -1951,5 +1951,8 @@ window.LANG['de'] = {
   'work.bookFailed': '{bag} konnte nicht gebucht werden: {err}',
   'work.flushAuto': 'je Beutel',
   'work.rReleasedPartial': 'ja — {n} fehlgeschlagen',
-  'work.bMixGone': 'Aus {id} lässt sich nichts mehr ziehen. Bitte einen anderen Ansatz wählen.'
+  'work.bMixGone': 'Aus {id} lässt sich nichts mehr ziehen. Bitte einen anderen Ansatz wählen.',
+  'batch.printTitle': 'Etiketten drucken',
+  'batch.printLater': 'Später',
+  'batch.printFor': '{id} — {n} Beutel eingelagert'
 };

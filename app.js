@@ -7268,8 +7268,9 @@ function createBatch() {
       .join('');
     const _res = document.getElementById('nb-result');
     _res.dataset.batchId = batchObj.batchId;
-    _res.style.display = 'block';
-    _res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const kopf = document.getElementById('nbp-head');
+    if (kopf) kopf.textContent = t('batch.printFor', { id: batchObj.batchId, n: bags.length });
+    nbpOpen();
   });
 }
 // ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
@@ -7829,6 +7830,17 @@ function writeOffSubstrate(subId, leftKg) {
 // "Druckoptionen…" button still opens the full Print page for ranges/formats.
 // Falls back to a ZPL download (same as printBagLabels) when the printer is
 // unreachable.
+// Der Etiketten-Dialog. Er kommt von selbst, sobald eine Charge steht — die
+// Etiketten sind der nächste Handgriff, und vorher lagen sie am Seitenende.
+function nbpOpen() {
+  const m = document.getElementById('m-batch-print');
+  if (m) m.classList.add('open');
+}
+function nbpClose() {
+  const m = document.getElementById('m-batch-print');
+  if (m) m.classList.remove('open');
+}
+
 async function printBatchLabelsInline() {
   const res = document.getElementById('nb-result');
   const id = res ? res.dataset.batchId : null;
@@ -7853,6 +7865,7 @@ async function printBatchLabelsInline() {
     a.click();
   } else {
     setFb('ok', t('print.printedBatch', { n: b.bags.length, id: b.batchId }));
+    nbpClose();
   }
 }
 function goToPrintBatch() {
@@ -13329,12 +13342,10 @@ function msQuickConfirm() {
   // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
   // leak into the next batch — so carry it over the close explicitly.
   const _inocPicked = _inoc.slice();
-  // Land on the Charge page BEFORE prefilling. createBatch's success panel
-  // (nb-result, with the print buttons) lives inside sp-batch-new, so creating
-  // from the dashboard shortcut used to reveal it on a page the worker was not
-  // looking at — the batch appeared, the labels did not. Order matters: opening
-  // the sub-tab can run nbApplyDefaults() on first visit, which would overwrite
-  // every field the recipe is about to set.
+  // Land on the Charge page BEFORE prefilling. Der Etiketten-Dialog kommt
+  // inzwischen von selbst hoch, egal wo man steht — aber die Reihenfolge bleibt:
+  // openStab() ruft beim ersten Besuch einer Sitzung nbApplyDefaults(), und das
+  // überschriebe jedes Feld, das das Rezept gleich setzt.
   msQuickClose();
   go('batch', 'n-batch');
   openStab('batch', 'new');
@@ -19883,6 +19894,7 @@ document.addEventListener('keydown', function (e) {
     'm-baginfo',
     'm-addbags',
     'm-batchadd',
+    'm-batch-print',
     'm-note',
     'm-prompt',
     // m-move-batch before the two list modals below: the zone picker opens on
@@ -20865,7 +20877,15 @@ function initEventListeners() {
   const strainShortcut = document.getElementById('nb-create-strain-btn');
   if (strainShortcut) strainShortcut.addEventListener('click', goCreateStrain);
   $('prt-25').addEventListener('click', printBatchLabelsInline);
-  $('prt-25-opts').addEventListener('click', goToPrintBatch);
+  $('prt-25-opts').addEventListener('click', () => {
+    nbpClose();
+    goToPrintBatch();
+  });
+  $('nbp-later').addEventListener('click', nbpClose);
+  $('nbp-close').addEventListener('click', nbpClose);
+  document.getElementById('m-batch-print').addEventListener('click', (e) => {
+    if (e.target.id === 'm-batch-print') nbpClose();
+  });
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab

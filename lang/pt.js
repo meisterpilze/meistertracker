@@ -1946,5 +1946,8 @@ window.LANG['pt'] = {
   'work.bookFailed': '{bag} não pôde ser registrado: {err}',
   'work.flushAuto': 'por saco',
   'work.rReleasedPartial': 'sim — {n} falharam',
-  'work.bMixGone': 'Não há mais nada para retirar de {id}. Escolha outra mistura.'
+  'work.bMixGone': 'Não há mais nada para retirar de {id}. Escolha outra mistura.',
+  'batch.printTitle': 'Imprimir etiquetas',
+  'batch.printLater': 'Depois',
+  'batch.printFor': '{id} — {n} sacos armazenados'
 };
