@@ -2149,6 +2149,28 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_user ON caldav_app_passwords(user_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_caldav_apppw_hash ON caldav_app_passwords(hash)');
     }
+  },
+  {
+    version: 74,
+    description: 'Remember that an OAuth client was actually used, so the sweep cannot mistake it',
+    fn(db) {
+      // The sweep of never-used auto-registered clients (S-25) asked "does this
+      // client have any codes or tokens?". That is a proxy, and it breaks:
+      // tokens go away when they expire and when deleteAuthArtifactsNoTxn runs
+      // — which it does on every password change. One colleague changing their
+      // password therefore put every MCP registration on a one-hour fuse.
+      //
+      // A mark that is only ever set is immune to all of that. NULL means the
+      // registration never completed a flow, which is the only thing the sweep
+      // is entitled to act on.
+      db.exec(`ALTER TABLE oauth_clients ADD COLUMN last_used TEXT DEFAULT NULL`);
+      // Existing rows: anything that ever got a code or a token has been used,
+      // whatever has become of those rows since. The rest stay NULL and are
+      // judged on their own merits.
+      db.exec(`UPDATE oauth_clients SET last_used = created
+                WHERE client_id IN (SELECT client_id FROM oauth_tokens)
+                   OR client_id IN (SELECT client_id FROM oauth_codes)`);
+    }
   }
 ];
 
@@ -3236,8 +3258,11 @@ function backupDb(db, destPath) {
 
 // ── Update CalDAV UID on a task after sync ──
 function updateTaskCaldavUid(db, text, created, uid, synced) {
+  // Same rule as the other two stores: a uid we would refuse to write is not
+  // worth keeping. This one is reached by push-one's private+unassigned branch,
+  // where writeIcsFile never runs and so never had a chance to object.
   db.prepare('UPDATE manual_tasks SET caldav_uid = ?, caldav_synced = ? WHERE text = ? AND created = ?').run(
-    uid,
+    cleanCaldavUid(uid),
     synced,
     text,
     created
@@ -4947,7 +4972,13 @@ function deleteCulture(db, id) {
 // Kept here rather than in server.js because both the file writer and the two
 // rows that store the value need it, and two copies of a rule like this is how
 // one of them quietly stops matching.
-const CALDAV_UID_RE = /^[A-Za-z0-9\-_.@]{1,120}$/;
+// 200 and not 120: the read-side regexes have no cap at all, and every
+// difference between the two is a value one of them accepts and the other
+// refuses. 200 is the length this codebase already uses for an id
+// (validateLengths on calendar events, cultures, batches), and `uid + '.ics'`
+// still fits any filesystem's 255-byte name limit — which is the only reason
+// there is a cap here at all.
+const CALDAV_UID_RE = /^[A-Za-z0-9\-_.@]{1,200}$/;
 
 function isValidCaldavUid(uid) {
   return typeof uid === 'string' && CALDAV_UID_RE.test(uid);
@@ -5008,7 +5039,14 @@ function updateTaskById(db, id, fields) {
   // updates so we don't spuriously invalidate cached calendar entries.
   const meaningful = entries.some(([k]) => k !== 'caldavSynced' && k !== 'caldavUid');
   const sets = entries.map(([k]) => `${map[k]}=?`).join(',') + (meaningful ? ', sequence=sequence+1' : '');
-  const vals = entries.map(([k, v]) => (k === 'done' || k === 'private' ? (v ? 1 : 0) : v));
+  // The fourth place that stores a caldav uid, and the last one that did not go
+  // through the rule. Same reason as the other three: a uid we would refuse to
+  // write is not worth keeping, and the next sync mints a fresh one.
+  const vals = entries.map(([k, v]) => {
+    if (k === 'done' || k === 'private') return v ? 1 : 0;
+    if (k === 'caldavUid') return cleanCaldavUid(v);
+    return v;
+  });
   db.prepare(`UPDATE manual_tasks SET ${sets} WHERE id=?`).run(...vals, id);
   incrementDataVersion(db);
 }
@@ -7217,6 +7255,13 @@ function getOAuthClient(db, clientId) {
   };
 }
 
+/** Mark a client as having got this far. Only ever set — see migration 74. */
+function touchOAuthClient(db, clientId) {
+  db.prepare("UPDATE oauth_clients SET last_used = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE client_id = ?").run(
+    clientId
+  );
+}
+
 function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChallenge, codeChallengeMethod, resource }) {
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
   try {
@@ -7233,6 +7278,9 @@ function createOAuthCode(db, { code, clientId, userId, redirectUri, codeChalleng
       throw e;
     }
   }
+  // The client got as far as an authorization code: that is a completed flow
+  // as far as the sweep is concerned, and nothing later can take it back.
+  touchOAuthClient(db, clientId);
 }
 
 function getOAuthCode(db, code) {
@@ -7263,6 +7311,7 @@ function createOAuthToken(db, { token, tokenType, clientId, userId, expiresInSec
   db.prepare(
     'INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires, created, refresh_token_ref) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(token, tokenType, clientId, userId, expires, new Date().toISOString(), refreshTokenRef || null);
+  touchOAuthClient(db, clientId);
 }
 
 function getOAuthAccessToken(db, tokenHash) {
@@ -7318,9 +7367,8 @@ function deleteExpiredOAuthData(db) {
   db.prepare(
     `DELETE FROM oauth_clients
       WHERE client_secret_hash IS NULL
-        AND created < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')
-        AND client_id NOT IN (SELECT client_id FROM oauth_tokens)
-        AND client_id NOT IN (SELECT client_id FROM oauth_codes)`
+        AND last_used IS NULL
+        AND created < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`
   ).run();
   db.prepare("DELETE FROM oauth_codes WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR used = 1").run();
   db.prepare("DELETE FROM oauth_tokens WHERE expires < strftime('%Y-%m-%dT%H:%M:%fZ', 'now') OR revoked = 1").run();
@@ -9657,5 +9705,6 @@ module.exports = {
   isSafeError,
   isValidCaldavUid,
   listUsersPublic,
-  canUserSeeTask
+  canUserSeeTask,
+  touchOAuthClient
 };

@@ -81,55 +81,23 @@ describe('and how the pile stops growing', () => {
     fs.unlinkSync(p);
   });
 
-  const anlegen = (id, alter, { secret = null } = {}) => {
+  const anlegen = (id, alter, { secret = null, benutzt = null } = {}) => {
     d.prepare(
-      'INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created, client_secret_hash) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, 'x', '[]', tage(alter), secret);
+      'INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created, client_secret_hash, last_used) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, 'x', '[]', tage(alter), secret, benutzt);
   };
   const da = (id) => !!d.prepare('SELECT client_id FROM oauth_clients WHERE client_id = ?').get(id);
 
-  it('sweeps an auto-registered client nobody ever used', () => {
-    anlegen('alt-ungenutzt', -2);
+  it('sweeps an auto-registered client that never completed a flow', () => {
+    anlegen('nie-benutzt', -2);
     db.deleteExpiredOAuthData(d);
-    assert.equal(da('alt-ungenutzt'), false);
+    assert.equal(da('nie-benutzt'), false);
   });
 
   it('leaves a fresh one alone — register, authorize and token take minutes, not a day', () => {
     anlegen('frisch', 0);
     db.deleteExpiredOAuthData(d);
     assert.equal(da('frisch'), true);
-  });
-
-  it('leaves one with a live token alone, however old the registration', () => {
-    anlegen('alt-mit-token', -30);
-    d.prepare(
-      "INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires) VALUES ('lebt', 'access', 'alt-mit-token', 1, ?)"
-    ).run(tage(30));
-    db.deleteExpiredOAuthData(d);
-    assert.equal(da('alt-mit-token'), true);
-  });
-
-  it('still speaks for its client with a token that expired since the last run', () => {
-    // The clients are judged before the two expiry deletions, and this is why:
-    // written the other way round, a client whose token expired an hour ago was
-    // swept in the same call that removed the token, which made a real
-    // registration look exactly like one that never completed a flow.
-    anlegen('token-eben-abgelaufen', -30);
-    d.prepare(
-      "INSERT INTO oauth_tokens (token, token_type, client_id, user_id, expires) VALUES ('eben', 'access', 'token-eben-abgelaufen', 1, ?)"
-    ).run(new Date(Date.now() - 60_000).toISOString());
-    db.deleteExpiredOAuthData(d);
-    assert.equal(da('token-eben-abgelaufen'), true, 'the token row was still there when the clients were judged');
-  });
-
-  it('does eventually sweep one whose tokens are long gone, and that is the deal', () => {
-    // A client not used for long enough that its tokens expired *and* were
-    // reaped is indistinguishable from one that never completed a flow. It
-    // registers again on next use — which is what dynamic registration is for,
-    // and the alternative is keeping every registration ever made for ever.
-    anlegen('lange-still', -30);
-    db.deleteExpiredOAuthData(d);
-    assert.equal(da('lange-still'), false);
   });
 
   it('never touches a client an admin created by hand', () => {
@@ -140,12 +108,49 @@ describe('and how the pile stops growing', () => {
     assert.equal(da('von-hand'), true);
   });
 
-  it('leaves one with an outstanding code alone', () => {
-    anlegen('mitten-drin', -2);
-    d.prepare(
-      "INSERT INTO oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, expires) VALUES ('c', 'mitten-drin', 1, 'https://x/cb', 'ch', ?)"
-    ).run(tage(1));
+  it('keeps one that ever completed a flow, however long ago', () => {
+    // ⚠️ This used to ask "does it have any tokens or codes?", and that broke.
+    // Tokens go away when they expire and when deleteAuthArtifactsNoTxn runs —
+    // which it does on every password change — so one colleague changing their
+    // password put every MCP registration on a one-hour fuse. The mark is only
+    // ever set, so nothing that happens later can take it back.
+    anlegen('einmal-benutzt', -365, { benutzt: tage(-364) });
     db.deleteExpiredOAuthData(d);
-    assert.equal(da('mitten-drin'), true);
+    assert.equal(da('einmal-benutzt'), true);
+  });
+
+  it('survives its owner changing their password', () => {
+    // The case that found the defect, walked end to end.
+    db.createUser(d, 'anton', 'passwort-lang-genug', 'user');
+    const nutzer = db.getUserByUsername(d, 'anton');
+    anlegen('mcp-klient', -30);
+    db.createOAuthCode(d, {
+      code: 'c-anton',
+      clientId: 'mcp-klient',
+      userId: nutzer.id,
+      redirectUri: 'https://x/cb',
+      codeChallenge: 'ch',
+      codeChallengeMethod: 'S256'
+    });
+    assert.ok(
+      d.prepare('SELECT last_used FROM oauth_clients WHERE client_id = ?').get('mcp-klient').last_used,
+      'issuing a code marks the client as used'
+    );
+    db.resetUserPassword(d, nutzer.id, 'ein-anderes-passwort');
+    db.deleteExpiredOAuthData(d);
+    assert.equal(da('mcp-klient'), true, 'a password change must not delete the registration');
+  });
+
+  it('marks the client when a token is issued too, not only a code', () => {
+    anlegen('nur-token', -30);
+    db.createOAuthToken(d, {
+      token: 'tok',
+      tokenType: 'access',
+      clientId: 'nur-token',
+      userId: 1,
+      expiresInSeconds: 3600
+    });
+    db.deleteExpiredOAuthData(d);
+    assert.equal(da('nur-token'), true);
   });
 });

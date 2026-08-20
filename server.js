@@ -4288,7 +4288,12 @@ function caldavRecordAllowed(req, ics) {
   if (ereignis) return ereignis.category === 'pickup' ? isAdmin : true;
   // A task, either by its own uid or by its companion due-date event's.
   const taskUid = uid.replace(/-event$/, '');
-  if (!db.isValidCaldavUid(taskUid)) return true;
+  // ⚠️ **No charset pre-check here.** There was one, and it failed open on
+  // exactly the values it rejected: isValidCaldavUid caps a uid at 120
+  // characters, the sync-back's own regex does not, so a 150-character uid was
+  // waved through by this guard and then happily resolved to a row and written.
+  // The lookup answers the only question that matters — does this name a row? —
+  // and cannot disagree with anything.
   const task = db.readTaskByCaldavUid(database, taskUid);
   if (!task) return true;
   return db.canUserModifyTask(database, req.caldavUser && req.caldavUser.username, task.id, isAdmin);

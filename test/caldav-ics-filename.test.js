@@ -25,7 +25,7 @@ const SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
 describe('what a caldav uid may be', () => {
   it('accepts the uids the app actually generates', () => {
-    for (const uid of ['abc123', 'task-1.2', 'a_b@c', 'MP-2026-08-19T10-00-00', 'x'.repeat(120)]) {
+    for (const uid of ['abc123', 'task-1.2', 'a_b@c', 'MP-2026-08-19T10-00-00', 'x'.repeat(200)]) {
       assert.ok(db.isValidCaldavUid(uid), 'should accept ' + uid);
     }
   });
@@ -38,7 +38,7 @@ describe('what a caldav uid may be', () => {
       'a\\b',
       'a\0b',
       '',
-      'x'.repeat(121),
+      'x'.repeat(201),
       null,
       undefined,
       42,
@@ -46,6 +46,21 @@ describe('what a caldav uid may be', () => {
     ]) {
       assert.equal(db.isValidCaldavUid(uid), false, 'should refuse ' + JSON.stringify(uid));
     }
+  });
+
+  it('is no narrower than the read side, because a difference is a fail-open', () => {
+    // ⚠️ The cap was 120 while the sync-back's own regex has none. A
+    // 150-character uid was therefore refused here — and caldavRecordAllowed
+    // read that refusal as "cannot name a row" and waved the request through,
+    // while the sync-back resolved the row and wrote it. Every difference
+    // between two spellings of one rule is a value one accepts and the other
+    // refuses; this one was an ownership bypass.
+    const lang = 'x'.repeat(150);
+    assert.equal(db.isValidCaldavUid(lang), true);
+    assert.equal(/^[A-Za-z0-9\-_.@]+$/.test(lang), true, 'the read side accepts it, so this must too');
+    // The cap that remains is a filesystem fact, not a rule: `uid + '.ics'`
+    // has to fit a 255-byte name.
+    assert.equal(db.isValidCaldavUid('x'.repeat(201)), false);
   });
 
   it('is what makes traversal impossible, rather than a hunt for ".."', () => {
@@ -97,6 +112,21 @@ describe('a uid we would not write is not stored either', () => {
     const fn = ins.match(/function insertTask\(db, t\) \{[\s\S]*?\n\}/);
     assert.ok(fn, 'insertTask has moved');
     assert.match(fn[0], /cleanCaldavUid\(t\.caldavUid\)/, 'the stored value goes through the same rule');
+  });
+
+  it('goes through the rule at all four stores, not two', () => {
+    // The commit that introduced this claimed "the file writer and both places
+    // that store the value". There are four: insertTask, writeAll,
+    // updateTaskCaldavUid and updateTaskById's field map. The last two wrote
+    // the raw string, and updateTaskCaldavUid is reached by push-one's
+    // private+unassigned branch — where writeIcsFile never runs and so never
+    // had a chance to object.
+    const dbSrc = fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8');
+    for (const fn of ['insertTask', 'updateTaskCaldavUid', 'updateTaskById']) {
+      const m = dbSrc.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n\\}'));
+      assert.ok(m, fn + ' has moved');
+      assert.match(m[0], /cleanCaldavUid\(/, fn + ' still stores the raw string');
+    }
   });
 
   it('and on the bulk replace-all path', () => {
