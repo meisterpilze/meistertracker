@@ -23037,6 +23037,25 @@ function wkbDraw() {
   return WKB.qty * WKB.bagKg;
 }
 
+// Woraus die Beutel wirklich bestehen. Ist ein Ansatz gewählt, ist das dessen
+// Mischung — so, wie sie angesetzt wurde. Der Server bucht es genauso
+// (createBagBatchFromSubstrate liest die Prozente aus substrate_batches), das
+// Rezept der Sorte spielt dann keine Rolle mehr, auch wenn es sich seitdem
+// geändert hat. Ohne Ansatz gilt das Rezept.
+function wkbMischung() {
+  const mix = wkbMix();
+  if (mix && mix.composition) {
+    return {
+      hw: mix.composition.hardwoodPct || 0,
+      wb: mix.composition.wheatbranPct || 0,
+      rh: mix.composition.rhPct || 0,
+      ausAnsatz: mix.subId
+    };
+  }
+  const r = wkbRecipe();
+  return { hw: r.hw, wb: r.wb, rh: r.rh, ausAnsatz: null };
+}
+
 function wkbOpen() {
   WKB.step = 1;
   WKB.notes = '';
@@ -23072,6 +23091,7 @@ function wkbRender() {
   const ms = wkbStrain();
   const r = wkbRecipe();
   const mix = wkbMix();
+  const m = wkbMischung();
   wkf('wkf-title').textContent = t('work.batch');
   wkf('wkf-back').hidden = WKB.step === 1 || WKF.step === 'done';
   const labels = [t('work.bStep1'), t('work.bStep2'), t('work.bStep3')];
@@ -23146,26 +23166,37 @@ function wkbRender() {
             : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>`)
         : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>
            <button class="btn" data-wkb="tosub">${esc(t('work.bMixFirst'))}</button>`) +
-      `<div class="wkf-note">
-         <b>${esc(t('work.bRecipe', { name: ms ? ms.name : '' }))}${WKB.custom ? esc(t('work.bChanged')) : ''}</b>
-         ${
-           r.hw || r.wb || r.rh
-             ? esc(t('work.bRecipeLine', { hw: r.hw, wb: r.wb, rh: r.rh, days: r.days }))
-             : esc(t('work.bNoRecipe'))
-         }
-         <button type="button" class="wkf-link" data-wkb="custom">${esc(WKB.custom ? t('work.bCollapse') : t('work.bEditRecipe'))}</button>
-       </div>` +
-      (WKB.custom
-        ? `<div class="wkf-two">
-             <div class="wkf-field"><label>${esc(t('batch.hardwood'))}</label><input type="text" inputmode="decimal" id="wkb-hw" value="${r.hw}" /></div>
-             <div class="wkf-field"><label>${esc(t('batch.wheatBran'))}</label><input type="text" inputmode="decimal" id="wkb-wb" value="${r.wb}" /></div>
+      // Mit Ansatz steht dessen Mischung da, und zwar fest: sie lässt sich nicht
+      // mehr ändern, also darf hier auch kein Feld so tun. Die Inkubationstage
+      // gehen weiterhin vom Assistenten an den Server, die bleiben einstellbar.
+      (mix
+        ? `<div class="wkf-note">
+             <b>${esc(t('work.bMixFrom', { id: mix.subId }))}</b>
+             ${esc(t('work.bMixLine', { hw: m.hw, wb: m.wb, rh: m.rh }))}
+             <div class="wkf-hint">${esc(t('work.bMixFixed'))}</div>
            </div>
-           <div class="wkf-two">
-             <div class="wkf-field"><label>${esc(t('batch.fieldCapacity'))}</label><input type="text" inputmode="decimal" id="wkb-rh" value="${r.rh}" /></div>
-             <div class="wkf-field"><label>${esc(t('batch.incDays'))}</label><input type="text" inputmode="numeric" id="wkb-days" value="${r.days}" /></div>
-           </div>
-           <div class="wkf-hint">${esc(t('work.bOnlyThis'))}</div>`
-        : '');
+           <div class="wkf-field"><label>${esc(t('batch.incDays'))}</label>
+             <input type="text" inputmode="numeric" id="wkb-days" value="${r.days}" /></div>`
+        : `<div class="wkf-note">
+             <b>${esc(t('work.bRecipe', { name: ms ? ms.name : '' }))}${WKB.custom ? esc(t('work.bChanged')) : ''}</b>
+             ${
+               r.hw || r.wb || r.rh
+                 ? esc(t('work.bRecipeLine', { hw: r.hw, wb: r.wb, rh: r.rh, days: r.days }))
+                 : esc(t('work.bNoRecipe'))
+             }
+             <button type="button" class="wkf-link" data-wkb="custom">${esc(WKB.custom ? t('work.bCollapse') : t('work.bEditRecipe'))}</button>
+           </div>` +
+          (WKB.custom
+            ? `<div class="wkf-two">
+                 <div class="wkf-field"><label>${esc(t('batch.hardwood'))}</label><input type="text" inputmode="decimal" id="wkb-hw" value="${r.hw}" /></div>
+                 <div class="wkf-field"><label>${esc(t('batch.wheatBran'))}</label><input type="text" inputmode="decimal" id="wkb-wb" value="${r.wb}" /></div>
+               </div>
+               <div class="wkf-two">
+                 <div class="wkf-field"><label>${esc(t('batch.fieldCapacity'))}</label><input type="text" inputmode="decimal" id="wkb-rh" value="${r.rh}" /></div>
+                 <div class="wkf-field"><label>${esc(t('batch.incDays'))}</label><input type="text" inputmode="numeric" id="wkb-days" value="${r.days}" /></div>
+               </div>
+               <div class="wkf-hint">${esc(t('work.bOnlyThis'))}</div>`
+            : ''));
   } else {
     body =
       `<div class="wkf-q">${esc(t('work.bQ3'))}</div>
@@ -23173,7 +23204,9 @@ function wkbRender() {
          <div><span class="wkf-r-k">${esc(t('strains.pilzsorte'))}</span><b>${esc(ms ? ms.name : '')}</b></div>
          <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
          <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${mix ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg' : esc(t('work.bFromShelfShort'))}</div>
-         <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${r.hw}/${r.wb} @ ${r.rh} %${WKB.custom ? esc(t('work.bChanged')) : ''}
+         <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${m.hw}/${m.wb} @ ${m.rh} %${
+           m.ausAnsatz ? '' : WKB.custom ? esc(t('work.bChanged')) : ''
+         }
            <button type="button" class="wkf-link" data-wkb="step2">${esc(t('work.bEdit'))}</button></div>
          <div><span class="wkf-r-k">${esc(t('batch.incDays'))}</span>${r.days}</div>
        </div>
@@ -23197,11 +23230,14 @@ function wkbReadStep() {
     if (g('wkb-qty')) WKB.qty = Math.max(1, parseInt(g('wkb-qty').value, 10) || 1);
   } else if (WKB.step === 2) {
     if (g('wkb-mix')) WKB.subId = g('wkb-mix').value;
+    // Die Inkubationstage stehen auch beim Ansatz-Weg auf dem Bildschirm, wo es
+    // kein „Rezept ändern" gibt — sie hängen nicht am Rezept, sondern gehen so
+    // oder so an den Server.
+    if (g('wkb-days')) WKB.days = parseInt(g('wkb-days').value, 10) || 14;
     if (WKB.custom) {
       if (g('wkb-hw')) WKB.hw = parseDecimal(g('wkb-hw').value) || 0;
       if (g('wkb-wb')) WKB.wb = parseDecimal(g('wkb-wb').value) || 0;
       if (g('wkb-rh')) WKB.rh = parseDecimal(g('wkb-rh').value) || 0;
-      if (g('wkb-days')) WKB.days = parseInt(g('wkb-days').value, 10) || 14;
     }
   } else if (WKB.step === 3) {
     if (g('wkb-notes')) WKB.notes = g('wkb-notes').value;
@@ -23252,6 +23288,9 @@ function wkbCreate() {
   }
   if (!mix) return wkbCreateFromShelf();
   const r = wkbRecipe();
+  // Vor der Buchung festhalten: loadData() ersetzt _sbList, und danach ist der
+  // Ansatz womöglich schon leer und aus der Liste gefallen.
+  const mischung = wkbMischung();
   const batchId = genBatchId(ms.name);
   // Wie das lange Formular: ohne eigene Stammbezeichnung steht in der Spalte
   // 'XXX', nicht das Sorten-Kürzel. Sonst bedeutet dieselbe Spalte je nach
@@ -23271,7 +23310,17 @@ function wkbCreate() {
         lines: [
           [t('work.rBatch'), res.batchId || batchId],
           [t('work.stepSubstrate'), t('work.bDrawn', { kg: (res.drawKg || wkbDraw()).toFixed(0), id: mix.subId, left: (res.remainingKg || 0).toFixed(0) })],
-          [t('work.bMixLabel'), r.hw + '/' + r.wb + ' @ ' + r.rh + ' %' + (WKB.custom ? t('work.bChanged') : t('work.bFromRecipe'))],
+          // Was tatsächlich in den Beuteln ist, samt Herkunft der Zahl — bei einem
+          // Ansatz ist das dessen Mischung, nicht das Rezept der Sorte.
+          [
+            t('work.bMixLabel'),
+            mischung.hw + '/' + mischung.wb + ' @ ' + mischung.rh + ' %' +
+              (mischung.ausAnsatz
+                ? t('work.bFromMix', { id: mischung.ausAnsatz })
+                : WKB.custom
+                  ? t('work.bChanged')
+                  : t('work.bFromRecipe'))
+          ],
           [t('batch.incDays'), String(r.days)]
         ].concat(WKB.notes.trim() ? [[t('work.bNote'), WKB.notes.trim()]] : []),
         next: null

@@ -1954,5 +1954,9 @@ window.LANG['en'] = {
   'search.gZones': 'Zones',
   'search.gOrders': 'Orders',
   'search.gCustomers': 'Customers',
-  'search.gPages': 'Pages'
+  'search.gPages': 'Pages',
+  'work.bMixFrom': 'Mix from {id}',
+  'work.bMixLine': '{hw} % hardwood / {wb} % bran · {rh} % moisture',
+  'work.bMixFixed': 'That is how the mix was made. The strain recipe no longer changes it.',
+  'work.bFromMix': ' (from {id})'
 };
