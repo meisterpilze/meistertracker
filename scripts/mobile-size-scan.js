@@ -102,6 +102,17 @@ function outsideMedia(css) {
 // line, and every DECLARED line number after the first block comment pointed
 // somewhere else in the file. `--list` was confidently sending people to the
 // wrong rule.
+// The same blanking, for source files rather than the stylesheet: a `<style>`
+// block emitted into a print window is CSS, not an inline style. Its rules
+// land on paper, where the phone floor means nothing and where the §6 bridge —
+// an attribute selector — could never have reached them anyway. Counting them
+// as inline debt asks for a fix that would be wrong to make.
+//
+// Blanked rather than deleted, so a reported line number is still the real one.
+function maskedSource(src) {
+  return src.replace(/<style>[\s\S]*?<\/style>/g, (s) => s.replace(/[^\n]/g, ' '));
+}
+
 function maskedCss(css = readCss()) {
   const blank = (s) => s.replace(/[^\n]/g, ' ');
   const src = css.replace(/\/\*[\s\S]*?\*\//g, blank);
@@ -121,5 +132,6 @@ module.exports = {
   PHONE_BLOCK,
   MEDIA_BLOCK,
   outsideMedia,
-  maskedCss
+  maskedCss,
+  maskedSource
 };

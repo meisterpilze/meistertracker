@@ -10,8 +10,13 @@
 //   node scripts/mobile-audit.js --list     # ...and show where the hits are
 //   node scripts/mobile-audit.js --update   # lower the ceilings after a phase
 //
-// 1. INLINE — style="font-size:11px" in index.html / app.js. A token layer
-//    cannot reach these, which is why styles.css carries a temporary bridge
+// 1. INLINE — style="font-size:11px" in index.html / app.js. `<style>` blocks
+//    are excluded: app.js builds a print window's stylesheet as a string, and
+//    its 11px `th` rule is a rule on paper, not an inline style on a phone.
+//    Nothing could have fixed those two and nothing should.
+//
+//    A token layer cannot reach the rest, which is why styles.css carries a
+//    temporary bridge
 //    block that lifts them at runtime. When this count hits 0, delete the
 //    bridge. See MOBILE_REDESIGN.md §6.
 //
@@ -42,19 +47,20 @@ const {
   blocks,
   PHONE_BLOCK,
   outsideMedia,
-  maskedCss
+  maskedCss,
+  maskedSource
 } = require('./mobile-size-scan.js');
 
 const SELF = path.relative(ROOT, __filename);
 const FLOOR = floor(); // --fs-xs, read from styles.css
 
 // Lower these as phases land. Never raise them.
-const CEILING = { inline: 256, declared: 0, base: 0 };
+const CEILING = { inline: 254, declared: 0, base: 0 };
 
 function inlineHits() {
   const hits = [];
   for (const file of ['index.html', 'app.js']) {
-    const lines = fs.readFileSync(path.join(ROOT, file), 'utf8').split('\n');
+    const lines = maskedSource(fs.readFileSync(path.join(ROOT, file), 'utf8')).split('\n');
     lines.forEach((line, i) => {
       for (const m of subFloorSizes(line, FLOOR)) hits.push({ file, line: i + 1, text: m.text });
     });

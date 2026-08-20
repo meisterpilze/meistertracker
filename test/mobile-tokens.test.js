@@ -29,7 +29,8 @@ const {
   subFloorSizes,
   blocks,
   MAX_WIDTH_BLOCK,
-  maskedCss
+  maskedCss,
+  maskedSource
 } = require('../scripts/mobile-size-scan.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -161,6 +162,26 @@ describe('the scan that the ratchet reports through', () => {
       'masking ate newlines — byte offsets still resolve, but every line number computed from them is wrong'
     );
     assert.equal(newlines(scan), newlines(RAW));
+  });
+});
+
+describe('what counts as an inline size', () => {
+  // app.js builds a print window by writing a whole document as a string,
+  // stylesheet included: `<style>…th{font-size:11px}…</style>`. Those are rules
+  // on paper. No phone reads them, and the §6 bridge is an attribute selector,
+  // so it never could have reached them — counting them as debt asks for a fix
+  // that would be wrong to make. Two of the 256 were exactly this.
+  it('does not count a print stylesheet as an inline style', () => {
+    const src = '<div style="font-size:11px">a</div><style>th{font-size:11px}</style>';
+    const found = [...subFloorSizes(maskedSource(src), FLOOR)];
+    assert.equal(found.length, 1, 'the rule inside <style> was counted as an inline size');
+  });
+
+  it('keeps every byte and every newline while doing it', () => {
+    const src = 'x<style>a{\nfont-size:9px;\n}</style>y';
+    const out = maskedSource(src);
+    assert.equal(out.length, src.length, 'masking moved every offset after it');
+    assert.equal((out.match(/\n/g) || []).length, 2, 'masking ate the newlines and every line number with them');
   });
 });
 
