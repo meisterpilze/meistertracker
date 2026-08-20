@@ -703,28 +703,45 @@ function _normalizeBillbee(o) {
     street = sp.street;
     house = sp.house;
   }
-  const items = (o.OrderItems || []).map((li) => {
-    const p = li.Product || {};
-    const qty = li.Quantity || 1;
-    return {
-      channelSku: p.SKU || p.SkuOrId || li.InvoiceSKU || null,
-      listingId: p.Id != null ? String(p.Id) : null,
-      title: p.Title || null,
-      qty,
-      // Billbee reports the position total (unit price × quantity); the hub stores
-      // the unit price.
-      unitPrice: li.TotalPrice != null && qty ? Math.round((Number(li.TotalPrice) / qty) * 10000) / 10000 : null
-    };
-  });
+  const items = (o.OrderItems || [])
+    // Coupons and discounts arrive as positions like any other. They are not
+    // things to make, and importing them parks a "Gutschein" line in the mapping
+    // screen for ever, waiting to be bound to a product that cannot exist.
+    .filter((li) => li && !li.IsCoupon)
+    .map((li) => {
+      const p = li.Product || {};
+      // A missing quantity means one. Number(null) is 0, so the null case has to
+      // be excluded before the finite check, or a position without a quantity
+      // would import as zero.
+      const qty = li.Quantity != null && Number.isFinite(Number(li.Quantity)) ? Number(li.Quantity) : 1;
+      return {
+        channelSku: p.SKU || p.SkuOrId || li.InvoiceSKU || null,
+        listingId: p.Id != null ? String(p.Id) : null,
+        title: p.Title || null,
+        qty,
+        // Billbee reports the position total (unit price × quantity); the hub
+        // stores the unit price.
+        unitPrice: li.TotalPrice != null && qty ? Math.round((Number(li.TotalPrice) / qty) * 10000) / 10000 : null
+      };
+    });
   // TotalCost is documented as the total *without* shipping, unlike the other
-  // three channels' totals — so the shipping cost is added back rather than the
-  // hub quietly under-reporting every Billbee order.
+  // three channels' totals, so the shipping cost is added back — otherwise the
+  // hub under-reports every Billbee order by its postage.
+  //
+  // ⚠️ That reading is the API documentation's, and it cannot be checked from
+  // here; several Billbee clients treat TotalCost as the whole order. Read the
+  // wrong way it would *over*-report every order by its postage instead, and
+  // nothing about the number would look wrong. So a paid order is believed over
+  // the arithmetic: PaidAmount is what the buyer actually handed over, and it is
+  // right whichever way the documentation is meant.
+  //
   // Rounded because it is money and this is the one channel where two figures are
   // added: 24.90 + 4.90 lands on 29.799999999999997 in binary floating point.
-  const total =
-    o.TotalCost != null
-      ? Math.round((Number(o.TotalCost) + (o.ShippingCost != null ? Number(o.ShippingCost) : 0)) * 100) / 100
-      : null;
+  const summed =
+    o.TotalCost != null ? Number(o.TotalCost) + (o.ShippingCost != null ? Number(o.ShippingCost) : 0) : null;
+  const paid = o.PayedAt && o.PaidAmount != null ? Number(o.PaidAmount) : null;
+  const chosen = paid != null && paid > 0 ? paid : summed;
+  const total = chosen != null && Number.isFinite(chosen) ? Math.round(chosen * 100) / 100 : null;
   return {
     channel: 'billbee',
     // The *internal* Billbee id — not Id or OrderNumber, which belong to the
@@ -767,11 +784,16 @@ const billbee = {
     // channels that must now be switched off on this page.
     return { ok: true, account: shops.length ? shops.join(', ') : 'Billbee', sample: shops.length, shops };
   },
-  // Orders of the last BILLBEE_WINDOW_DAYS days, newest page first by Billbee's
-  // own ordering. Cursor is the 1-based page number.
+  // Orders of the last BILLBEE_WINDOW_DAYS days. The cursor is `page|since`, and
+  // it carries the window start for a reason: recomputing "30 days ago" on every
+  // page moves the filter underneath the paging. An order sitting on the boundary
+  // then drops out between two requests, every later order shifts up one place,
+  // and whichever order that pushes across the page break is not returned by that
+  // sync at all — silent loss, not a delay, for an order never imported before.
   async fetchOrders(cfg, { cursor } = {}) {
-    const page = Math.max(1, parseInt(cursor, 10) || 1);
-    const since = new Date(Date.now() - BILLBEE_WINDOW_DAYS * 86400000).toISOString();
+    const [rawPage, rawSince] = String(cursor == null ? '' : cursor).split('|');
+    const page = Math.max(1, parseInt(rawPage, 10) || 1);
+    const since = rawSince || new Date(Date.now() - BILLBEE_WINDOW_DAYS * 86400000).toISOString();
     const q = _form({ page, pageSize: BILLBEE_PAGE_SIZE, minOrderDate: since });
     const j = await _billbeeFetch(cfg, '/orders?' + q, {}, 'Billbee Aufträge');
     const rows = (j && j.Data) || [];
@@ -779,7 +801,7 @@ const billbee = {
     // upsertOrder would throw on it mid-batch. Drop it here instead.
     const orders = rows.map(_normalizeBillbee).filter((o) => o.channelOrderId);
     const totalPages = (j && j.Paging && j.Paging.TotalPages) || 0;
-    const nextCursor = rows.length && page < totalPages ? String(page + 1) : null;
+    const nextCursor = rows.length && page < totalPages ? page + 1 + '|' + since : null;
     return { orders, nextCursor };
   },
   // Write the Sendungsnummer back onto the Billbee order. Best-effort, like the

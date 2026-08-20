@@ -441,6 +441,38 @@ describe('Billbee: orders in', () => {
     assert.equal(o.items[0].unitPrice, 12.45, 'position total ÷ quantity');
   });
 
+  it('leaves coupon positions out and reads a missing quantity as one', () => {
+    const o = channels._normalizeBillbee({
+      BillBeeOrderId: 2,
+      OrderItems: [
+        { Quantity: 1, TotalPrice: 24.9, Product: { SKU: 'AUS-250', Title: 'Austernpilze 250 g' } },
+        { IsCoupon: true, Quantity: 1, TotalPrice: -2.49, Product: { Title: 'Gutschein 10 %' } },
+        { TotalPrice: 5, Product: { SKU: 'X' } }
+      ]
+    });
+    assert.deepEqual(
+      o.items.map((i) => i.channelSku),
+      ['AUS-250', 'X'],
+      'a discount is not a thing to make, and it would sit in the mapping screen for ever'
+    );
+    assert.equal(o.items[1].qty, 1, 'Number(null) is 0 — a position without a quantity is one, not none');
+  });
+
+  it('believes a paid order over the arithmetic', () => {
+    // TotalCost is documented as excluding shipping, and that reading cannot be
+    // checked from here. What the buyer actually paid can be.
+    const paid = channels._normalizeBillbee({
+      BillBeeOrderId: 3,
+      TotalCost: 24.9,
+      ShippingCost: 4.9,
+      PayedAt: '2026-08-19T09:00:00Z',
+      PaidAmount: 24.9
+    });
+    assert.equal(paid.totalAmount, 24.9, 'PaidAmount is right whichever way the documentation is meant');
+    const unpaid = channels._normalizeBillbee({ BillBeeOrderId: 4, TotalCost: 24.9, ShippingCost: 4.9 });
+    assert.equal(unpaid.totalAmount, 29.8, 'nothing paid yet — fall back to the documented sum');
+  });
+
   it('keeps a house number Billbee already split', () => {
     const o = channels._normalizeBillbee({
       BillBeeOrderId: 1,
@@ -471,7 +503,7 @@ describe('Billbee: orders in', () => {
     try {
       const { orders, nextCursor } = await channels.billbee.fetchOrders(cfg, {});
       assert.equal(orders.length, 1);
-      assert.equal(nextCursor, '2', 'page 1 of 2 → there is a page 2');
+      assert.match(nextCursor, /^2\|2\d{3}-/, 'page 1 of 2 → a page 2, and the cursor carries the window start');
       assert.ok(seen[0].url.startsWith('https://api.billbee.io/api/v1/orders?'), seen[0].url);
       assert.ok(seen[0].url.includes('minOrderDate='), 'a sync must not walk the whole history');
       assert.equal(seen[0].headers['X-Billbee-Api-Key'], 'BB-KEY');
@@ -480,6 +512,27 @@ describe('Billbee: orders in', () => {
         'Basic ' + Buffer.from('jonas@example.de:api-pw').toString('base64'),
         'the API key identifies the app, basic auth the account'
       );
+    } finally {
+      restore();
+    }
+  });
+
+  it('carries one window across the pages of a sync', async () => {
+    // The filter must not move underneath the paging: recomputing "30 days ago"
+    // per page drops the order sitting on the boundary out of the result set
+    // between two requests, and whichever order that shifts across the page break
+    // is never returned by that sync at all.
+    const urls = [];
+    const restore = mockFetch(async (url) => {
+      urls.push(url);
+      return jsonRes(200, { Data: [order], Paging: { Page: urls.length, TotalPages: 2 } });
+    });
+    try {
+      const first = await channels.billbee.fetchOrders(cfg, {});
+      await channels.billbee.fetchOrders(cfg, { cursor: first.nextCursor });
+      const windowOf = (u) => decodeURIComponent(u.match(/minOrderDate=([^&]+)/)[1]);
+      assert.equal(windowOf(urls[0]), windowOf(urls[1]));
+      assert.ok(urls[1].includes('page=2'), urls[1]);
     } finally {
       restore();
     }
