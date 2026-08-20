@@ -3805,8 +3805,8 @@ tr:hover td {
   max-width: 560px;
   /* Bounded, so the list scrolls inside the box instead of running off the
      bottom of the screen. It never reaches this on a desk — seven results and a
-     footer come to roughly 450px — but a phone with the keyboard up has about
-     400px of viewport left, which is three rows and no way to reach the rest. */
+     footer come to roughly 450px. The phone value is in the media query below,
+     and it is in dvh for a reason spelled out there. */
   max-height: 100%;
   background: var(--c-surface);
   border-radius: 16px;
@@ -3847,7 +3847,12 @@ tr:hover td {
   font-family: monospace;
   font-size: max(11px, var(--fs-min));
   cursor: pointer;
+  /* Both floors, not just the tall one. On a phone the word "esc" is swapped
+     for a ✕ and this stops being a reminder and starts being the only way out
+     that a thumb can reach — at which point 24px tall and as wide as one glyph
+     is not a target. */
   min-height: max(24px, var(--tap-sm-min));
+  min-width: max(28px, var(--tap-sm-min));
 }
 .gs-results {
   overflow-y: auto;
@@ -3889,10 +3894,12 @@ tr:hover td {
   color: var(--c-text-sec);
 }
 /* Selection is one thing, and it is the same thing whether the keyboard or the
-   mouse put it there — an arrow key and a hovering finger must not be able to
-   light two rows at once. */
-.gs-row.gs-on,
-.gs-row:hover {
+   mouse put it there. Pairing .gs-on with :hover here said that and did the
+   opposite: arrow down to row two, leave the pointer over row four, and two
+   rows are lit while Enter opens one of them. The pointer now moves the
+   selection instead (gsInit's mousemove handler), so there is one rule and one
+   highlight. */
+.gs-row.gs-on {
   background: var(--c-primary-light);
 }
 .gs-row mark {
@@ -3941,9 +3948,6 @@ tr:hover td {
 .sb-search-wrap {
   padding: 12px 10px 0;
 }
-.sidebar.sb-collapsed .sb-search-wrap {
-  padding: 12px 8px 0;
-}
 .sb-search-key {
   margin-left: auto;
   border: 1px solid var(--c-border);
@@ -3985,6 +3989,15 @@ tr:hover td {
   }
   .gs-box {
     max-width: none;
+    /* dvh, not vh, and not the 100% it used to be. .gs-bg is position:fixed
+       inset:0, so 100% of it is the window — and with the on-screen keyboard up
+       the window is still the whole window as far as vh and a fixed backdrop are
+       concerned. The bound therefore never applied on the one device it was
+       written for: a phone with the keyboard open has around 400px left, which
+       is three rows, and the other four ran off the bottom with no way to reach
+       them. Same reason and same fix as .wkf-list, which says it at length.
+       22px is this block's own vertical padding on .gs-bg. */
+    max-height: calc(100dvh - 22px);
   }
   /* The rows are what a thumb aims at, so they get the chrome floor rather than
      the 7px a mouse is happy with. */
@@ -4875,7 +4888,9 @@ tr:hover td {
   .chip-pulse,
   .count-bump .chip-v,
   .cam-chip.ch-pulse,
-  .batch-row-flash > td {
+  .batch-row-flash > td,
+  .gs-flash,
+  .gs-flash > td {
     animation: none !important;
   }
 }

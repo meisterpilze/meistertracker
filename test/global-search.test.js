@@ -20,6 +20,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 
 // Lift the pure half. GS_ORDER comes with it because gsMatch() sorts by it.
 function lift(...names) {
@@ -398,6 +399,60 @@ describe('what the palette refuses to open on top of', () => {
     assert.match(handler[0], /e\.stopPropagation\(\);/);
     assert.match(APP, /const gsOpenNow = document\.getElementById\('m-search'\)\?\.classList\.contains\('open'\);/);
     assert.match(APP, /if \(gsOpenNow \|\| \(!scanOpen && !camOpen\)\)/);
+  });
+});
+
+describe('the palette on a phone', () => {
+  it('bounds the box against the viewport the keyboard leaves behind', () => {
+    // .gs-bg is position:fixed inset:0, so `max-height: 100%` on the box was
+    // 100% of the window — and with the keyboard up the window is still the
+    // whole window as far as vh and a fixed backdrop are concerned. The bound
+    // never applied on the one device it was written for.
+    const phone = CSS.slice(CSS.indexOf('@media (max-width: 768px) {', CSS.indexOf('═══ SUCHE')));
+    const box = phone.match(/\.gs-box \{[\s\S]*?\n {2}\}/);
+    assert.ok(box, 'the phone .gs-box rule is gone');
+    assert.match(box[0], /max-height: calc\(100dvh/, 'the bound is still measured against the window');
+  });
+
+  it('gives the way out a width as well as a height', () => {
+    // On a phone the word "esc" becomes a ✕ and the button stops being a
+    // reminder: it is the only dismissal a thumb can reach.
+    const esc = CSS.match(/\.gs-esc \{[\s\S]*?\n\}/);
+    assert.ok(esc, '.gs-esc is gone');
+    assert.match(esc[0], /min-height: max\(24px, var\(--tap-sm-min\)\)/);
+    assert.match(esc[0], /min-width: max\(28px, var\(--tap-sm-min\)\)/);
+  });
+
+  it('lines the sidebar button up with the entries under it when collapsed', () => {
+    // .sb-nav keeps padding: 12px 10px in both states, so an 8px override here
+    // moved the button 2px out of line with everything below it.
+    assert.doesNotMatch(CSS, /\.sidebar\.sb-collapsed \.sb-search-wrap/);
+    assert.match(CSS, /\.sb-search-wrap \{\s*padding: 12px 10px 0;/);
+  });
+
+  it('stops its flash for anyone who asked animations to stop', () => {
+    // .gs-flash reuses the batch-row-flash keyframes, and .batch-row-flash was
+    // already on this list. Reusing the animation without joining the list is
+    // how one gets missed.
+    const rm = CSS.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?animation: none !important;/g);
+    assert.ok(rm && rm.length, 'the allowlist block is gone');
+    assert.ok(
+      rm.some((b) => /\.gs-flash,/.test(b) && /\.gs-flash > td/.test(b)),
+      '.gs-flash animates for people who asked animations not to'
+    );
+  });
+
+  it('lights one row, not two', () => {
+    // .gs-on paired with :hover meant an arrow key and a resting pointer could
+    // each light a different row while Enter opened only one of them.
+    assert.doesNotMatch(CSS, /\.gs-row:hover \{[\s\S]*?background/);
+    assert.doesNotMatch(CSS, /\.gs-row:hover,/);
+    const init = APP.match(/function gsInit\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(init, /box\.addEventListener\('mousemove'/, 'nothing moves the selection with the pointer');
+    // And moving it must not rebuild the rows the pointer is sitting on.
+    const move = init.match(/box\.addEventListener\('mousemove'[\s\S]*?\n {2}\}\);/)[0];
+    assert.match(move, /gsSelect\(\);/);
+    assert.doesNotMatch(move, /gsRender\(/);
   });
 });
 

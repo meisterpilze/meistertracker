@@ -20354,6 +20354,20 @@ function gsRender(keep) {
   if (!gsHits.length) html = '<div class="gs-empty">' + esc(t('search.none', { q: q })) + '</div>';
   else if (all.length > GS_CAP) html += '<div class="gs-more">' + esc(t('search.more', { n: all.length - GS_CAP })) + '</div>';
   box.innerHTML = html;
+  gsSelect();
+}
+
+// Move the highlight, and say so, without touching the list itself. gsRender()
+// would do this and would also throw away and rebuild every row under the
+// pointer — which is fine once per keystroke and not fine once per mouse move.
+function gsSelect() {
+  const box = document.getElementById('gs-results');
+  if (!box) return;
+  box.querySelectorAll('.gs-row').forEach((row) => {
+    const on = +row.dataset.i === gsSel;
+    row.classList.toggle('gs-on', on);
+    row.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   const hint = document.getElementById('gs-hint');
   if (hint) hint.textContent = gsHits.length ? t('search.opens', { id: gsHits[gsSel].id }) : '';
   document.getElementById('gs-q').setAttribute('aria-activedescendant', gsHits.length ? 'gs-o-' + gsSel : '');
@@ -20364,7 +20378,7 @@ function gsRender(keep) {
 function gsMove(step) {
   if (!gsHits.length) return;
   gsSel = (gsSel + step + gsHits.length) % gsHits.length;
-  gsRender();
+  gsSelect();
 }
 
 // Every full-viewport overlay in this app, by the two class conventions plus
@@ -20605,6 +20619,17 @@ function gsInit() {
   box.addEventListener('click', (e) => {
     const row = e.target.closest('.gs-row');
     if (row) gsGoto(gsHits[+row.dataset.i]);
+  });
+  // The pointer takes the selection with it. A :hover rule beside .gs-on lit a
+  // second row instead — arrow down to two, leave the mouse over four, and the
+  // list shows two answers to "what does Enter open".
+  box.addEventListener('mousemove', (e) => {
+    const row = e.target.closest('.gs-row');
+    if (!row) return;
+    const i = +row.dataset.i;
+    if (i === gsSel || !gsHits[i]) return;
+    gsSel = i;
+    gsSelect();
   });
   bg.addEventListener('click', (e) => {
     if (e.target === bg) gsClose();
