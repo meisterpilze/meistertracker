@@ -5649,6 +5649,36 @@ tr:hover td {
   max-width: 64%;
 }
 
+/* The phone tile, after the four rules above rather than before them: a media
+   query adds no specificity, so between two `.wk-tile` rules the later one wins
+   and the base min-height would simply have stood. */
+@media (max-width: 768px) {
+  /* And in one column the height is the content's, not a number's. `min-height:
+     156px` is a good proportion for a tile 261px wide on a desk; stretched full
+     width it is 35-70px of air per tile, seven times over. Measured at 375px:
+     every tile reported its when-line box as 88px tall for one to three lines of
+     13px text, because `grid-template-rows: auto 1fr` hands the second row
+     whatever the min-height left spare — the box was filling the air rather than
+     needing it.
+
+     The floor stays a floor: --tap, the same one every other control on a Feld
+     screen answers to. No tile comes near it — the shortest is a title and one
+     line — which is why it is written as the token rather than a literal.
+
+     The drawing shrinks with the box or it swallows it, and the when-line takes
+     back the width the drawing gives up. */
+  .wk-tile {
+    min-height: var(--tap);
+    padding: 14px 16px;
+  }
+  .wk-tile-art {
+    width: 96px;
+  }
+  .wk-tile-when {
+    max-width: 72%;
+  }
+}
+
 /* ── flow modal ─────────────────────────────────────────────────────────── */
 .wkf-head {
   display: flex;
