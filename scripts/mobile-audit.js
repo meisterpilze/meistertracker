@@ -54,7 +54,10 @@ const {
 const SELF = path.relative(ROOT, __filename);
 const FLOOR = floor(); // --fs-xs, read from styles.css
 
-// Lower these as phases land. Never raise them.
+// All three reached 0. There is nothing left to lower, so the job has changed:
+// this now fails if any of it comes back — an inline font-size below the floor,
+// a sub-floor rule aimed at the phone, or a base rule that serves both devices
+// from one number under 13px. Never raise them.
 const CEILING = { inline: 0, declared: 0, base: 0 };
 
 function inlineHits() {
@@ -167,7 +170,7 @@ for (const key of ['inline', 'declared', 'base']) {
   }
 }
 
-if (!failed && counts.inline === 0) {
+if (!failed && counts.inline === 0 && /\[style\*='font-size/.test(fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8'))) {
   console.log('\n✓ no inline sub-floor sizes left — delete the bridge block in styles.css.');
 }
 process.exit(failed ? 1 : 0);

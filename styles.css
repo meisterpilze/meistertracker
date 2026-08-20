@@ -1476,6 +1476,25 @@ body:has(.modal-bg.open) .cam-fab {
    !important }` at (0,0,3), and an important utility at (0,1,0) would beat it
    — handing Safari a 13px field to zoom into on every form control that used
    to carry an inline size. A doubled class loses to it, which is correct. */
+/* A <canvas> with no width attribute is 300px wide, and that is wider than a
+   card's content box on a 320px phone — measured at 320, where two harvest
+   charts hang 13px off the edge and take the page to 333.
+
+   Honest about what that measurement is: the page it was taken on has its
+   scripts stripped, so Chart.js never ran, and Chart.js in responsive mode
+   sizes the canvas to its container itself. So this is the pre-initialisation
+   state rather than proof of a permanent defect. It is still worth a rule —
+   it covers the flash before the first draw, and any container Chart.js cannot
+   measure — and one line is cheaper than finding out which.
+
+   The one canvas that is not a chart — #pa-canvas, the photo annotation
+   surface — was going to be excluded from this, until a check showed it sets
+   max-width: 100% for itself two thousand lines further down. So there is
+   nothing to exclude, and the rule says the plain thing. */
+canvas {
+  max-width: 100%;
+}
+
 .fs-meta.fs-meta {
   font-size: var(--fs-meta);
 }
