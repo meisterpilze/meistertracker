@@ -495,8 +495,20 @@ In this order, cheapest and highest-traffic first:
    `style="padding:8px 10px;font-size:..."` (three emitters around `_openZonePicker`), so
    the floor cannot reach them and the ratchet counts them under INLINE. They are a markup
    change, not a stylesheet one, and belong with the rest of the de-inlining.
-3. **`p-batch`** — 4 sub-tabs, tables `t-batches` + `t-harvest`.
-4. **`p-lab`** — 5 sub-tabs, tables `t-grain` + `t-cultures`.
+3. ✅ **`p-batch`** and 4. ✅ **`p-lab`** — and both turned out smaller than the plan
+   assumed, because the survey they were scoped from predated Phase 2 item 0. Its
+   headline items — `.sec` at 12px, `label` at 12px, `.btn-sm` with no minimum — were
+   all already handled by the two floors. What was left, and what shipped, was measured
+   rather than surveyed: the culture library's header row (2 filters and a button, 366px
+   of them, pushing p-lab to 467px at 375), and the tables, which are item 3 of Phase 3
+   below rather than two page-shaped PRs.
+
+   ➖ **The grid finding did not survive checking.** The survey proposed moving
+   `.g3/.g4/.g5 → 1fr` from the 480 breakpoint up to 768. At 375px the 480 block already
+   applies, so nothing there was broken; what *was* broken is a different thing at the
+   same address — `1fr` rather than `minmax(0, 1fr)`, which let one `<select>` blow a
+   grid track 84px past its share. Fixed, and it was Pilzsorten rather than either of
+   these two pages.
 5. ✅ **`p-cal`** — an agenda list below 769px, and the reason it took one day rather
    than three is that the list was already written. `printCalendarTaskList()` collects
    the same events the grids collect, groups them by date, sorts each day all-day-first
@@ -520,24 +532,95 @@ In this order, cheapest and highest-traffic first:
    holding agenda markup.
 
    *Measured at 375px: sub-floor type 8 → 0, DECLARED ratchet 10 → 7.*
-6. **`p-inv`**, **`p-zones`**.
+6. ✅ **`p-inv`**, **`p-zones`** — nothing page-specific was left by the time the floors,
+   the grid fix and the de-inlining had run. Both measure clean at 375px.
 
 Each PR: de-inline that page's font sizes, apply §5.1–5.2, convert its tables per §5.4.
 
-### Phase 3 — Remaining tables
+> **[corrected]** "One PR each" was the right shape for the first two items and the wrong
+> shape for the rest. Once `scripts/measure-mobile.js` existed, the work stopped being
+> per-page: the defects it found were *per-mechanism* and crossed every page at once —
+> one touch floor missing for chrome, one grid track spelled `1fr`, one card layout
+> written four times. Splitting those by page would have meant four copies of each fix.
 
-The 13 `app.js`-generated tables not covered by Phase 2, converted in 3–4 batched PRs.
+### Phase 3 — Remaining tables · **shipped**
 
-### Phase 4 — Büro floor
+Twelve of twelve, and it became one mechanism instead of 3–4 batched PRs.
 
-No redesign. Per page, only: no horizontal scroll, ≥44px targets, ≥13px text, forms one
-column. Settings, Orders, Print, Strains, Pickups, Dash.
+Four tables carried the card layout in four blocks of the same rules under different ids
+— 306 lines. The cost was never the duplication: **`#t-grain` is filled by
+`batchRowHtml()`, the same function that fills `#t-batches`**, so every one of its cells
+already carried a `data-mlabel` — and it still handed a phone a sideways-scrolling
+twelve-column table, because the fifth copy of the block was never written.
 
-### Phase 5 — Remove the bridge
+`.t-cards` replaces all four with 152 lines, keyed on two structural facts that were
+already true: the card header is the **first** cell (batch id, culture id, log time,
+harvest date — all four, by construction), and the actions cell is the one with **no
+`data-mlabel`**, because a row of buttons has nothing to label. That last one is why
+`:last-child` would have been wrong: `#t-harvest`'s last cell is data.
 
-When the inline-size ratchet hits zero, delete the §6 block. If it does not hit zero within
-a release or two, that is data: the remaining sites are the ones nobody wants to touch, and
-they should be listed and decided on rather than left implicit.
+The remaining seven tables needed their renderers to emit `data-mlabel`, which they now
+do. The label goes 10–11px → 13px, which emptied the DECLARED ratchet: **7 → 0**.
+
+Found while checking: `tr:nth-child(even) td` tints every second *card* grey and
+`tr:hover td` leaves a tap tint stuck on a coarse pointer. Neither was introduced by the
+card layout and neither had been revisited since it arrived.
+
+➖ **§5.4's plan could not be applied as written.** It proposed a `data-l` attribute and
+an additive block. The attribute is `data-mlabel` and has been since the first card mode;
+the block had to *replace* the four existing ones, which carry 17 `!important`s at
+`#t-batches > tbody > tr > td` (1,0,3) and would have won every conflict.
+
+### Phase 4 — Büro floor · **shipped, and measured rather than asserted**
+
+No redesign, four requirements, and `scripts/measure-mobile.js` checks all four at 375px
+across every page at once rather than one page at a time:
+
+- **No horizontal scroll** — 0 pages. Two failed when it was first run: p-strains at 443px
+  (a `<select>` whose longest option is 363px wide, through a `1fr` grid track) and p-lab
+  at 467px (a card header that would not wrap).
+- **≥44px targets** — 0 under. Fourteen failed at first run, and the reason they had
+  survived four phases is worth keeping: there was one touch sentinel, `--tap-min` at
+  56px, and 56px is the *Feld* floor. Flooring a topbar bell with it buys a 76px topbar,
+  so chrome had nothing to be floored with that did not also make it huge. `--tap-sm-min`
+  is the other half of the pair §9 had already decided on.
+- **≥13px text** — 0 under. The last eight were the calendar legend, which the agenda
+  view made redundant rather than bigger.
+- **Forms one column** — measured by where the children actually land, not by reading the
+  template: exactly one multi-column grid survives at 375px, a label/value list in
+  Settings at 94px + 201px, and it holds no form fields.
+
+### Phase 5 — Remove the bridge · **shipped**
+
+The ratchet hit zero and the block is gone: 48 lines, 20 attribute-substring selectors,
+and a substring match against every element in the document on every phone-width render.
+
+The 497 became three classes and one escape hatch. `.fs-meta` (13/12), `.fs-xs` (13/11)
+and `.fs-micro` (13/10) take the sizes that are on the scale. Sixteen are not on any
+scale — 10.5px on a fruiting target, 9px on a bag chip, 8px on a bag label, across eight
+components, no two alike — and rounding them would have moved sixteen desktop values by
+up to 2px to save a class. `.fs-floor` keeps the number on the element as `--fs-own` and
+floors it with the same `max()` the base rules use.
+
+**The class name is doubled — `.fs-meta.fs-meta` — and that is the finding.** An inline
+style outranks every normal rule, so moving one onto a plain class quietly hands the
+element back to whatever component rule it had been overriding. Measured, not feared: the
+single-class version moved 13 elements at 1440px, four hints 12→14px under `.modal p` and
+six buttons 11→12px under `.btn-sm`. `!important` would also have worked and is
+deliberately not used — it outranks the iOS anti-zoom rule at (0,0,3), and 16 form
+controls carry one of these classes.
+
+Two things the count itself had wrong, both found by doing the work:
+
+- **Two of the 254 were never inline.** `app.js` builds a print window by writing a whole
+  document as a string, `<style>` block included. Those are rules on paper: no phone reads
+  them and the bridge, an attribute selector, could never have reached them. The scan
+  blanks `<style>` blocks now.
+- **Print was getting the gloved-hand values.** The desktop override is keyed
+  `(hover: hover)`, and paper has no pointer, so every token resolved to the phone value
+  when printing — 13px floors on a barcode label, 56px of white space under any control
+  that reached a page. Latent while nothing in `@media print` read a token, and no longer
+  latent the moment an inline size moves onto a class that does. `, print` in the query.
 
 ---
 
