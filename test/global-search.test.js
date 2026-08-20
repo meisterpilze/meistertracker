@@ -219,6 +219,77 @@ describe('the palette is wired to the app around it', () => {
   });
 });
 
+describe('what the palette refuses to open on top of', () => {
+  // gsOpen() used to ask `.modal-bg.open`, which describes how most dialogs in
+  // this app open and not all of them: #change-pw-modal is a .modal-bg that
+  // opens by writing style.display, #scan-overlay is not a .modal-bg, and
+  // #ms-quick-modal and #ship-modal are neither. The palette therefore opened
+  // over the scan overlay, where the field is invisible and the station's next
+  // Enter commits a bag movement.
+  //
+  // The guard now asks the screen (getClientRects) rather than the class, but
+  // it still needs the right set of elements to ask about. This census is what
+  // keeps that set honest.
+  const SEL = (() => {
+    const m = APP.match(/const GS_OVERLAY_SEL = '([^']+)';/);
+    assert.ok(m, 'GS_OVERLAY_SEL is gone — gsCovered() has nothing to look at');
+    return m[1].split(',').map((x) => x.trim());
+  })();
+
+  // Every element in the markup that covers the whole viewport: the two class
+  // conventions, plus anything that places itself inline.
+  const OVERLAYS = [...HTML.matchAll(/<div\b[^>]*>/g)]
+    .map((m) => {
+      const flat = m[0].replace(/\s+/g, ' ');
+      return {
+        id: (flat.match(/id="([^"]+)"/) || [])[1] || '',
+        cls: (flat.match(/class="([^"]+)"/) || [])[1] || '',
+        flat
+      };
+    })
+    .filter(
+      (o) =>
+        /\bmodal-bg\b/.test(o.cls) ||
+        /\bscan-overlay\b/.test(o.cls) ||
+        (/position: ?fixed/.test(o.flat) && /inset: ?0/.test(o.flat))
+    );
+
+  it('finds the overlays — a silent zero would make this block useless', () => {
+    assert.ok(OVERLAYS.length >= 25, `expected at least 25 full-screen overlays, found ${OVERLAYS.length}`);
+  });
+
+  it('names every one of them', () => {
+    const covered = (o) =>
+      SEL.some((sel) =>
+        sel.startsWith('#')
+          ? sel.slice(1) === o.id
+          : sel.startsWith('.')
+            ? o.cls.split(/\s+/).includes(sel.slice(1))
+            : false
+      );
+    const missing = OVERLAYS.filter((o) => !covered(o)).map((o) => o.id || o.cls);
+    assert.deepEqual(missing, [], `the palette would open on top of: ${missing.join(', ')}`);
+  });
+
+  it('asks what is on the screen, not how it got there', () => {
+    // style.display and the .open class are two routes to the same state, and
+    // this app uses both. Client rects are the state.
+    assert.match(APP, /function gsCovered\(\)/);
+    assert.match(APP, /el\.getClientRects\(\)\.length/);
+    assert.match(APP, /if \(gsCovered\(\)\) return;/, 'gsOpen() no longer consults the guard');
+  });
+
+  it('does not let one scanned Enter be read twice', () => {
+    // The palette's own handler stops the key, and the global scan buffer
+    // treats the open palette the way it treats any other search box.
+    const handler = APP.match(/input\.addEventListener\('keydown'[\s\S]*?\n {2}\}\);/);
+    assert.ok(handler, 'the palette keydown handler moved');
+    assert.match(handler[0], /e\.stopPropagation\(\);/);
+    assert.match(APP, /const gsOpenNow = document\.getElementById\('m-search'\)\?\.classList\.contains\('open'\);/);
+    assert.match(APP, /if \(gsOpenNow \|\| \(!scanOpen && !camOpen\)\)/);
+  });
+});
+
 describe('the page index reads the sidebar rather than repeating it', () => {
   // gsPageIndex() builds the "Seiten" results from .sb-btn[data-page]. An entry
   // without the attribute is simply absent from the search — no error, no

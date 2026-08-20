@@ -17268,7 +17268,11 @@ document.addEventListener('keydown', (e) => {
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
     const scanOpen = document.getElementById('scan-overlay')?.classList.contains('open');
     const camOpen = document.getElementById('m-camscan')?.classList.contains('open');
-    if (!scanOpen && !camOpen) {
+    // The search palette is the search box this comment already warns about,
+    // and it is the one that resolves a scanned code itself. Two readers of the
+    // same keystrokes would open a result and log a movement off one scan.
+    const gsOpenNow = document.getElementById('m-search')?.classList.contains('open');
+    if (gsOpenNow || (!scanOpen && !camOpen)) {
       _scanBuf.chars = [];
       clearTimeout(_scanBuf.timer);
       return;
@@ -20191,10 +20195,35 @@ function gsMove(step) {
   gsRender();
 }
 
+// Every full-viewport overlay in this app, by the two class conventions plus
+// the three that carry their placement inline. Membership is checked by
+// test/global-search.test.js against index.html, so a new one cannot join the
+// markup without joining this.
+const GS_OVERLAY_SEL = '.modal-bg, .scan-overlay, #ms-quick-modal, #ship-modal';
+
+// Is something already covering the screen?
+//
+// Asking the class was not enough, and the way it failed is worth keeping in
+// mind: `.modal-bg.open` describes how most dialogs open, but #change-pw-modal
+// is a .modal-bg that opens by writing style.display, #scan-overlay is not a
+// .modal-bg at all, and #ms-quick-modal and #ship-modal are neither. So ask
+// what is on the screen instead of how it got there — an element that is not
+// displayed has no client rects, whichever route hid it.
+function gsCovered() {
+  const list = document.querySelectorAll(GS_OVERLAY_SEL);
+  for (const el of list) {
+    if (el.id === 'm-search') continue;
+    if (el.getClientRects().length) return true;
+  }
+  return false;
+}
+
 function gsOpen() {
   // Not on top of another dialog: navigating out from here would leave that one
-  // open over a page it was never about.
-  if (document.querySelector('.modal-bg.open:not(#m-search)')) return;
+  // open over a page it was never about — and over the scan overlay it is worse
+  // than untidy. The field would take a scanned code into an invisible input at
+  // a station whose next Enter commits a bag movement.
+  if (gsCovered()) return;
   const bg = document.getElementById('m-search');
   if (!bg) return;
   gsReturnFocus = document.activeElement;
@@ -20315,6 +20344,10 @@ function gsInit() {
       gsMove(-1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      // And nothing else gets this key. The global scan buffer listens on
+      // document and a scanner's Enter would otherwise be read twice: once as
+      // "open the highlighted result" and once as "commit the scan".
+      e.stopPropagation();
       gsGoto(gsHits[gsSel]);
     }
   });
