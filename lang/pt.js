@@ -33,6 +33,7 @@ window.LANG['pt'] = {
   'nav.ordersCustomers': 'Clientes',
   'nav.pickups': 'Levantamentos',
   'nav.adminBack': 'Voltar',
+  'nav.backToList': 'Voltar \u00e0 lista',
   'nav.adminOps': 'Opera\u00e7\u00f5es',
   'nav.adminSales': 'Vendas',
   'nav.adminDevices': 'Dispositivos',
@@ -1425,6 +1426,7 @@ window.LANG['pt'] = {
   'cal.taskListTitle': 'Lista de tarefas',
   'cal.entries': 'entradas',
   'cal.noTasks': 'sem tarefas',
+  'cal.agendaEmpty': 'Nada neste mês',
   'cal.printChooseRange': 'Escolha o período para a lista de tarefas:',
   'cal.printWeek': 'Semana — lista de tarefas da semana atual',
   'cal.printMonth': 'M\u00eas — lista de tarefas do m\u00eas atual',
@@ -1445,7 +1447,6 @@ window.LANG['pt'] = {
   'aria.searchLog': 'Pesquisar registo',
   'aria.openCameraScanner': 'Abrir scanner de c\u00e2mera',
   'scan.fabLabel': 'Escanear',
-  'aria.actionSpeedDial': 'A\u00e7\u00f5es r\u00e1pidas',
   'aria.clickToSync': 'Clique para sincronizar',
   // Placeholders
   'harvest.gramsPlaceholder': 'ex. 245',
@@ -1772,7 +1773,6 @@ window.LANG['pt'] = {
   'dash.splitBatches.stale': '> 24 h sem movimento',
   'dash.actionNewBatch': '+ Novo lote',
   'dash.actionLabWork': '+ Trabalho de laborat\u00f3rio',
-  'dash.actionHarvest': '+ Registrar colheita',
   'dash.harvestNoFruiting': 'Nenhum lote pronto para colheita no momento.',
   // Scan log
   'log.entries': '{n} entradas',

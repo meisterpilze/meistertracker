@@ -86,7 +86,12 @@ describe('scan log: the ✕ button', () => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-    const m = APP.match(/\$\{isRecent \? ('<button class="btn-xs lg-del"[\s\S]*?) : ''\}/);
+    // Anchored on the two classes that carry a contract — btn-xs for the size
+    // rules, lg-del for the delegated listener above — and tolerant of the rest
+    // of the list. Pinning the full class string made this fail the moment the
+    // mobile branch added .fs-micro to the button, which is a presentation
+    // change this test has no opinion about.
+    const m = APP.match(/\$\{isRecent \? ('<button class="btn-xs lg-del[^"]*"[\s\S]*?) : ''\}/);
     assert.ok(m, 'the ✕ button template no longer matches — has the row been rebuilt?');
     return new Function('e', 'esc', 't', 'return ' + m[1] + ';')(e, esc, () => 'Löschen');
   };

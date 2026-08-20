@@ -60,5 +60,41 @@ jobs:
       - name: Translations complete
         run: node --test test/i18n.test.js
 
+      # Same blindness as the translation step above, different symptom: type
+      # that is too small does not throw, it just ships, and nobody reviewing
+      # the diff is holding a phone. Called out separately so "Mobile size
+      # system: failed" is readable in the checks list.
+      - name: Mobile size system
+        run: node --test test/mobile-tokens.test.js
+
+      # The drill-down's behaviour lives in four files that cannot see each
+      # other — the strip's home page, its translation, the two states in CSS,
+      # and the class in JS. Edit one alone and the back row reads a raw i18n
+      # key or the strip scrolls sideways again; neither throws.
+      - name: Mobile navigation
+        run: node --test test/mobile-nav.test.js
+
+      # Below 769px a table row becomes a card, and the layout reads two
+      # structural facts off the markup: the first cell is the header, and the
+      # cell with no data-mlabel is the button row. A renderer that forgets a
+      # label therefore does not lose a label — it turns a data cell into the
+      # card's buttons, full width and ruled off. Nothing throws and the
+      # desktop table is unaffected, so this needs to be loud here.
+      - name: Mobile table cards
+        run: node --test test/table-cards.test.js
+
+      # The agenda list's grouping is shared between the phone view and the
+      # printed task list, so a change made for one silently reaches the other.
+      # Same blindness as the two steps above: wrong output, no error.
+      - name: Calendar agenda
+        run: node --test test/calendar-agenda.test.js
+
+      # Ratchet, not a gate: the inline font sizes and sub-floor mobile rules
+      # are paid down over several phases, and this only fails when the count
+      # goes UP. All three now read 0 — it fails if any of them comes back.
+      # See MOBILE_REDESIGN.md.
+      - name: Mobile debt ratchet
+        run: npm run mobile-audit
+
       - name: Tests
         run: npm test
