@@ -240,13 +240,26 @@ not indexed; twenty per batch would outnumber every other record four to one for
 that rule already covers. The four-character floor on that rank is what keeps a
 three-letter zone id (`FRU`) from claiming every query beginning F-R-U.*
 
-*A scanner types the whole code. When the query **is** an id and only one record carries it,
-the palette opens it without waiting for a keypress the scanner may not send — at eight
-characters or more, which every id this app generates clears and no half-typed word does.*
+*A scanner types the whole code, and the field says so — "Suchen oder scannen". A printed
+label is a number that appears in no index, so it goes through `barcodeRegistry` first, the
+same lookup `processScan()` does; a German HID scanner sends underscores where a bag id has
+hyphens, so that reading is tried second, never first, because zone barcodes carry real
+underscores. When the query is answered by exactly one record the palette opens it without
+waiting for a keypress the scanner may not send — after the typing stops, because the batch
+id is a **prefix** of the bag code and jumping at the prefix left the last three characters
+to land in whatever had focus next.*
 
-*Orders and customers are the only two sources not already in memory. The palette warms
-them once in the background and redraws when they land, rather than making the fast path
-wait for the slow one on every open.*
+*Orders and customers are the only two sources not already in memory. The palette fetches
+them on the way in and redraws when they land, rather than making the fast path wait for
+the slow one — and on every open rather than once per page load, because a latch set before
+the request went out could not be retried and a customer erased on another machine stayed
+searchable for ever.*
+
+*A result goes to its destination the way a user would: by clicking the nav entry and the
+sub-tab pill, not by calling `go()` and `openStab()` past them. Seven pills load their own
+panel from their own handler, and the nav entries clear filters and reset state, so the
+short cut opened panels blank and lists still filtered. `mayLeavePage()` is asked before
+anything closes, or its "cancel" arrives too late to stop the steps behind it.*
 
 *A result lands on its record: the page, scrolled to, flashed. Batches reuse `goToBatch()`,
 which already did this for the dashboard's "Zur Charge" button; the other five got a
@@ -256,7 +269,13 @@ is silent: right page, no flash.*
 
 *On a phone the footer goes: "↑↓ wählen · ↵ öffnen" describes a keyboard that is not there,
 and it was 40px of a screen with an on-screen keyboard over half of it. The box is bounded
-and the list scrolls inside it, because with the keyboard up there is room for three rows.*
+in `dvh` and the list scrolls inside it, because with the keyboard up there is room for
+three rows — and `vh`, which is what `max-height: 100%` of a `position: fixed` backdrop
+comes to, does not know the keyboard is there. `.wkf-list` says the same thing at length.*
+
+*One table describes a kind of result — heading, monospace, destination filter, route,
+flash. It used to be four, and forgetting one of them failed quietly and differently each
+time.*
 
 ### Phase 5 — Say where you are · §3.4 · **shipped**
 
@@ -322,7 +341,7 @@ Same two tools, same rules as `MOBILE_REDESIGN.md` §8:
 - `node scripts/measure-mobile.js 375` and `320` — type, touch and overflow stay at zero.
 - `npm run mobile-audit` — the ratchet may only fall.
 - `npm test` — plus one new file per phase that pins the thing that would silently rot.
-  **1189 tests**, and each new assertion was run against the tree as it stood and fails
+  **1236 tests**, and each new assertion was run against the tree as it stood and fails
   there; a test that passes before the fix is checking nothing.
   - `test/sidebar-entries.test.js` — one entry per page, and no `go()` naming a button
     that is not in the markup.
@@ -332,8 +351,12 @@ Same two tools, same rules as `MOBILE_REDESIGN.md` §8:
     rule written to change it.
   - `test/mobile-nav.test.js` — the topbar title derived from the nav entry, and
     truncating rather than shoving the bell off the bar.
-  - `test/global-search.test.js` — the ranking run for real, and the census that asks
-    whether a renderer still emits the `data-find` hook `gsGoto()` flashes.
+  - `test/global-search.test.js` — the ranking run for real; the census that asks whether
+    a renderer still emits the `data-find` hook `gsGoto()` flashes; the census of
+    full-screen overlays the palette must not open on top of, held against `index.html`;
+    and `gsZoneCounts()` checked against `getZoneBags()` on four hundred random scan logs
+    from a fixed seed, because the fast version has to give the same number as the zone
+    card, not a reasonable one.
 - `npm run lint` — the warning ceiling is a ratchet too: **73 → 65** as the unreachable
   code went.
 
