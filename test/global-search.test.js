@@ -37,7 +37,7 @@ function lift(...names) {
     .join('\n');
   return new Function(`${src}\nreturn { ${names.join(', ')} };`)();
 }
-const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark } = lift(
+const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark, gsGroup } = lift(
   'GS_ORDER',
   'gsRank',
   'gsMatch',
@@ -45,7 +45,8 @@ const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark } = l
   'gsScanned',
   'gsLookup',
   'esc',
-  'gsMark'
+  'gsMark',
+  'gsGroup'
 );
 
 // A stand-in farm. The ids are the shapes this app really generates: genBatchId
@@ -399,6 +400,70 @@ describe('what the palette refuses to open on top of', () => {
     assert.match(handler[0], /e\.stopPropagation\(\);/);
     assert.match(APP, /const gsOpenNow = document\.getElementById\('m-search'\)\?\.classList\.contains\('open'\);/);
     assert.match(APP, /if \(gsOpenNow \|\| \(!scanOpen && !camOpen\)\)/);
+  });
+});
+
+describe('what a row says, and under which heading', () => {
+  it('gives each kind one heading', () => {
+    // gsMatch() sorts by rank first, so a kind can come back after another one.
+    // The renderer opens a heading whenever the type changes, so that read
+    // "Chargen / Seiten / Chargen" — one kind, two headings, and the second
+    // batch filed under the wrong word.
+    const gemischt = [
+      { type: 'batch', id: 'AUS-190826-02', sub: '' },
+      { type: 'page', id: 'Chargen', sub: '' },
+      { type: 'batch', id: 'AUS-150826-01', sub: '' }
+    ];
+    assert.deepEqual(
+      gsGroup(gemischt).map((r) => r.type),
+      ['batch', 'batch', 'page']
+    );
+  });
+
+  it('keeps the order the ranking chose', () => {
+    // The kind that appears first is the kind with the best hit, so grouping
+    // must not sort by GS_ORDER — a page that beat every record still leads.
+    const seiteZuerst = [
+      { type: 'page', id: 'Zonen', sub: '' },
+      { type: 'zone', id: 'ZONEN_R1', sub: '' }
+    ];
+    assert.deepEqual(
+      gsGroup(seiteZuerst).map((r) => r.type),
+      ['page', 'zone']
+    );
+  });
+
+  it('answers an empty field with all the pages, not seven of twelve', () => {
+    // The one list the palette offers unprompted, truncated to "+5 more — keep
+    // typing", which is the opposite of the offer. The box scrolls.
+    const render = APP.match(/function gsRender\(keep\) \{[\s\S]*?\n\}/)[0];
+    assert.match(render, /gsHits = gsGroup\(q \? all\.slice\(0, GS_CAP\) : all\);/);
+    assert.match(render, /all\.length > gsHits\.length/, 'the "+n more" line still counts against a fixed cap');
+  });
+
+  it('does not subtitle a page with the name of its own heading', () => {
+    const index = APP.match(/function gsPageIndex\(\) \{[\s\S]*?\n\}/)[0];
+    assert.doesNotMatch(
+      index,
+      /sub: t\('search\.gPages'\)/,
+      'every page row reads "Seiten" under a heading reading "Seiten"'
+    );
+  });
+
+  it('calls a zone what the rest of the app calls it', () => {
+    // zoneDisplayName() translates the four zones this app knows by name.
+    // Reading z.name made the palette the one place showing the raw column.
+    const index = APP.match(/function gsIndex\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(index, /const dn = zoneDisplayName\(z\.id\);/);
+    assert.doesNotMatch(index, /z\.name && z\.name !== z\.id/);
+  });
+
+  it('says what a customer has three of', () => {
+    // join() filters falsy parts, so `c.orderCount || 0` contributed nothing
+    // for a customer with none — the right answer by the wrong route — and a
+    // bare "3" for one with three.
+    const index = APP.match(/function gsIndex\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(index, /c\.orderCount \? c\.orderCount \+ ' ' \+ t\('orders\.th\.orders'\) : ''/);
   });
 });
 

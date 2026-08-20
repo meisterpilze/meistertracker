@@ -20104,7 +20104,7 @@ function gsPageIndex() {
   };
   document.querySelectorAll('.sb-nav .sb-btn[data-page], .sb-footer .sb-btn[data-page]').forEach((btn) => {
     if (btn.style.display === 'none') return;
-    out.push({ type: 'page', id: label(btn), sub: t('search.gPages'), page: btn.dataset.page, btn: btn.id });
+    out.push({ type: 'page', id: label(btn), sub: '', page: btn.dataset.page, btn: btn.id });
   });
   document.querySelectorAll('.page > .stabs').forEach((strip) => {
     const page = strip.parentElement.id.replace('p-', '');
@@ -20116,7 +20116,10 @@ function gsPageIndex() {
       out.push({
         type: 'page',
         id: home + ' \u203a ' + label(st),
-        sub: t('search.gPages'),
+        // No subtitle. Every page row used to carry the word "Seiten" under a
+        // heading reading "Seiten", and a sub-page already names its page in
+        // its own id.
+        sub: '',
         page: page,
         btn: nav.id,
         stab: st.id.replace('st-' + page + '-', '')
@@ -20202,11 +20205,16 @@ function gsIndex() {
     });
   });
   zones.forEach((z) => {
+    // zoneDisplayName() and not z.name: the four zones this app knows by name
+    // carry a translation, and the rest of the app shows that. Reading the raw
+    // column here made the palette the one place that called Fruchtung by
+    // whatever is in the database.
+    const dn = zoneDisplayName(z.id);
     out.push({
       type: 'zone',
       id: z.id,
       sub: join([
-        z.name && z.name !== z.id ? z.name : '',
+        dn && dn !== z.id ? dn : '',
         ROLE_LABELS[z.role] ? t(ROLE_LABELS[z.role]) : z.role,
         tp('dash.bags', zoneBags[z.id] || 0)
       ])
@@ -20224,7 +20232,14 @@ function gsIndex() {
       type: 'customer',
       id: c.name || c.email || String(c.id),
       key: c.id,
-      sub: join([(c.channels || '').split(',').filter(Boolean).map(_ohChannelLabel).join(', '), c.orderCount || 0])
+      // `c.orderCount || 0` was dead twice over: join() filters falsy parts, so a
+      // customer with no orders contributed nothing (right answer, wrong route),
+      // and one with three contributed a bare "3" with nothing saying three of
+      // what. Same shape as the Sorte counts above it.
+      sub: join([
+        (c.channels || '').split(',').filter(Boolean).map(_ohChannelLabel).join(', '),
+        c.orderCount ? c.orderCount + ' ' + t('orders.th.orders') : ''
+      ])
     });
   });
   _gsIndex = out.concat(gsPageIndex());
@@ -20336,7 +20351,10 @@ function gsRender(keep) {
   const q = found.q;
   const all = found.hits;
   gsQ = q;
-  gsHits = all.slice(0, GS_CAP);
+  // An empty field answers with the pages, and there are twelve. Capping that
+  // at seven turned the one list the palette offers unprompted into "+5 more —
+  // keep typing", which is the opposite of the offer. The box scrolls.
+  gsHits = gsGroup(q ? all.slice(0, GS_CAP) : all);
   if (wasOn) {
     const wieder = gsHits.findIndex((r) => gsKey(r) === wasOn);
     if (wieder >= 0) gsSel = wieder;
@@ -20352,7 +20370,8 @@ function gsRender(keep) {
     html += gsRowHtml(rec, i, q);
   });
   if (!gsHits.length) html = '<div class="gs-empty">' + esc(t('search.none', { q: q })) + '</div>';
-  else if (all.length > GS_CAP) html += '<div class="gs-more">' + esc(t('search.more', { n: all.length - GS_CAP })) + '</div>';
+  else if (all.length > gsHits.length)
+    html += '<div class="gs-more">' + esc(t('search.more', { n: all.length - gsHits.length })) + '</div>';
   box.innerHTML = html;
   gsSelect();
 }
@@ -20373,6 +20392,27 @@ function gsSelect() {
   document.getElementById('gs-q').setAttribute('aria-activedescendant', gsHits.length ? 'gs-o-' + gsSel : '');
   const on = box.querySelector('.gs-on');
   if (on) on.scrollIntoView({ block: 'nearest' });
+}
+
+// One heading per kind. gsMatch() sorts by rank first, so a kind can come back
+// after another one — a batch at rank 1, a page at rank 1, a second batch at
+// rank 3 — and the renderer, which opens a heading whenever the type changes,
+// wrote "Chargen" twice with "Seiten" in between. This keeps the order the
+// ranking chose, because the first kind to appear is the kind with the best
+// hit, and puts each kind's rows together under one heading.
+function gsGroup(hits) {
+  const order = [];
+  const by = new Map();
+  hits.forEach((rec) => {
+    if (!by.has(rec.type)) {
+      by.set(rec.type, []);
+      order.push(rec.type);
+    }
+    by.get(rec.type).push(rec);
+  });
+  const out = [];
+  order.forEach((type) => by.get(type).forEach((rec) => out.push(rec)));
+  return out;
 }
 
 function gsMove(step) {
