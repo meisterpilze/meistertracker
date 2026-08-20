@@ -15,10 +15,13 @@ This is a small, maintainer-paced project. Drive-by patches are welcome; please 
 git clone https://github.com/meisterpilze/meistertracker.git
 cd meistertracker
 npm ci
+git config core.hooksPath .githooks
 npm test
 ```
 
 You'll need **Node.js 22 or newer**. The test suite is self-contained — no real database or network needed.
+
+The `core.hooksPath` line enables the leak guard's hooks. Git does not clone hooks, so this is the only way they reach your checkout, and they are the only part of the guard that runs before anything is public — see [What must never go in](#what-must-never-go-in).
 
 To run the server locally, use the watchdog wrapper:
 
@@ -44,6 +47,16 @@ This is the only supported way to start the server (see in-repo notes — it han
    `npm run lint:fix` and `npm run format` will auto-fix most issues.
 4. Sign off each commit (`git commit -s`) — see [Sign your work](#sign-your-work) below.
 5. Push your branch and open a Pull Request. The PR template will ask you to confirm tests, lint, and format are green, and that you license the change under AGPL-3.0-or-later.
+
+## What must never go in
+
+This repository is public, and so is everything around it: commit messages, branch names, pull request titles and bodies, review comments, and workflow logs. Never write the address of a live instance into any of them — no real hostname, no routable IP, no tunnel URL, no token, no app password. Use the placeholders [DEPLOYMENT.md](DEPLOYMENT.md) already documents: `<your-name>.duckdns.org`, `<server-ip>`, `<your-domain>`.
+
+This is easy to break by accident, because the natural place for an address is a verification note. A line like `- [ ] Server: https://<the real host>:3000/caldav/` is a good habit and a published address at the same time. Write what you checked, not where you checked it.
+
+A guard enforces this. `scripts/leak-scan.js` runs from the hooks you enabled above, from CI over files and commit messages, and from a workflow that reads pull request titles, bodies and comments — and redacts them automatically if something slips through. When it fires, fix the text; don't reach for `--no-verify`. If a hit is genuinely wrong, put `leak-scan:allow` on that line in the same commit, so the exception is reviewable.
+
+Editing a pull request description afterwards is **not** enough on its own: GitHub keeps an edit history and shows it to anyone who can see the page. The full rules, and what to do when something got out anyway, are in [CLAUDE.md](CLAUDE.md).
 
 ## Code style
 
