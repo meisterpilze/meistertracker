@@ -8826,8 +8826,14 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
       ).run(channel, channelSku || null, listingId || null, productId || null, now);
       db.exec('RELEASE mt_map');
     } catch (e) {
-      db.exec('ROLLBACK TO mt_map');
-      db.exec('RELEASE mt_map');
+      // The unwind gets its own guard: if the savepoint is already gone, throwing
+      // from here would replace the error that actually explains the failure.
+      try {
+        db.exec('ROLLBACK TO mt_map');
+        db.exec('RELEASE mt_map');
+      } catch {
+        /* the original error is the one worth having */
+      }
       throw e;
     }
   }

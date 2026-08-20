@@ -8289,7 +8289,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Readable by everyone who can open the screen, like /api/products and
     // /api/products/unmapped right above — it is the same page, and an admin-only
     // read here put a red error box in front of every worker who opened it.
-    // Writing a mapping stays admin (POST /api/products/map).
+    //
+    // "catalog/mapping/merge = admin" at the top of this section is about the
+    // *writes*: POST /api/products, POST /api/products/map and the customer merge
+    // all check requireAdmin, while every read beside them is open to any authed
+    // user. This row set is product names and channel article numbers — nothing
+    // /api/products does not already hand out.
     try {
       const channel = new URL(req.url, 'http://x').searchParams.get('channel') || '';
       jsonOk(res, { items: channel ? db.listChannelMappings(database, channel) : [] });
