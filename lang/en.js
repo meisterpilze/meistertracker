@@ -430,6 +430,7 @@ window.LANG['en'] = {
   'channels.billbeeStockDone': '{n} of {total} articles sent to Billbee',
   'channels.billbeeDisabled': 'Billbee is not enabled',
   'channels.billbeeUnknownSpecies': 'Species with no release: {list}',
+  'channels.billbeeDoubleImport': 'Duplicate orders: {list} is also connected directly',
   // Scan strip
   'scan.action': 'Action',
   'scan.from': 'From',

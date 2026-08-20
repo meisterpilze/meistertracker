@@ -1542,6 +1542,7 @@ window.LANG['pt'] = {
   'channels.billbeeStockDone': '{n} de {total} artigos enviados para o Billbee',
   'channels.billbeeDisabled': 'O Billbee não está ativado',
   'channels.billbeeUnknownSpecies': 'Espécies sem libertação: {list}',
+  'channels.billbeeDoubleImport': 'Encomendas duplicadas: {list} também está ligado diretamente',
   // Print
   'print.barcodeOnly': 'S\u00f3 c\u00f3digo de barras (C\u00f3digo + ID)',
   'print.barcodeStrain': 'C\u00f3digo + variedade (+ esp\u00e9cie & notas)',

@@ -9382,19 +9382,20 @@ function billbeeStockLevels(db, opts = {}) {
     let computable = true;
     for (const c of comps) {
       const per = (Number(c.grams) || 0) * (c.qtyPerUnit != null ? Number(c.qtyPerUnit) : 1);
-      if (!(per > 0)) {
-        // "Made from harvest" without saying how much of it. Guessing a number
-        // here would publish an amount nobody entered.
+      const species = String(c.species || '');
+      // "Made from harvest" without saying how much, or of what. Either way there
+      // is no number to derive, and a 0 would be an answer rather than a silence:
+      // it would delist the article in every shop Billbee feeds.
+      if (!(per > 0) || !species) {
         computable = false;
         break;
       }
-      const species = String(c.species || '');
-      if (species && !known.has(species)) unknownSpecies.add(species);
+      if (!known.has(species)) unknownSpecies.add(species);
       const units = Math.floor((released.get(species) || 0) / per);
       qty = qty === null ? units : Math.min(qty, units);
     }
     if (!computable) {
-      skipped.push({ sku: row.sku, product: row.name, reason: 'component-without-grams' });
+      skipped.push({ sku: row.sku, product: row.name, reason: 'component-without-species-or-grams' });
       continue;
     }
     // Two articles can be mapped to one Billbee SKU (different listings of the

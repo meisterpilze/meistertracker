@@ -432,6 +432,7 @@ window.LANG['de'] = {
   'channels.billbeeStockDone': '{n} von {total} Artikeln an Billbee gesendet',
   'channels.billbeeDisabled': 'Billbee ist nicht aktiviert',
   'channels.billbeeUnknownSpecies': 'Sorten ohne Freigabe: {list}',
+  'channels.billbeeDoubleImport': 'Doppelte Bestellungen: {list} ist zusätzlich direkt verbunden',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',

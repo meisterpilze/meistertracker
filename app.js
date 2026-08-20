@@ -9400,6 +9400,13 @@ async function loadChannelsSettings() {
       const bits = [bb.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
       if (bb.lastError) bits.push('⚠ ' + bb.lastError);
       else if (bb.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(bb.lastSync) }));
+      // The trap this whole card warns about, caught in the act: Billbee already
+      // collects from these shops, so every order they hold arrives twice.
+      const doubled = ['wix', 'ebay', 'etsy'].filter(
+        (c) => ((d.channels || []).find((x) => x.channel === c) || {}).enabled
+      );
+      if (bb.enabled && doubled.length)
+        bits.push('⚠ ' + t('channels.billbeeDoubleImport', { list: doubled.join(', ') }));
       bbStatus.style.display = 'block';
       bbStatus.textContent = bits.join(' · ');
     }
@@ -9493,7 +9500,10 @@ async function testChannel(channel) {
   }
   try {
     const r = await apiPost('/api/channels/' + channel + '/test', {});
-    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected');
+    // Billbee answers with the shops it collects from. Naming them turns the
+    // card's advice ("switch those off here") into something checkable.
+    const shops = r && Array.isArray(r.shops) && r.shops.length ? ' — ' + r.shops.join(', ') : '';
+    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected') + shops;
   } catch (e) {
     if (st) st.textContent = '⚠ ' + t('common.error');
   }

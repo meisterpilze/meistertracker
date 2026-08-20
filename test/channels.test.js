@@ -722,6 +722,37 @@ describe('Billbee stock levels are derived from releases', () => {
     assert.ok(skipped.some((s) => s.sku === 'KIT-1' && s.reason === 'no-harvest-component'));
   });
 
+  it('skips an article whose recipe does not say what, or how much', () => {
+    const now = new Date().toISOString();
+    const mk = (sku, species, grams) => {
+      const id = d
+        .prepare("INSERT INTO products(sku, name, category, active, created) VALUES(?, ?, 'fresh', 1, ?)")
+        .run(sku, sku, now).lastInsertRowid;
+      d.prepare(
+        `INSERT INTO product_components(product_id, fulfill_type, species, grams, qty_per_unit)
+         VALUES(?, 'harvest', ?, ?, 1)`
+      ).run(id, species, grams);
+      d.prepare('INSERT INTO product_channel_map(channel, channel_sku, product_id, created) VALUES(?, ?, ?, ?)').run(
+        'billbee',
+        sku,
+        id,
+        now
+      );
+    };
+    mk('NO-GRAMS', 'Austernseitling (AUS)', null);
+    mk('NO-SPECIES', null, 250);
+    const { levels, skipped, unknownSpecies } = db.billbeeStockLevels(d, { today: TODAY });
+    for (const sku of ['NO-GRAMS', 'NO-SPECIES']) {
+      assert.equal(
+        levels.find((l) => l.sku === sku),
+        undefined,
+        sku + ' must not be published as 0 — that is an answer, and there is none'
+      );
+      assert.ok(skipped.some((s) => s.sku === sku && s.reason === 'component-without-species-or-grams'));
+    }
+    assert.ok(!unknownSpecies.includes(''), 'a missing species is not a species with a strange name');
+  });
+
   it('reports a species name the lab has never released', () => {
     const { unknownSpecies } = db.billbeeStockLevels(d, { today: TODAY });
     // Sold out and misspelled both read as zero — only this list tells them apart.
