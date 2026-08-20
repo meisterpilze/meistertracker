@@ -492,6 +492,36 @@ describe('the route the palette takes to a destination', () => {
     assert.match(APP, /function gsStab\(page, sub\)/);
   });
 
+  it('does not land on a list that is filtering the result away', () => {
+    // Chargen has had this from the start — goToBatch() clears the attention
+    // filter and renderBatches() lets a query past the archive filter, which
+    // its own comment says is for exactly this. Kulturen and Bestellungen had
+    // nothing of the kind.
+    assert.match(APP, /function gsClearFilters\(type\)/);
+    assert.match(APP, /gsClearFilters\(rec\.type\);/);
+    const clear = APP.match(/function gsClearFilters\(type\) \{[\s\S]*?\n\}/)[0];
+    assert.match(clear, /'cult-type'/);
+    assert.match(clear, /'cult-stat'/);
+    // Through the setter, or one chip stays looking selected over an unfiltered
+    // list.
+    assert.match(clear, /setOrdersFilter\(''\)/);
+    assert.doesNotMatch(clear, /_ordersFilter = /);
+    // And before the navigation, because the pill that opens the panel is what
+    // renders it.
+    assert.ok(
+      GOTO_CODE.indexOf('gsClearFilters') < GOTO_CODE.indexOf("gsNav('n-lab'"),
+      'the filter is cleared after the render it was meant to affect'
+    );
+  });
+
+  it('leaves the filters alone when the page itself was the result', () => {
+    // Somebody who searched for "Kulturen" asked for the page, and what they
+    // last looked at on it is part of the page.
+    const seite = GOTO_CODE.match(/if \(rec\.type === 'page'\) \{[\s\S]*?\n {2}\}/);
+    assert.ok(seite, 'the page branch moved');
+    assert.doesNotMatch(seite[0], /gsClearFilters/);
+  });
+
   it('asks whether it may leave before it closes itself', () => {
     // go() asks as well, and used to be the only one asking — by then the
     // palette had gone and the openStab() and gsFlash() queued behind it ran on

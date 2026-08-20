@@ -20434,6 +20434,33 @@ function gsStab(page, sub) {
   else openStab(page, sub);
 }
 
+// A result that lands on a filtered list is a result nobody can see.
+//
+// Chargen has had this rule from the start: goToBatch() clears the attention
+// filter and puts the id in the search box, and renderBatches() lets a query
+// through the archive filter on purpose, so a done batch is still findable.
+// Kulturen and Bestellungen have filters of their own and had no such rule. A
+// Kultur found by id can be of any type in any state, and the two selects
+// above the table remember what the user last looked at; an order can be in
+// any status, and the chips above the inbox do the same. Either was able to
+// hide the one row the search had just navigated to, and the flash then hunted
+// for it silently until it gave up.
+//
+// Only for a record. Somebody who searched for the page "Kulturen" asked for
+// the page, and their filters are part of it.
+function gsClearFilters(type) {
+  if (type === 'culture') {
+    const typ = document.getElementById('cult-type');
+    const stat = document.getElementById('cult-stat');
+    if (typ) typ.value = 'all';
+    if (stat) stat.value = 'all';
+  } else if (type === 'order') {
+    // The chips are part of the filter, so this goes through the setter rather
+    // than writing _ordersFilter and leaving one of them looking selected.
+    setOrdersFilter('');
+  }
+}
+
 // Where each type lives. goToBatch() already existed for the dashboard's "Zur
 // Charge" button and does the filter-field-plus-flash dance for batches, so
 // batches use it rather than a second version of it.
@@ -20453,6 +20480,10 @@ function gsGoto(rec) {
     if (rec.stab) gsStab(rec.page, rec.stab);
     return;
   }
+  // Before the navigation: the pill that opens the panel is also what renders
+  // it, so a filter cleared afterwards would clear it for the render after this
+  // one.
+  gsClearFilters(rec.type);
   if (rec.type === 'culture') {
     gsNav('n-lab', 'lab');
     gsStab('lab', 'cultures');
