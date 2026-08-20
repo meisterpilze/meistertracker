@@ -188,6 +188,58 @@ describe('the floating scan button', () => {
   });
 });
 
+describe('the drawer and the bottom bar', () => {
+  // Phase 1 left this open on purpose and said why: hiding the five duplicated
+  // rows by id would rot the day the bottom nav changed. So the marking is
+  // derived from the list that wires the bar's buttons — the same loop, the
+  // same `'n-' + bnId.slice(3)` pairing — and these assertions are here to keep
+  // it derived. A hardcoded selector list would pass a visual check and fail
+  // silently a year later.
+  const WIRING = APP.match(/\['bn-work'[\s\S]*?\n {2}\}\);/);
+
+  it('marks the duplicates inside the loop that pairs the two navigations', () => {
+    assert.ok(WIRING, 'the bottom-nav wiring loop is gone or reshaped');
+    assert.match(
+      WIRING[0],
+      /classList\.add\('sb-in-bottom-nav'\)/,
+      "the drawer rows are no longer marked from the bar's own list — whatever marks them can now drift from it"
+    );
+  });
+
+  it('never names a sidebar id to decide it', () => {
+    // The failure this rules out is the one the note predicted: five selectors
+    // that look right today and are wrong the first time someone adds a sixth
+    // destination to the bar.
+    const css = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+    const byId = [...css.matchAll(/#n-(?:work|dash|batch|lab|cal)\b/g)].map((m) => m[0]);
+    assert.deepEqual(byId, [], `the stylesheet hides drawer rows by id: ${byId.join(', ')}`);
+  });
+
+  it('hides them only below the breakpoint the bar appears at', () => {
+    const hiding = [...blocks(CSS, MAX_WIDTH_BLOCK)].filter((b) => b.body.includes('.sb-in-bottom-nav'));
+    assert.equal(hiding.length, 1, '.sb-in-bottom-nav is not hidden in exactly one max-width block');
+    const header = CSS.slice(0, hiding[0].start).match(/@media[^{]*\{$/);
+    assert.match(
+      header[0],
+      /max-width:\s*768px/,
+      'the drawer hides its duplicates at a different width than the bar appears'
+    );
+  });
+
+  it('marks a group heading whose entries have all gone', () => {
+    // "Arbeiten" holds exactly the three the bar shows. Without this it stays,
+    // a heading over nothing.
+    assert.match(APP, /function markEmptyDrawerGroups\(\)/, 'the empty-heading pass is gone');
+    assert.match(APP, /markEmptyDrawerGroups\(\);/, 'the empty-heading pass is defined but never called');
+    const fn = APP.match(/function markEmptyDrawerGroups\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(
+      fn,
+      /every\(\(e\) => e\.classList\.contains\('sb-in-bottom-nav'\)\)/,
+      'the heading is hidden by something other than all of its own entries being marked'
+    );
+  });
+});
+
 describe('the calendar agenda', () => {
   // Same split-brain as the drill-down, one file further: app.js decides that a
   // phone gets the agenda, styles.css decides that a phone gets no view toggle

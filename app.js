@@ -17660,6 +17660,20 @@ function collectCalendarEvents() {
 // navigation read it. The breakpoint is duplicated in styles.css — where it
 // hides the view toggle — and that pair is exactly the split-brain
 // test/mobile-nav.test.js exists to catch, so it is asserted there too.
+// A group heading whose entries are all in the bottom bar would be left over
+// the gap where they used to be — "Arbeiten" loses all three. Derived from what
+// is actually marked rather than named, so it follows the list above.
+function markEmptyDrawerGroups() {
+  document.querySelectorAll('.sb-group-label').forEach((label) => {
+    const entries = [];
+    for (let el = label.nextElementSibling; el && !el.classList.contains('sb-group-label'); el = el.nextElementSibling) {
+      if (el.classList.contains('sb-btn')) entries.push(el);
+    }
+    const allInBar = entries.length > 0 && entries.every((e) => e.classList.contains('sb-in-bottom-nav'));
+    label.classList.toggle('sb-in-bottom-nav', allInBar);
+  });
+}
+
 function calAgendaOnly() {
   return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
 }
@@ -20461,11 +20475,25 @@ function initEventListeners() {
   });
   // Mobile bottom-nav buttons delegate to their sidebar counterparts so any
   // side effects (e.g. n-batch resetting batchAttentionFilter) stay in one place.
+  //
+  // The same loop marks those counterparts, which is what closes Phase 1's one
+  // deferred item: below 769px the drawer repeated all five bottom-nav
+  // destinations, 19 rows and 868px of content in a 655px viewport, so five of
+  // fourteen sat below the fold — and the five the bar already shows
+  // permanently were among them. That note asked for "a real mechanism — the
+  // bottom nav emitting the list it owns — not five hardcoded selectors", and
+  // the mechanism was already here: this list is the list, and `'n-' +
+  // bnId.slice(3)` is already how the two navigations are paired. Marking from
+  // inside it cannot drift, because a bottom-nav entry that is added or removed
+  // changes both halves in the same edit.
   ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());
+    const twin = $(sidebarId);
+    if (btn && twin) twin.classList.add('sb-in-bottom-nav');
   });
+  markEmptyDrawerGroups();
   $('n-inv').addEventListener('click', () => {
     go('inv', 'n-inv');
   });

@@ -3998,6 +3998,15 @@ tr:hover td {
   .cal-week-hdr-cell .wk-day-num {
     font-size: 16px;
   }
+  /* The drawer stops repeating the bottom bar. app.js marks these from the same
+     list that wires the bar's buttons, so the two cannot drift apart: 19 rows
+     and 868px of content in a 655px viewport becomes 14 rows that fit, and the
+     five destinations that were pushed below the fold were the five the bar
+     shows permanently anyway. A group heading whose entries are all in the bar
+     is marked too, or "Arbeiten" would sit alone over the gap. */
+  .sb-in-bottom-nav {
+    display: none;
+  }
   /* Both of these describe the grids, and below this breakpoint there are no
      grids. The toggle would offer three views that all render the agenda; the
      legend is eight colour keys for dots whose meaning every agenda row spells
