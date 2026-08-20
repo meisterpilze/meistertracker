@@ -618,8 +618,6 @@ function billbeeCredentialProblem(cfg) {
     return 'Billbee API-Passwort darf keinen Doppelpunkt enthalten';
   return null;
 }
-const _billbeeColon = billbeeCredentialProblem;
-
 function _billbeeHeaders(cfg, hasBody) {
   const h = {
     'X-Billbee-Api-Key': cfg.apiKey,
@@ -638,7 +636,8 @@ async function _billbeeFetch(cfg, pathAndQuery, opts = {}, label = 'Billbee') {
   // colon in the API password breaks the connection at their end too. Both would
   // otherwise arrive as a plain 401, which reads as "the key was never approved"
   // and sends somebody off requesting a new one.
-  if (_billbeeColon(cfg)) throw new Error(_billbeeColon(cfg));
+  const badCredential = billbeeCredentialProblem(cfg);
+  if (badCredential) throw new Error(badCredential);
   const url = BILLBEE_API + pathAndQuery;
   const init = { ...opts, headers: _billbeeHeaders(cfg, !!opts.body) };
   let res = await _billbeeGate(() => tfetch(url, init));
@@ -854,17 +853,22 @@ const billbee = {
    * about this lab's releases, so db.billbeeStockLevels() answers it and this only
    * carries the answer.
    *
-   * Returns `{ pushed, failed, results, error }`; a per-article error from Billbee
-   * is reported, never thrown, so one unknown SKU cannot stop the rest of a push.
-   * A transport error stops the run, but only throws while nothing has gone out
-   * yet — see the catch below.
+   * Returns `{ pushed, failed, results, stoppedWith }`; a per-article error from
+   * Billbee is reported, never thrown, so one unknown SKU cannot stop the rest of
+   * a push. A transport error stops the run, but only throws while nothing has
+   * gone out yet — see the catch below.
+   *
+   * `stoppedWith`, not `error`: the caller hands this straight to the browser,
+   * where an `error` field is the word for "the whole call failed" and is shown
+   * *instead of* the result. A run that stopped half way has a result, and hiding
+   * how much of it went out is the thing this field exists to prevent.
    */
   async pushStock(cfg, items) {
     const list = (items || []).filter((i) => i && i.sku);
     const results = [];
     let pushed = 0;
     let failed = 0;
-    let error = null;
+    let stoppedWith = null;
     for (let i = 0; i < list.length; i += BILLBEE_STOCK_CHUNK) {
       const slice = list.slice(i, i + BILLBEE_STOCK_CHUNK);
       const body = slice.map((it) => ({
@@ -891,7 +895,7 @@ const billbee = {
         // nothing is out yet, and a wrong key or a dead network has to reach the
         // caller as an error rather than as a tidy "0 of 120 sent".
         if (!results.length) throw e;
-        error = e.message || String(e);
+        stoppedWith = e.message || String(e);
         break;
       }
       const rows = Array.isArray(j) ? j : [j];
@@ -913,7 +917,7 @@ const billbee = {
         results.push({ sku: slice[n].sku, qty: slice[n].qty, stock: undefined, message: 'keine Antwort' });
       }
     }
-    return { pushed, failed, results, error };
+    return { pushed, failed, results, stoppedWith };
   }
 };
 

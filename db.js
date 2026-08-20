@@ -2171,6 +2171,31 @@ const MIGRATIONS = [
                 WHERE client_id IN (SELECT client_id FROM oauth_tokens)
                    OR client_id IN (SELECT client_id FROM oauth_codes)`);
     }
+  },
+  {
+    version: 75,
+    description: 'Fold away the duplicate listing mappings the broken upsert left behind',
+    fn(db) {
+      // mapListing() meant to correct a mapping and instead added a second row
+      // beside it: SQLite counts NULLs as distinct in a UNIQUE index, so
+      // (channel, 'AUS-250', NULL) never collided with itself and the ON CONFLICT
+      // never fired. Every mapping made without a listing id — which is every one
+      // the mapping screen makes — could therefore exist several times over, each
+      // copy pointing at whatever product was chosen that day.
+      //
+      // Stopping the leak does not empty the bucket: the rows are already in
+      // every database this has ever run against, and the Billbee stock push
+      // takes the *smallest* quantity per article number, so an old wrong mapping
+      // can still outvote the correction that was supposed to replace it.
+      //
+      // The newest row wins, by id. That is the correction: whoever last chose a
+      // product for this article number meant it.
+      db.exec(`DELETE FROM product_channel_map
+                WHERE id NOT IN (
+                  SELECT MAX(id) FROM product_channel_map
+                   GROUP BY channel, IFNULL(channel_sku, char(31)), IFNULL(listing_id, char(31))
+                )`);
+    }
   }
 ];
 
@@ -8779,16 +8804,32 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
     // Billbee stock push takes the smallest quantity per SKU, so the correction
     // could lose to the mistake it was meant to replace. `IS` is null-safe
     // equality, which `=` is not.
-    db.prepare('DELETE FROM product_channel_map WHERE channel = ? AND channel_sku IS ? AND listing_id IS ?').run(
-      channel,
-      channelSku || null,
-      listingId || null
-    );
-    db.prepare(
-      `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
-       VALUES(?,?,?,?,?)
-       ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
-    ).run(channel, channelSku || null, listingId || null, productId || null, now);
+    //
+    // In one transaction: the delete and the insert are a single correction, and
+    // a crash between them would leave the article mapped to nothing at all —
+    // which is worse than the duplicate this replaces, because the stock push
+    // would then stop mentioning it and the shop would keep its last number.
+    // A SAVEPOINT rather than BEGIN, which is what the rest of this file uses:
+    // it nests, so a caller that already holds a transaction does not turn this
+    // into "cannot start a transaction within a transaction" one day.
+    db.exec('SAVEPOINT mt_map');
+    try {
+      db.prepare('DELETE FROM product_channel_map WHERE channel = ? AND channel_sku IS ? AND listing_id IS ?').run(
+        channel,
+        channelSku || null,
+        listingId || null
+      );
+      db.prepare(
+        `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+         VALUES(?,?,?,?,?)
+         ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+      ).run(channel, channelSku || null, listingId || null, productId || null, now);
+      db.exec('RELEASE mt_map');
+    } catch (e) {
+      db.exec('ROLLBACK TO mt_map');
+      db.exec('RELEASE mt_map');
+      throw e;
+    }
   }
   // Back-resolve currently-unmapped order items for this listing group.
   if (productId && (channelSku || listingId)) {
@@ -9362,7 +9403,10 @@ function setChannelSyncState(db, channel, s) {
  *    where the shops have to stop offering.
  *  • **A retired article is pushed as 0**, the one place a zero is the right
  *    answer: it was on sale, it no longer is, and dropping it from the push would
- *    leave the last number it was given standing in every shop for good.
+ *    leave the last number it was given standing in every shop for good. But only
+ *    for an article number no live article answers for — including a live one
+ *    whose stock cannot be worked out. Otherwise the retired zero would fill that
+ *    silence and delist something that is still on sale.
  *  • **A species with no release counts as 0** — but it is reported back in
  *    `unknownSpecies` when the lab has never released that name at all, because
  *    the commonest cause is a spelling that does not match `Name (KÜRZEL)`, and
@@ -9416,6 +9460,12 @@ function billbeeStockLevels(db, opts = {}) {
   const retired = new Map();
   const skipped = [];
   const unknownSpecies = new Set();
+  // Every article number a live article answers for — *before* asking whether its
+  // stock can be worked out. An article with no recipe is left out of the push
+  // (we do not know its stock), and if a retired listing shares its number, the
+  // retired zero would then be the only thing sent and would delist an article
+  // that is still on sale.
+  const liveSkus = new Set(mapped.filter((r) => r.active).map((r) => r.sku));
   for (const row of mapped) {
     const comps = byProduct.get(row.productId) || [];
     if (!comps.length) {
@@ -9454,7 +9504,8 @@ function billbeeStockLevels(db, opts = {}) {
   }
   const levels = [...bySku.values()].map((l) => ({ ...l, reason: 'Meistertracker: Freigabe' }));
   for (const [sku, l] of retired)
-    if (!bySku.has(sku)) levels.push({ ...l, qty: 0, retired: true, reason: 'Meistertracker: ausgelistet' });
+    if (!bySku.has(sku) && !liveSkus.has(sku))
+      levels.push({ ...l, qty: 0, retired: true, reason: 'Meistertracker: ausgelistet' });
   levels.sort((a, b) => (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0));
   return { levels, skipped, unknownSpecies: [...unknownSpecies].sort() };
 }

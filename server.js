@@ -8286,7 +8286,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // The standing mappings of one channel, so they can be seen and corrected
   // without waiting for an order to carry the listing in.
   if (req.method === 'GET' && url === '/api/products/mappings') {
-    if (requireAdmin(req, res)) return;
+    // Readable by everyone who can open the screen, like /api/products and
+    // /api/products/unmapped right above — it is the same page, and an admin-only
+    // read here put a red error box in front of every worker who opened it.
+    // Writing a mapping stays admin (POST /api/products/map).
     try {
       const channel = new URL(req.url, 'http://x').searchParams.get('channel') || '';
       jsonOk(res, { items: channel ? db.listChannelMappings(database, channel) : [] });

@@ -799,7 +799,10 @@ describe('Billbee: stock out', () => {
       // Throwing would have reported the whole push as failed and left nobody
       // able to say which half of the catalogue carries the new numbers.
       assert.equal(r.pushed, 50);
-      assert.match(r.error, /socket hang up/);
+      // Not `error`: the browser reads that field as "the whole call failed" and
+      // shows it instead of the counts, which is what this reports around.
+      assert.equal(r.error, undefined);
+      assert.match(r.stoppedWith, /socket hang up/);
       assert.equal(r.results.length, 50);
     } finally {
       restore();
@@ -1022,6 +1025,55 @@ describe('an article can be mapped before anybody has ordered it', () => {
     assert.equal(db.listChannelMappings(d, 'billbee').length, 2, 'corrected, not duplicated');
   });
 
+  it('folds away duplicates that were already in the database (migration 75)', () => {
+    // Stopping the leak does not empty the bucket: every database this has run
+    // against may already hold several rows for one article number, and the stock
+    // push takes the *smallest* quantity per number — so an old wrong mapping can
+    // still outvote the correction meant to replace it. The migration's own SQL is
+    // lifted out of db.js and run here, rather than a copy of it that could drift.
+    const quelle = fs.readFileSync(path.join(__dirname, '..', 'db.js'), 'utf8');
+    const at = quelle.indexOf('version: 75,');
+    assert.notEqual(at, -1, 'migration 75 is still the duplicate fold');
+    const open = quelle.indexOf('{', quelle.indexOf('fn(db)', at));
+    let depth = 0;
+    let body = null;
+    for (let i = open; i < quelle.length; i++) {
+      if (quelle[i] === '{') depth++;
+      else if (quelle[i] === '}' && --depth === 0) {
+        body = quelle.slice(open + 1, i);
+        break;
+      }
+    }
+    const now = new Date().toISOString();
+    const a = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('D1', 'Alt', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    const b = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('D2', 'Neu', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    // Straight into the table, the way the broken upsert left them.
+    const raw = d.prepare(
+      'INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created) VALUES(?,?,?,?,?)'
+    );
+    raw.run('billbee', 'DUP-1', null, a, now);
+    raw.run('billbee', 'DUP-1', null, b, now);
+    raw.run('billbee', 'KEEP-1', null, a, now);
+    raw.run('etsy', 'DUP-1', null, a, now); // another channel's row of the same name
+    assert.equal(db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'DUP-1').length, 2);
+
+    new Function('db', body)(d);
+
+    const left = db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'DUP-1');
+    assert.equal(left.length, 1, 'one row per article number');
+    assert.equal(left[0].productName, 'Neu', 'the newest wins — whoever chose last meant it');
+    assert.equal(db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'KEEP-1').length, 1);
+    assert.equal(
+      db.listChannelMappings(d, 'etsy').filter((r) => r.channelSku === 'DUP-1').length,
+      1,
+      'the same article number under another channel is not a duplicate'
+    );
+  });
+
   it('has a form that reaches the mapping route without an order', () => {
     const ROOT = path.join(__dirname, '..');
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -1131,6 +1183,20 @@ describe('Billbee stock levels use the lab day, and say when an article is gone'
     // connected shop, for good.
     assert.equal(row.qty, 0);
     assert.equal(row.retired, true);
+  });
+
+  it('keeps quiet about a SKU a live article claims but cannot price', () => {
+    const at = new Date('2026-08-20T12:00:00');
+    // The live article has no recipe, so its stock is unknown and it is left out
+    // of the push. A retired listing on the same number must not fill that
+    // silence with a zero — that would delist an article that is still on sale.
+    const live = prod('MIX-1', 'Überraschungskiste');
+    map('MIX-1', live);
+    const gone = prod('MIX-1-alt', 'Überraschungskiste, alte Fassung', 0);
+    comp(gone, 'Austernseitling (AUS)', 250);
+    map('MIX-1', gone, 'alt');
+    const rows = db.billbeeStockLevels(d, { at }).levels.filter((l) => l.sku === 'MIX-1');
+    assert.deepEqual(rows, []);
   });
 
   it('does not let a retired listing delist a SKU that is still on sale', () => {

@@ -9611,12 +9611,13 @@ async function pushBillbeeStock() {
     if (r && r.failed)
       bits.push('⚠ ' + t('channels.billbeeStockFailed', { n: r.failed, list: missed.slice(0, 6).join(', ') }));
     // A run that stopped part-way: the articles before the break are live at
-    // Billbee, the ones after it are not.
-    if (r && r.error) bits.push('⚠ ' + r.error);
+    // Billbee, the ones after it are not. Deliberately not called `error` — that
+    // field is checked above and would hide the counts this line belongs to.
+    if (r && r.stoppedWith) bits.push('⚠ ' + r.stoppedWith);
     const unknown = (r && r.unknownSpecies) || [];
     if (unknown.length) bits.push('⚠ ' + t('channels.billbeeUnknownSpecies', { list: unknown.join(', ') }));
     if (st) st.textContent = bits.join(' · ');
-    setFb(r && (r.failed || r.error) ? 'err' : 'ok', msg);
+    setFb(r && (r.failed || r.stoppedWith) ? 'err' : 'ok', msg);
   } catch (e) {
     if (st) st.textContent = '⚠ ' + t('common.error');
   }
