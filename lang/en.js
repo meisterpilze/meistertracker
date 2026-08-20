@@ -7,6 +7,7 @@ window.LANG['en'] = {
   'common.close': 'Close',
   'common.ok': 'OK',
   'common.confirm': 'Confirm',
+  'common.proceed': 'Proceed anyway',
   'common.delete': 'Delete',
   'common.loading': 'Loading…',
   'common.error': 'Error',
@@ -705,6 +706,7 @@ window.LANG['en'] = {
   'batch.substrateExceeds': 'Substrate composition must total 100% (hardwood + wheat bran = {sum}%). Please adjust.',
   'batch.noSubstrateWarn':
     'No substrate composition given — NO material will be deducted from stock for this batch.\n\nCreate anyway?',
+  'batch.noSubstrateTitle': 'Book no material?',
   'batch.grainNeeded': 'Grain needed:',
   'batch.inStock': 'In stock:',
   'batch.sufficient': 'sufficient',
@@ -1752,6 +1754,7 @@ window.LANG['en'] = {
   // Inventory cards
   'inv.lowStock': 'LOW STOCK',
   'inv.shortageWarn': 'Not enough stock for this batch:',
+  'inv.shortageTitle': 'Not enough stock',
   'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the missing amount is not recorded.)',
   'inv.alertBelow': 'Alert below {n}kg',
   'inv.logDelivery': '+ Log delivery',

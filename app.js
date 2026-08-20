@@ -2175,21 +2175,67 @@ function _ohProductDelete() {
 }
 
 // ─── MODALS ──────────────────────────────────────────────────
-function confirm2(title, body, label, cb) {
+function confirm2(title, body, label, cb, cancelCb) {
   document.getElementById('m-title').textContent = title;
   document.getElementById('m-body').textContent = body;
-  document.getElementById('m-ok').textContent = label || 'Confirm';
+  document.getElementById('m-ok').textContent = label || t('common.confirm');
   confirmCb = cb;
+  confirmCancelCb = cancelCb || null;
   document.getElementById('m-confirm').classList.add('open');
 }
 function closeConfirm() {
   document.getElementById('m-confirm').classList.remove('open');
+  // Read and clear before calling: a cancel handler that opens another dialog
+  // would otherwise find this one's callbacks still in place.
+  const cancel = confirmCancelCb;
   confirmCb = null;
+  confirmCancelCb = null;
+  if (cancel) cancel();
 }
 document.getElementById('m-ok').onclick = () => {
-  if (confirmCb) confirmCb();
-  closeConfirm();
+  const cb = confirmCb;
+  confirmCb = null;
+  // Cleared first, or closing after a Yes would report a No as well.
+  confirmCancelCb = null;
+  document.getElementById('m-confirm').classList.remove('open');
+  if (cb) cb();
 };
+
+/**
+ * The dialog confirm2() opens, as a promise, so a caller can keep the shape it
+ * had with window.confirm(): `if (!(await askConfirm(…))) return;`.
+ *
+ * Eight irreversible actions in this app asked through window.confirm(), and the
+ * button that agrees to one is labelled **OK**. "Kamera löschen?" answered with
+ * OK is a worse button than one that says Löschen: the label is the last thing
+ * read before the thing happens, and OK does not say what it does. confirm2()
+ * has taken a label since it was written — these eight had simply never been
+ * moved onto it.
+ *
+ * It settles both ways. Cancel, the backdrop and closeConfirm() all resolve
+ * false, because an await that never settles leaves the rest of the caller
+ * suspended for the life of the page.
+ *
+ * The ninth confirm() stays native: mayLeavePage() runs from `beforeunload`,
+ * which is synchronous by specification, and a promise there resolves after the
+ * tab is already gone.
+ *
+ * @param {string} title  the action, short — it is also the button's label
+ * @param {string} body   what happens if they say yes
+ * @param {string} label  the button. Never "OK".
+ * @returns {Promise<boolean>}
+ */
+function askConfirm(title, body, label) {
+  return new Promise((resolve) => {
+    confirm2(
+      title,
+      body,
+      label,
+      () => resolve(true),
+      () => resolve(false)
+    );
+  });
+}
 document.getElementById('si-close').onclick = closeSubstrateInfo;
 document.getElementById('m-subinfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-subinfo') closeSubstrateInfo();
@@ -2198,6 +2244,7 @@ document.getElementById('m-confirm').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm') closeConfirm();
 });
 
+let confirmCancelCb = null;
 let confirm3CbA = null;
 let confirm3CbB = null;
 function confirm3(title, body, labelA, labelB, cbA, cbB) {
@@ -6435,10 +6482,10 @@ function _zcSelectMissing() {
   document.getElementById('m-zonecheck').classList.remove('open');
   return selectedLocBags.size;
 }
-function locRemoveSelected() {
+async function locRemoveSelected() {
   if (!selectedLocBags.size) return;
   const n = selectedLocBags.size;
-  if (!confirm(t('scanFb.confirmRemove', { n: n }))) return;
+  if (!(await askConfirm(t('dash.remove'), t('scanFb.confirmRemove', { n: n }), t('dash.remove')))) return;
   const now = new Date().toISOString();
   const entries = [];
   selectedLocBags.forEach((d, bagId) => {
@@ -6933,7 +6980,10 @@ function nbApplyDefaults() {
   renderNbGrainBanner();
   nbSubSum(); // also refreshes the material preview
 }
-function createBatch() {
+// async since the two warnings inside became dialogs rather than window.confirm().
+// Both internal callers invoke it as their last statement and ignore the result,
+// and $('btn-24') is a click handler, so nothing was waiting on it before either.
+async function createBatch() {
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
@@ -6997,7 +7047,10 @@ function createBatch() {
   // untouched form — the inputs only carry placeholders, so a collapsed
   // "Substrat" section read as 70/30 while actually submitting 0/0, and stock
   // drifted with no signal. Make the no-op explicit instead of silent.
-  if (!hw && !wb && !coir && !grainKg && !window.confirm(t('batch.noSubstrateWarn'))) return;
+  if (!hw && !wb && !coir && !grainKg) {
+    const weiter = await askConfirm(t('batch.noSubstrateTitle'), t('batch.noSubstrateWarn'), t('common.proceed'));
+    if (!weiter) return;
+  }
   const substrate =
     hw || wb || coir
       ? {
@@ -7043,11 +7096,13 @@ function createBatch() {
       _shortages.push(
         'Grain: ' + (_stock.grain || 0).toFixed(1) + ' kg vorhanden, ' + _grainUsed.toFixed(1) + ' kg nötig'
       );
-    if (
-      _shortages.length &&
-      !window.confirm(t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'))
-    ) {
-      return;
+    if (_shortages.length) {
+      const weiter = await askConfirm(
+        t('inv.shortageTitle'),
+        t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'),
+        t('common.proceed')
+      );
+      if (!weiter) return;
     }
   }
   const batchId = genBatchId(ms.name);
@@ -10522,7 +10577,7 @@ async function saveCameraEdit() {
 async function deleteCamera(id) {
   const cam = _cam.cameras.find((c) => c.id === id);
   if (!cam) return;
-  if (!confirm(t('cam.confirmDelete', { name: cam.name }))) return;
+  if (!(await askConfirm(t('cam.delete'), t('cam.confirmDelete', { name: cam.name }), t('cam.delete')))) return;
   try {
     const r = await authFetch('/api/camera/cameras/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
@@ -10831,7 +10886,7 @@ async function generateMcpToken() {
   }
 }
 async function revokeMcpToken() {
-  if (!confirm(t('mcp.revokeKeyConfirm'))) return;
+  if (!(await askConfirm(t('mcp.revokeKey'), t('mcp.revokeKeyConfirm'), t('mcp.revokeKey')))) return;
   try {
     const r = await authFetch('/api/mcp/token', { method: 'DELETE' });
     const data = await r.json();
@@ -10967,7 +11022,8 @@ async function loadOAuthClients() {
   }
 }
 async function deleteOAuthClient(clientId, isAuto) {
-  if (!confirm(isAuto ? t('mcp.confirmDeleteAuto') : t('mcp.confirmDelete'))) return;
+  const frage = isAuto ? t('mcp.confirmDeleteAuto') : t('mcp.confirmDelete');
+  if (!(await askConfirm(t('mcp.deleteClient'), frage, t('mcp.deleteClient')))) return;
   try {
     const r = await authFetch('/api/mcp/oauth-clients/' + encodeURIComponent(clientId), { method: 'DELETE' });
     const data = await r.json();
@@ -11691,7 +11747,8 @@ function editPickupLocation(id) {
 async function retirePickupLocation(id) {
   const l = pickupLocations.find((x) => x.id === id);
   if (!l) return;
-  if (!confirm(t('pickupLoc.confirmRetire', { name: l.name }))) return;
+  if (!(await askConfirm(t('pickupLoc.retire'), t('pickupLoc.confirmRetire', { name: l.name }), t('pickupLoc.retire'))))
+    return;
   const r = await apiDelete('/api/pickup-locations/' + id);
   if (!r) return;
   l.active = false;
@@ -17248,7 +17305,7 @@ async function addUser() {
 }
 
 async function deleteUser(id) {
-  if (!confirm(t('users.deleteConfirm'))) return;
+  if (!(await askConfirm(t('common.delete'), t('users.deleteConfirm'), t('common.delete')))) return;
   try {
     const r = await authFetch('/api/users/' + id, { method: 'DELETE' });
     if (!r.ok) {
@@ -19734,11 +19791,14 @@ async function pushBatchCaldav(batch) {
 // Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
 // m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
 // so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
-// modal underneath.
+// modal underneath. m-confirm3 sits with it: it was missing from this list
+// entirely, so the recurring-event delete dialog was the one modal in the app
+// that Escape could not dismiss.
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
   const modals = [
     'm-confirm',
+    'm-confirm3',
     'm-work-flow',
     'm-camscan',
     'm-cal-entry',
@@ -19766,6 +19826,14 @@ document.addEventListener('keydown', function (e) {
       // 'open' class would leave the camera live (LED on, battery drain,
       // barcodes still firing processScan) behind a hidden modal.
       else if (id === 'm-camscan') closeCamScan();
+      // The three ask-a-question dialogs hold a callback for the answer, and
+      // taking the class off is not answering: the callback stays set for the
+      // next caller to trip over, and — since askConfirm() — the promise behind
+      // it never settles, so whatever awaited it is suspended for the life of
+      // the page. Their own closers are what say "no".
+      else if (id === 'm-confirm') closeConfirm();
+      else if (id === 'm-confirm3') closeConfirm3();
+      else if (id === 'm-prompt') closePrompt();
       else el.classList.remove('open');
       return;
     }

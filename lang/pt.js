@@ -7,6 +7,7 @@ window.LANG['pt'] = {
   'common.close': 'Fechar',
   'common.ok': 'OK',
   'common.confirm': 'Confirmar',
+  'common.proceed': 'Continuar mesmo assim',
   'common.delete': 'Apagar',
   'common.loading': 'A carregar\u2026',
   'common.error': 'Erro',
@@ -553,6 +554,7 @@ window.LANG['pt'] = {
     'A composi\u00e7\u00e3o do substrato deve totalizar 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
   'batch.noSubstrateWarn':
     'Nenhuma composi\u00e7\u00e3o de substrato informada \u2014 NENHUM material ser\u00e1 deduzido do estoque para este lote.\n\nCriar mesmo assim?',
+  'batch.noSubstrateTitle': 'Não debitar material?',
   'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
   'batch.inStock': 'Em estoque:',
   'batch.sufficient': 'suficiente',
@@ -1770,6 +1772,7 @@ window.LANG['pt'] = {
   // Inventory cards
   'inv.lowStock': 'ESTOQUE BAIXO',
   'inv.shortageWarn': 'Estoque insuficiente para este lote:',
+  'inv.shortageTitle': 'Stock insuficiente',
   'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a quantidade em falta não é registrada.)',
   'inv.alertBelow': 'Alerta abaixo de {n}kg',
   'inv.logDelivery': '+ Registar entrega',

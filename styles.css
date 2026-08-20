@@ -3756,6 +3756,13 @@ tr:hover td {
   margin-bottom: 14px;
   line-height: 1.6;
 }
+/* The question in a confirm dialog can be several lines — the stock shortage
+   lists one line per material — and it arrives as a string with \n in it,
+   because that is the shape it had when window.confirm() rendered it. Collapsed
+   to spaces, a three-material shortage reads as one run-on sentence. */
+#m-body {
+  white-space: pre-line;
+}
 .modal-btns {
   display: flex;
   gap: 10px;

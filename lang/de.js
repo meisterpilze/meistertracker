@@ -7,6 +7,7 @@ window.LANG['de'] = {
   'common.close': 'Schlie\u00dfen',
   'common.ok': 'OK',
   'common.confirm': 'Best\u00e4tigen',
+  'common.proceed': 'Trotzdem fortfahren',
   'common.delete': 'L\u00f6schen',
   'common.loading': 'L\u00e4dt\u2026',
   'common.error': 'Fehler',
@@ -713,6 +714,7 @@ window.LANG['de'] = {
     'Substratzusammensetzung muss 100% ergeben (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
   'batch.noSubstrateWarn':
     'Keine Substrat-Zusammensetzung angegeben — für diese Charge wird KEIN Material vom Lagerbestand abgezogen.\n\nTrotzdem anlegen?',
+  'batch.noSubstrateTitle': 'Kein Material abbuchen?',
   'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
   'batch.inStock': 'Auf Lager:',
   'batch.sufficient': 'ausreichend',
@@ -1775,6 +1777,7 @@ window.LANG['de'] = {
   // Inventory cards
   'inv.lowStock': 'NIEDRIGER BESTAND',
   'inv.shortageWarn': 'Nicht genug Bestand f\u00fcr diese Charge:',
+  'inv.shortageTitle': 'Bestand reicht nicht',
   'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die fehlende Menge wird nicht erfasst.)',
   'inv.alertBelow': 'Alarm unter {n}kg',
   'inv.logDelivery': '+ Lieferung erfassen',

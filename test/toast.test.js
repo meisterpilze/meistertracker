@@ -182,3 +182,133 @@ describe('nothing speaks through the browser any more', () => {
     assert.match(fn[0], /window\.confirm\(/, 'the unload guard stopped asking');
   });
 });
+
+// ── the dialog that replaced the destructive confirm()s ─────────────────────
+//
+// Eight irreversible actions asked through window.confirm(), whose agree button
+// is labelled OK. The label is the last thing read before the thing happens, and
+// OK does not say what it does. confirm2() had taken a label since it was
+// written; these eight had never been moved onto it.
+//
+// What has to hold, and cannot be seen by reading either half: the promise
+// settles on *every* way out. An await that never settles does not throw — it
+// leaves the rest of the caller suspended for the life of the page, with the
+// form still open and the button still live.
+const DIALOG = [
+  [/^let confirmCb = null,[\s\S]*?;$/m, 'confirmCb'],
+  [/^let confirmCancelCb = null;$/m, 'confirmCancelCb'],
+  [/^function confirm2\(title, body, label, cb, cancelCb\) \{[\s\S]*?\n\}/m, 'confirm2()'],
+  [/^function closeConfirm\(\) \{[\s\S]*?\n\}/m, 'closeConfirm()'],
+  [/^function askConfirm\(title, body, label\) \{[\s\S]*?\n\}/m, 'askConfirm()'],
+  // The Yes handler is a bare statement between the functions, not inside one.
+  // Lifted too, because it is where "clear the cancel callback first" lives —
+  // the half that keeps a confirmed action from also reporting itself cancelled.
+  [/^document\.getElementById\('m-ok'\)\.onclick = \(\) => \{[\s\S]*?\n\};/m, 'the m-ok handler']
+];
+
+function ladenDialog() {
+  const code = DIALOG.map(([re, was]) => {
+    const m = APP.match(re);
+    assert.ok(m, 'could not find ' + was + ' in app.js — has it been renamed?');
+    return m[0];
+  }).join('\n\n');
+
+  const el = () => ({
+    textContent: '',
+    classes: new Set(),
+    classList: {
+      add(c) {
+        this.classes.add(c);
+      },
+      remove(c) {
+        this.classes.delete(c);
+      }
+    }
+  });
+  const nodes = { 'm-title': el(), 'm-body': el(), 'm-ok': el(), 'm-confirm': el() };
+  nodes['m-confirm'].classList = {
+    add: (c) => nodes['m-confirm'].classes.add(c),
+    remove: (c) => nodes['m-confirm'].classes.delete(c)
+  };
+  const stub = `
+    const t = (k) => k;
+    const document = { getElementById: (id) => nodes[id] || null };
+  `;
+  const api = new Function(
+    'nodes',
+    stub +
+      '\n' +
+      code +
+      '\nreturn { confirm2, closeConfirm, askConfirm, ok: () => document.getElementById("m-ok").onclick() };'
+  );
+  return { nodes, ...api(nodes) };
+}
+
+describe('asking before something irreversible', () => {
+  it('resolves true when the named button is pressed', async () => {
+    const f = ladenDialog();
+    const antwort = f.askConfirm('Löschen', 'Diesen Client löschen?', 'Löschen');
+    f.ok();
+    assert.equal(await antwort, true);
+    assert.equal(f.nodes['m-ok'].textContent, 'Löschen', 'the button does not say what it does');
+    assert.equal(f.nodes['m-confirm'].classes.has('open'), false, 'the dialog stayed open after answering');
+  });
+
+  it('resolves false when it is closed instead', async () => {
+    // Cancel, the backdrop and Escape all arrive here. Without this the caller
+    // never continues and never fails — the worst of the two.
+    const f = ladenDialog();
+    const antwort = f.askConfirm('Löschen', 'Diesen Client löschen?', 'Löschen');
+    f.closeConfirm();
+    assert.equal(await antwort, false);
+  });
+
+  it('does not report a No after a Yes', async () => {
+    // Both paths end by closing, so the yes path has to clear the cancel
+    // callback before it does — or every confirmed action also cancels itself.
+    const f = ladenDialog();
+    let nein = 0;
+    f.confirm2(
+      't',
+      'b',
+      'l',
+      () => {},
+      () => nein++
+    );
+    f.ok();
+    f.closeConfirm();
+    assert.equal(nein, 0, 'answering yes also fired the cancel callback');
+  });
+
+  it('is what Escape reaches for, on all three question dialogs', () => {
+    // Escape used to take the class off m-confirm directly, which is not an
+    // answer: the callback stays set for the next caller and the promise behind
+    // it never settles. m-confirm3 was not in the list at all.
+    const handler = APP.match(
+      /document\.addEventListener\('keydown', function \(e\) \{\s*if \(e\.key !== 'Escape'\)[\s\S]*?\n\}\);/m
+    );
+    assert.ok(handler, 'the Escape handler is gone');
+    for (const [id, closer] of [
+      ['m-confirm', 'closeConfirm()'],
+      ['m-confirm3', 'closeConfirm3()'],
+      ['m-prompt', 'closePrompt()']
+    ]) {
+      assert.match(
+        handler[0],
+        new RegExp(`id === '${id}'\\) ${closer.replace('(', '\\(').replace(')', '\\)')}`),
+        `Escape does not call ${closer} for #${id}`
+      );
+      assert.match(handler[0], new RegExp(`'${id}'`), `#${id} is not in the Escape list`);
+    }
+  });
+
+  it('never labels an irreversible action OK', () => {
+    // The whole point of the change. A grep, because the labels are literals at
+    // the call sites and that is where the next one will be written too.
+    const schlecht = [...APP.matchAll(/askConfirm\(([\s\S]*?)\)\)?\)/g)]
+      .map((m) => m[1])
+      .filter((args) => /t\('common\.(ok|confirm)'\)\s*\)?\s*$/.test(args.trim()));
+    assert.deepEqual(schlecht, [], `askConfirm() call(s) whose button says OK: ${schlecht.join(' | ')}`);
+    assert.ok(APP.split('askConfirm(').length - 1 >= 9, 'the eight call sites plus the helper are not all there');
+  });
+});
