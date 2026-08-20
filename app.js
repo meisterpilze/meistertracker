@@ -19953,6 +19953,12 @@ let gsHits = [];
 let gsSel = 0;
 let gsWarmed = false;
 let gsReturnFocus = null;
+// The query the results actually answer, which is not always the one in the
+// field: a scanned label resolves to the id it stands for. Everything that
+// needs the query after a render — the highlight, the auto-open, the "nothing
+// found" line — means this one.
+let gsQ = '';
+let gsJumpTimer = null;
 
 // How well a record answers `q`. Lower is better; -1 is "not an answer".
 //
@@ -20000,18 +20006,62 @@ function gsMatch(index, query) {
   return scored.map((s) => s.rec);
 }
 
-// A scanner types, and it types the whole code. When the query IS an id and
-// only one record carries it there is nothing left to choose, so the palette
-// gets out of the way rather than waiting for a keypress the scanner may not
-// send. Eight characters is the floor: every id this app generates is longer,
-// and it stops a short Sorte name from teleporting a human mid-word.
-function gsAutoOpen(hits, query) {
+// A scanner types, and it types the whole code. When the query is answered by
+// exactly one record there is nothing left to choose, so the palette gets out
+// of the way rather than waiting for a keypress the scanner may not send.
+// Eight characters is the floor: every id this app generates is longer, and it
+// stops a short Sorte name from teleporting a human mid-word.
+//
+// The second half is for the code a station actually produces. A bag barcode
+// has no record of its own and never will — twenty per batch would outnumber
+// everything else four to one — so the batch that owns it answers, at rank 2.
+// `isCode` gates that on the string being one this app would recognise as its
+// own (isKnownBarcode), because rank 2 is a prefix rule and without the gate it
+// would jump a human out of the middle of a long Sorte name after a pause.
+function gsAutoOpen(hits, query, isCode) {
   const q = String(query || '')
     .trim()
     .toLowerCase();
   if (q.length < 8) return null;
   const exact = hits.filter((r) => String(r.id).toLowerCase() === q);
-  return exact.length === 1 ? exact[0] : null;
+  if (exact.length) return exact.length === 1 ? exact[0] : null;
+  if (!isCode) return null;
+  const owner = hits.filter((r) => gsRank(r, q) === 2);
+  return owner.length === 1 ? owner[0] : null;
+}
+
+// A scanned label is a lookup key, not an id. The numeric barcode system prints
+// a number and keeps the id it stands for in barcodeRegistry, so a scanner at
+// the palette types eight digits that appear in no index. processScan() does
+// this lookup first and so does this. A number nobody printed a label for is
+// left as typed: it ranks nowhere, and the "nothing found" line says so.
+function gsScanned(query, registry) {
+  const val = String(query || '')
+    .trim()
+    .toUpperCase();
+  if (!/^\d{7,}$/.test(val)) return null;
+  const num = parseInt(val, 10);
+  if (num < 1000000) return null;
+  const entry = registry && registry.get ? registry.get(num) : null;
+  return entry && entry.id ? entry.id : null;
+}
+
+// One query, read up to three ways, in the order that cannot lose anything.
+//
+// As typed first — always, because underscores are real here: zone and rack
+// barcodes carry them (INC_BUERO_01, SPAWN_R1) and rewriting them would make
+// every zone unfindable. Only when that answers nothing does the German HID
+// reading get a turn — those scanners send an underscore where a bag id has a
+// hyphen, which is the same fix processScan() applies, but applied as a second
+// attempt rather than as a rewrite.
+function gsLookup(index, query, registry) {
+  const typed = String(query || '').trim();
+  const q = gsScanned(typed, registry) || typed;
+  const hits = gsMatch(index, q);
+  if (hits.length || q.indexOf('_') < 0) return { q: q, hits: hits };
+  const dashed = q.replace(/_/g, '-');
+  const retry = gsMatch(index, dashed);
+  return retry.length ? { q: dashed, hits: retry } : { q: q, hits: hits };
 }
 
 // Pages and sub-pages, read off the sidebar and the sub-tab strips rather than
@@ -20166,8 +20216,10 @@ function gsMark(text, q) {
 function gsRender() {
   const box = document.getElementById('gs-results');
   if (!box) return;
-  const q = document.getElementById('gs-q').value.trim();
-  const all = gsMatch(gsIndex(), q);
+  const found = gsLookup(gsIndex(), document.getElementById('gs-q').value, barcodeRegistry);
+  const q = found.q;
+  const all = found.hits;
+  gsQ = q;
   gsHits = all.slice(0, GS_CAP);
   if (gsSel >= gsHits.length) gsSel = Math.max(0, gsHits.length - 1);
   let html = '';
@@ -20241,6 +20293,8 @@ function gsOpen() {
 function gsClose() {
   const bg = document.getElementById('m-search');
   if (!bg || !bg.classList.contains('open')) return;
+  // A jump that was still pending is a jump nobody asked for any more.
+  clearTimeout(gsJumpTimer);
   bg.classList.remove('open');
   // Back where they were, so Escape costs nothing — the palette can be opened
   // by accident mid-form and must not eat the caret.
@@ -20364,8 +20418,18 @@ function gsInit() {
   input.addEventListener('input', () => {
     gsSel = 0;
     gsRender();
-    const jump = gsAutoOpen(gsHits, input.value);
-    if (jump) gsGoto(jump);
+    // Not while characters are still arriving. A scanner types a bag code one
+    // key at a time and the batch id is a prefix of it, so at "AUS-190826-02"
+    // the query was already a unique complete id — the jump fired there, thirty
+    // milliseconds before the "-03" that says which bag, and those three
+    // characters landed in whatever the palette had handed focus back to.
+    // SCAN_MAX_GAP * 2 is the same "the scanner has stopped" the global scan
+    // buffer uses to decide the very same thing.
+    clearTimeout(gsJumpTimer);
+    gsJumpTimer = setTimeout(() => {
+      const jump = gsAutoOpen(gsHits, gsQ, isKnownBarcode(gsQ.toUpperCase()));
+      if (jump) gsGoto(jump);
+    }, SCAN_MAX_GAP * 2);
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {

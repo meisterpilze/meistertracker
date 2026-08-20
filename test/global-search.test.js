@@ -33,7 +33,14 @@ function lift(...names) {
     .join('\n');
   return new Function(`${src}\nreturn { ${names.join(', ')} };`)();
 }
-const { GS_ORDER, gsRank, gsMatch, gsAutoOpen } = lift('GS_ORDER', 'gsRank', 'gsMatch', 'gsAutoOpen');
+const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup } = lift(
+  'GS_ORDER',
+  'gsRank',
+  'gsMatch',
+  'gsAutoOpen',
+  'gsScanned',
+  'gsLookup'
+);
 
 // A stand-in farm. The ids are the shapes this app really generates: genBatchId
 // builds KUERZEL-DDMMYY-NN, cultures prefix that with their type, zone ids are
@@ -125,15 +132,17 @@ describe('what the search puts first', () => {
 });
 
 describe('the code a scanner types', () => {
+  const jump = (q, isCode) => gsAutoOpen(gsMatch(INDEX, q), q, !!isCode);
+
   it('opens a unique, complete id without waiting for a keypress', () => {
-    assert.equal(gsAutoOpen(gsMatch(INDEX, 'LC-AUS-260801-01'), 'LC-AUS-260801-01'), KULTUR);
+    assert.equal(jump('LC-AUS-260801-01'), KULTUR);
   });
 
   it('waits when something is still being typed', () => {
     // Eight characters: every id this app generates is longer, and a human
     // halfway through a word must not be teleported.
-    assert.equal(gsAutoOpen(gsMatch(INDEX, 'FRU'), 'FRU'), null);
-    assert.equal(gsAutoOpen(gsMatch(INDEX, 'AUS-190'), 'AUS-190'), null);
+    assert.equal(jump('FRU'), null);
+    assert.equal(jump('AUS-190'), null);
   });
 
   it('waits when the code is not unique', () => {
@@ -143,11 +152,79 @@ describe('the code a scanner types', () => {
       { type: 'order', id: 'DOPPELT-01', sub: 'eBay' },
       { type: 'customer', id: 'DOPPELT-01', sub: 'eBay' }
     ];
-    assert.equal(gsAutoOpen(gsMatch(doppelt, 'DOPPELT-01'), 'DOPPELT-01'), null);
+    assert.equal(gsAutoOpen(gsMatch(doppelt, 'DOPPELT-01'), 'DOPPELT-01', false), null);
   });
 
   it('never jumps on a prefix, however long', () => {
-    assert.equal(gsAutoOpen(gsMatch(INDEX, 'LC-AUS-260801-0'), 'LC-AUS-260801-0'), null);
+    assert.equal(jump('LC-AUS-260801-0'), null);
+  });
+
+  it('opens the batch a scanned bag belongs to', () => {
+    // The code a station actually produces. Nothing indexes single bags, so
+    // AUS-190826-02-03 is answered by AUS-190826-02 at rank 2 — and that is
+    // the answer, not a shortlist to choose from.
+    assert.equal(jump('AUS-190826-02-03', true), CHARGE);
+  });
+
+  it('will not do that for a string this app did not issue', () => {
+    // Rank 2 is a prefix rule, so without the gate a Sorte called "Austern"
+    // would swallow anybody typing "Austernpilze" the moment they paused.
+    const sorten = [{ type: 'strain', id: 'Austern', key: 1, sub: 'AUS' }];
+    assert.equal(gsAutoOpen(gsMatch(sorten, 'Austernpilze'), 'Austernpilze', false), null);
+    // Same query, same records, and only the gate is different.
+    assert.equal(gsAutoOpen(gsMatch(sorten, 'Austernpilze'), 'Austernpilze', true), sorten[0]);
+  });
+
+  it('does not fire on the way through a bag code', () => {
+    // This is why the caller waits for the typing to stop. Mid-scan the query
+    // is "AUS-190826-02", which is a complete unique id and would jump — with
+    // "-03" still in the scanner's buffer, landing wherever focus went next.
+    assert.equal(jump('AUS-190826-02', true), CHARGE, 'the mid-scan prefix is a jump on its own');
+    const init = APP.match(/function gsInit\(\) \{[\s\S]*?\n\}/);
+    assert.ok(init, 'gsInit moved');
+    const handler = init[0].match(/input\.addEventListener\('input'[\s\S]*?\n {2}\}\);/);
+    assert.ok(handler, 'the palette input handler moved');
+    assert.match(handler[0], /clearTimeout\(gsJumpTimer\)/);
+    assert.match(handler[0], /SCAN_MAX_GAP \* 2/, 'the wait is not the one the scan buffer already uses');
+    assert.match(APP, /function gsClose\(\)[\s\S]*?clearTimeout\(gsJumpTimer\)/, 'a pending jump outlives the palette');
+  });
+});
+
+describe('a scanned label is a lookup key, not an id', () => {
+  const REGISTRY = new Map([[1234567, { type: 'bag', id: 'AUS-190826-02-03' }]]);
+
+  it('resolves a printed barcode to the id it stands for', () => {
+    assert.equal(gsScanned('1234567', REGISTRY), 'AUS-190826-02-03');
+    assert.equal(gsLookup(INDEX, '1234567', REGISTRY).hits[0], CHARGE, 'a scanned label did not reach its batch');
+  });
+
+  it('leaves a number nobody printed a label for as typed', () => {
+    assert.equal(gsScanned('9999999', REGISTRY), null);
+    assert.equal(gsLookup(INDEX, '9999999', REGISTRY).q, '9999999', 'the empty result would name something else');
+  });
+
+  it('is not fooled by a short number, which is just a query', () => {
+    assert.equal(gsScanned('190826', REGISTRY), null);
+    assert.equal(gsLookup(INDEX, '190826', REGISTRY).hits[0], CHARGE, 'six digits stopped being a substring search');
+  });
+
+  it('reads a German scanner’s underscores as hyphens — but only as a second attempt', () => {
+    // Those scanners send an underscore where a bag id has a hyphen.
+    assert.equal(gsLookup(INDEX, 'AUS_190826_02', null).hits[0], CHARGE);
+    // And zone barcodes really do carry underscores, which is why the typed
+    // form is tried first. Rewriting it would make every zone unfindable.
+    assert.equal(gsLookup(INDEX, 'INC_BUERO_01', null).hits[0], ZONE2);
+    assert.equal(gsLookup(INDEX, 'INC_BUERO_01', null).q, 'INC_BUERO_01', 'the zone id was rewritten anyway');
+  });
+
+  it('keeps the field and the answer in step', () => {
+    // gsRender() marks the match and names the miss with the resolved query,
+    // not the one in the box — otherwise a scan highlights nothing.
+    assert.match(
+      APP,
+      /const found = gsLookup\(gsIndex\(\), document\.getElementById\('gs-q'\)\.value, barcodeRegistry\);/
+    );
+    assert.match(APP, /gsQ = q;/);
   });
 });
 
