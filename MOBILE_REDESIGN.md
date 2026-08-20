@@ -686,11 +686,29 @@ review the same way. The test reads `styles.css` as text and asserts:
 > as deliberate and passes the ratchet, which only looks for a bare `px`.
 
 **Ratchet — `scripts/mobile-audit.js`. ✅ built, wired into CI.** Three ceilings, all allowed
-only to fall: **500** inline sub-floor sizes, **11** sub-floor `font-size` declarations
-inside `max-width` blocks, and **0** in base rules outside every `@media` — that last one
-started at 104 and Phase 2 emptied it in one commit. `--list` locates them, `--update` moves
-the ceilings after a phase and marks a rise `↑ RAISED` rather than describing it as a fall.
-Sibling to the existing `scripts/i18n-hardcoded.js`.
+only to fall, and **all three now read 0**:
+
+| | started | now | emptied by |
+|---|---|---|---|
+| INLINE — `style="font-size:11px"` in the two source files | 549 | **0** | Phase 5 |
+| DECLARED — sub-floor `font-size` in any block a phone matches | 11 | **0** | Phase 3 |
+| BASE — sub-floor `font-size` outside every `@media` | 104 | **0** | Phase 2 item 0 |
+
+So its job has changed. It no longer watches a number fall; it fails if any of it comes
+back. `--list` locates hits, `--update` moves the ceilings and marks a rise `↑ RAISED`
+rather than describing it as a fall. Sibling to the existing `scripts/i18n-hardcoded.js`.
+
+Three things it got wrong along the way, each fixed and each worth knowing about, because
+all three are the same mistake — reading text without a notion of what the text *is*:
+
+- DECLARED read `max-width` blocks only, so `@media (pointer: coarse)` — which aims at
+  exactly the devices the floor exists for — was invisible. It immediately found a 12px
+  undo button under a comment promising "a real tap target".
+- `--list` reported the wrong line for every DECLARED hit, because the masking preserved
+  byte offsets and destroyed newlines. It was confidently sending people elsewhere.
+- INLINE counted two rules inside a `<style>` block that `app.js` writes into a print
+  window. Those are rules on paper; no phone reads them, and the bridge could never have
+  reached them.
 
 **Desktop-unchanged proof — `scripts/capture-desktop-baseline.js` + `test/desktop-baseline.json`.
 ✅ built.** 31 selectors at 1440px, captured before Phase 0 touched anything; `--compare`
