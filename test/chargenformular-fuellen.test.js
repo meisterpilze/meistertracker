@@ -22,7 +22,9 @@ const SRC = quelle();
 const AUSGABE = new Set(['nb-bags', 'nb-result', 'nb-mat-preview']);
 
 function gelesenVonCreateBatch() {
-  const m = SRC.match(/^function createBatch\(\) \{[\s\S]*?\r?\n\}/m);
+  // `async`, seit die beiden Material-Warnungen darin Dialoge sind statt
+  // window.confirm() — hier optional, damit beides passt.
+  const m = SRC.match(/^(?:async )?function createBatch\(\) \{[\s\S]*?\r?\n\}/m);
   assert.ok(m, 'createBatch() nicht in app.js gefunden — der Test muss mitgeführt werden');
   const ids = new Set();
   for (const treffer of m[0].matchAll(/getElementById\('(nb-[a-z0-9-]+)'\)/g)) {

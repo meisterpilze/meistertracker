@@ -1,5 +1,5 @@
 {
-  "_readme": "Computed desktop styles captured BEFORE the Phase 0 token conversion. Regenerate with scripts/capture-desktop-baseline.js and diff to prove the desktop did not move. See MOBILE_REDESIGN.md section 8.",
+  "_readme": "Computed desktop styles captured BEFORE the Phase 0 token conversion. Regenerate with scripts/capture-desktop-baseline.js and diff to prove the desktop did not move. See MOBILE_REDESIGN.md section 8. .wk-todo-strip was dropped from this fixture when the component was deleted (the day's work moved onto Arbeitsg\u00e4nge, so the strip that pointed at the Dashboard had nothing to point at) \u2014 the remaining selectors still carry their pre-Phase-0 values.",
   "viewport": 1440,
   "styles": {
     "body": {
@@ -274,19 +274,6 @@
       "marginBottom": "0px",
       "fontWeight": "400",
       "gap": "normal"
-    },
-    ".wk-todo-strip": {
-      "fontSize": "13px",
-      "lineHeight": "19.5px",
-      "paddingTop": "9px",
-      "paddingRight": "12px",
-      "paddingBottom": "9px",
-      "paddingLeft": "12px",
-      "minHeight": "0px",
-      "borderRadius": "8px",
-      "marginBottom": "14px",
-      "fontWeight": "600",
-      "gap": "10px"
     },
     ".wk-head": {
       "fontSize": "15px",

@@ -19,7 +19,7 @@
     "test": "node --test test/*.test.js",
     "mcp": "node mcp-server.js",
     "mobile-audit": "node scripts/mobile-audit.js",
-    "lint": "eslint --max-warnings 73 app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js test/",
+    "lint": "eslint --max-warnings 65 app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js test/",
     "lint:fix": "eslint --fix app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js test/",
     "format": "prettier --write server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js styles.css test/",
     "format:check": "prettier --check server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js styles.css test/",

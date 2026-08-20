@@ -1,0 +1,360 @@
+'use strict';
+// The message line that replaced alert().
+//
+// Seventy-seven call sites went through the browser's modal, and the reason
+// that was worth changing is not that it looks dated. It is not the app: on a
+// phone it renders as `192.168.x.x sagt:` in the OS font, ignoring the theme
+// and the 56px touch floor the rest of the app now guarantees; it blocks, so a
+// gloved thumb has to find one small OK before anything else can happen; and it
+// detaches the message from the field that caused it.
+//
+// What this file pins is the part that would rot silently. The bar has three
+// jobs on one element — an undo offer, a receipt, an error — and each has to
+// clean up after the last one. An error that leaves `is-err` behind tints the
+// next receipt red; a receipt that leaves `role="alert"` behind makes every
+// later message interrupt a screen reader; and an undo offer that keeps the
+// tap-to-dismiss handler loses the undo to a stray tap. None of the three
+// throws, and none is visible in a diff.
+//
+// Lifted out of app.js and run against a stub DOM, the same way
+// test/harvest-release-ui.test.js does it: the browser is not the thing under
+// test, the decisions are.
+const { describe, it, beforeEach } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+const TEILE = [
+  [/^let _undoTimer = null;/m, '_undoTimer'],
+  [/^function showUndoBar\(msg, undoCb\) \{[\s\S]*?\n\}/m, 'showUndoBar()'],
+  [/^function toast\(msg, kind\) \{[\s\S]*?\n\}/m, 'toast()'],
+  [/^function flashUndoBar\(msg\) \{[\s\S]*?\n\}/m, 'flashUndoBar()'],
+  [/^function hideUndoBar\(\) \{[\s\S]*?\n\}/m, 'hideUndoBar()']
+];
+
+function laden() {
+  const code = TEILE.map(([re, was]) => {
+    const m = APP.match(re);
+    assert.ok(m, 'could not find ' + was + ' in app.js — has it been renamed?');
+    return m[0];
+  }).join('\n\n');
+
+  // A class list that records rather than renders, and an attribute bag beside
+  // it: between them they are everything the three functions touch.
+  const bar = {
+    classes: new Set(),
+    attrs: {},
+    onclick: undefined,
+    classList: {
+      add(c) {
+        bar.classes.add(c);
+      },
+      remove(c) {
+        bar.classes.delete(c);
+      },
+      toggle(c, on) {
+        if (on) bar.classes.add(c);
+        else bar.classes.delete(c);
+      },
+      contains: (c) => bar.classes.has(c)
+    },
+    setAttribute(k, v) {
+      bar.attrs[k] = v;
+    }
+  };
+  const msg = { textContent: '' };
+  const btn = { textContent: '', style: {}, onclick: null };
+
+  const stub = `
+    const t = (k) => k;
+    const document = {
+      getElementById: (id) =>
+        id === 'undo-bar' ? bar : id === 'undo-msg' ? msg : id === 'undo-btn' ? btn : null
+    };
+  `;
+  const api = new Function(
+    'bar',
+    'msg',
+    'btn',
+    'setTimeout',
+    'clearTimeout',
+    stub + '\n' + code + '\nreturn { toast, flashUndoBar, showUndoBar, hideUndoBar };'
+  );
+  // Timers are collected, not run: hideUndoBar's own deferred cleanup would
+  // otherwise fire mid-assertion, and the point of each test is the state the
+  // bar is left in the moment a caller returns.
+  const timers = [];
+  return {
+    bar,
+    msg,
+    btn,
+    timers,
+    ...api(
+      bar,
+      msg,
+      btn,
+      (fn, ms) => {
+        timers.push({ fn, ms });
+        return timers.length;
+      },
+      () => {}
+    )
+  };
+}
+
+describe('the message bar', () => {
+  let f;
+  beforeEach(() => {
+    f = laden();
+  });
+
+  it('shows an error in its own skin, read out assertively', () => {
+    f.toast('Menge fehlt', 'err');
+    assert.equal(f.msg.textContent, 'Menge fehlt');
+    assert.ok(f.bar.classes.has('show'), 'the bar never came up');
+    assert.ok(f.bar.classes.has('is-err'), 'an error is not marked as one');
+    assert.equal(f.bar.attrs.role, 'alert');
+    assert.equal(f.bar.attrs['aria-live'], 'assertive');
+    assert.equal(f.btn.style.display, 'none', 'an error is not an undo offer — the button must be gone');
+  });
+
+  it('leaves the error skin behind for nobody', () => {
+    // The failure: a red receipt. `is-err` is set with toggle(), not add(), so
+    // this holds without hideUndoBar() having run in between — which matters,
+    // because two messages inside six seconds is the normal case.
+    f.toast('kaputt', 'err');
+    f.toast('gespeichert');
+    assert.equal(f.bar.classes.has('is-err'), false, 'the receipt inherited the error colour');
+    assert.equal(f.bar.attrs.role, 'status');
+    assert.equal(f.bar.attrs['aria-live'], 'polite');
+  });
+
+  it('gives an error longer than a receipt', () => {
+    // A validation message that leaves before the eye reaches it is one nobody
+    // got. The numbers themselves are a judgement; that they differ is not.
+    f.toast('kaputt', 'err');
+    const err = f.timers.at(-1).ms;
+    f.toast('gespeichert');
+    const ok = f.timers.at(-1).ms;
+    assert.ok(err > ok, `an error (${err}ms) must outlast a receipt (${ok}ms)`);
+  });
+
+  it('lets a tap dismiss a message and not an undo offer', () => {
+    // An undo offer that vanished under a stray tap would take the undo with it,
+    // and the tap that dismissed it is exactly the tap of somebody reaching for
+    // the button.
+    f.toast('kaputt', 'err');
+    assert.equal(typeof f.bar.onclick, 'function', 'a message cannot be tapped away');
+    f.showUndoBar('4 Beutel verschoben', () => {});
+    assert.equal(f.bar.onclick, null, 'an undo offer can be tapped away by accident');
+  });
+
+  it('hands an undo offer a clean bar', () => {
+    f.toast('kaputt', 'err');
+    f.showUndoBar('4 Beutel verschoben', () => {});
+    assert.equal(f.bar.classes.has('is-err'), false, 'the undo offer came up red');
+    assert.equal(f.bar.attrs.role, 'status');
+    assert.equal(f.btn.style.display, '', 'the undo button stayed hidden from the message before it');
+  });
+});
+
+describe('nothing speaks through the browser any more', () => {
+  it('has no alert() left in app.js', () => {
+    // The sweep is only worth as much as the next person not adding a
+    // seventy-eighth. Comments are allowed to name it — this file's own
+    // reasoning does — so only calls count.
+    const calls = [...APP.matchAll(/(^|[^.\w])alert\(/g)]
+      .map((m) => APP.slice(0, m.index).split('\n').length)
+      .filter((line) => !/^\s*(\/\/|\*)/.test(APP.split('\n')[line - 1]));
+    assert.deepEqual(calls, [], `alert() is back at app.js line(s) ${calls.join(', ')} — use toast(msg, 'err')`);
+  });
+
+  it('still allows the one confirm() that cannot be a dialog', () => {
+    // mayLeavePage() is called from `beforeunload`, which is synchronous by
+    // specification: a promise-based dialog there would resolve after the tab
+    // is gone. The other eight confirm()s are a separate change and are
+    // deliberately not asserted about here — see USABILITY_PLAN.md.
+    const fn = APP.match(/function mayLeavePage\(\) \{[\s\S]*?\n\}/m);
+    assert.ok(fn, 'mayLeavePage() not found');
+    assert.match(fn[0], /window\.confirm\(/, 'the unload guard stopped asking');
+  });
+});
+
+// ── the dialog that replaced the destructive confirm()s ─────────────────────
+//
+// Eight irreversible actions asked through window.confirm(), whose agree button
+// is labelled OK. The label is the last thing read before the thing happens, and
+// OK does not say what it does. confirm2() had taken a label since it was
+// written; these eight had never been moved onto it.
+//
+// What has to hold, and cannot be seen by reading either half: the promise
+// settles on *every* way out. An await that never settles does not throw — it
+// leaves the rest of the caller suspended for the life of the page, with the
+// form still open and the button still live.
+const DIALOG = [
+  [/^let confirmCb = null,[\s\S]*?;$/m, 'confirmCb'],
+  [/^let confirmCancelCb = null;$/m, 'confirmCancelCb'],
+  [/^function confirm2\(title, body, label, cb, cancelCb\) \{[\s\S]*?\n\}/m, 'confirm2()'],
+  [/^function closeConfirm\(\) \{[\s\S]*?\n\}/m, 'closeConfirm()'],
+  [/^function askConfirm\(title, body, label\) \{[\s\S]*?\n\}/m, 'askConfirm()'],
+  // The Yes handler is a bare statement between the functions, not inside one.
+  // Lifted too, because it is where "clear the cancel callback first" lives —
+  // the half that keeps a confirmed action from also reporting itself cancelled.
+  [/^document\.getElementById\('m-ok'\)\.onclick = \(\) => \{[\s\S]*?\n\};/m, 'the m-ok handler']
+];
+
+function ladenDialog() {
+  const code = DIALOG.map(([re, was]) => {
+    const m = APP.match(re);
+    assert.ok(m, 'could not find ' + was + ' in app.js — has it been renamed?');
+    return m[0];
+  }).join('\n\n');
+
+  const el = () => ({
+    textContent: '',
+    classes: new Set(),
+    classList: {
+      add(c) {
+        this.classes.add(c);
+      },
+      remove(c) {
+        this.classes.delete(c);
+      }
+    }
+  });
+  const nodes = { 'm-title': el(), 'm-body': el(), 'm-ok': el(), 'm-confirm': el() };
+  nodes['m-confirm'].classList = {
+    add: (c) => nodes['m-confirm'].classes.add(c),
+    remove: (c) => nodes['m-confirm'].classes.delete(c)
+  };
+  const stub = `
+    const t = (k) => k;
+    const document = { getElementById: (id) => nodes[id] || null };
+  `;
+  const api = new Function(
+    'nodes',
+    stub +
+      '\n' +
+      code +
+      '\nreturn { confirm2, closeConfirm, askConfirm, ok: () => document.getElementById("m-ok").onclick() };'
+  );
+  return { nodes, ...api(nodes) };
+}
+
+describe('asking before something irreversible', () => {
+  it('resolves true when the named button is pressed', async () => {
+    const f = ladenDialog();
+    const antwort = f.askConfirm('Löschen', 'Diesen Client löschen?', 'Löschen');
+    f.ok();
+    assert.equal(await antwort, true);
+    assert.equal(f.nodes['m-ok'].textContent, 'Löschen', 'the button does not say what it does');
+    assert.equal(f.nodes['m-confirm'].classes.has('open'), false, 'the dialog stayed open after answering');
+  });
+
+  it('resolves false when it is closed instead', async () => {
+    // Cancel, the backdrop and Escape all arrive here. Without this the caller
+    // never continues and never fails — the worst of the two.
+    const f = ladenDialog();
+    const antwort = f.askConfirm('Löschen', 'Diesen Client löschen?', 'Löschen');
+    f.closeConfirm();
+    assert.equal(await antwort, false);
+  });
+
+  it('does not report a No after a Yes', async () => {
+    // Both paths end by closing, so the yes path has to clear the cancel
+    // callback before it does — or every confirmed action also cancels itself.
+    const f = ladenDialog();
+    let nein = 0;
+    f.confirm2(
+      't',
+      'b',
+      'l',
+      () => {},
+      () => nein++
+    );
+    f.ok();
+    f.closeConfirm();
+    assert.equal(nein, 0, 'answering yes also fired the cancel callback');
+  });
+
+  it('is what Escape reaches for, on all three question dialogs', () => {
+    // Escape used to take the class off m-confirm directly, which is not an
+    // answer: the callback stays set for the next caller and the promise behind
+    // it never settles. m-confirm3 was not in the list at all.
+    const handler = APP.match(
+      /document\.addEventListener\('keydown', function \(e\) \{\s*if \(e\.key !== 'Escape'\)[\s\S]*?\n\}\);/m
+    );
+    assert.ok(handler, 'the Escape handler is gone');
+    for (const [id, closer] of [
+      ['m-confirm', 'closeConfirm()'],
+      ['m-confirm3', 'closeConfirm3()'],
+      ['m-prompt', 'closePrompt()']
+    ]) {
+      assert.match(
+        handler[0],
+        new RegExp(`id === '${id}'\\) ${closer.replace('(', '\\(').replace(')', '\\)')}`),
+        `Escape does not call ${closer} for #${id}`
+      );
+      assert.match(handler[0], new RegExp(`'${id}'`), `#${id} is not in the Escape list`);
+    }
+  });
+
+  it('never labels an irreversible action OK', () => {
+    // The whole point of the change. A grep, because the labels are literals at
+    // the call sites and that is where the next one will be written too.
+    const schlecht = [...APP.matchAll(/askConfirm\(([\s\S]*?)\)\)?\)/g)]
+      .map((m) => m[1])
+      .filter((args) => /t\('common\.(ok|confirm)'\)\s*\)?\s*$/.test(args.trim()));
+    assert.deepEqual(schlecht, [], `askConfirm() call(s) whose button says OK: ${schlecht.join(' | ')}`);
+    assert.ok(APP.split('askConfirm(').length - 1 >= 9, 'the eight call sites plus the helper are not all there');
+  });
+});
+
+// ── the field a message is about ────────────────────────────────────────────
+describe('a validation message points at its own field', () => {
+  const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+  it('marks, focuses and clears again', () => {
+    const fn = APP.match(/function fieldError\(el, msg\) \{[\s\S]*?\n\}/m);
+    assert.ok(fn, 'fieldError() not found');
+    assert.match(fn[0], /classList\.add\('is-invalid'\)/, 'the field is not marked');
+    assert.match(fn[0], /setAttribute\('aria-invalid', 'true'\)/, 'the mark is visual only');
+    assert.match(fn[0], /\{ once: true \}/, 'the ring is never taken off — the field looks broken while it is fixed');
+    assert.match(fn[0], /toast\(msg, 'err'\)/, 'the words are gone as well as the pointer');
+    // A renamed id must degrade to what the call site did before, not to silence.
+    assert.match(fn[0], /if \(!input\) return toast\(msg, 'err'\);/, 'a missing element makes the message disappear');
+  });
+
+  it('has a ring to show', () => {
+    const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+    assert.match(CSS, /input\.is-invalid[\s\S]{0,80}\{[^}]*box-shadow/, 'nothing styles .is-invalid');
+    assert.doesNotMatch(
+      CSS.match(/input\.is-invalid[\s\S]*?\}/)[0],
+      /border-color: var\(--c-red\);\s*\}/,
+      'the mark is a border colour alone — invisible to a red/green deficiency'
+    );
+  });
+
+  it('names a field that exists', () => {
+    // The failure mode is silent by construction: fieldError() falls back to a
+    // plain toast when the element is missing, so a typo'd id looks exactly like
+    // the old behaviour and nobody notices the ring never appears.
+    const ids = new Set();
+    // The definition is `fieldError(el, msg)` and matches this too — its body
+    // would contribute 'string' and 'err' as if they were element ids.
+    for (const call of (APP.match(/fieldError\([\s\S]*?\);/g) || []).filter(
+      (c) => !c.startsWith('fieldError(el, msg)')
+    )) {
+      for (const m of call.matchAll(/'([a-z][a-z0-9-]{2,})'/g)) if (!m[1].includes('.')) ids.add(m[1]);
+    }
+    assert.ok(ids.size >= 15, `expected at least 15 field ids, found ${ids.size}`);
+    const inMarkup = new Set([...HTML.matchAll(/id="([A-Za-z0-9_:.-]+)"/g)].map((m) => m[1]));
+    // Some forms are built by app.js, so an id it writes itself counts too.
+    const built = new Set([...APP.matchAll(/id="([A-Za-z0-9_:.-]+)"/g)].map((m) => m[1]));
+    const missing = [...ids].filter((id) => !inMarkup.has(id) && !built.has(id));
+    assert.deepEqual(missing, [], `fieldError() points at element(s) that do not exist: ${missing.join(', ')}`);
+  });
+});

@@ -351,3 +351,63 @@ describe('the back rows', () => {
     assert.deepEqual(missing, [], `back row label(s) with no translation: ${missing.join(', ')}`);
   });
 });
+
+describe('the mobile topbar title', () => {
+  // Three files again, and the same failure mode. index.html holds the span,
+  // app.js writes into it, styles.css keeps it from pushing the bell off the
+  // bar. Any one can be edited alone and the result is a phone that says
+  // "Meistertracker" on twelve different pages, or one that says the right
+  // thing and hides the notification bell to do it.
+
+  it('has a span to write into', () => {
+    assert.match(HTML, /id="topbar-title"/, 'the mobile topbar has no title element');
+    assert.match(
+      HTML,
+      /id="topbar-title" data-i18n="nav\.[a-zA-Z]+"/,
+      'the title starts without a data-i18n key, so a language switch would leave the first page name in the old language'
+    );
+  });
+
+  it('reads the name off the entry that opened the page', () => {
+    // A second table of page names is the thing this rules out: it looks right
+    // the day it is written and goes stale the first time a page is renamed in
+    // only one of the two places.
+    const fn = APP.match(/function go\(page, btnId\) \{[\s\S]*?\n\}/)[0];
+    assert.match(fn, /getElementById\('topbar-title'\)/, 'go() no longer sets the topbar title');
+    assert.match(
+      fn,
+      /navBtn\.querySelector\('\[data-i18n\]'\)/,
+      'the title is no longer derived from the nav entry — whatever names it can now drift from the sidebar'
+    );
+    assert.match(
+      fn,
+      /title\.dataset\.i18n = label\.dataset\.i18n/,
+      'the key does not travel with the text, so translatePage() cannot reach it'
+    );
+  });
+
+  // A different `max-width` block from PHONE_BLOCK: the title's rules sit with
+  // .mobile-topbar's own, where the bar is turned on.
+  const TOPBAR_BLOCK = (() => {
+    for (const b of blocks(CSS, MAX_WIDTH_BLOCK)) if (b.body.includes('.mobile-topbar {')) return b.body;
+    return null;
+  })();
+
+  it('truncates rather than shoving the chrome off the bar', () => {
+    // pt `nav.workSteps` is "Etapas de trabalho" and overflows a 320px bar by
+    // 4px. Without min-width: 0 on both the flex item and the span, no ellipsis
+    // is possible at all and the bell and sync dot go over the right edge.
+    assert.ok(TOPBAR_BLOCK, 'no `max-width` block in styles.css turns the mobile topbar on');
+    assert.match(TOPBAR_BLOCK, /#topbar-title \{[^}]*text-overflow: ellipsis/s, 'the title does not ellipsise');
+    assert.match(
+      TOPBAR_BLOCK,
+      /#topbar-title \{[^}]*min-width: 0/s,
+      'the span cannot shrink, so the ellipsis never fires'
+    );
+    assert.match(
+      TOPBAR_BLOCK,
+      /\.mobile-topbar \.sb-logo \{[^}]*min-width: 0/s,
+      '.sb-logo still cannot shrink — it carries flex-shrink: 0 in the base rule'
+    );
+  });
+});

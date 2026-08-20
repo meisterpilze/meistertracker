@@ -7,6 +7,7 @@ window.LANG['de'] = {
   'common.close': 'Schlie\u00dfen',
   'common.ok': 'OK',
   'common.confirm': 'Best\u00e4tigen',
+  'common.proceed': 'Trotzdem fortfahren',
   'common.delete': 'L\u00f6schen',
   'common.loading': 'L\u00e4dt\u2026',
   'common.error': 'Fehler',
@@ -27,10 +28,6 @@ window.LANG['de'] = {
   'nav.calendar': 'Kalender',
   'nav.orders': 'Bestellungen',
   'nav.sales': 'Verkauf',
-  'nav.ordersInbox': 'Bestellungen',
-  'nav.ordersDemand': 'Was muss ich machen',
-  'nav.ordersMapping': 'Produkte',
-  'nav.ordersCustomers': 'Kunden',
   'nav.pickups': 'Abholungen',
   'nav.adminBack': 'Zur\u00fcck',
   'nav.backToList': 'Zur\u00fcck zur \u00dcbersicht',
@@ -80,7 +77,7 @@ window.LANG['de'] = {
   'pickupLoc.confirmRetire':
     '„{name}" stilllegen? Der Ort ist dann bei neuen Terminen nicht mehr auswählbar. Bestehende Termine behalten ihn.',
   // Order hub (Phase 0)
-  'orders.inbox': 'Bestellungen',
+  'orders.inbox': 'Eingang',
   'orders.tomake': 'Was muss ich machen',
   'orders.mapping': 'Produkt-Zuordnung',
   'orders.customers': 'Kunden',
@@ -344,7 +341,6 @@ window.LANG['de'] = {
   'msq.grainKg': 'kg pro Beutel',
   'msq.grainPreview': '{n} Beutel Körnerbrut werden angelegt.',
   // Versand (Phase 4)
-  'nav.ordersVersand': 'Versand',
   'orders.versandTab': 'Versand',
   'orders.th.orderId': 'Bestell-ID',
   'settings.tabVersand': 'Versand',
@@ -478,8 +474,6 @@ window.LANG['de'] = {
   'dash.harvestBySpecies': 'Ernte nach Art (kg)',
   'dash.noHarvestData': 'Noch keine Erntedaten',
   'dash.liveStatus': 'Live Chargen-Status',
-  'dash.modeFarm': 'Betrieb',
-  'dash.modeOverview': 'Übersicht',
   'dash.ov.qualityEff': 'Qualität & Effizienz',
   'dash.ov.substrates': 'Substrate',
   'dash.ov.bagsCreated': 'Erstellte Beutel',
@@ -720,6 +714,7 @@ window.LANG['de'] = {
     'Substratzusammensetzung muss 100% ergeben (Hartholz + Weizenkleie = {sum}%). Bitte anpassen.',
   'batch.noSubstrateWarn':
     'Keine Substrat-Zusammensetzung angegeben — für diese Charge wird KEIN Material vom Lagerbestand abgezogen.\n\nTrotzdem anlegen?',
+  'batch.noSubstrateTitle': 'Kein Material abbuchen?',
   'batch.grainNeeded': 'K\u00f6rner ben\u00f6tigt:',
   'batch.inStock': 'Auf Lager:',
   'batch.sufficient': 'ausreichend',
@@ -861,9 +856,6 @@ window.LANG['de'] = {
   'todo.dueToday': 'Heute fällig',
   // Days
   // Team
-  'team.membersDesc':
-    'F\u00fcge Teammitglieder hinzu, um Aufgaben individuell zuzuweisen. Jedes Mitglied kann optional einen eigenen CalDAV-Kalender erhalten.',
-  'team.empty': 'Noch keine Teammitglieder. F\u00fcge unten dein erstes Mitglied hinzu.',
   // CalDAV
   'caldav.title': 'CalDAV-Kalenderserver',
   'caldav.desc':
@@ -1776,8 +1768,6 @@ window.LANG['de'] = {
   'stage.incubation': 'Inkubation',
   'stage.fruiting': 'Fruchtung',
   'dash.splitBatches.stale': '> 24 h unbewegt',
-  'dash.actionNewBatch': '+ Neue Charge',
-  'dash.actionLabWork': '+ Laborarbeit',
   'dash.harvestNoFruiting': 'Aktuell sind keine Chargen erntereif.',
   // Scan log
   'log.entries': '{n} Eintr\u00e4ge',
@@ -1787,6 +1777,7 @@ window.LANG['de'] = {
   // Inventory cards
   'inv.lowStock': 'NIEDRIGER BESTAND',
   'inv.shortageWarn': 'Nicht genug Bestand f\u00fcr diese Charge:',
+  'inv.shortageTitle': 'Bestand reicht nicht',
   'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die fehlende Menge wird nicht erfasst.)',
   'inv.alertBelow': 'Alarm unter {n}kg',
   'inv.logDelivery': '+ Lieferung erfassen',
@@ -1838,8 +1829,6 @@ window.LANG['de'] = {
   'nav.lookup': 'Nachschauen',
   'work.title': 'Was hast du gemacht?',
   'work.sub': 'Wähle den Arbeitsgang — die App fragt den Rest ab.',
-  'work.dontKnow': 'Weißt du nicht, was ansteht?',
-  'work.todayOpen': 'Heute zu tun',
   'work.lab': 'Reinraumarbeit erfassen',
   'work.labWhen': 'Slant, Petri, Flüssigkultur, Spritzen, Korn-zu-Korn',
   'work.grain': 'Körnerbrut ansetzen',
