@@ -5546,6 +5546,34 @@ tr:hover td {
   color: var(--c-amber-dark);
 }
 
+/* Aufs Handy legen: dieselbe Bauart wie der Hinweis oben, aber ruhiger — das
+   ist ein Angebot, keine Aufgabe. Die eigene [hidden]-Regel ist nötig, weil
+   display:flex eine Autoren-Regel ist und sonst die des Browsers schlägt;
+   derselbe Fehler stand bis vor Kurzem auf dem Zurück-Knopf. */
+.wk-install {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--c-blue-light);
+  border: 1px solid var(--c-blue-border);
+  color: var(--c-blue-dark);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  margin: 14px 0 0;
+}
+.wk-install[hidden] {
+  display: none;
+}
+.wk-install .btn {
+  margin-left: auto;
+  min-height: var(--tap);
+  border-color: var(--c-blue-dark);
+  color: var(--c-blue-dark);
+}
+
 .wk-tiles {
   display: grid;
   /* Fixed four across, so the launcher reads as four things that make
