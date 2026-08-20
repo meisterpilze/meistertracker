@@ -173,9 +173,8 @@
    it and every token above resolved to the value chosen for a gloved hand:
    13px floors on a barcode label, and `min-height: max(46px, var(--tap-min))`
    putting 56px of white space under every control that reached paper. Nothing
-   reads a token from inside @media print today, so this is latent rather than
-   broken — but it stops being latent the moment an inline size moves onto a
-   class, which is the next commit. */
+   read a token from inside @media print, so this was latent rather than
+   broken — until the inline sizes moved onto classes that do. */
 @media (min-width: 769px) and (hover: hover), print {
   :root {
     --fs-xs: 11px;
@@ -1534,6 +1533,21 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .fs-micro.fs-micro {
   font-size: var(--fs-micro);
+}
+/* And a fourth for the sizes that are not on the scale at all: 10.5px on a
+   fruiting target, 11.5px on a week strip, 9px on a bag chip, 8px on a bag
+   label. Sixteen of them across eight components, no two the same, none of
+   them a considered step — they are what somebody typed to make a row fit.
+
+   Rounding them to the nearest of the three above would have moved sixteen
+   desktop values by up to 2px to save a class, and "the desktop does not move"
+   is the promise this whole project rests on. So the number stays where it
+   was, on the element, as a custom property — and gains the floor through the
+   same max() the base rules use. `--fs-own: 10.5px` reads 10.5px on a desk and
+   13px in a hand, and the ratchet stops counting it because it is no longer a
+   font-size the cascade cannot reach. */
+.fs-floor.fs-floor {
+  font-size: max(var(--fs-own), var(--fs-min));
 }
 
 /* A filter that sizes to its own content rather than the form grid. */

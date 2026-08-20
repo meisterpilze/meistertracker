@@ -50,7 +50,8 @@ function block(re) {
 }
 const ROOT_BLOCK = block(/^:root \{[\s\S]*?\n\}/m);
 // Non-greedy to the first `}` at column 0: the nested :root close is indented,
-// so this lands on the media query's own brace.
+// so this lands on the media query's own brace. `, print` is part of the
+// header and not an afterthought — see the assertion below.
 const DESKTOP_BLOCK = block(/@media \(min-width: 769px\) and \(hover: hover\), print \{[\s\S]*?\n\}/);
 
 // Derived from the stylesheet, not restated here. Phase 2 adds a paired token
@@ -126,8 +127,8 @@ describe('mobile token layer', () => {
     assert.match(DESKTOP_BLOCK, /hover: hover/);
   });
 
-  // And paper, which has no pointer at all. Without it every token resolves to
-  // the gloved-hand value when printing: 13px floors on a barcode label and
+  // And paper, which has no pointer at all. Without this every token resolves
+  // to the gloved-hand value when printing: 13px floors on a barcode label and
   // 56px of white space under any control that reaches a page.
   it('gives print the desk values, not the hand ones', () => {
     assert.match(
@@ -229,14 +230,24 @@ describe('the phone floors', () => {
     // `max(12px, var(--fs-sm))` would read as deliberate, pass the ratchet —
     // which only looks for a bare px after `font-size:` — and quietly hand the
     // desktop a 13px value where 12px was written.
-    const wrong = [...CSS.matchAll(/font-size:\s*max\([^)]*var\((--[a-z0-9-]+)\)/g)]
-      .map((m) => m[1])
-      .filter((t) => t !== '--fs-min');
-    assert.deepEqual(
-      wrong,
-      [],
-      `font-size: max() floored against ${[...new Set(wrong)].join(', ')} instead of --fs-min`
-    );
+    //
+    // Two shapes are legitimate and both have to end at --fs-min:
+    //   max(12px, var(--fs-min))            a rule with its own literal
+    //   max(var(--fs-own), var(--fs-min))   .fs-floor, where the literal is on
+    //                                       the element as a custom property
+    //
+    // Read from the comment-blanked stylesheet. The token block explains this
+    // very pattern in prose, `font-size: max(12px, var(--fs-min))` and all, and
+    // a scan of the raw text finds it there — the earlier version of this
+    // assertion did, and only passed because the token it found in the comment
+    // happened to be the allowed one.
+    const bad = [];
+    for (const m of maskedCss(CSS).src.matchAll(/font-size:\s*max\(([^;]*)\);/g)) {
+      const vars = [...m[1].matchAll(/var\((--[a-z0-9-]+)\)/g)].map((v) => v[1]);
+      if (!vars.includes('--fs-min')) bad.push(`${m[0].trim()} — no --fs-min`);
+      for (const v of vars) if (v !== '--fs-min' && v !== '--fs-own') bad.push(`${m[0].trim()} — ${v}`);
+    }
+    assert.deepEqual(bad, [], `font-size: max() floored against something other than --fs-min: ${bad.join(' | ')}`);
   });
 
   // The same idea applied to height, twice — because §9 chose two floors and
@@ -362,6 +373,22 @@ describe('the size utilities that replace the inline styles', () => {
       assert.ok(token, `.${u} does not read its size from a token`);
       assert.ok(TOKENS.includes(token[1]), `${token[1]} is not a declared size token`);
     }
+  });
+
+  // .fs-floor is the fourth, and the only one whose number still lives on the
+  // element — as `--fs-own`, so a 10.5px fruiting target keeps 10.5px on a desk
+  // instead of being rounded onto the scale. It is worth its own assertion
+  // because dropping the max() leaves valid CSS that simply has no floor, and
+  // the utilities check above would not notice: it only inspects max()
+  // expressions, and there would no longer be one.
+  it('keeps the floor on the class whose size comes from the element', () => {
+    const rule = CSS.match(/\.fs-floor\.fs-floor\s*\{[^}]*\}/);
+    assert.ok(rule, '.fs-floor.fs-floor rule not found');
+    assert.match(
+      rule[0],
+      /font-size:\s*max\(var\(--fs-own\),\s*var\(--fs-min\)\)/,
+      '.fs-floor no longer floors — every one-off size it carries is back under 13px on a phone'
+    );
   });
 
   it('leaves no sub-floor inline size behind in index.html', () => {
