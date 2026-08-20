@@ -398,8 +398,9 @@ is in the hub from day one and the API just makes it automatic later.
 ### 6.4 Billbee — *the hub, not a shop* (built)
 
 Jonas runs [Billbee](https://billbee.io), which already collects the orders of every channel he
-sells on and already pushes stock out to all of them. It therefore enters this design from both
-ends, and the ways it differs from §6.1–6.3 are the whole point.
+sells on. Meistertracker reads them and writes nothing but a Sendungsnummer: Billbee keeps the
+stock, the invoices, the shipping and the customer. What follows are the ways that differs from
+§6.1–6.3.
 
 - **Auth:** an application API key (`X-Billbee-Api-Key`) **plus** basic auth with the Billbee login
   and an API password created in the Billbee account. The key has to be requested from Billbee and
@@ -423,6 +424,14 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   eBay's, so re-attributing would file one sale twice instead of merging it. **Consequence: when
   Billbee is on, the direct connection for every shop it covers belongs off.** The shop name still
   travels in `raw_json`.
+- **No customer comes into the lab.** Billbee's order carries the buyer's name, e-mail, telephone
+  and delivery address; a lab needs none of it, and this server runs on a farm's own machine behind
+  a home line while Billbee is built to hold exactly that and already does. `_billbeeLabRecord()`
+  keeps the order's identity, state, money, country, articles and a link back into Billbee, and
+  drops the person — `raw_json` included, or filtering the columns would only have moved the
+  address rather than left it behind. An order with no identity and no name creates no customer row
+  at all (`upsertCustomerFromOrder` returns null), so the customer list does not fill with blank
+  strangers.
 - **Tracking write-back:** `POST /api/v1/orders/{id}/shipment`. Carrier ids are read once per
   process from `GET /api/v1/enums/shippingcarriers` rather than hard-coded from a guess — a miss
   costs the carrier id, never the Sendungsnummer, and the carrier name still travels in the
@@ -434,8 +443,15 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   cash, never through a Billbee channel, so there was nothing for that road to carry. The four
   commits are on the branch's history if the question ever changes shape (see the note under
   §11.1).
+- **When it runs:** every 15 minutes for every channel that is switched on *and* connected, one
+  after another (`pollSalesChannels`), plus the button. Before that timer existed a channel was
+  pulled only when somebody pressed "Jetzt synchronisieren", which made the production planning
+  depend on somebody remembering — least likely on the day it matters. Not started in a worktree
+  copy; the button still works there.
 - **Throttle:** 2 calls/second per endpoint for one key + user, answered with 429 + `Retry-After`.
-  All calls are serialised through one 550 ms queue and a 429 is retried once.
+  All calls are serialised through one 550 ms queue and a 429 is retried once. The poll is
+  sequential for the same reason: two channels at once share one connection and one account
+  throttle.
 - **Credentials that cannot work are refused at the keyboard:** a colon breaks basic auth outright
   in the login and, per Billbee's documentation, the connection in the API password. Both arrive
   otherwise as a plain 401, which reads as "the key was never approved" and sends somebody off
@@ -461,7 +477,7 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
 | `POST /api/products/map`              | admin  | Bind a channel listing → product         |
 | `GET/POST /api/channels/:c/config`    | admin  | Channel credentials + enable/disable     |
 | `POST /api/channels/:c/sync`          | admin  | Force a sync now                         |
-| `GET  /api/products/mappings?channel=` | admin | The standing article ↔ listing mappings of one channel |
+| `GET  /api/products/mappings?channel=` | worker | The standing article ↔ listing mappings of one channel |
 | `POST /api/orders/webhook/wix`         | public | Signed Wix webhook                       |
 | `GET/POST /api/orders/webhook/ebay-deletion` | public | eBay account-deletion compliance   |
 
