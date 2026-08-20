@@ -408,7 +408,15 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   application key, `client_id` = login, `client_secret` = API password.
 - **Read orders:** `GET /api/v1/orders`, paged (`page`, `pageSize` ≤ 250) and floored at
   `minOrderDate` = 30 days — without a floor every poll would walk the entire order history of
-  every connected channel, and the sync route stops after 20 pages regardless.
+  every connected channel, and the sync route stops after 20 pages regardless. The cursor is
+  `page|since`: recomputing the floor per page moves the filter underneath the paging, and the
+  order that shift pushes across a page break is never returned by that sync at all.
+- **What is not an order:** coupon and discount positions arrive in `OrderItems` like any other
+  line and are dropped (`IsCoupon`) — they are not things to make, and they cannot map to a
+  product, so they would sit in the mapping screen for ever. An order's total prefers `PaidAmount`
+  on a paid order over `TotalCost + ShippingCost`: the sum rests on a reading of the API
+  documentation that cannot be checked from here, and read the wrong way it overstates every
+  order by its postage.
 - **Dedup — the one rule to understand:** orders are filed under the channel `billbee` and keyed on
   `BillBeeOrderId`, never re-attributed to the shop they came from the way `_wixOriginChannel`
   does. Orders dedupe on (channel, channelOrderId), and Billbee's order id has nothing to do with
@@ -426,12 +434,29 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
   type `harvest`. An expired release is zero; an article without a harvest component is left out of
   the push **entirely** rather than pushed as zero, which would delist it in every connected shop;
   a species the lab has never released comes back in `unknownSpecies`, because a misspelt name and
-  a sold-out one both read as zero. `AutosubtractReservedAmount` is always on — Billbee knows about
-  orders that are not shipped yet and a release does not. See `db.billbeeStockLevels()`.
+  a sold-out one both read as zero. A **retired** article is the one place a zero is right: it is
+  pushed as 0 rather than dropped, or the last number it was ever given would stand in every shop
+  for good. Which releases are live is decided by `activeHarvestReleases()`, on the **lab** day —
+  asking that question in its own words against the UTC day kept expired releases selling until
+  02:00. `AutosubtractReservedAmount` is always on — Billbee knows about orders that are not
+  shipped yet and a release does not. See `db.billbeeStockLevels()`.
+- **Which articles:** the rows of `product_channel_map` for channel `billbee`, and nothing else.
+  They are made in Bestellungen → Zuordnung, which lists what stands and can add one by hand —
+  the unmapped-lines list next to it only ever fills from orders that already exist, so on its own
+  it could never map an article before somebody had bought it.
 - **When it goes out:** the three moments a release changes (the same ones the harvest feed fires
-  on) plus a button in Settings → Kanäle. Skipped in worktree mode, like the feed.
+  on), a 15-minute heartbeat, and a button in Settings → Kanäle. The heartbeat is not optional
+  decoration: the hooks fire once, so without it a push that failed while nobody watched leaves
+  every connected shop on the old figure until a human next edits a release. Only one push is ever
+  in the air — with two overlapping, a 429 retry re-enters the call queue at the back and the older
+  run can land last, republishing the figure somebody has just corrected downwards. Skipped in
+  worktree mode, like the feed.
 - **Throttle:** 2 calls/second per endpoint for one key + user, answered with 429 + `Retry-After`.
   All calls are serialised through one 550 ms queue and a 429 is retried once.
+- **Credentials that cannot work are refused at the keyboard:** a colon breaks basic auth outright
+  in the login and, per Billbee's documentation, the connection in the API password. Both arrive
+  otherwise as a plain 401, which reads as "the key was never approved" and sends somebody off
+  requesting a new one.
 - **Not webhooks — for now.** Billbee can register one, which needs a URL it can reach; the server
   has public endpoints already (the eBay deletion route is one), so this is a later step rather
   than an impossibility. Polling reuses the sync route the other three channels use.
@@ -454,6 +479,7 @@ ends, and the ways it differs from §6.1–6.3 are the whole point.
 | `GET/POST /api/channels/:c/config`    | admin  | Channel credentials + enable/disable     |
 | `POST /api/channels/:c/sync`          | admin  | Force a sync now                         |
 | `POST /api/channels/billbee/stock`    | admin  | Push the released amounts to Billbee (§6.4) |
+| `GET  /api/products/mappings?channel=` | admin | The standing article ↔ listing mappings of one channel |
 | `POST /api/orders/webhook/wix`         | public | Signed Wix webhook                       |
 | `GET/POST /api/orders/webhook/ebay-deletion` | public | eBay account-deletion compliance   |
 
