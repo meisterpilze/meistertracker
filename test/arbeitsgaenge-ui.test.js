@@ -39,6 +39,7 @@ const TEILE = [
   [/^function wkBagFlush\(bag\) \{[\s\S]*?\r?\n\}/m, 'wkBagFlush()'],
   [/^function wkfBagFlush\(bag, lastFlush\) \{[\s\S]*?\r?\n\}/m, 'wkfBagFlush()'],
   [/^function wkfHarvestReceiptText\(r\) \{[\s\S]*?\r?\n\}/m, 'wkfHarvestReceiptText()'],
+  [/^function wkIstApple\(ua, touchPoints\) \{[\s\S]*?\r?\n\}/m, 'wkIstApple()'],
   [/^function wkOpenMixes\(\) \{[\s\S]*?\r?\n\}/m, 'wkOpenMixes()'],
   [/^function wkmStock\(\) \{[\s\S]*?\r?\n\}/m, 'wkmStock()'],
   [/^function wkmShortfalls\(\) \{[\s\S]*?\r?\n\}/m, 'wkmShortfalls()']
@@ -70,7 +71,7 @@ function bauen({ harvests = [], sbList = [], preview = null, stock = {}, lang = 
     const WKF = { flushOverride: ${JSON.stringify(flushOverride)} };
     const t = (k, p) => (p ? k + ' ' + JSON.stringify(p) : k);
     ${TEILE_SRC}
-    return { fmtKg, wkBagHarvested, wkBagFlush, wkfBagFlush, wkfHarvestReceiptText, wkOpenMixes, wkmShortfalls, WKF };
+    return { fmtKg, wkBagHarvested, wkBagFlush, wkfBagFlush, wkfHarvestReceiptText, wkIstApple, wkOpenMixes, wkmShortfalls, WKF };
   `;
   return new Function(quelle)();
 }
@@ -186,6 +187,46 @@ describe('Arbeitsgänge — die Quittung rechnet nach', () => {
     r.released = false;
     w.wkfHarvestReceiptText(r);
     assert.equal(r.lines[2][1], 'work.rReleasedNo');
+  });
+});
+
+describe('Arbeitsgänge — aufs Handy legen', () => {
+  // Chrome meldet beforeinstallprompt, Safari nicht. Für Safari steht statt des
+  // Knopfes der Weg von Hand da — und nur dort, sonst bekämen Android-Nutzer eine
+  // Anleitung für ein Menü, das ihr Browser nicht hat.
+  const IPHONE =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const IPAD_ALT =
+    'Mozilla/5.0 (iPad; CPU OS 12_5 like Mac OS X) AppleWebKit/605.1.15 Version/12.1 Mobile/15E148 Safari/604.1';
+  const IPAD_NEU =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const ANDROID =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+  const WINDOWS =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+  it('erkennt iPhone und älteres iPad an der Kennung', () => {
+    const w = bauen({});
+    assert.equal(w.wkIstApple(IPHONE, 5), true);
+    assert.equal(w.wkIstApple(IPAD_ALT, 5), true);
+  });
+
+  it('erkennt das iPad, das sich als Macintosh ausgibt', () => {
+    // Seit iPadOS 13 ist die Kennung die eines Rechners. Ohne den Touch-Zähler
+    // bekäme genau das Gerät im Labor den Hinweis nie zu sehen.
+    const w = bauen({});
+    assert.equal(w.wkIstApple(IPAD_NEU, 5), true);
+  });
+
+  it('hält einen echten Mac für einen Rechner', () => {
+    const w = bauen({});
+    assert.equal(w.wkIstApple(IPAD_NEU, 0), false, 'ohne Touch ist es keiner');
+  });
+
+  it('lässt Android und Windows in Ruhe — dort gibt es den Knopf', () => {
+    const w = bauen({});
+    assert.equal(w.wkIstApple(ANDROID, 5), false);
+    assert.equal(w.wkIstApple(WINDOWS, 0), false);
   });
 });
 

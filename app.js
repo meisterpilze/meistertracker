@@ -21915,27 +21915,63 @@ function wkOpenGrain() {
   }
 }
 
-// The mixing form lives in the "Neue Charge" panel, right above the batch form
-// that draws kilos out of it — the "Substrat-Ansätze" tab only lists the open
-// mixes. Pointing the tile at the list was a dead end: it showed what exists
-// and offered no way to add one.
-function wkOpenSubstrate() {
-  go('batch', 'n-batch');
-  openStab('batch', 'new');
-  setTimeout(() => {
-    const el = document.getElementById('sb-recipe');
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.focus();
-  }, 80);
+
+// ─── Aufs Handy legen ────────────────────────────────────────────────────────
+// Chrome meldet beforeinstallprompt, sobald die App installierbar ist, und legt
+// das Ereignis für später beiseite; Safari meldet gar nichts und will den Weg
+// über Teilen. Beides landet im selben Streifen.
+let _installEvent = null;
+
+// Läuft die App schon als Symbol? Dann hat der Streifen nichts mehr zu sagen.
+function wkAlsAppOffen() {
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 }
+// iPadOS meldet sich seit 13 als Macintosh — ohne den Touch-Zähler hielte man
+// jedes iPad für einen Rechner und zeigte den Hinweis nie an.
+function wkIstApple(ua, touchPoints) {
+  if (/iphone|ipad|ipod/i.test(ua)) return true;
+  return /macintosh/i.test(ua) && touchPoints > 1;
+}
+function wkInstallRender() {
+  const bar = document.getElementById('wk-install');
+  if (!bar) return;
+  const why = document.getElementById('wk-install-why');
+  const apple = document.getElementById('wk-install-apple');
+  const btn = document.getElementById('wk-install-btn');
+  const apfel = !_installEvent && !wkAlsAppOffen() && wkIstApple(navigator.userAgent, navigator.maxTouchPoints);
+  why.hidden = !_installEvent || wkAlsAppOffen();
+  btn.hidden = why.hidden;
+  apple.hidden = !apfel;
+  bar.hidden = why.hidden && apple.hidden;
+}
+async function wkInstall() {
+  if (!_installEvent) return;
+  _installEvent.prompt();
+  const wahl = await _installEvent.userChoice;
+  // Das Ereignis ist verbraucht, wie die Antwort auch ausfiel — ein zweites
+  // prompt() auf demselben wirft.
+  _installEvent = null;
+  wkInstallRender();
+  if (wahl && wahl.outcome === 'accepted') setFb('ok', t('work.installDone'), { noModal: true });
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Ohne preventDefault zeigt Chrome seinen eigenen Streifen — und der ist für
+  // immer weg, sobald man ihn einmal wegwischt.
+  e.preventDefault();
+  _installEvent = e;
+  wkInstallRender();
+});
+window.addEventListener('appinstalled', () => {
+  _installEvent = null;
+  wkInstallRender();
+});
 
 (function wireWorkSteps() {
   const tiles = [
     ['wk-t-lab', msQuickLaborNew],
     ['wk-t-grain', wkOpenGrain],
-    ['wk-t-batch', msQuickChargeNew],
-    ['wk-t-sub', wkOpenSubstrate],
+    ['wk-t-batch', wkbOpen],
+    ['wk-t-sub', wkmOpen],
     ['wk-t-move', () => wkfOpen('move')],
     ['wk-t-harvest', () => wkfOpen('harvest')],
     ['wk-t-contam', () => wkfOpen('contam')]
@@ -21946,6 +21982,11 @@ function wkOpenSubstrate() {
   });
   const today = document.getElementById('wk-goto-today');
   if (today) today.addEventListener('click', () => go('dash', 'n-dash'));
+  const inst = document.getElementById('wk-install-btn');
+  if (inst) inst.addEventListener('click', wkInstall);
+  // Für den Apple-Weg und für den Fall, dass beforeinstallprompt schon durch
+  // war, bevor diese Datei lief.
+  wkInstallRender();
   const nav = document.getElementById('n-work');
   if (nav) nav.addEventListener('click', () => go('work', 'n-work'));
   const close = document.getElementById('wkf-close');
@@ -22314,8 +22355,12 @@ function wkbCreate() {
       wkbOpen();
       return;
     } else if (a === 'tosub') {
-      wkfClose();
-      wkOpenSubstrate();
+      // Direkt in den Misch-Dialog, nicht auf die Chargenseite: wkOpenSubstrate()
+      // springt in das lange Formular und lässt den Arbeiter dort suchen. Die
+      // Kachel auf der Arbeitsgang-Seite öffnet längst den Dialog; dieser Knopf
+      // steht an genau der Stelle, an der man ihn am dringendsten braucht — es
+      // gibt keinen Ansatz, also legen wir jetzt einen an.
+      wkmOpen();
       return;
     } else if (a === 'create') {
       wkbCreate();
@@ -22331,13 +22376,6 @@ function wkbCreate() {
       wkbRender();
     }
   });
-  const tile = document.getElementById('wk-t-batch');
-  if (tile) {
-    // Die Kachel führt jetzt durch den Ablauf statt in den Schnelldialog.
-    const fresh = tile.cloneNode(true);
-    tile.parentNode.replaceChild(fresh, tile);
-    fresh.addEventListener('click', wkbOpen);
-  }
   // Derselbe Weg aus der Karte heraus, wo das lange Formular steht: wer dort
   // landet, soll nicht erst auf die Startseite zurückmüssen, um geführt zu werden.
   const guided = document.getElementById('nb-guided');
@@ -22633,10 +22671,4 @@ function wkmSubmit(subId, kg, label) {
       wkmRead();
     }
   });
-  const tile = document.getElementById('wk-t-sub');
-  if (tile) {
-    const fresh = tile.cloneNode(true);
-    tile.parentNode.replaceChild(fresh, tile);
-    fresh.addEventListener('click', wkmOpen);
-  }
 })();
