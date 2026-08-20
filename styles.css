@@ -1919,6 +1919,14 @@ textarea:focus {
 .btn-r:hover {
   background: #fee2e2;
 }
+/* A width the desk caps and a phone does not. The number arrives as data on the
+   element (`--w-cap: 480px`) rather than as an inline `max-width` declaration,
+   because an inline declaration wins against every rule in this file — including
+   the phone rule that exists to undo exactly this cap. */
+.w-cap {
+  max-width: var(--w-cap);
+}
+
 .btn-sm {
   padding: 5px 10px;
   font-size: max(12px, var(--fs-min));
@@ -3970,6 +3978,14 @@ tr:hover td {
   /* Constrain inline-sized inputs so they can't overflow narrow viewports */
   input[style*='width:'],
   select[style*='width:'] {
+    max-width: 100%;
+  }
+  /* Eight fields the rule above was written for and could not reach: their cap
+     was an inline `max-width`, which outranks every rule in this sheet. It is a
+     custom property now, so the cascade decides again — same device as
+     .fs-floor and --fs-own. Two of the eight declare no inline width at all, so
+     the attribute selector does not match them either; this is what covers them. */
+  .w-cap {
     max-width: 100%;
   }
   /* WCAG-size touch targets for calendar toolbar on mobile */

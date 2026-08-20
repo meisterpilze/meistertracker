@@ -2263,7 +2263,7 @@
                   This year
                 </button>
               </div>
-              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV" style="padding: 4px 10px">
+              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                   <polyline points="7 10 12 15 17 10" />
@@ -2324,7 +2324,6 @@
                   class="btn btn-sm fs-xs"
                   onclick="takeKpiSnapshot()"
                   title="Update today's snapshot"
-                  style="padding: 3px 8px"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="23 4 23 10 17 10" />
@@ -2574,7 +2573,7 @@
                         type="button"
                         id="nb-create-strain-btn"
                         class="btn btn-sm btn-p fs-xs"
-                        style="margin-left: 6px; padding: 3px 8px"
+                        style="margin-left: 6px"
                         data-i18n="strains.createNow"
                       >
                         Jetzt Pilzsorte anlegen →
@@ -3726,7 +3725,7 @@
                         <button
                           type="button"
                           class="btn btn-sm gs-line-rm"
-                          style="display: none; padding: 4px 8px; color: var(--c-red)"
+                          style="display: none; color: var(--c-red)"
                           title="Remove"
                         >
                           &times;
@@ -4698,7 +4697,7 @@
                     class="btn btn-sm fs-xs"
                     data-i18n-title="caldav.copyUrl"
                     title="Copy URL"
-                    style="white-space: nowrap; padding: 4px 8px"
+                    style="white-space: nowrap"
                     data-i18n="common.copy"
                   >
                     Copy
@@ -4813,12 +4812,12 @@
                     >Subdomain</label
                   >
                   <div style="display: flex; align-items: center; gap: 4px">
-                    <input
+                    <input class="w-cap"
                       type="text"
                       id="duckdns-domain"
                       data-i18n-placeholder="duckdns.subdomainPlaceholder"
                       placeholder="myserver"
-                      style="flex: 1; max-width: 200px"
+                      style="flex: 1; --w-cap: 200px"
                     />
                     <span style="font-size: 13px; color: var(--c-text-muted)">.duckdns.org</span>
                   </div>
@@ -4829,11 +4828,11 @@
                     data-i18n="duckdns.token"
                     >DuckDNS token</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="password"
                     id="duckdns-token"
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -5028,11 +5027,11 @@
                     data-i18n="harvestFeed.url"
                     >Receiver URL</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="url"
                     id="harvestfeed-url"
                     placeholder="https://example.org/harvest"
-                    style="max-width: 480px; width: 100%"
+                    style="width: 100%; --w-cap: 480px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -5048,7 +5047,7 @@
                     >Shared secret</label
                   >
                   <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
-                    <input type="password" id="harvestfeed-secret" style="max-width: 380px; width: 100%; flex: 1" />
+                    <input class="w-cap" type="password" id="harvestfeed-secret" style="width: 100%; flex: 1; --w-cap: 380px" />
                     <button id="harvestfeed-gen-btn" class="btn btn-sm" data-i18n="harvestFeed.generate">
                       Generate
                     </button>
@@ -5080,11 +5079,11 @@
                     data-i18n="harvestFeed.site"
                     >Name of this farm in the feed (optional)</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="text"
                     id="harvestfeed-site"
                     maxlength="64"
-                    style="max-width: 240px; width: 100%"
+                    style="width: 100%; --w-cap: 240px"
                     data-i18n-placeholder="harvestFeed.sitePh"
                     placeholder="e.g. north-farm"
                   />
@@ -5191,11 +5190,11 @@
                     data-i18n="printer.bridgeUrl"
                     >Bridge URL</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="text"
                     id="printer-bridge-url"
                     placeholder="https://192.168.1.50:9100"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 2px" data-i18n="printer.urlHint">
                     LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).
@@ -5207,12 +5206,12 @@
                     data-i18n="printer.bridgeToken"
                     >Bridge token (optional)</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="password"
                     id="printer-bridge-token"
                     placeholder="leave empty to keep current"
                     data-i18n-placeholder="printer.tokenPlaceholder"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -5887,7 +5886,7 @@
                 without an error anywhere — the shop just kept showing nothing.
                 Only species this database has actually recorded can be picked.
               -->
-              <select id="harvestrelease-new" style="max-width: 260px"></select>
+              <select class="w-cap" id="harvestrelease-new" style="--w-cap: 260px"></select>
               <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
               <span style="flex: 1"></span>
               <!--
