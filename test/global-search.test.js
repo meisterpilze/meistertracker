@@ -22,12 +22,16 @@ const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 
-// Lift the pure half. GS_ORDER comes with it because gsMatch() sorts by it.
+// Lift the pure half. GS_TYPES comes with it because GS_ORDER is derived from
+// it and gsMatch() sorts by that.
 function lift(...names) {
   const src = names
     .map((n) => {
+      // Order matters: the single-line form is tried before the block-arrow
+      // one, or `const GS_KIND = (t) => …;` would run lazily to the next
+      // `\n};` in the file and drag a whole unrelated function in with it.
       const re = new RegExp(
-        `^(?:const ${n} = \\[[\\s\\S]*?\\];|const ${n} = \\([\\s\\S]*?\\n\\};|function ${n}\\([\\s\\S]*?\\n\\})`,
+        `^(?:const ${n} = \\[[\\s\\S]*?\\n\\];|const ${n} = \\[[\\s\\S]*?\\];|const ${n} = [^\\n]*;|const ${n} = \\([\\s\\S]*?\\n\\};|function ${n}\\([\\s\\S]*?\\n\\})`,
         'm'
       );
       const m = APP.match(re);
@@ -37,7 +41,8 @@ function lift(...names) {
     .join('\n');
   return new Function(`${src}\nreturn { ${names.join(', ')} };`)();
 }
-const { GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark, gsGroup } = lift(
+const { GS_TYPES, GS_ORDER, gsRank, gsMatch, gsAutoOpen, gsScanned, gsLookup, gsMark, gsGroup } = lift(
+  'GS_TYPES',
   'GS_ORDER',
   'gsRank',
   'gsMatch',
@@ -281,20 +286,34 @@ describe('where a result lands', () => {
   });
 
   it('sends batches through the one that already existed', () => {
-    assert.match(APP, /if \(rec\.type === 'batch'\) return goToBatch\(rec\.id\);/);
+    // goToBatch() is the whole landing for a Charge: filter, search box, flash.
+    const charge = GS_TYPES.find((k) => k.type === 'batch');
+    assert.match(String(charge.go), /goToBatch\(rec\.id\)/);
+    assert.ok(!charge.flash, 'gsGoto() would flash a row goToBatch() has already flashed');
+    assert.ok(!charge.clear, 'goToBatch() clears the attention filter itself');
   });
 
-  it('names a group for every type it can rank', () => {
-    const grouped = [...APP.matchAll(/^\s{2}(\w+): 'search\.g\w+',?$/gm)].map((m) => m[1]);
+  it('describes every kind in one place', () => {
+    // Four tables used to say what a kind is — the sort order, the heading, the
+    // monospace list inside gsRowHtml(), and a branch of gsGoto() — and
+    // forgetting one of them failed quietly and differently each time.
+    for (const kind of GS_TYPES) {
+      assert.match(kind.group, /^search\.g\w+$/, `${kind.type} has no heading`);
+      assert.equal(typeof kind.mono, 'boolean', `${kind.type} does not say whether its id is machine-shaped`);
+      assert.equal(typeof kind.go, 'function', `${kind.type} does not say where it opens`);
+    }
     assert.deepEqual(
-      GS_ORDER.filter((t) => !grouped.includes(t)),
-      [],
-      'a type with no group heading renders under the previous type’s heading'
+      GS_ORDER,
+      GS_TYPES.map((k) => k.type)
     );
+    assert.equal(GS_ORDER[GS_ORDER.length - 1], 'page', 'pages are meant to sort last');
   });
 
   it('opens the sub-page a sub-tab result names', () => {
-    assert.match(APP, /if \(rec\.stab\) gsStab\(rec\.page, rec\.stab\);/);
+    const seite = GS_TYPES.find((k) => k.type === 'page');
+    assert.match(String(seite.go), /gsNav\(rec\.btn, rec\.page\)/);
+    assert.match(String(seite.go), /if \(rec\.stab\) gsStab\(rec\.page, rec\.stab\)/);
+    assert.ok(!seite.flash, 'a page has no row to flash');
   });
 });
 
@@ -731,16 +750,9 @@ describe('the route the palette takes to a destination', () => {
   });
 
   it('clicks the control instead of calling what the control calls', () => {
-    assert.doesNotMatch(
-      GOTO_CODE,
-      /\bopenStab\(/,
-      'gsGoto() calls openStab() directly and skips the pill that loads the panel'
-    );
-    assert.doesNotMatch(
-      GOTO_CODE,
-      /\bgo\(/,
-      'gsGoto() calls go() directly and skips the nav entry that resets the page'
-    );
+    const routen = GS_TYPES.map((k) => String(k.go)).join('\n');
+    assert.doesNotMatch(routen, /\bopenStab\(/, 'a route calls openStab() and skips the pill that loads the panel');
+    assert.doesNotMatch(routen, /\bgo\(/, 'a route calls go() and skips the nav entry that resets the page');
     assert.match(APP, /function gsNav\(btnId, page\)/);
     assert.match(APP, /function gsStab\(page, sub\)/);
   });
@@ -750,19 +762,17 @@ describe('the route the palette takes to a destination', () => {
     // filter and renderBatches() lets a query past the archive filter, which
     // its own comment says is for exactly this. Kulturen and Bestellungen had
     // nothing of the kind.
-    assert.match(APP, /function gsClearFilters\(type\)/);
-    assert.match(APP, /gsClearFilters\(rec\.type\);/);
-    const clear = APP.match(/function gsClearFilters\(type\) \{[\s\S]*?\n\}/)[0];
-    assert.match(clear, /'cult-type'/);
-    assert.match(clear, /'cult-stat'/);
-    // Through the setter, or one chip stays looking selected over an unfiltered
-    // list.
-    assert.match(clear, /setOrdersFilter\(''\)/);
-    assert.doesNotMatch(clear, /_ordersFilter = /);
+    const kultur = GS_TYPES.find((k) => k.type === 'culture');
+    const bestellung = GS_TYPES.find((k) => k.type === 'order');
+    assert.match(String(kultur.clear), /'cult-type', 'cult-stat'/);
+    // Through the setter, or one chip stays looking selected over an
+    // unfiltered list.
+    assert.match(String(bestellung.clear), /setOrdersFilter\(''\)/);
+    assert.doesNotMatch(String(bestellung.clear), /_ordersFilter = /);
     // And before the navigation, because the pill that opens the panel is what
     // renders it.
     assert.ok(
-      GOTO_CODE.indexOf('gsClearFilters') < GOTO_CODE.indexOf("gsNav('n-lab'"),
+      GOTO_CODE.indexOf('kind.clear()') < GOTO_CODE.indexOf('kind.go(rec)'),
       'the filter is cleared after the render it was meant to affect'
     );
   });
@@ -770,9 +780,7 @@ describe('the route the palette takes to a destination', () => {
   it('leaves the filters alone when the page itself was the result', () => {
     // Somebody who searched for "Kulturen" asked for the page, and what they
     // last looked at on it is part of the page.
-    const seite = GOTO_CODE.match(/if \(rec\.type === 'page'\) \{[\s\S]*?\n {2}\}/);
-    assert.ok(seite, 'the page branch moved');
-    assert.doesNotMatch(seite[0], /gsClearFilters/);
+    assert.ok(!GS_TYPES.find((k) => k.type === 'page').clear);
   });
 
   it('asks whether it may leave before it closes itself', () => {

@@ -19960,16 +19960,102 @@ async function pushBatchCaldav(batch) {
 // Single bags are deliberately not indexed. There are twenty per batch, they
 // would outnumber everything else four to one, and a scanned bag code finds its
 // batch anyway — see rank 2.
-const GS_ORDER = ['batch', 'culture', 'strain', 'zone', 'order', 'customer', 'page'];
-const GS_GROUP = {
-  batch: 'search.gBatches',
-  culture: 'search.gCultures',
-  strain: 'search.gStrains',
-  zone: 'search.gZones',
-  order: 'search.gOrders',
-  customer: 'search.gCustomers',
-  page: 'search.gPages'
-};
+// One table per kind, rather than four that have to agree.
+//
+// A kind used to be described in four places: GS_ORDER for the tie-break order,
+// GS_GROUP for its heading, a list of type names inside gsRowHtml() deciding
+// whether its id is monospaced, and a branch of gsGoto() saying where it opens.
+// Forgetting any one of them failed quietly and differently — no heading, a
+// proportional id under a column of monospaced ones, or a result that opened
+// nothing at all.
+//
+// Order is the tie-break order in gsMatch(): records before pages, and within
+// records the kinds a worker names most often first.
+//
+//   group  its heading, and the only thing the empty list is grouped by
+//   mono   ids that are machine-shaped and read down a column
+//   clear  a filter on the destination that would hide the row on arrival
+//   go     where it opens, through the controls rather than past them
+//   flash  whether gsGoto() marks the row afterwards; the two that say no
+//          both land somewhere that has already done it, or has no row
+const GS_TYPES = [
+  {
+    type: 'batch',
+    group: 'search.gBatches',
+    mono: true,
+    // goToBatch() is the whole landing for a Charge and has been since the
+    // dashboard's "Zur Charge" button: it clears the attention filter, writes
+    // the id into the search box — which renderBatches() lets past the archive
+    // filter on purpose — and flashes the row itself.
+    go: (rec) => goToBatch(rec.id)
+  },
+  {
+    type: 'culture',
+    group: 'search.gCultures',
+    mono: true,
+    clear: () => gsSetValue(['cult-type', 'cult-stat'], 'all'),
+    go: () => {
+      gsNav('n-lab', 'lab');
+      gsStab('lab', 'cultures');
+    },
+    flash: true
+  },
+  {
+    type: 'strain',
+    group: 'search.gStrains',
+    mono: false,
+    go: () => gsNav('n-strains', 'strains'),
+    flash: true
+  },
+  {
+    type: 'zone',
+    group: 'search.gZones',
+    mono: true,
+    go: () => gsNav('n-zones', 'zones'),
+    flash: true
+  },
+  {
+    type: 'order',
+    group: 'search.gOrders',
+    mono: true,
+    // Through the setter, or a chip stays looking selected over a list it is
+    // no longer filtering.
+    clear: () => setOrdersFilter(''),
+    go: () => {
+      gsNav('n-orders', 'orders');
+      gsStab('orders', 'inbox');
+    },
+    flash: true
+  },
+  {
+    type: 'customer',
+    group: 'search.gCustomers',
+    mono: false,
+    go: () => {
+      gsNav('n-orders', 'orders');
+      gsStab('orders', 'customers');
+    },
+    flash: true
+  },
+  {
+    type: 'page',
+    group: 'search.gPages',
+    mono: false,
+    // No clear: somebody who searched for the page "Kulturen" asked for the
+    // page, and what they last had it filtered to is part of it.
+    go: (rec) => {
+      gsNav(rec.btn, rec.page);
+      if (rec.stab) gsStab(rec.page, rec.stab);
+    }
+  }
+];
+const GS_ORDER = GS_TYPES.map((k) => k.type);
+const GS_KIND = (type) => GS_TYPES.find((k) => k.type === type);
+const gsSetValue = (ids, v) =>
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
 const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
 // Seven fits the box without a scrollbar. A list that scrolls is a filtered
 // table, and every page worth having one already has one.
@@ -20295,7 +20381,8 @@ function gsLate() {
 
 function gsRowHtml(rec, i, q) {
   const on = i === gsSel;
-  const mono = rec.type === 'batch' || rec.type === 'culture' || rec.type === 'zone' || rec.type === 'order';
+  const kind = GS_KIND(rec.type);
+  const mono = !!(kind && kind.mono);
   return (
     '<div class="gs-row' +
     (on ? ' gs-on' : '') +
@@ -20368,7 +20455,8 @@ function gsRender(keep) {
       // role=presentation: a listbox may hold options, and a heading is not
       // one. Left as a plain div it was an unlabelled child of the list and
       // some screen readers count it as an item.
-      html += '<div class="gs-group" role="presentation">' + esc(t(GS_GROUP[group])) + '</div>';
+      const kind = GS_KIND(group);
+      html += '<div class="gs-group" role="presentation">' + esc(t(kind ? kind.group : group)) + '</div>';
     }
     html += gsRowHtml(rec, i, q);
   });
@@ -20510,9 +20598,6 @@ function gsToggle() {
 // What makes a record itself: the type and whatever gsGoto() would navigate by.
 const gsKey = (r) => (r ? r.type + ':' + (r.key != null ? r.key : r.id) : null);
 
-// Attribute-selector quoting. Customer names reach this.
-const gsAttr = (v) => String(v).replace(/["\\]/g, '\\$&');
-
 // The record's page may not have drawn yet — Bestellungen and Kunden fetch on
 // arrival, so the row exists a round-trip after the navigation. Keep looking for
 // a second and a half, then stop without a word: the page is the right page
@@ -20561,71 +20646,36 @@ function gsStab(page, sub) {
   else openStab(page, sub);
 }
 
-// A result that lands on a filtered list is a result nobody can see.
+// Four steps, and the kind decides what each of them is.
 //
-// Chargen has had this rule from the start: goToBatch() clears the attention
-// filter and puts the id in the search box, and renderBatches() lets a query
-// through the archive filter on purpose, so a done batch is still findable.
-// Kulturen and Bestellungen have filters of their own and had no such rule. A
-// Kultur found by id can be of any type in any state, and the two selects
-// above the table remember what the user last looked at; an order can be in
-// any status, and the chips above the inbox do the same. Either was able to
-// hide the one row the search had just navigated to, and the flash then hunted
-// for it silently until it gave up.
-//
-// Only for a record. Somebody who searched for the page "Kulturen" asked for
-// the page, and their filters are part of it.
-function gsClearFilters(type) {
-  if (type === 'culture') {
-    const typ = document.getElementById('cult-type');
-    const stat = document.getElementById('cult-stat');
-    if (typ) typ.value = 'all';
-    if (stat) stat.value = 'all';
-  } else if (type === 'order') {
-    // The chips are part of the filter, so this goes through the setter rather
-    // than writing _ordersFilter and leaving one of them looking selected.
-    setOrdersFilter('');
-  }
-}
-
-// Where each type lives. goToBatch() already existed for the dashboard's "Zur
-// Charge" button and does the filter-field-plus-flash dance for batches, so
-// batches use it rather than a second version of it.
+// `clear` is there because a result that lands on a filtered list is a result
+// nobody can see. Chargen has had that rule from the start — goToBatch()
+// clears the attention filter and renderBatches() lets a query past the
+// archive filter on purpose, so a finished batch stays findable — and Kulturen
+// and Bestellungen had nothing of the kind. A Kultur found by id can be of any
+// type in any state and the two selects above the table remember what the user
+// last looked at; an order can be in any status and the chips do the same.
+// Either could hide the one row the search had just navigated to, and the
+// flash then hunted for it silently until it gave up.
 function gsGoto(rec) {
-  if (!rec) return;
+  const kind = GS_KIND(rec && rec.type);
+  if (!kind) return;
   // Ask before closing anything. go() asks too, but its "cancel" arrived after
-  // the palette had gone and could not reach the two steps queued behind it:
-  // the page stayed where it was and its sub-tab changed underneath, and the
-  // flash hunted for a row on a page nobody had navigated to. One question
-  // here settles it — mayLeavePage() discards the guards it got a yes for, so
-  // go()'s own call finds nothing left to ask about.
+  // the palette had gone and could not reach the steps queued behind it: the
+  // page stayed where it was and its sub-tab changed underneath, and the flash
+  // hunted for a row on a page nobody had navigated to. One question here
+  // settles it — mayLeavePage() discards the guards it got a yes for, so go()'s
+  // own call finds nothing left to ask about.
   if (!mayLeavePage()) return;
   gsClose();
-  if (rec.type === 'batch') return goToBatch(rec.id);
-  if (rec.type === 'page') {
-    gsNav(rec.btn, rec.page);
-    if (rec.stab) gsStab(rec.page, rec.stab);
-    return;
-  }
-  // Before the navigation: the pill that opens the panel is also what renders
-  // it, so a filter cleared afterwards would clear it for the render after this
-  // one.
-  gsClearFilters(rec.type);
-  if (rec.type === 'culture') {
-    gsNav('n-lab', 'lab');
-    gsStab('lab', 'cultures');
-  } else if (rec.type === 'strain') {
-    gsNav('n-strains', 'strains');
-  } else if (rec.type === 'zone') {
-    gsNav('n-zones', 'zones');
-  } else if (rec.type === 'order') {
-    gsNav('n-orders', 'orders');
-    gsStab('orders', 'inbox');
-  } else if (rec.type === 'customer') {
-    gsNav('n-orders', 'orders');
-    gsStab('orders', 'customers');
-  }
-  gsFlash('[data-find="' + gsAttr(gsKey(rec)) + '"]');
+  // Before the navigation: the pill that opens a panel is also what renders it,
+  // so a filter cleared afterwards would only take effect on the render after
+  // this one.
+  if (kind.clear) kind.clear();
+  kind.go(rec);
+  // CSS.escape, which is what this repo uses for the same job in
+  // toggleLocBag(). An order id comes out of a channel payload.
+  if (kind.flash) gsFlash('[data-find="' + CSS.escape(gsKey(rec)) + '"]');
 }
 
 function gsInit() {
