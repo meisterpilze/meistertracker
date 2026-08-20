@@ -748,3 +748,29 @@ describe('Billbee stock levels are derived from releases', () => {
     assert.equal(rows[0].qty, 2, '2 × 250 g per unit is the recipe that must not be oversold');
   });
 });
+
+describe('the Billbee card is actually wired', () => {
+  // Same lesson as settings-tabs.test.js: a card can be added, translated and
+  // merged while a button does nothing, because nothing throws. Worse here —
+  // `$('id')` on a missing element throws inside the one init handler, so a typo
+  // in an id does not break the Billbee card, it breaks the whole page.
+  const ROOT = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+  it('has every element app.js reaches for', () => {
+    const ids = new Set();
+    for (const m of app.matchAll(/\$\('([a-z0-9-]*billbee[a-z0-9-]*)'\)/g)) ids.add(m[1]);
+    for (const m of app.matchAll(/getElementById\('([a-z0-9-]*billbee[a-z0-9-]*)'\)/g)) ids.add(m[1]);
+    assert.ok(ids.size >= 8, 'found the Billbee element lookups: ' + ids.size);
+    for (const id of ids) assert.ok(html.includes('id="' + id + '"'), 'index.html has #' + id);
+  });
+
+  it('gives each of its four buttons a listener', () => {
+    for (const id of ['billbee-save-btn', 'billbee-test-btn', 'billbee-sync-btn', 'billbee-stock-btn']) {
+      const at = app.indexOf(id);
+      assert.notEqual(at, -1, id + ' is referenced');
+      assert.ok(app.slice(at, at + 200).includes('addEventListener'), id + ' has a listener');
+    }
+  });
+});

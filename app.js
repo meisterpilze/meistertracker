@@ -9379,6 +9379,30 @@ async function loadChannelsSettings() {
         st2.textContent = bits.join(' · ');
       }
     };
+    // Billbee is neither: an app key plus the account it acts for, no OAuth.
+    const bb = (d.channels || []).find((c) => c.channel === 'billbee') || {};
+    const bbEnabled = document.getElementById('billbee-enabled');
+    if (bbEnabled) bbEnabled.checked = !!bb.enabled;
+    const bbUser = document.getElementById('billbee-user');
+    if (bbUser) bbUser.value = bb.clientId || '';
+    const bbKey = document.getElementById('billbee-apikey');
+    if (bbKey) {
+      bbKey.value = '';
+      bbKey.placeholder = bb.hasApiKey ? t('channels.keySet') : t('channels.apiKey');
+    }
+    const bbPw = document.getElementById('billbee-apipw');
+    if (bbPw) {
+      bbPw.value = '';
+      bbPw.placeholder = bb.hasClientSecret ? t('channels.keySet') : t('channels.billbeeApiPassword');
+    }
+    const bbStatus = document.getElementById('billbee-status');
+    if (bbStatus) {
+      const bits = [bb.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
+      if (bb.lastError) bits.push('⚠ ' + bb.lastError);
+      else if (bb.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(bb.lastSync) }));
+      bbStatus.style.display = 'block';
+      bbStatus.textContent = bits.join(' · ');
+    }
     fillOauth('ebay', (d.channels || []).find((c) => c.channel === 'ebay') || {});
     fillOauth('etsy', (d.channels || []).find((c) => c.channel === 'etsy') || {});
     // eBay account-deletion setup: never echo the stored token back, and show the
@@ -9418,6 +9442,13 @@ async function saveChannel(channel) {
     body = {
       enabled: document.getElementById('etsy-enabled').checked,
       clientId: (document.getElementById('etsy-clientid').value || '').trim() // Keystring
+    };
+  } else if (channel === 'billbee') {
+    body = {
+      enabled: document.getElementById('billbee-enabled').checked,
+      apiKey: (document.getElementById('billbee-apikey').value || '').trim(), // X-Billbee-Api-Key (blank = keep)
+      clientId: (document.getElementById('billbee-user').value || '').trim(), // Billbee login
+      clientSecret: (document.getElementById('billbee-apipw').value || '').trim() // API password (blank = keep)
     };
   } else {
     return false;
@@ -9481,6 +9512,37 @@ async function syncChannel(channel) {
     }
     if (st) st.textContent = '✓ ' + t('channels.synced', { n: r.imported || 0 });
     setFb('ok', t('channels.synced', { n: r.imported || 0 }));
+  } catch (e) {
+    if (st) st.textContent = '⚠ ' + t('common.error');
+  }
+}
+
+// Send the released amounts to Billbee, which forwards them to every shop
+// connected there. The unknown-species warning is the whole reason this reports
+// more than a count: a name that does not match a release reads as "sold out"
+// in every shop and looks like nothing at all from here.
+async function pushBillbeeStock() {
+  const st = document.getElementById('billbee-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('channels.billbeeStockSending');
+  }
+  try {
+    const r = await apiPost('/api/channels/billbee/stock', {});
+    if (r && r.error) {
+      if (st) st.textContent = '⚠ ' + r.error;
+      return;
+    }
+    if (r && r.disabled) {
+      if (st) st.textContent = '⚠ ' + t('channels.billbeeDisabled');
+      return;
+    }
+    const msg = t('channels.billbeeStockDone', { n: (r && r.pushed) || 0, total: (r && r.articles) || 0 });
+    const unknown = (r && r.unknownSpecies) || [];
+    if (st)
+      st.textContent =
+        '✓ ' + msg + (unknown.length ? ' · ⚠ ' + t('channels.billbeeUnknownSpecies', { list: unknown.join(', ') }) : '');
+    setFb('ok', msg);
   } catch (e) {
     if (st) st.textContent = '⚠ ' + t('common.error');
   }
@@ -21167,6 +21229,10 @@ function initEventListeners() {
   $('st-settings-channels').addEventListener('click', () => {
     openStab('settings', 'channels');
   });
+  $('billbee-save-btn').addEventListener('click', () => saveChannel('billbee'));
+  $('billbee-test-btn').addEventListener('click', () => testChannel('billbee'));
+  $('billbee-sync-btn').addEventListener('click', () => syncChannel('billbee'));
+  $('billbee-stock-btn').addEventListener('click', pushBillbeeStock);
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
   $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));

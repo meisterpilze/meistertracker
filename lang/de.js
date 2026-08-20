@@ -422,6 +422,16 @@ window.LANG['de'] = {
   'channels.syncing': 'Synchronisiere …',
   'channels.synced': '{n} Bestellungen synchronisiert',
   'channels.lastSync': 'Zuletzt: {time}',
+  'channels.billbeeTitle': 'Billbee',
+  'channels.billbeeDesc':
+    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, und dorthin geht der freigegebene Bestand — Billbee verteilt ihn an jeden angeschlossenen Shop. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Wichtig: Sobald Billbee an ist, gehören die Direktverbindungen zu den Shops, die Billbee schon abholt, hier aus — sonst kommt jede Bestellung doppelt.',
+  'channels.billbeeUser': 'Billbee-Benutzer (E-Mail)',
+  'channels.billbeeApiPassword': 'API-Passwort',
+  'channels.billbeeStock': 'Bestand jetzt senden',
+  'channels.billbeeStockSending': 'Sende Bestand …',
+  'channels.billbeeStockDone': '{n} von {total} Artikeln an Billbee gesendet',
+  'channels.billbeeDisabled': 'Billbee ist nicht aktiviert',
+  'channels.billbeeUnknownSpecies': 'Sorten ohne Freigabe: {list}',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',

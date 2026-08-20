@@ -4390,6 +4390,75 @@
           <!-- Sales channels (live order sync) -->
           <div class="sp" id="sp-settings-channels">
             <div class="card">
+              <div class="sec" data-i18n="channels.billbeeTitle">Billbee</div>
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="channels.billbeeDesc"
+              >
+                Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal,
+                und dorthin geht der freigegebene Bestand — Billbee verteilt ihn an jeden angeschlossenen Shop.
+                API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen.
+                Wichtig: Sobald Billbee an ist, gehören die Direktverbindungen zu den Shops, die Billbee schon abholt,
+                hier aus — sonst kommt jede Bestellung doppelt.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 10px; max-width: 440px">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0">
+                  <input type="checkbox" id="billbee-enabled" style="width: auto" />
+                  <span data-i18n="channels.enable">Aktivieren</span>
+                </label>
+                <div>
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.apiKey"
+                    >API-Key</label
+                  >
+                  <input
+                    type="password"
+                    id="billbee-apikey"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div>
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.billbeeUser"
+                    >Billbee-Benutzer (E-Mail)</label
+                  >
+                  <input type="text" id="billbee-user" style="width: 100%" />
+                </div>
+                <div>
+                  <label class="fs-meta"
+                    style="font-weight: 600; color: var(--c-text-sec); display: block; margin-bottom: 4px"
+                    data-i18n="channels.billbeeApiPassword"
+                    >API-Passwort</label
+                  >
+                  <input
+                    type="password"
+                    id="billbee-apipw"
+                    data-i18n-placeholder="channels.secretPlaceholder"
+                    placeholder="(leer lassen = unverändert)"
+                    style="width: 100%"
+                  />
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px">
+                  <button id="billbee-save-btn" class="btn btn-sm btn-p" data-i18n="common.save">Speichern</button>
+                  <button id="billbee-test-btn" class="btn btn-sm" data-i18n="channels.test">Verbindung testen</button>
+                  <button id="billbee-sync-btn" class="btn btn-sm" data-i18n="channels.syncNow">
+                    Jetzt synchronisieren
+                  </button>
+                  <button id="billbee-stock-btn" class="btn btn-sm" data-i18n="channels.billbeeStock">
+                    Bestand jetzt senden
+                  </button>
+                </div>
+                <div class="fs-meta"
+                  id="billbee-status"
+                  style="color: var(--c-text-muted); padding: 6px 10px; background: var(--c-bg); border-radius: 7px; display: none"
+                ></div>
+              </div>
+            </div>
+            <div class="card">
               <div class="sec" data-i18n="channels.wixTitle">Wix</div>
               <p class="fs-meta"
                 style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"

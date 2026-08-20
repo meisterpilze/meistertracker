@@ -1532,6 +1532,16 @@ window.LANG['pt'] = {
   'channels.syncing': 'A sincronizar …',
   'channels.synced': '{n} encomendas sincronizadas',
   'channels.lastSync': 'Última: {time}',
+  'channels.billbeeTitle': 'Billbee',
+  'channels.billbeeDesc':
+    'O Billbee não é uma loja, é a central: de lá chegam as encomendas de todos os canais de uma só vez, e para lá vai o stock libertado — o Billbee distribui-o por todas as lojas ligadas. Peça uma chave de API ao Billbee, ative a API na conta Billbee e crie aí uma palavra-passe de API. Importante: assim que o Billbee estiver ativo, as ligações diretas às lojas que o Billbee já recolhe devem ficar desligadas aqui — caso contrário cada encomenda chega duas vezes.',
+  'channels.billbeeUser': 'Utilizador Billbee (e-mail)',
+  'channels.billbeeApiPassword': 'Palavra-passe da API',
+  'channels.billbeeStock': 'Enviar stock agora',
+  'channels.billbeeStockSending': 'A enviar stock …',
+  'channels.billbeeStockDone': '{n} de {total} artigos enviados para o Billbee',
+  'channels.billbeeDisabled': 'O Billbee não está ativado',
+  'channels.billbeeUnknownSpecies': 'Espécies sem libertação: {list}',
   // Print
   'print.barcodeOnly': 'S\u00f3 c\u00f3digo de barras (C\u00f3digo + ID)',
   'print.barcodeStrain': 'C\u00f3digo + variedade (+ esp\u00e9cie & notas)',
