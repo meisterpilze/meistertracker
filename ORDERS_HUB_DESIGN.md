@@ -395,6 +395,47 @@ You haven't applied, so the plan includes onboarding. The important correction u
 `POST /api/orders/import` (channel `ebay`, same upsert path), plus a **manual add** form. So eBay
 is in the hub from day one and the API just makes it automatic later.
 
+### 6.4 Billbee — *the hub, not a shop* (built)
+
+Jonas runs [Billbee](https://billbee.io), which already collects the orders of every channel he
+sells on and already pushes stock out to all of them. It therefore enters this design from both
+ends, and the ways it differs from §6.1–6.3 are the whole point.
+
+- **Auth:** an application API key (`X-Billbee-Api-Key`) **plus** basic auth with the Billbee login
+  and an API password created in the Billbee account. The key has to be requested from Billbee and
+  the API switched on in the account — neither is something the code can do, and both surface as a
+  plain 401. No OAuth, so the credentials fit `sales_channel_config` unchanged: `api_key` =
+  application key, `client_id` = login, `client_secret` = API password.
+- **Read orders:** `GET /api/v1/orders`, paged (`page`, `pageSize` ≤ 250) and floored at
+  `minOrderDate` = 30 days — without a floor every poll would walk the entire order history of
+  every connected channel, and the sync route stops after 20 pages regardless.
+- **Dedup — the one rule to understand:** orders are filed under the channel `billbee` and keyed on
+  `BillBeeOrderId`, never re-attributed to the shop they came from the way `_wixOriginChannel`
+  does. Orders dedupe on (channel, channelOrderId), and Billbee's order id has nothing to do with
+  eBay's, so re-attributing would file one sale twice instead of merging it. **Consequence: when
+  Billbee is on, the direct connection for every shop it covers belongs off.** The shop name still
+  travels in `raw_json`.
+- **Tracking write-back:** `POST /api/v1/orders/{id}/shipment`. Carrier ids are read once per
+  process from `GET /api/v1/enums/shippingcarriers` rather than hard-coded from a guess — a miss
+  costs the carrier id, never the Sendungsnummer, and the carrier name still travels in the
+  comment.
+- **Stock out — the reason to connect it at all:** `POST /api/v1/products/updatestockmultiple`,
+  one call for every shop Billbee feeds. What a level *is* stays a question about this lab:
+  Meistertracker keeps no stock figure, it keeps a release, so the quantity is
+  `floor(released grams ÷ grams the article needs)` over the article's `product_components` rows of
+  type `harvest`. An expired release is zero; an article without a harvest component is left out of
+  the push **entirely** rather than pushed as zero, which would delist it in every connected shop;
+  a species the lab has never released comes back in `unknownSpecies`, because a misspelt name and
+  a sold-out one both read as zero. `AutosubtractReservedAmount` is always on — Billbee knows about
+  orders that are not shipped yet and a release does not. See `db.billbeeStockLevels()`.
+- **When it goes out:** the three moments a release changes (the same ones the harvest feed fires
+  on) plus a button in Settings → Kanäle. Skipped in worktree mode, like the feed.
+- **Throttle:** 2 calls/second per endpoint for one key + user, answered with 429 + `Retry-After`.
+  All calls are serialised through one 550 ms queue and a 429 is retried once.
+- **Not webhooks — for now.** Billbee can register one, which needs a URL it can reach; the server
+  has public endpoints already (the eBay deletion route is one), so this is a later step rather
+  than an impossibility. Polling reuses the sync route the other three channels use.
+
 ---
 
 ## 7. REST API surface (matches your `/api/*` style)
@@ -412,6 +453,7 @@ is in the hub from day one and the API just makes it automatic later.
 | `POST /api/products/map`              | admin  | Bind a channel listing → product         |
 | `GET/POST /api/channels/:c/config`    | admin  | Channel credentials + enable/disable     |
 | `POST /api/channels/:c/sync`          | admin  | Force a sync now                         |
+| `POST /api/channels/billbee/stock`    | admin  | Push the released amounts to Billbee (§6.4) |
 | `POST /api/orders/webhook/wix`         | public | Signed Wix webhook                       |
 | `GET/POST /api/orders/webhook/ebay-deletion` | public | eBay account-deletion compliance   |
 
@@ -477,6 +519,11 @@ better-than-retail rates). Candidates for Germany: **Shipcloud** (API-first, Ger
 **Sendcloud** (more turnkey, has marketplace connectors), **Billbee** (covers more of the order
 side too). *Provider choice is a separate comparison — the design below stays provider-agnostic
 behind a thin `shipping/provider.js` adapter, so swapping later is cheap.*
+
+> **Billbee is connected since §6.4 — as the order hub, not as the label arm.** Labels are bought
+> through `shipping.js` and only the resulting Sendungsnummer is written back to Billbee. Whether
+> the label itself should be bought through Billbee is still open question 4 below; connecting the
+> hub did not answer it, because nothing in §6.4 buys anything.
 
 > **Division of labour:** Meistertracker stays the **brain** (orders → production → pack-ready);
 > the aggregator is only the **arm** (label + tracking). One API call between them.
