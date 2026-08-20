@@ -2016,7 +2016,7 @@
                speed-dial FAB was deleted for. One screen answers both halves now, and
                the Dashboard keeps what only it has. -->
           <!-- Batch tasks + Alerts side by side -->
-          <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
+          <div class="dash-top-row">
             <!-- Batch tasks (worker-first — top of page) -->
             <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
               <!-- No All/Urgent-only filter: the urgency sections below ARE the
@@ -2233,8 +2233,10 @@
                toggle; the other mode held the day's work, which now sits on
                Arbeitsgänge where the jobs it names are started. See USABILITY_PLAN.md. -->
           <div id="dash-charts-section">
-            <!-- Top bar: Period toggle + CSV download -->
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+            <!-- Top bar: Period toggle + CSV download. It wraps, which it never had to
+                 while this whole section sat behind display:none in the Farm mode — three
+                 period pills and a CSV button come to 382px at 375. -->
+            <div class="ov-toolbar">
               <div class="ov-period-toggle" style="margin-bottom: 0">
                 <button
                   class="ov-period-btn active"

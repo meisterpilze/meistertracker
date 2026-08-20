@@ -3492,6 +3492,17 @@ tr:hover td {
 }
 
 /* ═══ OVERVIEW PERIOD TOGGLE ════════════════════════════════════ */
+/* The period pills and the CSV button. Wrapping is not decoration: measured at
+   375px the row is 382px wide, and it was invisible to scripts/measure-mobile.js
+   for as long as the section around it carried an inline display:none. */
+.ov-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 .ov-period-toggle {
   display: flex;
   background: var(--c-border-light);
@@ -3891,6 +3902,18 @@ tr:hover td {
   }
 }
 
+/* Batch tasks and Alerts: side by side on a desk, stacked in a hand. These four
+   were an inline style, and an inline value outranks every rule in the sheet — so
+   the phone block below could turn the row into a column and could not touch the
+   alignment, leaving both cards at the width of their own text. Measured at 375px:
+   137px of card inside a 343px page. */
+.dash-top-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
 /* ═══ DESKTOP: batch tasks own a full-width row ════════════════ */
 /* The move list is the primary card. On wide screens it takes its own
    row so its two-button rows aren't crushed into a quarter-column; the
@@ -4081,6 +4104,7 @@ tr:hover td {
   }
   .dash-top-row {
     flex-direction: column;
+    align-items: stretch;
   }
   .dash-top-row #dash-alerts-card {
     flex: 0 0 auto !important;
