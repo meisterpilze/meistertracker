@@ -17,11 +17,7 @@
 // laufen. Der Browser steht nicht unter Test, die Zahlen schon.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
-
-const ROOT = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+const { hebe } = require('./helpers/quelle');
 
 // Benannt, damit ein Fehlschlag sagt, welche Funktion umgezogen ist, statt
 // "unexpected token".
@@ -45,18 +41,9 @@ const TEILE = [
   [/^function wkmShortfalls\(\) \{[\s\S]*?\r?\n\}/m, 'wkmShortfalls()']
 ];
 
-function lift() {
-  const out = [];
-  for (const [re, name] of TEILE) {
-    const m = SRC.match(re);
-    assert.ok(m, name + ' nicht in app.js gefunden — der Test muss mitgeführt werden');
-    out.push(m[0]);
-  }
-  return out.join('\n');
-}
 // Einmal aus der Quelle heben, nicht je Attrappe: app.js ist knapp ein Megabyte,
 // und der gehobene Text ist bei jedem Aufbau derselbe.
-const TEILE_SRC = lift();
+const TEILE_SRC = hebe(TEILE);
 
 // Die Attrappen: nur das, was die gehobenen Funktionen wirklich anfassen.
 // t() gibt die Platzhalter mit zurück, damit die Quittungstests sehen, mit

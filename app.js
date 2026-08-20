@@ -7376,6 +7376,19 @@ async function sbPreview() {
   }
 }
 
+// Der Torbogen vor jedem Substrat-Ansatz: einmal bestätigen, und wenn das
+// Lager nicht reicht, steht die Frage ausdrücklich dabei. Das Formular und der
+// geführte Dialog bauten diesen Text getrennt zusammen — das Formular schrieb
+// die Kilo dabei ohne Tausenderpunkt, weil es toFixed statt fmtKg nahm.
+function sbConfirmMix(subId, kg, label, knapp, dann) {
+  confirm2(
+    t('sub.confirmTitle'),
+    t('sub.confirmMsg', { kg: fmtKg(kg, 0), recipe: label, id: subId }) + (knapp ? '\n\n' + t('sub.shortConfirm') : ''),
+    t('sub.create'),
+    dann
+  );
+}
+
 async function createSubstrateBatchUI() {
   const st = document.getElementById('sb-status');
   if (!_sbLast) {
@@ -7383,11 +7396,11 @@ async function createSubstrateBatchUI() {
     return;
   }
   const subId = sbGenId();
-  confirm2(
-    t('sub.confirmTitle'),
-    t('sub.confirmMsg', { kg: _sbLast.kg.toFixed(0), recipe: _sbLast.label, id: subId }) +
-      (_sbLast.shortfalls && _sbLast.shortfalls.length ? '\n\n' + t('sub.shortConfirm') : ''),
-    t('sub.create'),
+  sbConfirmMix(
+    subId,
+    _sbLast.kg,
+    _sbLast.label,
+    !!(_sbLast.shortfalls && _sbLast.shortfalls.length),
     async () => {
       setStatus(st, t('sub.running'), true);
       const r = await apiPost('/api/substrate-batches', {
@@ -13260,10 +13273,6 @@ function msQuickConfirm() {
     const el = document.getElementById(id);
     if (el) el.value = val;
   };
-  const setchk = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.checked = !!val;
-  };
   const sourceCulture =
     (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || '';
   if (mode === 'labor') {
@@ -13349,26 +13358,64 @@ function msQuickConfirm() {
   msQuickClose();
   go('batch', 'n-batch');
   openStab('batch', 'new');
+  nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: _inocPicked });
+  createBatch();
+}
+
+// Das lange Chargenformular aus einem Rezept füllen.
+//
+// Zwei Wege führen hierher: der Schnelldialog (msQuickConfirm) und der
+// geführte Assistent (wkbCreateFromShelf). Beide schrieben ihre eigene
+// Feldliste, und die waren schon auseinandergelaufen — dem Assistenten
+// fehlten Gips, Kultur und Körnerfeuchte, bis die Nachprüfung sie fand.
+// createBatch() liest all diese Felder; wer eines vergisst, bucht den Altwert
+// des letzten Benutzers mit. Deshalb steht die Liste nur noch hier.
+//
+// `ms` ist die Sorte. Alles in `o` überschreibt deren Rezept: qty, bagKg,
+// days, hw, wb, rh kommen als Zahlen aus dem Assistenten, strainText und
+// notes als Text, culture als Kultur-Id und inoc als Beimpf-Auswahl.
+function nbFillFromStrain(ms, o) {
+  const opt = o || {};
+  const setv = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+  const oder = (v, ersatz) => (v != null ? v : ersatz);
   const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
+  // Ein Ansatz aus einer früheren Charge steht sonst noch in der Auswahl, und
+  // createBatch nimmt dann den Weg über den Ansatz und übergeht die
+  // Zusammensetzung, die hier gerade gesetzt wird. Der Schnelldialog hat das
+  // nie geleert.
+  setv('nb-substrate-batch', '');
   setv('nb-strain-sel', ms.id);
-  setv('nb-strain-text', strainText);
-  setv('nb-qty', qty);
-  setv('nb-days', days);
-  setBagWeight(parseDecimal(ms.recBagKg) || 0);
-  setv('nb-rh', ms.recRhPct || 0);
-  setv('nb-hw', isCvg ? 0 : ms.recHardwoodPct || 0);
-  setv('nb-wb', isCvg ? 0 : ms.recWheatbranPct || 0);
+  setv('nb-strain-text', opt.strainText || '');
+  setv('nb-qty', oder(opt.qty, 1));
+  setv('nb-days', oder(opt.days, ms.recIncDays || 14));
+  setBagWeight(parseDecimal(oder(opt.bagKg, ms.recBagKg)) || 0);
+  setv('nb-rh', oder(opt.rh, ms.recRhPct || 0));
+  // Eine CVG-Sorte hat ihre ganze Masse im Kokos, eine All-in-One ihre
+  // Körnerbrut. Hart auf 0 gesetzt legt der Aufrufer sie an, ohne ein Gramm
+  // abzubuchen.
+  setv('nb-hw', isCvg ? 0 : oder(opt.hw, ms.recHardwoodPct || 0));
+  setv('nb-wb', isCvg ? 0 : oder(opt.wb, ms.recWheatbranPct || 0));
   setv('nb-coir', isCvg ? ms.recCoirPct || 100 : 0);
   setv('nb-grainkg', ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0);
-  setv('nb-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
-  setchk('nb-gyp', ms.recGypsum);
+  setv('nb-grainrh', oder(ms.recGrainRhPct, 52));
+  const gyp = document.getElementById('nb-gyp');
+  if (gyp) gyp.checked = !!ms.recGypsum;
+  // Die Kultur wird zur Herkunft der Charge, und eine G2G-/GS-Kultur schreibt
+  // createBatch anschließend als verbraucht ab — eine stehengebliebene aus
+  // einer abgebrochenen Vorbelegung darf hier nicht überleben.
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-  const nbc = document.getElementById('nb-culture');
-  if (nbc) nbc.value = sourceCulture;
-  setv('nb-notes', '');
-  _inoc = _inocPicked;
+  setv('nb-culture', opt.culture || '');
+  _inoc = opt.inoc || [];
   inocRender('nb');
-  createBatch();
+  setv('nb-notes', opt.notes || '');
+  // Erst am Ende nachrechnen lassen: jeder dieser Aufrufe zieht eine Vorschau
+  // nach sich, und mittendrin gerufen rechnen sie mit halb gefüllten Feldern
+  // etwas aus, das die nächste Zeile sofort ersetzt.
+  if (typeof nbSubstrateChanged === 'function') nbSubstrateChanged();
+  if (typeof nbStrainChanged === 'function') nbStrainChanged();
 }
 
 function nbStrainChanged() {
@@ -22234,50 +22281,22 @@ function wkbCreateFromShelf() {
   const ms = wkbStrain();
   if (!ms) return;
   const r = wkbRecipe();
-  const set = (id, v) => {
-    const el = document.getElementById(id);
-    if (el) el.value = v;
-  };
   wkfClose();
   // Zuerst hin, dann füllen: openStab() ruft beim ersten Besuch einer Sitzung
   // nbApplyDefaults(), und das überschrieb bisher alles, was hier gesetzt wurde.
   go('batch', 'n-batch');
   openStab('batch', 'new');
-  set('nb-substrate-batch', '');
-  if (typeof nbSubstrateChanged === 'function') nbSubstrateChanged();
-  set('nb-strain-sel', String(ms.id));
-  if (typeof nbStrainChanged === 'function') nbStrainChanged();
-  set('nb-qty', String(WKB.qty));
-  // Über setBagWeight, damit Knopf-Hervorhebung und Sichtbarkeit des Feldes
-  // zum Wert passen — ein direkt gesetztes Gewicht bleibt sonst unsichtbar.
-  if (typeof setBagWeight === 'function') setBagWeight(WKB.bagKg);
-  else set('nb-weight', String(WKB.bagKg));
-  // Dieselbe Ableitung wie im Schnelldialog (msQuickConfirm): eine CVG-Sorte hat
-  // ihre ganze Masse im Kokos, eine All-in-One ihre Körnerbrut. Hart auf 0
-  // gesetzt legt der Assistent sie an, ohne ein Gramm abzubuchen — createBatch
-  // fragt dann sogar noch „bucht kein Material?" und nbSaveDefaults schreibt die
-  // Nullen anschließend in die gemerkten Vorgaben des langen Formulars.
-  const isCvg = (ms.recSubstrate || 'holzkleie') === 'cvg';
-  set('nb-hw', String(isCvg ? 0 : r.hw));
-  set('nb-wb', String(isCvg ? 0 : r.wb));
-  set('nb-rh', String(r.rh));
-  set('nb-days', String(r.days));
-  set('nb-coir', String(isCvg ? ms.recCoirPct || 100 : 0));
-  set('nb-grainkg', String(ms.recBatchType === 'allinone' ? ms.recGrainKg || 0 : 0));
-  set('nb-grainrh', String(ms.recGrainRhPct != null ? ms.recGrainRhPct : 52));
-  // Felder, die createBatch ebenfalls liest und die sonst mit Altwerten aus
-  // einer früheren Eingabe oder den gemerkten Vorgaben mitgebucht würden.
-  set('nb-strain-text', '');
-  // Der Gips-Haken überlebt über nbSaveDefaults/nbApplyDefaults jede Sitzung,
-  // die Kultur eine abgebrochene Vorbelegung. Beide würden sonst mitgebucht,
-  // und eine stehengebliebene G2G-/GS-Kultur wird zusätzlich als verbraucht
-  // abgeschrieben.
-  const gyp = document.getElementById('nb-gyp');
-  if (gyp) gyp.checked = !!ms.recGypsum;
-  set('nb-culture', '');
-  _inoc = [];
-  if (typeof inocRender === 'function') inocRender('nb');
-  set('nb-notes', WKB.notes.trim());
+  // Das Rezept des Assistenten überschreibt das der Sorte, wo es abweicht;
+  // Kultur und Beimpfung bleiben leer, weil dieser Weg keine kennt.
+  nbFillFromStrain(ms, {
+    qty: WKB.qty,
+    bagKg: WKB.bagKg,
+    days: r.days,
+    hw: r.hw,
+    wb: r.wb,
+    rh: r.rh,
+    notes: WKB.notes.trim()
+  });
   createBatch();
 }
 
@@ -22579,15 +22598,7 @@ async function wkmCreate() {
   const subId = sbGenId();
   const kg = WKM.kg;
   const label = WKM.preview.recipeLabel || '';
-  // Derselbe Torbogen wie im Formular: einmal bestätigen, und bei zu wenig
-  // Material steht die Frage ausdrücklich dabei.
-  confirm2(
-    t('sub.confirmTitle'),
-    t('sub.confirmMsg', { kg: fmtKg(kg, 0), recipe: label, id: subId }) +
-      (kurz.length ? '\n\n' + t('sub.shortConfirm') : ''),
-    t('sub.create'),
-    () => wkmSubmit(subId, kg, label)
-  );
+  sbConfirmMix(subId, kg, label, kurz.length > 0, () => wkmSubmit(subId, kg, label));
 }
 
 function wkmSubmit(subId, kg, label) {
