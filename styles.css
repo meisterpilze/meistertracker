@@ -168,7 +168,15 @@
 
    `auto` for the tap tokens is not a placeholder — it means "intrinsic height,
    exactly as before", so min-height contributes nothing on a desktop. */
-@media (min-width: 769px) and (hover: hover) {
+/* …and print, which is neither a phone nor a desk but is much closer to the
+   desk. A printed page has no pointer at all, so `hover: hover` is false for
+   it and every token above resolved to the value chosen for a gloved hand:
+   13px floors on a barcode label, and `min-height: max(46px, var(--tap-min))`
+   putting 56px of white space under every control that reached paper. Nothing
+   reads a token from inside @media print today, so this is latent rather than
+   broken — but it stops being latent the moment an inline size moves onto a
+   class, which is the next commit. */
+@media (min-width: 769px) and (hover: hover), print {
   :root {
     --fs-xs: 11px;
     --fs-sm: 13px;

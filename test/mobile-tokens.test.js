@@ -51,7 +51,7 @@ function block(re) {
 const ROOT_BLOCK = block(/^:root \{[\s\S]*?\n\}/m);
 // Non-greedy to the first `}` at column 0: the nested :root close is indented,
 // so this lands on the media query's own brace.
-const DESKTOP_BLOCK = block(/@media \(min-width: 769px\) and \(hover: hover\) \{[\s\S]*?\n\}/);
+const DESKTOP_BLOCK = block(/@media \(min-width: 769px\) and \(hover: hover\), print \{[\s\S]*?\n\}/);
 
 // Derived from the stylesheet, not restated here. Phase 2 adds a paired token
 // per component — the base layer holds 104 sub-floor sizes and every one needs
@@ -124,6 +124,17 @@ describe('mobile token layer', () => {
   // needs the phone's numbers. Width alone would hand it the desk's.
   it('keys the desktop override on the input device as well as the width', () => {
     assert.match(DESKTOP_BLOCK, /hover: hover/);
+  });
+
+  // And paper, which has no pointer at all. Without it every token resolves to
+  // the gloved-hand value when printing: 13px floors on a barcode label and
+  // 56px of white space under any control that reaches a page.
+  it('gives print the desk values, not the hand ones', () => {
+    assert.match(
+      CSS,
+      /@media \(min-width: 769px\) and \(hover: hover\), print \{/,
+      'print is not in the desktop token query — `hover: hover` is false on paper, so every floor applies there'
+    );
   });
 
   it('overrides only tokens that :root actually declares', () => {
