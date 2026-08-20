@@ -8772,6 +8772,18 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
   // Remember the mapping for future auto-resolution — only meaningful when a
   // sku or listing id is present (manual/title-only lines have neither).
   if (channelSku || listingId) {
+    // ⚠️ The ON CONFLICT below cannot carry this on its own. SQLite counts NULLs
+    // as distinct in a UNIQUE index, so (channel, 'AUS-250', NULL) never collides
+    // with itself and re-mapping a mistyped SKU *added* a second row instead of
+    // correcting the first. Both rows then answered for one article number: the
+    // Billbee stock push takes the smallest quantity per SKU, so the correction
+    // could lose to the mistake it was meant to replace. `IS` is null-safe
+    // equality, which `=` is not.
+    db.prepare('DELETE FROM product_channel_map WHERE channel = ? AND channel_sku IS ? AND listing_id IS ?').run(
+      channel,
+      channelSku || null,
+      listingId || null
+    );
     db.prepare(
       `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
        VALUES(?,?,?,?,?)
@@ -8796,6 +8808,29 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
     ).run(productId, title, channel);
   }
   incrementDataVersion(db);
+}
+
+/**
+ * The standing article ↔ listing mappings of one channel.
+ *
+ * listUnmappedItems() answers a different question — which *ordered* lines still
+ * need a product — and for a long while it was the only way into
+ * product_channel_map, because the screen was built around it. That leaves the
+ * Billbee stock push unreachable by construction: it publishes what an article
+ * has in stock so that somebody can order it, and the article could only be
+ * mapped once somebody already had.
+ */
+function listChannelMappings(db, channel) {
+  return db
+    .prepare(
+      `SELECT m.id, m.channel, m.channel_sku AS channelSku, m.listing_id AS listingId,
+              m.product_id AS productId, p.name AS productName, p.active AS productActive
+         FROM product_channel_map m
+         LEFT JOIN products p ON p.id = m.product_id
+        WHERE m.channel = ?
+        ORDER BY m.channel_sku IS NULL, m.channel_sku, m.listing_id`
+    )
+    .all(channel);
 }
 
 function listUnmappedItems(db) {
@@ -9585,6 +9620,7 @@ module.exports = {
   mapListing,
   resolveProductId,
   listUnmappedItems,
+  listChannelMappings,
   upsertOrder,
   listOrders,
   getChannelConfig,

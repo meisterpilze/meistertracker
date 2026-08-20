@@ -3265,6 +3265,7 @@
                     <option value="wix">Wix</option>
                     <option value="etsy">Etsy</option>
                     <option value="ebay">eBay</option>
+                    <option value="billbee">Billbee</option>
                   </select>
                   <input id="oh-m-oid" data-i18n-placeholder="orders.f.orderId" placeholder="Bestell-Nr." />
                   <input id="oh-m-shipby" type="date" />
@@ -3327,6 +3328,31 @@
             <div class="card">
               <div class="sec" data-i18n="orders.unmappedTitle">Noch zuzuordnen</div>
               <div id="orders-unmapped-list"></div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="orders.fixmapTitle">Feste Zuordnungen</div>
+              <p class="fs-meta"
+                style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
+                data-i18n="orders.fixmapDesc"
+              >
+                Welche Artikelnummer eines Kanals zu welchem Produkt gehört. Die Liste darüber füllt sich nur aus
+                Bestellungen — für den Bestand, der an Billbee hinausgeht, muss eine Nummer aber schon zugeordnet
+                sein, bevor sie jemand zum ersten Mal bestellt.
+              </p>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
+                <select id="oh-fixmap-channel" style="width: auto">
+                  <option value="billbee">Billbee</option>
+                  <option value="wix">Wix</option>
+                  <option value="etsy">Etsy</option>
+                  <option value="ebay">eBay</option>
+                </select>
+                <input id="oh-fixmap-sku" data-i18n-placeholder="orders.f.sku" placeholder="SKU" style="width: auto" />
+                <select id="oh-fixmap-product" style="width: auto"></select>
+                <button class="btn btn-sm btn-p" data-action="oh-map-fixed" data-i18n="orders.assign">
+                  Zuordnen
+                </button>
+              </div>
+              <div id="orders-fixmap-list" style="margin-top: 10px"></div>
             </div>
             <div class="card">
               <div

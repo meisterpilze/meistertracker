@@ -8283,6 +8283,19 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // Products — map a channel listing → internal product (admin)
+  // The standing mappings of one channel, so they can be seen and corrected
+  // without waiting for an order to carry the listing in.
+  if (req.method === 'GET' && url === '/api/products/mappings') {
+    if (requireAdmin(req, res)) return;
+    try {
+      const channel = new URL(req.url, 'http://x').searchParams.get('channel') || '';
+      jsonOk(res, { items: channel ? db.listChannelMappings(database, channel) : [] });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   if (req.method === 'POST' && url === '/api/products/map') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {

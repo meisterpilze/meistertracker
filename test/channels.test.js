@@ -970,6 +970,71 @@ describe('Billbee stock levels are derived from releases', () => {
   });
 });
 
+describe('an article can be mapped before anybody has ordered it', () => {
+  // The stock push publishes exactly the rows of product_channel_map, and for a
+  // long while the only screen that could write one was driven by
+  // listUnmappedItems() — lines of orders that already exist. So an article could
+  // only be mapped after it had been sold, which is the thing publishing stock is
+  // for. These are the two halves of the way out: the query behind the list, and
+  // the form that can add a row without an order.
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('lists what stands for one channel, with the product name and whether it is retired', () => {
+    const now = new Date().toISOString();
+    const live = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('A', 'Austern 250 g', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    const gone = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('B', 'Shiitake alt', 'fresh', 0, ?)")
+      .run(now).lastInsertRowid;
+    db.mapListing(d, { channel: 'billbee', channelSku: 'AUS-250', productId: live });
+    db.mapListing(d, { channel: 'billbee', channelSku: 'SHI-250', productId: gone });
+    db.mapListing(d, { channel: 'etsy', channelSku: 'ETSY-1', productId: live });
+
+    const rows = db.listChannelMappings(d, 'billbee');
+    assert.deepEqual(
+      rows.map((r) => [r.channelSku, r.productName, r.productActive]),
+      [
+        ['AUS-250', 'Austern 250 g', 1],
+        ['SHI-250', 'Shiitake alt', 0]
+      ],
+      'one channel only, and enough to spot a typo without opening the database'
+    );
+    assert.equal(db.listChannelMappings(d, 'wix').length, 0);
+  });
+
+  it('maps the same SKU again instead of refusing it', () => {
+    const now = new Date().toISOString();
+    const other = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('C', 'Austern 500 g', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    // Correcting a mistyped mapping is the same gesture as making one.
+    db.mapListing(d, { channel: 'billbee', channelSku: 'AUS-250', productId: other });
+    const row = db.listChannelMappings(d, 'billbee').find((r) => r.channelSku === 'AUS-250');
+    assert.equal(row.productName, 'Austern 500 g');
+    assert.equal(db.listChannelMappings(d, 'billbee').length, 2, 'corrected, not duplicated');
+  });
+
+  it('has a form that reaches the mapping route without an order', () => {
+    const ROOT = path.join(__dirname, '..');
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    for (const id of ['oh-fixmap-channel', 'oh-fixmap-sku', 'oh-fixmap-product', 'orders-fixmap-list'])
+      assert.ok(html.includes('id="' + id + '"'), 'index.html has #' + id);
+    assert.ok(html.includes('data-action="oh-map-fixed"'), 'the button carries the action');
+    assert.ok(app.includes("action === 'oh-map-fixed'"), 'and something answers it');
+    assert.ok(app.includes("apiPost('/api/products/map'"), 'through the route that already exists');
+    assert.ok(html.includes('<option value="billbee">Billbee</option>'), 'and Billbee is one of the channels offered');
+  });
+});
+
 describe('the Billbee card is actually wired', () => {
   // Same lesson as settings-tabs.test.js: a card can be added, translated and
   // merged while a button does nothing, because nothing throws. Worse here —

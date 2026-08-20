@@ -1411,6 +1411,15 @@ function renderOrdersMapping() {
             )
             .join('')
         : `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('orders.allMapped'))}</div>`;
+      // The standing mappings, and the one form that can create one without an
+      // order having carried the listing in first.
+      const fixSel = $('oh-fixmap-product');
+      if (fixSel) {
+        const keep = fixSel.value;
+        fixSel.innerHTML = `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}`;
+        if (keep) fixSel.value = keep;
+      }
+      renderFixedMappings();
       const cat = $('orders-catalog-body');
       if (cat) {
         cat.innerHTML = products.length
@@ -1428,6 +1437,35 @@ function renderOrdersMapping() {
     })
     .catch(() => {
       left.innerHTML = `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('common.error'))}</div>`;
+    });
+}
+
+// The mappings that already stand for the channel chosen in the form, so a typo
+// is visible and can be corrected by mapping the same SKU again (the insert is an
+// upsert). Without this list the Billbee stock push is a black box: it publishes
+// exactly these rows and nothing else.
+function renderFixedMappings() {
+  const box = $('orders-fixmap-list');
+  const sel = $('oh-fixmap-channel');
+  if (!box || !sel) return;
+  apiGet('/api/products/mappings?channel=' + encodeURIComponent(sel.value))
+    .then((d) => {
+      const rows = (d && d.items) || [];
+      box.innerHTML = rows.length
+        ? rows
+            .map(
+              (m) =>
+                `<div class="oh-maprow"><div style="flex:1;min-width:0">` +
+                `<span style="font-family:monospace">${esc(m.channelSku || m.listingId || '—')}</span>` +
+                ` → <strong>${esc(m.productName || '—')}</strong>` +
+                (m.productActive === 0 ? ` <span class="muted fs-xs">(${esc(t('orders.retired'))})</span>` : '') +
+                `</div></div>`
+            )
+            .join('')
+        : `<div class="muted fs-meta" style="padding:8px 2px">${esc(t('orders.fixmapNone'))}</div>`;
+    })
+    .catch(() => {
+      box.innerHTML = `<div class="muted fs-meta" style="padding:8px 2px">${esc(t('common.error'))}</div>`;
     });
 }
 
@@ -1780,6 +1818,23 @@ function ordersActionHandler(e) {
     if (f) f.click();
   } else if (action === 'oh-manual-submit') {
     _ordersManualSubmit();
+  } else if (action === 'oh-map-fixed') {
+    const channel = ($('oh-fixmap-channel') || {}).value;
+    const sku = (($('oh-fixmap-sku') || {}).value || '').trim();
+    const productId = parseInt(($('oh-fixmap-product') || {}).value || '', 10);
+    if (!sku || !productId) {
+      setFb('err', t('orders.fixmapNeeds'));
+      return;
+    }
+    apiPost('/api/products/map', { channel, channelSku: sku, productId }).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      $('oh-fixmap-sku').value = '';
+      setFb('ok', t('orders.mapped'));
+      renderOrdersMapping();
+    });
   } else if (action === 'oh-map') {
     const row = btn.closest('.oh-maprow');
     const sel = row && row.querySelector('.oh-mapsel');
@@ -9548,11 +9603,20 @@ async function pushBillbeeStock() {
       return;
     }
     const msg = t('channels.billbeeStockDone', { n: (r && r.pushed) || 0, total: (r && r.articles) || 0 });
+    const bits = ['✓ ' + msg];
+    // Which articles did not arrive, by name. A count alone leaves the operator
+    // nothing to act on, and the commonest cause — an article number Billbee does
+    // not know — is fixed in ten seconds once you can see which one it is.
+    const missed = ((r && r.results) || []).filter((x) => x && x.message).map((x) => x.sku || '?');
+    if (r && r.failed)
+      bits.push('⚠ ' + t('channels.billbeeStockFailed', { n: r.failed, list: missed.slice(0, 6).join(', ') }));
+    // A run that stopped part-way: the articles before the break are live at
+    // Billbee, the ones after it are not.
+    if (r && r.error) bits.push('⚠ ' + r.error);
     const unknown = (r && r.unknownSpecies) || [];
-    if (st)
-      st.textContent =
-        '✓ ' + msg + (unknown.length ? ' · ⚠ ' + t('channels.billbeeUnknownSpecies', { list: unknown.join(', ') }) : '');
-    setFb('ok', msg);
+    if (unknown.length) bits.push('⚠ ' + t('channels.billbeeUnknownSpecies', { list: unknown.join(', ') }));
+    if (st) st.textContent = bits.join(' · ');
+    setFb(r && (r.failed || r.error) ? 'err' : 'ok', msg);
   } catch (e) {
     if (st) st.textContent = '⚠ ' + t('common.error');
   }
@@ -21239,6 +21303,8 @@ function initEventListeners() {
   $('st-settings-channels').addEventListener('click', () => {
     openStab('settings', 'channels');
   });
+  const fixmapChannel = $('oh-fixmap-channel');
+  if (fixmapChannel) fixmapChannel.addEventListener('change', renderFixedMappings);
   $('billbee-save-btn').addEventListener('click', () => saveChannel('billbee'));
   $('billbee-test-btn').addEventListener('click', () => testChannel('billbee'));
   $('billbee-sync-btn').addEventListener('click', () => syncChannel('billbee'));
