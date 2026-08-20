@@ -11337,7 +11337,7 @@ function renderThresholds() {
     <p class="fs-meta" style="color:var(--c-text-muted);margin-bottom:10px;line-height:1.6">
       ${t('inv.avgCompDesc')}
     </p>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+    <div class="g6" style="gap:8px">
       <div><label class="fs-xs">${t('inv.hwPct')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
       <div><label class="fs-xs">${t('inv.wbPct')}</label>

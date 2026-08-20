@@ -1970,6 +1970,19 @@ textarea:focus {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
+/* Six, for the one place that needs six: the average-composition row in
+   Inventory. It was an inline `repeat(6,1fr)` written straight into
+   renderThresholds(), and a bare 1fr is minmax(auto, 1fr) — the track cannot
+   go below its content's min-content width, and an <input> has a wide one. Six
+   of them held a 285px container open to 486px, so the Inventory page scrolled
+   sideways by 111px at 375px. Nothing could see it: the grid is a template
+   string in app.js, so the source census reads it as text and measure-mobile.js
+   serves the page with the scripts stripped. */
+.g6 {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
 
 /* ═══ RESPONSIVE TABLES ════════════════════════════════════════ */
 .table-wrap {
@@ -3895,7 +3908,8 @@ tr:hover td {
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .g4,
-  .g5 {
+  .g5,
+  .g6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .rack-grid-inc {
@@ -3988,7 +4002,8 @@ tr:hover td {
   }
   .g3,
   .g4,
-  .g5 {
+  .g5,
+  .g6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .g2 {
@@ -4107,7 +4122,8 @@ tr:hover td {
   .g2,
   .g3,
   .g4,
-  .g5 {
+  .g5,
+  .g6 {
     grid-template-columns: minmax(0, 1fr);
   }
   .cal-cell {
@@ -4829,6 +4845,38 @@ tr:hover td {
      56px nav + safe-area inset for devices with home indicators. */
   .content-wrap {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+  }
+
+  /* ── The touch floor, once, for everything that takes a tap ──
+     Every other touch rule in this file names a component: .btn-sm and
+     .btn-xs get one under (pointer: coarse), .sb-btn another, .sle-undo
+     a third. That works exactly as far as the list someone remembered,
+     and rendering the app against a seeded backend at 375px found five
+     shapes that were never on it — the column-sort buttons in the batch
+     table at 21px, the "Prüfen" buttons on the zone sections at 28px,
+     the collapsed-group toggles at 27px, and "Wochenrhythmus bearbeiten"
+     on the dashboard at 15px. All five carry one of the .fs-* utilities
+     and nothing else, which is what made them look styled.
+
+     So this stops enumerating components. 347 buttons render on a phone;
+     this moves 12 of them, and every one it moves was under the floor or
+     (three calendar buttons) at the universal 44px minimum rather than
+     the 48px §9 chose for Büro work. Nothing already above it changes.
+
+     A <div> with an onclick is a control the markup does not declare, so
+     no selector can find it in general. .location-section-header is the
+     one this app has. */
+  button,
+  [role='button'],
+  .location-section-header {
+    min-height: var(--tap-sm-min);
+  }
+  /* min-height alone makes a taller box with the label at the top of it
+     when the button sets its own display; the UA's centring only applies
+     to the default one. */
+  button,
+  [role='button'] {
+    align-content: center;
   }
 
   /* ── Tables as cards ────────────────────────────────────────
