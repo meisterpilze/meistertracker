@@ -398,6 +398,49 @@ describe('what the palette refuses to open on top of', () => {
   });
 });
 
+describe('the two sources the palette has to fetch', () => {
+  it('has one writer for each cache', () => {
+    // The page that shows them and the search that indexes them both used to
+    // fetch, each writing the module cache from its own .then(). Two answers to
+    // the same question, landing in either order.
+    const orders = [...APP.matchAll(/^\s*_ordersCache = /gm)];
+    const kunden = [...APP.matchAll(/^\s*_ohCustomerCache = /gm)];
+    assert.equal(orders.length, 1, 'more than one place writes _ordersCache');
+    assert.equal(kunden.length, 1, 'more than one place writes _ohCustomerCache');
+    assert.match(APP, /function loadOrders\(\) \{[\s\S]*?_ordersCache = /);
+    assert.match(APP, /function loadCustomers\(\) \{[\s\S]*?_ohCustomerCache = /);
+  });
+
+  it('asks for every customer, not the first page of them', () => {
+    // db.listCustomers defaults to 200 and caps at 1000, ordered by spend. 200
+    // is a fine page of a table and a poor thing to search — customer 201
+    // downwards did not exist, with nothing on screen to say so.
+    assert.match(APP, /apiGet\('\/api\/customers\?limit=1000'\)/);
+    assert.doesNotMatch(APP, /apiGet\('\/api\/customers'\)/, 'a caller is still taking the default 200');
+  });
+
+  it('can be asked again after it failed', () => {
+    // The old latch was set before the request went out and both catches
+    // swallowed, so one offline moment made the two sources permanently
+    // unsearchable for the life of the tab.
+    assert.doesNotMatch(APP, /gsWarmed/, 'the once-only latch is back');
+    const warm = APP.match(/function gsWarm\(\) \{[\s\S]*?\n\}/);
+    assert.ok(warm, 'gsWarm moved');
+    assert.equal((warm[0].match(/\.finally\(/g) || []).length, 2, 'a failed warm does not release its in-flight flag');
+  });
+
+  it('does not re-sort the list under somebody already reading it', () => {
+    // A late answer arrives while the palette is open and the user may have
+    // arrowed down it. Position means a different record by then; identity does
+    // not. Typing passes nothing, because typing means "start at the top".
+    assert.match(APP, /function gsRender\(keep\)/);
+    assert.match(APP, /const wasOn = keep \? gsKey\(gsHits\[gsSel\]\) : null;/);
+    assert.match(APP, /if \(gsIsOpen\(\)\) gsRender\(true\);/);
+    const init = APP.match(/function gsInit\(\) \{[\s\S]*?\n\}/);
+    assert.doesNotMatch(init[0], /gsRender\(true\)/, 'typing keeps the old selection');
+  });
+});
+
 describe('the route the palette takes to a destination', () => {
   const GOTO = (() => {
     const m = APP.match(/function gsGoto\(rec\) \{[\s\S]*?\n\}/);

@@ -1319,12 +1319,34 @@ function _refreshOrdersActive() {
   else renderOrders();
 }
 
+// One reader for the orders snapshot, and one for the customer list. Both used
+// to be fetched from two places — the page that shows them and the search that
+// indexes them — each writing the module cache from its own `.then()`, so two
+// answers to the same question could land in either order and the table could
+// end up showing rows the cache no longer held. The endpoint and its limit are
+// written once here, so they cannot drift apart either.
+function loadOrders() {
+  return apiGet('/api/orders?limit=500').then((d) => {
+    _ordersCache = d.items || [];
+    return _ordersCache;
+  });
+}
+// The server caps this at 1000 and defaults to 200 (db.listCustomers), ordered
+// by spend. 200 is a fine page of a table and a poor thing to search: customer
+// 201 downwards simply did not exist as far as the palette was concerned, with
+// nothing on screen to say so. Ask for the maximum the server will give.
+function loadCustomers() {
+  return apiGet('/api/customers?limit=1000').then((d) => {
+    _ohCustomerCache = d.items || [];
+    return _ohCustomerCache;
+  });
+}
+
 function renderOrders() {
   const body = $('orders-body');
   if (!body) return;
-  apiGet('/api/orders?limit=500')
-    .then((d) => {
-      _ordersCache = d.items || [];
+  loadOrders()
+    .then(() => {
       _renderOrdersInbox();
     })
     .catch(() => {
@@ -1476,10 +1498,8 @@ function renderOrdersCustomers() {
   if (privacyTh) privacyTh.hidden = !isAdmin;
   const cols = isAdmin ? 7 : 6;
   body.innerHTML = _ohEmpty(cols, t('common.loading'));
-  apiGet('/api/customers')
-    .then((d) => {
-      const rows = d.items || [];
-      _ohCustomerCache = rows;
+  loadCustomers()
+    .then((rows) => {
       if (!rows.length) {
         body.innerHTML = _ohEmpty(cols, t('orders.noCustomers'));
         return;
@@ -19951,7 +19971,6 @@ const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'l
 const GS_CAP = 7;
 let gsHits = [];
 let gsSel = 0;
-let gsWarmed = false;
 let gsReturnFocus = null;
 // The query the results actually answer, which is not always the one in the
 // field: a scanned label resolves to the id it stands for. Everything that
@@ -20158,27 +20177,51 @@ function gsIndex() {
   return out.concat(gsPageIndex());
 }
 
-// Orders and customers are the two sources that are not already here. Ask once
-// per page load, in the background, and redraw whatever is on screen when the
+// Orders and customers are the two sources that are not already here. Ask on
+// the way in, in the background, and redraw whatever is on screen when the
 // answer arrives — the field stays usable throughout, it just has less to
 // search until then.
+//
+// Asked on every open, not once per page load. A once-only latch made three
+// promises it could not keep: a customer erased on this machine stayed
+// searchable for the life of the tab, one erased on another machine stayed
+// searchable for ever, and a warm that failed — offline for a moment, a 500 —
+// could never be retried, because the latch was set before the request went
+// out and both catches swallowed. The cost of dropping it is two GETs per
+// Strg+K, which is what the Bestellungen page already spends per visit; the
+// in-flight flags stop a hammered shortcut from stacking them up.
+const gsInFlight = { orders: false, customers: false };
 function gsWarm() {
-  if (gsWarmed) return;
-  gsWarmed = true;
-  if (!_ordersCache.length)
-    apiGet('/api/orders?limit=500')
-      .then((d) => {
-        _ordersCache = d.items || [];
-        gsRender();
-      })
-      .catch(() => {});
-  if (!_ohCustomerCache.length)
-    apiGet('/api/customers')
-      .then((d) => {
-        _ohCustomerCache = d.items || [];
-        gsRender();
-      })
-      .catch(() => {});
+  if (!gsInFlight.orders) {
+    gsInFlight.orders = true;
+    loadOrders()
+      .then(() => gsLate())
+      .catch(() => {})
+      .finally(() => {
+        gsInFlight.orders = false;
+      });
+  }
+  if (!gsInFlight.customers) {
+    gsInFlight.customers = true;
+    loadCustomers()
+      .then(() => gsLate())
+      .catch(() => {})
+      .finally(() => {
+        gsInFlight.customers = false;
+      });
+  }
+}
+
+function gsIsOpen() {
+  const bg = document.getElementById('m-search');
+  return !!(bg && bg.classList.contains('open'));
+}
+
+// A warm that lands while the palette is open redraws it; one that lands after
+// it closed has nothing to say. Redrawing a closed palette is not harmless —
+// it writes aria-activedescendant onto a field nobody is on.
+function gsLate() {
+  if (gsIsOpen()) gsRender(true);
 }
 
 function gsRowHtml(rec, i, q) {
@@ -20225,14 +20268,25 @@ function gsMark(text, q) {
   );
 }
 
-function gsRender() {
+// `keep` is for the redraw nobody asked for. Typing means "start at the top"
+// and passes nothing; a late answer from gsWarm() re-sorts the list under
+// whoever has already arrowed down it, and the row index they were on then
+// belongs to a different record. Identity, not position — gsIndex() builds
+// fresh objects on every call, so the record they were on is not the same
+// object even when it is the same batch.
+function gsRender(keep) {
   const box = document.getElementById('gs-results');
   if (!box) return;
+  const wasOn = keep ? gsKey(gsHits[gsSel]) : null;
   const found = gsLookup(gsIndex(), document.getElementById('gs-q').value, barcodeRegistry);
   const q = found.q;
   const all = found.hits;
   gsQ = q;
   gsHits = all.slice(0, GS_CAP);
+  if (wasOn) {
+    const wieder = gsHits.findIndex((r) => gsKey(r) === wasOn);
+    if (wieder >= 0) gsSel = wieder;
+  }
   if (gsSel >= gsHits.length) gsSel = Math.max(0, gsHits.length - 1);
   let html = '';
   let group = null;
@@ -20326,6 +20380,9 @@ function gsToggle() {
   else gsOpen();
 }
 
+// What makes a record itself: the type and whatever gsGoto() would navigate by.
+const gsKey = (r) => (r ? r.type + ':' + (r.key != null ? r.key : r.id) : null);
+
 // Attribute-selector quoting. Customer names reach this.
 const gsAttr = (v) => String(v).replace(/["\\]/g, '\\$&');
 
@@ -20410,7 +20467,7 @@ function gsGoto(rec) {
     gsNav('n-orders', 'orders');
     gsStab('orders', 'customers');
   }
-  gsFlash('[data-find="' + gsAttr(rec.type + ':' + (rec.key != null ? rec.key : rec.id)) + '"]');
+  gsFlash('[data-find="' + gsAttr(gsKey(rec)) + '"]');
 }
 
 function gsInit() {
