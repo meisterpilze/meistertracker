@@ -181,7 +181,7 @@ describe('where a result lands', () => {
   });
 
   it('opens the sub-page a sub-tab result names', () => {
-    assert.match(APP, /if \(rec\.stab\) openStab\(rec\.page, rec\.stab\);/);
+    assert.match(APP, /if \(rec\.stab\) gsStab\(rec\.page, rec\.stab\);/);
   });
 });
 
@@ -287,6 +287,68 @@ describe('what the palette refuses to open on top of', () => {
     assert.match(handler[0], /e\.stopPropagation\(\);/);
     assert.match(APP, /const gsOpenNow = document\.getElementById\('m-search'\)\?\.classList\.contains\('open'\);/);
     assert.match(APP, /if \(gsOpenNow \|\| \(!scanOpen && !camOpen\)\)/);
+  });
+});
+
+describe('the route the palette takes to a destination', () => {
+  const GOTO = (() => {
+    const m = APP.match(/function gsGoto\(rec\) \{[\s\S]*?\n\}/);
+    assert.ok(m, 'gsGoto is gone');
+    return m[0];
+  })();
+  // The comments in there name go() and openStab() on purpose — they are about
+  // why the code no longer calls them. Read the code.
+  const GOTO_CODE = GOTO.replace(/\/\/[^\n]*/g, '');
+
+  // go() and openStab() are the last two steps of arriving somewhere, not all
+  // of it. Seven sub-tab pills load their own panel from their own click
+  // handler, so calling openStab() past them opens the panel empty; the nav
+  // entries carry side effects of the same kind. Clicking is the app's own
+  // idiom for this — the bottom nav delegates to its sidebar twin, and go()
+  // ends by clicking the active pill for Admin and Bestellungen.
+  const HANDLERS = [
+    ...APP.matchAll(/\$\('(st-[a-z0-9-]+)'\)\.addEventListener\('click', \(\) => (\{[\s\S]*?\n {2}\}|[^\n]*?)\);/g)
+  ];
+
+  it('finds the sub-tab handlers — a silent zero would make this block useless', () => {
+    assert.ok(HANDLERS.length >= 25, `expected at least 25 sub-tab handlers, found ${HANDLERS.length}`);
+  });
+
+  it('has something to protect: pills that do more than switch the panel', () => {
+    const extra = HANDLERS.filter((m) => {
+      const body = m[2]
+        .replace(/^\{|\}$/g, '')
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/openStab\([^)]*\);?/g, '')
+        .trim();
+      return body.length > 0;
+    }).map((m) => m[1]);
+    assert.ok(extra.length >= 5, `expected several loader-carrying pills, found ${extra.join(', ') || 'none'}`);
+  });
+
+  it('clicks the control instead of calling what the control calls', () => {
+    assert.doesNotMatch(
+      GOTO_CODE,
+      /\bopenStab\(/,
+      'gsGoto() calls openStab() directly and skips the pill that loads the panel'
+    );
+    assert.doesNotMatch(
+      GOTO_CODE,
+      /\bgo\(/,
+      'gsGoto() calls go() directly and skips the nav entry that resets the page'
+    );
+    assert.match(APP, /function gsNav\(btnId, page\)/);
+    assert.match(APP, /function gsStab\(page, sub\)/);
+  });
+
+  it('asks whether it may leave before it closes itself', () => {
+    // go() asks as well, and used to be the only one asking — by then the
+    // palette had gone and the openStab() and gsFlash() queued behind it ran on
+    // a page the user had just refused to leave.
+    const bis = GOTO_CODE.indexOf('gsClose();');
+    const frage = GOTO_CODE.indexOf('mayLeavePage()');
+    assert.ok(frage >= 0, 'gsGoto() no longer asks');
+    assert.ok(frage < bis, 'the question comes after the palette has already closed');
   });
 });
 

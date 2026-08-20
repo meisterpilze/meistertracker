@@ -20286,31 +20286,63 @@ function gsFlash(sel) {
   setTimeout(look, 60);
 }
 
+// Take the route a user would take.
+//
+// go() and openStab() are the last two steps of that route, not the whole of
+// it. The nav entry above them clears the Chargen attention filter and draws
+// the Sorten list; the sub-tab pill loads the panel for half of Admin, for
+// Lieferanten, and for Kamera and Server, because that wiring lives in the
+// pill's own handler and nowhere else. Calling the last two steps directly
+// skips the first, so Admin ▸ Benutzer opened blank.
+//
+// So click the control instead. This is the app's own idiom in three places
+// already: the mobile bottom nav delegates to its sidebar twin, and go() ends
+// by clicking the active pill for Admin and Bestellungen — "the strip handler
+// already knows what its panel needs", as the comment there puts it. The
+// fallback is for a destination that has no button, which today is none.
+function gsNav(btnId, page) {
+  const btn = document.getElementById(btnId);
+  if (btn) btn.click();
+  else go(page, btnId);
+}
+function gsStab(page, sub) {
+  const st = document.getElementById('st-' + page + '-' + sub);
+  if (st) st.click();
+  else openStab(page, sub);
+}
+
 // Where each type lives. goToBatch() already existed for the dashboard's "Zur
 // Charge" button and does the filter-field-plus-flash dance for batches, so
 // batches use it rather than a second version of it.
 function gsGoto(rec) {
   if (!rec) return;
+  // Ask before closing anything. go() asks too, but its "cancel" arrived after
+  // the palette had gone and could not reach the two steps queued behind it:
+  // the page stayed where it was and its sub-tab changed underneath, and the
+  // flash hunted for a row on a page nobody had navigated to. One question
+  // here settles it — mayLeavePage() discards the guards it got a yes for, so
+  // go()'s own call finds nothing left to ask about.
+  if (!mayLeavePage()) return;
   gsClose();
   if (rec.type === 'batch') return goToBatch(rec.id);
   if (rec.type === 'page') {
-    go(rec.page, rec.btn);
-    if (rec.stab) openStab(rec.page, rec.stab);
+    gsNav(rec.btn, rec.page);
+    if (rec.stab) gsStab(rec.page, rec.stab);
     return;
   }
   if (rec.type === 'culture') {
-    go('lab', 'n-lab');
-    openStab('lab', 'cultures');
+    gsNav('n-lab', 'lab');
+    gsStab('lab', 'cultures');
   } else if (rec.type === 'strain') {
-    go('strains', 'n-strains');
+    gsNav('n-strains', 'strains');
   } else if (rec.type === 'zone') {
-    go('zones', 'n-zones');
+    gsNav('n-zones', 'zones');
   } else if (rec.type === 'order') {
-    go('orders', 'n-orders');
-    openStab('orders', 'inbox');
+    gsNav('n-orders', 'orders');
+    gsStab('orders', 'inbox');
   } else if (rec.type === 'customer') {
-    go('orders', 'n-orders');
-    openStab('orders', 'customers');
+    gsNav('n-orders', 'orders');
+    gsStab('orders', 'customers');
   }
   gsFlash('[data-find="' + gsAttr(rec.type + ':' + (rec.key != null ? rec.key : rec.id)) + '"]');
 }
