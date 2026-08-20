@@ -576,6 +576,9 @@ function applyData(d) {
   // so the lazy rebuild on next getStatus() will pick up the new state.
   _statusByBatch = null;
   _hasScanByBatch = null;
+  // Same reason, same wholesale replacement: the search index is built from
+  // these arrays and every one of them is about to be a different array.
+  gsIndexInvalidate();
   mushroomStrains = d.mushroomStrains || [];
   batches = d.batches || [];
   scanLog = d.scanLog || [];
@@ -1298,10 +1301,13 @@ let _ordersFilter = '';
 function _ohEmpty(cols, msg) {
   return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
 }
+// The channel's name on its own. _ohChannel() wraps it in the pill; the search
+// index wants the words without the markup around them.
+function _ohChannelLabel(ch) {
+  return ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
+}
 function _ohChannel(ch) {
-  const label =
-    ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
-  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(label)}</span>`;
+  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(_ohChannelLabel(ch))}</span>`;
 }
 function _ohStatus(st) {
   return `<span class="oh-st oh-st-${esc(st)}">${esc(t('orders.status.' + st))}</span>`;
@@ -1316,12 +1322,36 @@ function _refreshOrdersActive() {
   else renderOrders();
 }
 
+// One reader for the orders snapshot, and one for the customer list. Both used
+// to be fetched from two places — the page that shows them and the search that
+// indexes them — each writing the module cache from its own `.then()`, so two
+// answers to the same question could land in either order and the table could
+// end up showing rows the cache no longer held. The endpoint and its limit are
+// written once here, so they cannot drift apart either.
+function loadOrders() {
+  return apiGet('/api/orders?limit=500').then((d) => {
+    _ordersCache = d.items || [];
+    gsIndexInvalidate();
+    return _ordersCache;
+  });
+}
+// The server caps this at 1000 and defaults to 200 (db.listCustomers), ordered
+// by spend. 200 is a fine page of a table and a poor thing to search: customer
+// 201 downwards simply did not exist as far as the palette was concerned, with
+// nothing on screen to say so. Ask for the maximum the server will give.
+function loadCustomers() {
+  return apiGet('/api/customers?limit=1000').then((d) => {
+    _ohCustomerCache = d.items || [];
+    gsIndexInvalidate();
+    return _ohCustomerCache;
+  });
+}
+
 function renderOrders() {
   const body = $('orders-body');
   if (!body) return;
-  apiGet('/api/orders?limit=500')
-    .then((d) => {
-      _ordersCache = d.items || [];
+  loadOrders()
+    .then(() => {
       _renderOrdersInbox();
     })
     .catch(() => {
@@ -1349,7 +1379,7 @@ function _renderOrdersInbox() {
   body.innerHTML = rows
     .map(
       (o) =>
-        `<tr><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
+        `<tr data-find="order:${esc(o.channelOrderId)}"><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
         `<td class="fs-xs" data-mlabel="${esc(t('orders.th.order'))}" style="font-family:monospace">${esc(o.channelOrderId)}</td>` +
         `<td data-mlabel="${esc(t('orders.th.customer'))}">${esc(o.customerName || '—')}</td>` +
         `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
@@ -1456,6 +1486,11 @@ function renderOrdersMapping() {
 // Set when an eBay account-closure notification is clicked, so the row that the
 // request is about is findable in a 200-row table. Cleared on the next render.
 let _ohHighlightCustomer = null;
+// Kept for the search index. This table re-fetches on every visit and renders
+// straight from the response, so nothing here remembered a customer between
+// renders — and the palette cannot search a list that only ever existed inside
+// a .then().
+let _ohCustomerCache = [];
 function renderOrdersCustomers() {
   const body = $('orders-customers-body');
   if (!body) return;
@@ -1468,9 +1503,8 @@ function renderOrdersCustomers() {
   if (privacyTh) privacyTh.hidden = !isAdmin;
   const cols = isAdmin ? 7 : 6;
   body.innerHTML = _ohEmpty(cols, t('common.loading'));
-  apiGet('/api/customers')
-    .then((d) => {
-      const rows = d.items || [];
+  loadCustomers()
+    .then((rows) => {
       if (!rows.length) {
         body.innerHTML = _ohEmpty(cols, t('orders.noCustomers'));
         return;
@@ -1502,7 +1536,7 @@ function renderOrdersCustomers() {
           // only an id to go on.
           const hit = _ohHighlightCustomer && c.id === _ohHighlightCustomer;
           return (
-            `<tr${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
+            `<tr data-find="customer:${esc(String(c.id))}"${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
             `<td data-mlabel="${esc(t('orders.th.customer'))}"><strong>${esc(c.name || c.email || '—')}</strong></td>` +
             `<td data-mlabel="${esc(t('orders.th.channels'))}">${chans}</td>` +
             `<td data-mlabel="${esc(t('orders.th.orders'))}">${c.orderCount || 0}</td>` +
@@ -12041,7 +12075,7 @@ function renderZones() {
           })
           .join('')
       : '<span class="fs-xs" style="color:var(--c-text-muted)">' + t('zones.noRacks') + '</span>';
-    return `<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
+    return `<div class="zone-row" data-find="zone:${esc(z.id)}" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
         <span class="zone-row-name">${esc(z.name)}</span>
@@ -12598,7 +12632,7 @@ function renderStrains() {
       const chargeBtn = ms.recBatchType
         ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
         : '';
-      return `<tr>
+      return `<tr data-find="strain:${ms.id}">
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span class="fs-meta" style="font-family:monospace;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td class="fs-meta" style="color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
@@ -13499,7 +13533,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -17259,7 +17293,11 @@ document.addEventListener('keydown', (e) => {
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
     const scanOpen = document.getElementById('scan-overlay')?.classList.contains('open');
     const camOpen = document.getElementById('m-camscan')?.classList.contains('open');
-    if (!scanOpen && !camOpen) {
+    // The search palette is the search box this comment already warns about,
+    // and it is the one that resolves a scanned code itself. Two readers of the
+    // same keystrokes would open a result and log a movement off one scan.
+    const gsOpenNow = document.getElementById('m-search')?.classList.contains('open');
+    if (gsOpenNow || (!scanOpen && !camOpen)) {
       _scanBuf.chars = [];
       clearTimeout(_scanBuf.timer);
       return;
@@ -19905,6 +19943,818 @@ async function pushBatchCaldav(batch) {
   });
 })();
 
+// ═══ SUCHE ═════════════════════════════════════════════════════════════════
+//
+// One field over what this client already holds — Chargen, Kulturen, Sorten,
+// Zonen, Bestellungen, Kunden — and over the pages and sub-pages themselves,
+// because the quickest way to a page in a twelve-entry sidebar is not to go
+// looking for it in the sidebar.
+//
+// What it can index is what is in memory. batches, cultures, mushroomStrains
+// and zones arrive with /api/data and are always there; orders and customers
+// have their own endpoints and are fetched on the way into Bestellungen, so the
+// first open warms those two caches and redraws when they land. Blocking the
+// field until every source has answered would make the fast path wait for the
+// slow one on every single open, so it does not.
+//
+// Single bags are deliberately not indexed. There are twenty per batch, they
+// would outnumber everything else four to one, and a scanned bag code finds its
+// batch anyway — see rank 2.
+// One table per kind, rather than four that have to agree.
+//
+// A kind used to be described in four places: GS_ORDER for the tie-break order,
+// GS_GROUP for its heading, a list of type names inside gsRowHtml() deciding
+// whether its id is monospaced, and a branch of gsGoto() saying where it opens.
+// Forgetting any one of them failed quietly and differently — no heading, a
+// proportional id under a column of monospaced ones, or a result that opened
+// nothing at all.
+//
+// Order is the tie-break order in gsMatch(): records before pages, and within
+// records the kinds a worker names most often first.
+//
+//   group  its heading, and the only thing the empty list is grouped by
+//   mono   ids that are machine-shaped and read down a column
+//   clear  a filter on the destination that would hide the row on arrival
+//   go     where it opens, through the controls rather than past them
+//   flash  whether gsGoto() marks the row afterwards; the two that say no
+//          both land somewhere that has already done it, or has no row
+const GS_TYPES = [
+  {
+    type: 'batch',
+    group: 'search.gBatches',
+    mono: true,
+    // goToBatch() is the whole landing for a Charge and has been since the
+    // dashboard's "Zur Charge" button: it clears the attention filter, writes
+    // the id into the search box — which renderBatches() lets past the archive
+    // filter on purpose — and flashes the row itself.
+    go: (rec) => goToBatch(rec.id)
+  },
+  {
+    type: 'culture',
+    group: 'search.gCultures',
+    mono: true,
+    clear: () => gsSetValue(['cult-type', 'cult-stat'], 'all'),
+    go: () => {
+      gsNav('n-lab', 'lab');
+      gsStab('lab', 'cultures');
+    },
+    flash: true
+  },
+  {
+    type: 'strain',
+    group: 'search.gStrains',
+    mono: false,
+    go: () => gsNav('n-strains', 'strains'),
+    flash: true
+  },
+  {
+    type: 'zone',
+    group: 'search.gZones',
+    mono: true,
+    go: () => gsNav('n-zones', 'zones'),
+    flash: true
+  },
+  {
+    type: 'order',
+    group: 'search.gOrders',
+    mono: true,
+    // Through the setter, or a chip stays looking selected over a list it is
+    // no longer filtering.
+    clear: () => setOrdersFilter(''),
+    go: () => {
+      gsNav('n-orders', 'orders');
+      gsStab('orders', 'inbox');
+    },
+    flash: true
+  },
+  {
+    type: 'customer',
+    group: 'search.gCustomers',
+    mono: false,
+    go: () => {
+      gsNav('n-orders', 'orders');
+      gsStab('orders', 'customers');
+    },
+    flash: true
+  },
+  {
+    type: 'page',
+    group: 'search.gPages',
+    mono: false,
+    // No clear: somebody who searched for the page "Kulturen" asked for the
+    // page, and what they last had it filtered to is part of it.
+    go: (rec) => {
+      gsNav(rec.btn, rec.page);
+      if (rec.stab) gsStab(rec.page, rec.stab);
+    }
+  }
+];
+const GS_ORDER = GS_TYPES.map((k) => k.type);
+const GS_KIND = (type) => GS_TYPES.find((k) => k.type === type);
+const gsSetValue = (ids, v) =>
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
+const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
+// Seven fits the box without a scrollbar. A list that scrolls is a filtered
+// table, and every page worth having one already has one.
+const GS_CAP = 7;
+let gsHits = [];
+let gsSel = 0;
+let gsReturnFocus = null;
+// The query the results actually answer, which is not always the one in the
+// field: a scanned label resolves to the id it stands for. Everything that
+// needs the query after a render — the highlight, the auto-open, the "nothing
+// found" line — means this one.
+let gsQ = '';
+let gsJumpTimer = null;
+
+// How well a record answers `q`. Lower is better; -1 is "not an answer".
+//
+//   0  it IS the id — a scanned code, or an id typed out in full
+//   1  the id starts with it — the ordinary case while typing
+//   2  it starts with the ID — a scanned bag code (AUS-190826-02-03) naming the
+//      batch that owns it (AUS-190826-02), which is the whole reason a worker
+//      would type sixteen characters by scanner in the first place
+//   3  the id contains it
+//   4  only the subtitle does — species, zone, status, customer, Kürzel
+//
+// Rank 2 needs four characters of id or a three-letter zone (FRU) would claim
+// every query that happens to begin with those letters.
+function gsRank(rec, q) {
+  const id = String((rec && rec.id) || '').toLowerCase();
+  const sub = String((rec && rec.sub) || '').toLowerCase();
+  if (!id) return -1;
+  if (id === q) return 0;
+  if (id.startsWith(q)) return 1;
+  if (id.length >= 4 && q.startsWith(id)) return 2;
+  if (id.indexOf(q) >= 0) return 3;
+  if (sub.indexOf(q) >= 0) return 4;
+  return -1;
+}
+
+// An empty field is not an empty answer: somebody who opened this and typed
+// nothing wants a page. Sub-pages stay out of that list — forty of them would
+// bury the twelve entries the list exists to offer.
+function gsMatch(index, query) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  if (!q) return index.filter((r) => r.type === 'page' && !r.stab);
+  const scored = [];
+  index.forEach((rec) => {
+    const rank = gsRank(rec, q);
+    if (rank >= 0) scored.push({ rec: rec, rank: rank });
+  });
+  scored.sort(
+    (a, b) =>
+      a.rank - b.rank ||
+      GS_ORDER.indexOf(a.rec.type) - GS_ORDER.indexOf(b.rec.type) ||
+      String(a.rec.id).localeCompare(String(b.rec.id))
+  );
+  return scored.map((s) => s.rec);
+}
+
+// A scanner types, and it types the whole code. When the query is answered by
+// exactly one record there is nothing left to choose, so the palette gets out
+// of the way rather than waiting for a keypress the scanner may not send.
+// Eight characters is the floor: every id this app generates is longer, and it
+// stops a short Sorte name from teleporting a human mid-word.
+//
+// The second half is for the code a station actually produces. A bag barcode
+// has no record of its own and never will — twenty per batch would outnumber
+// everything else four to one — so the batch that owns it answers, at rank 2.
+// `isCode` gates that on the string being one this app would recognise as its
+// own (isKnownBarcode), because rank 2 is a prefix rule and without the gate it
+// would jump a human out of the middle of a long Sorte name after a pause.
+function gsAutoOpen(hits, query, isCode) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  if (q.length < 8) return null;
+  const exact = hits.filter((r) => String(r.id).toLowerCase() === q);
+  if (exact.length) return exact.length === 1 ? exact[0] : null;
+  if (!isCode) return null;
+  const owner = hits.filter((r) => gsRank(r, q) === 2);
+  return owner.length === 1 ? owner[0] : null;
+}
+
+// A scanned label is a lookup key, not an id. The numeric barcode system prints
+// a number and keeps the id it stands for in barcodeRegistry, so a scanner at
+// the palette types eight digits that appear in no index. processScan() does
+// this lookup first and so does this. A number nobody printed a label for is
+// left as typed: it ranks nowhere, and the "nothing found" line says so.
+function gsScanned(query, registry) {
+  const val = String(query || '')
+    .trim()
+    .toUpperCase();
+  if (!/^\d{7,}$/.test(val)) return null;
+  const num = parseInt(val, 10);
+  if (num < 1000000) return null;
+  const entry = registry && registry.get ? registry.get(num) : null;
+  return entry && entry.id ? entry.id : null;
+}
+
+// One query, read up to three ways, in the order that cannot lose anything.
+//
+// As typed first — always, because underscores are real here: zone and rack
+// barcodes carry them (INC_BUERO_01, SPAWN_R1) and rewriting them would make
+// every zone unfindable. Only when that answers nothing does the German HID
+// reading get a turn — those scanners send an underscore where a bag id has a
+// hyphen, which is the same fix processScan() applies, but applied as a second
+// attempt rather than as a rewrite.
+function gsLookup(index, query, registry) {
+  const typed = String(query || '').trim();
+  const q = gsScanned(typed, registry) || typed;
+  const hits = gsMatch(index, q);
+  if (hits.length || q.indexOf('_') < 0) return { q: q, hits: hits };
+  const dashed = q.replace(/_/g, '-');
+  const retry = gsMatch(index, dashed);
+  return retry.length ? { q: dashed, hits: retry } : { q: q, hits: hits };
+}
+
+// Pages and sub-pages, read off the sidebar and the sub-tab strips rather than
+// listed a second time here. A page added to the sidebar is searchable without
+// anyone remembering to add it, and a renamed one is renamed once — the same
+// reason go() takes the topbar title off the nav entry it was handed.
+//
+// `style.display !== 'none'` is how this app gates by role (showAdminNav,
+// showAdminSubTab, stabLandable), so it is also how the index decides what a
+// user may be offered. A packer must not be sent to a blank Admin sub-page.
+function gsPageIndex() {
+  const out = [];
+  const label = (el) => {
+    const span = el.querySelector('[data-i18n]');
+    return span ? span.textContent.trim() : el.textContent.trim();
+  };
+  document.querySelectorAll('.sb-nav .sb-btn[data-page], .sb-footer .sb-btn[data-page]').forEach((btn) => {
+    if (btn.style.display === 'none') return;
+    out.push({ type: 'page', id: label(btn), sub: '', page: btn.dataset.page, btn: btn.id });
+  });
+  document.querySelectorAll('.page > .stabs').forEach((strip) => {
+    const page = strip.parentElement.id.replace('p-', '');
+    const nav = document.querySelector('.sb-btn[data-page="' + page + '"]');
+    if (!nav || nav.style.display === 'none') return;
+    const home = strip.dataset.stabHome ? t(strip.dataset.stabHome) : label(nav);
+    strip.querySelectorAll('.stab').forEach((st) => {
+      if (!stabLandable(st)) return;
+      out.push({
+        type: 'page',
+        id: home + ' \u203a ' + label(st),
+        // No subtitle. Every page row used to carry the word "Seiten" under a
+        // heading reading "Seiten", and a sub-page already names its page in
+        // its own id.
+        sub: '',
+        page: page,
+        btn: nav.id,
+        stab: st.id.replace('st-' + page + '-', '')
+      });
+    });
+  });
+  return out;
+}
+
+// getZoneBags() for every zone in one walk of scanLog instead of one walk per
+// zone. The subtitle below wants a bag count per zone, and on a farm with a
+// dozen zones and fifty thousand scan entries that single line was most of what
+// the palette cost. The rules are getZoneBags()'s own, kept case for case: a
+// bag's zone is the last ADD or MOVE that placed it, a MOVE with no readable
+// destination takes it out of the count, a REMOVE only removes it from the zone
+// it says it came from, and a HARVEST places nothing — logging a flush does not
+// move anything.
+function gsZoneCounts() {
+  const inZone = {};
+  const put = (z, bag) => (inZone[z] || (inZone[z] = new Set())).add(bag);
+  const drop = (z, bag) => inZone[z] && inZone[z].delete(bag);
+  scanLog.forEach((e) => {
+    if (!e.bag) return;
+    const tz = toZone(e.to);
+    const fz = toZone(e.from);
+    if (e.action === 'ADD') {
+      if (tz) put(tz, e.bag);
+    } else if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      if (tz) put(tz, e.bag);
+      // fz !== tz, for the reason spelled out in getZoneBags(): a move within
+      // one zone (rack to rack, which toZone() maps back to the zone) would
+      // otherwise insert the bag and delete it on the next line.
+      if (fz && fz !== tz) drop(fz, e.bag);
+    } else if (e.action === 'REMOVE') {
+      if (fz) drop(fz, e.bag);
+    }
+  });
+  const out = {};
+  for (const z in inZone) out[z] = inZone[z].size;
+  return out;
+}
+
+// The index, built at most once per open rather than once per keystroke. It
+// walks every batch, culture, Sorte and zone and reads the sidebar, which is
+// work in proportion to the whole farm; doing it again for each character was
+// what made the field feel slow on the phones it is meant for.
+//
+// Invalidated the same way and in the same place as _statusByBatch — applyData()
+// replaces the arrays underneath it — plus on the way in, so a search never
+// opens on a picture older than itself.
+let _gsIndex = null;
+function gsIndexInvalidate() {
+  _gsIndex = null;
+}
+
+function gsIndex() {
+  if (_gsIndex) return _gsIndex;
+  const out = [];
+  const join = (parts) => parts.filter(Boolean).join(' \u00b7 ');
+  const zoneBags = gsZoneCounts();
+  batches.forEach((b) => {
+    const st = getStatus(b.batchId);
+    const where = Object.keys(st.c || {})
+      .filter((z) => st.c[z] > 0)
+      .map(zoneDisplayName);
+    out.push({ type: 'batch', id: b.batchId, sub: join([b.species, st.status, where.join(', ')]) });
+  });
+  cultures.forEach((c) => {
+    out.push({
+      type: 'culture',
+      id: c.id,
+      sub: join([c.strainName || c.species, c.type, GS_CULTURE_STATUS[c.status] ? t(GS_CULTURE_STATUS[c.status]) : ''])
+    });
+  });
+  mushroomStrains.forEach((ms) => {
+    const bc = batches.filter((b) => b.strainId === ms.id).length;
+    const cc = cultures.filter((c) => c.strainId === ms.id).length;
+    out.push({
+      type: 'strain',
+      id: ms.name,
+      key: ms.id,
+      sub: join([ms.kuerzel, bc ? bc + ' ' + t('strains.batches') : '', cc ? cc + ' ' + t('strains.cultures') : ''])
+    });
+  });
+  zones.forEach((z) => {
+    // zoneDisplayName() and not z.name: the four zones this app knows by name
+    // carry a translation, and the rest of the app shows that. Reading the raw
+    // column here made the palette the one place that called Fruchtung by
+    // whatever is in the database.
+    const dn = zoneDisplayName(z.id);
+    out.push({
+      type: 'zone',
+      id: z.id,
+      sub: join([
+        dn && dn !== z.id ? dn : '',
+        ROLE_LABELS[z.role] ? t(ROLE_LABELS[z.role]) : z.role,
+        tp('dash.bags', zoneBags[z.id] || 0)
+      ])
+    });
+  });
+  _ordersCache.forEach((o) => {
+    out.push({
+      type: 'order',
+      id: o.channelOrderId,
+      sub: join([_ohChannelLabel(o.channel), o.customerName, t('orders.status.' + o.status)])
+    });
+  });
+  _ohCustomerCache.forEach((c) => {
+    out.push({
+      type: 'customer',
+      id: c.name || c.email || String(c.id),
+      key: c.id,
+      // `c.orderCount || 0` was dead twice over: join() filters falsy parts, so a
+      // customer with no orders contributed nothing (right answer, wrong route),
+      // and one with three contributed a bare "3" with nothing saying three of
+      // what. Same shape as the Sorte counts above it.
+      sub: join([
+        (c.channels || '').split(',').filter(Boolean).map(_ohChannelLabel).join(', '),
+        c.orderCount ? c.orderCount + ' ' + t('orders.th.orders') : ''
+      ])
+    });
+  });
+  _gsIndex = out.concat(gsPageIndex());
+  return _gsIndex;
+}
+
+// Orders and customers are the two sources that are not already here. Ask on
+// the way in, in the background, and redraw whatever is on screen when the
+// answer arrives — the field stays usable throughout, it just has less to
+// search until then.
+//
+// Asked on every open, not once per page load. A once-only latch made three
+// promises it could not keep: a customer erased on this machine stayed
+// searchable for the life of the tab, one erased on another machine stayed
+// searchable for ever, and a warm that failed — offline for a moment, a 500 —
+// could never be retried, because the latch was set before the request went
+// out and both catches swallowed. The cost of dropping it is two GETs per
+// Strg+K, which is what the Bestellungen page already spends per visit; the
+// in-flight flags stop a hammered shortcut from stacking them up.
+const gsInFlight = { orders: false, customers: false };
+function gsWarm() {
+  if (!gsInFlight.orders) {
+    gsInFlight.orders = true;
+    loadOrders()
+      .then(() => gsLate())
+      .catch(() => {})
+      .finally(() => {
+        gsInFlight.orders = false;
+      });
+  }
+  if (!gsInFlight.customers) {
+    gsInFlight.customers = true;
+    loadCustomers()
+      .then(() => gsLate())
+      .catch(() => {})
+      .finally(() => {
+        gsInFlight.customers = false;
+      });
+  }
+}
+
+function gsIsOpen() {
+  const bg = document.getElementById('m-search');
+  return !!(bg && bg.classList.contains('open'));
+}
+
+// A warm that lands while the palette is open redraws it; one that lands after
+// it closed has nothing to say. Redrawing a closed palette is not harmless —
+// it writes aria-activedescendant onto a field nobody is on.
+function gsLate() {
+  if (gsIsOpen()) gsRender(true);
+}
+
+function gsRowHtml(rec, i, q) {
+  const on = i === gsSel;
+  const kind = GS_KIND(rec.type);
+  const mono = !!(kind && kind.mono);
+  return (
+    '<div class="gs-row' +
+    (on ? ' gs-on' : '') +
+    '" role="option" id="gs-o-' +
+    i +
+    '" aria-selected="' +
+    (on ? 'true' : 'false') +
+    '" data-i="' +
+    i +
+    '"><span class="gs-row-t' +
+    (mono ? ' gs-mono' : '') +
+    '">' +
+    gsMark(rec.id, q) +
+    '</span><span class="gs-row-s">' +
+    gsMark(rec.sub, q) +
+    '</span></div>'
+  );
+}
+
+// The matched run, marked in the text it was found in.
+//
+// Find it in the text, escape the three pieces. Escaping first and then
+// measuring was the same operation in the wrong order, and it went wrong in
+// both directions on the strings this actually gets — every id and subtitle in
+// here has been through a customer name or a channel payload. "Meier & Co" is
+// "Meier &amp; Co" once escaped, so a search for "& co" found nothing, and a
+// search for "&" found the ampersand of the entity and cut it in half:
+// `Meier <mark>&</mark>amp; Co`, an entity split by a tag, rendered as a
+// literal "amp;" on the row. Cutting first means no cut can land inside an
+// entity, because there are no entities yet.
+function gsMark(text, q) {
+  const s = String(text == null ? '' : text);
+  if (!q) return esc(s);
+  const needle = String(q);
+  const at = s.toLowerCase().indexOf(needle.toLowerCase());
+  if (at < 0) return esc(s);
+  return (
+    esc(s.slice(0, at)) + '<mark>' + esc(s.slice(at, at + needle.length)) + '</mark>' + esc(s.slice(at + needle.length))
+  );
+}
+
+// `keep` is for the redraw nobody asked for. Typing means "start at the top"
+// and passes nothing; a late answer from gsWarm() re-sorts the list under
+// whoever has already arrowed down it, and the row index they were on then
+// belongs to a different record. Identity, not position — gsIndex() builds
+// fresh objects on every call, so the record they were on is not the same
+// object even when it is the same batch.
+function gsRender(keep) {
+  const box = document.getElementById('gs-results');
+  if (!box) return;
+  const wasOn = keep ? gsKey(gsHits[gsSel]) : null;
+  const found = gsLookup(gsIndex(), document.getElementById('gs-q').value, barcodeRegistry);
+  const q = found.q;
+  const all = found.hits;
+  gsQ = q;
+  // An empty field answers with the pages, and there are twelve. Capping that
+  // at seven turned the one list the palette offers unprompted into "+5 more —
+  // keep typing", which is the opposite of the offer. The box scrolls.
+  gsHits = gsGroup(q ? all.slice(0, GS_CAP) : all);
+  if (wasOn) {
+    const wieder = gsHits.findIndex((r) => gsKey(r) === wasOn);
+    if (wieder >= 0) gsSel = wieder;
+  }
+  if (gsSel >= gsHits.length) gsSel = Math.max(0, gsHits.length - 1);
+  let html = '';
+  let group = null;
+  gsHits.forEach((rec, i) => {
+    if (rec.type !== group) {
+      group = rec.type;
+      // role=presentation: a listbox may hold options, and a heading is not
+      // one. Left as a plain div it was an unlabelled child of the list and
+      // some screen readers count it as an item.
+      const kind = GS_KIND(group);
+      html += '<div class="gs-group" role="presentation">' + esc(t(kind ? kind.group : group)) + '</div>';
+    }
+    html += gsRowHtml(rec, i, q);
+  });
+  if (!gsHits.length) html = '<div class="gs-empty" role="presentation">' + esc(t('search.none', { q: q })) + '</div>';
+  else if (all.length > gsHits.length)
+    html +=
+      '<div class="gs-more" role="presentation">' + esc(t('search.more', { n: all.length - gsHits.length })) + '</div>';
+  box.innerHTML = html;
+  // The count, out of sight. The listbox cannot be the live region — it would
+  // read every row on every keystroke — and #gs-hint lives in .gs-foot, which a
+  // phone does not show at all.
+  const live = document.getElementById('gs-live');
+  if (live) live.textContent = tp('search.hits', all.length);
+  gsSelect();
+}
+
+// Move the highlight, and say so, without touching the list itself. gsRender()
+// would do this and would also throw away and rebuild every row under the
+// pointer — which is fine once per keystroke and not fine once per mouse move.
+function gsSelect() {
+  const box = document.getElementById('gs-results');
+  if (!box) return;
+  box.querySelectorAll('.gs-row').forEach((row) => {
+    const on = +row.dataset.i === gsSel;
+    row.classList.toggle('gs-on', on);
+    row.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  const hint = document.getElementById('gs-hint');
+  if (hint) hint.textContent = gsHits.length ? t('search.opens', { id: gsHits[gsSel].id }) : '';
+  document.getElementById('gs-q').setAttribute('aria-activedescendant', gsHits.length ? 'gs-o-' + gsSel : '');
+  const on = box.querySelector('.gs-on');
+  if (on) on.scrollIntoView({ block: 'nearest' });
+}
+
+// One heading per kind. gsMatch() sorts by rank first, so a kind can come back
+// after another one — a batch at rank 1, a page at rank 1, a second batch at
+// rank 3 — and the renderer, which opens a heading whenever the type changes,
+// wrote "Chargen" twice with "Seiten" in between. This keeps the order the
+// ranking chose, because the first kind to appear is the kind with the best
+// hit, and puts each kind's rows together under one heading.
+function gsGroup(hits) {
+  const order = [];
+  const by = new Map();
+  hits.forEach((rec) => {
+    if (!by.has(rec.type)) {
+      by.set(rec.type, []);
+      order.push(rec.type);
+    }
+    by.get(rec.type).push(rec);
+  });
+  const out = [];
+  order.forEach((type) => by.get(type).forEach((rec) => out.push(rec)));
+  return out;
+}
+
+function gsMove(step) {
+  if (!gsHits.length) return;
+  gsSel = (gsSel + step + gsHits.length) % gsHits.length;
+  gsSelect();
+}
+
+// Every full-viewport overlay in this app, by the two class conventions plus
+// the three that carry their placement inline. Membership is checked by
+// test/global-search.test.js against index.html, so a new one cannot join the
+// markup without joining this.
+const GS_OVERLAY_SEL = '.modal-bg, .scan-overlay, #ms-quick-modal, #ship-modal';
+
+// Is something already covering the screen?
+//
+// Asking the class was not enough, and the way it failed is worth keeping in
+// mind: `.modal-bg.open` describes how most dialogs open, but #change-pw-modal
+// is a .modal-bg that opens by writing style.display, #scan-overlay is not a
+// .modal-bg at all, and #ms-quick-modal and #ship-modal are neither. So ask
+// what is on the screen instead of how it got there — an element that is not
+// displayed has no client rects, whichever route hid it.
+function gsCovered() {
+  const list = document.querySelectorAll(GS_OVERLAY_SEL);
+  for (const el of list) {
+    if (el.id === 'm-search') continue;
+    if (el.getClientRects().length) return true;
+  }
+  return false;
+}
+
+function gsOpen() {
+  // Not on top of another dialog: navigating out from here would leave that one
+  // open over a page it was never about — and over the scan overlay it is worse
+  // than untidy. The field would take a scanned code into an invisible input at
+  // a station whose next Enter commits a bag movement.
+  if (gsCovered()) return;
+  const bg = document.getElementById('m-search');
+  if (!bg) return;
+  gsReturnFocus = document.activeElement;
+  gsSel = 0;
+  gsIndexInvalidate();
+  bg.classList.add('open');
+  gsWarm();
+  const input = document.getElementById('gs-q');
+  input.value = '';
+  gsRender();
+  // Now, inside the gesture that opened this. The 80 ms delay copied from
+  // openNote() was there because focusing a display:none element is a no-op —
+  // but the class above has already made this one visible, and iOS opens the
+  // on-screen keyboard only for a focus() that is still part of the tap. After
+  // a timeout the field had the caret and the phone had no keyboard, which for
+  // a search box is the whole of it. The timeout stays as a fallback for the
+  // case the comment was really about, and does nothing when the first one
+  // worked.
+  input.focus();
+  setTimeout(() => {
+    if (document.activeElement !== input) input.focus();
+  }, 80);
+}
+
+function gsClose() {
+  const bg = document.getElementById('m-search');
+  if (!bg || !bg.classList.contains('open')) return;
+  // A jump that was still pending is a jump nobody asked for any more.
+  clearTimeout(gsJumpTimer);
+  bg.classList.remove('open');
+  // Back where they were, so Escape costs nothing — the palette can be opened
+  // by accident mid-form and must not eat the caret.
+  if (gsReturnFocus && gsReturnFocus.focus) {
+    try {
+      gsReturnFocus.focus();
+    } catch (e) {
+      /* element gone with the page it was on */
+    }
+  }
+  gsReturnFocus = null;
+}
+
+function gsToggle() {
+  const bg = document.getElementById('m-search');
+  if (bg && bg.classList.contains('open')) gsClose();
+  else gsOpen();
+}
+
+// What makes a record itself: the type and whatever gsGoto() would navigate by.
+const gsKey = (r) => (r ? r.type + ':' + (r.key != null ? r.key : r.id) : null);
+
+// The record's page may not have drawn yet — Bestellungen and Kunden fetch on
+// arrival, so the row exists a round-trip after the navigation. Keep looking for
+// a second and a half, then stop without a word: the page is the right page
+// either way, and a missing flash is not worth a message.
+function gsFlash(sel) {
+  let tries = 0;
+  const look = () => {
+    const el = document.querySelector(sel);
+    if (!el) {
+      if (++tries < 15) setTimeout(look, 100);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('gs-flash');
+    // Restart the animation. Without the reflow, a second hit on the same row
+    // re-adds a class the element never lost and nothing plays.
+    void el.offsetWidth;
+    el.classList.add('gs-flash');
+    setTimeout(() => el.classList.remove('gs-flash'), 1600);
+  };
+  setTimeout(look, 60);
+}
+
+// Take the route a user would take.
+//
+// go() and openStab() are the last two steps of that route, not the whole of
+// it. The nav entry above them clears the Chargen attention filter and draws
+// the Sorten list; the sub-tab pill loads the panel for half of Admin, for
+// Lieferanten, and for Kamera and Server, because that wiring lives in the
+// pill's own handler and nowhere else. Calling the last two steps directly
+// skips the first, so Admin ▸ Benutzer opened blank.
+//
+// So click the control instead. This is the app's own idiom in three places
+// already: the mobile bottom nav delegates to its sidebar twin, and go() ends
+// by clicking the active pill for Admin and Bestellungen — "the strip handler
+// already knows what its panel needs", as the comment there puts it. The
+// fallback is for a destination that has no button, which today is none.
+function gsNav(btnId, page) {
+  const btn = document.getElementById(btnId);
+  if (btn) btn.click();
+  else go(page, btnId);
+}
+function gsStab(page, sub) {
+  const st = document.getElementById('st-' + page + '-' + sub);
+  if (st) st.click();
+  else openStab(page, sub);
+}
+
+// Four steps, and the kind decides what each of them is.
+//
+// `clear` is there because a result that lands on a filtered list is a result
+// nobody can see. Chargen has had that rule from the start — goToBatch()
+// clears the attention filter and renderBatches() lets a query past the
+// archive filter on purpose, so a finished batch stays findable — and Kulturen
+// and Bestellungen had nothing of the kind. A Kultur found by id can be of any
+// type in any state and the two selects above the table remember what the user
+// last looked at; an order can be in any status and the chips do the same.
+// Either could hide the one row the search had just navigated to, and the
+// flash then hunted for it silently until it gave up.
+function gsGoto(rec) {
+  const kind = GS_KIND(rec && rec.type);
+  if (!kind) return;
+  // Ask before closing anything. go() asks too, but its "cancel" arrived after
+  // the palette had gone and could not reach the steps queued behind it: the
+  // page stayed where it was and its sub-tab changed underneath, and the flash
+  // hunted for a row on a page nobody had navigated to. One question here
+  // settles it — mayLeavePage() discards the guards it got a yes for, so go()'s
+  // own call finds nothing left to ask about.
+  if (!mayLeavePage()) return;
+  gsClose();
+  // Before the navigation: the pill that opens a panel is also what renders it,
+  // so a filter cleared afterwards would only take effect on the render after
+  // this one.
+  if (kind.clear) kind.clear();
+  kind.go(rec);
+  // CSS.escape, which is what this repo uses for the same job in
+  // toggleLocBag(). An order id comes out of a channel payload.
+  if (kind.flash) gsFlash('[data-find="' + CSS.escape(gsKey(rec)) + '"]');
+}
+
+function gsInit() {
+  // ⌘K on a Mac, Strg K everywhere else. This is the only label in the app
+  // that follows the keyboard in front of the user rather than the language they
+  // chose, so the Mac branch takes data-i18n off with it — otherwise the next
+  // translatePage() would write the word back over the symbol.
+  const key = document.getElementById('sb-search-key');
+  if (key && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')) {
+    key.removeAttribute('data-i18n');
+    key.textContent = '\u2318K';
+  }
+  const input = document.getElementById('gs-q');
+  const box = document.getElementById('gs-results');
+  const bg = document.getElementById('m-search');
+  if (!input || !box || !bg) return;
+  input.addEventListener('input', () => {
+    gsSel = 0;
+    gsRender();
+    // Not while characters are still arriving. A scanner types a bag code one
+    // key at a time and the batch id is a prefix of it, so at "AUS-190826-02"
+    // the query was already a unique complete id — the jump fired there, thirty
+    // milliseconds before the "-03" that says which bag, and those three
+    // characters landed in whatever the palette had handed focus back to.
+    // SCAN_MAX_GAP * 2 is the same "the scanner has stopped" the global scan
+    // buffer uses to decide the very same thing.
+    clearTimeout(gsJumpTimer);
+    gsJumpTimer = setTimeout(() => {
+      const jump = gsAutoOpen(gsHits, gsQ, isKnownBarcode(gsQ.toUpperCase()));
+      if (jump) gsGoto(jump);
+    }, SCAN_MAX_GAP * 2);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      gsMove(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      gsMove(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      // And nothing else gets this key. The global scan buffer listens on
+      // document and a scanner's Enter would otherwise be read twice: once as
+      // "open the highlighted result" and once as "commit the scan".
+      e.stopPropagation();
+      gsGoto(gsHits[gsSel]);
+    }
+  });
+  box.addEventListener('click', (e) => {
+    const row = e.target.closest('.gs-row');
+    if (row) gsGoto(gsHits[+row.dataset.i]);
+  });
+  // The pointer takes the selection with it. A :hover rule beside .gs-on lit a
+  // second row instead — arrow down to two, leave the mouse over four, and the
+  // list shows two answers to "what does Enter open".
+  box.addEventListener('mousemove', (e) => {
+    const row = e.target.closest('.gs-row');
+    if (!row) return;
+    const i = +row.dataset.i;
+    if (i === gsSel || !gsHits[i]) return;
+    gsSel = i;
+    gsSelect();
+  });
+  bg.addEventListener('click', (e) => {
+    if (e.target === bg) gsClose();
+  });
+  document.getElementById('gs-close').addEventListener('click', gsClose);
+  document.querySelectorAll('[data-gs-open]').forEach((btn) => btn.addEventListener('click', gsOpen));
+}
+
+// Ctrl+K everywhere, Cmd+K on a Mac. preventDefault because both browsers bind
+// it to their own search box, and this one is closer to the work.
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    gsToggle();
+  }
+});
+
 // Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
 // m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
 // so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
@@ -19916,6 +20766,10 @@ document.addEventListener('keydown', function (e) {
   const modals = [
     'm-confirm',
     'm-confirm3',
+    // gsClose() and not a class removal: the palette hands focus back to
+    // whatever had it, and Escape is the route that most needs it — it can be
+    // opened by accident in the middle of a form.
+    'm-search',
     'm-work-flow',
     'm-camscan',
     'm-cal-entry',
@@ -19953,6 +20807,7 @@ document.addEventListener('keydown', function (e) {
       // next caller to trip over, and — since askConfirm() — the promise behind
       // it never settles, so whatever awaited it is suspended for the life of
       // the page. Their own closers are what say "no".
+      else if (id === 'm-search') gsClose();
       else if (id === 'm-confirm') closeConfirm();
       else if (id === 'm-confirm3') closeConfirm3();
       else if (id === 'm-prompt') closePrompt();
@@ -21333,6 +22188,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // for the same reason as the FAB above: this inserts elements, and doing that
   // once the document is settled keeps it off the critical path.
   stabDrillInit();
+  gsInit();
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
   // Wait until the rest of the app has had a chance to fetch data + render

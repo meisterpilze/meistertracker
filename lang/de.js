@@ -1947,5 +1947,22 @@ window.LANG['de'] = {
   'work.installWhy': 'Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.',
   'work.installApple': 'Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".',
   'work.installDo': 'Aufs Handy legen',
-  'work.installDone': 'Liegt jetzt auf dem Startbildschirm.'
+  'work.installDone': 'Liegt jetzt auf dem Startbildschirm.',
+  'search.open': 'Suchen',
+  'search.placeholder': 'Suchen oder scannen',
+  'search.results': 'Treffer',
+  'search.keys': '↑↓ wählen · ↵ öffnen',
+  'search.keyCtrl': 'Strg K',
+  'search.opens': 'öffnet {id}',
+  'search.none': 'Nichts gefunden für „{q}“',
+  'search.more': '+ {n} weitere — tippe weiter',
+  'search.hits.one': '{n} Treffer',
+  'search.hits.other': '{n} Treffer',
+  'search.gBatches': 'Chargen',
+  'search.gCultures': 'Kulturen',
+  'search.gStrains': 'Pilzsorten',
+  'search.gZones': 'Zonen',
+  'search.gOrders': 'Bestellungen',
+  'search.gCustomers': 'Kunden',
+  'search.gPages': 'Seiten'
 };
