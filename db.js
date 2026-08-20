@@ -9222,7 +9222,7 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
 
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
-const SALES_CHANNELS = ['wix', 'etsy', 'ebay'];
+const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
 function _ensureChannelRow(db, channel) {
   db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
     channel,
@@ -9260,7 +9260,15 @@ function listChannelConfigs(db) {
       hasApiKey: !!cfg.apiKey,
       hasClientSecret: !!cfg.clientSecret,
       hasWebhookSecret: !!cfg.webhookSecret,
-      connected: c === 'wix' ? !!cfg.apiKey && !!cfg.siteId : !!cfg.accessToken,
+      // Each channel is "connected" once it holds what its own auth needs: Wix an
+      // API key + site, Billbee a key plus the login it belongs to, the two OAuth
+      // channels a token.
+      connected:
+        c === 'wix'
+          ? !!cfg.apiKey && !!cfg.siteId
+          : c === 'billbee'
+            ? !!cfg.apiKey && !!cfg.clientId && !!cfg.clientSecret
+            : !!cfg.accessToken,
       tokenExpires: cfg.tokenExpires,
       lastSync: cfg.lastSync,
       lastError: cfg.lastError
@@ -9298,6 +9306,108 @@ function setChannelSyncState(db, channel, s) {
     channel
   );
   incrementDataVersion(db);
+}
+
+/**
+ * What Billbee should be told this lab has in stock, per mapped article.
+ *
+ * Meistertracker keeps no stock number for anything, and that is the point: what
+ * it keeps is a **release** — how many grams of a species somebody has set aside
+ * to be sold (harvest_release). An article's stock is therefore derived, and only
+ * for articles that say what they are made of:
+ *
+ *     units = floor(released grams of the species ÷ grams this article needs)
+ *
+ * Three rules keep that from publishing something nobody has:
+ *
+ *  • **An article without a harvest component is left out entirely**, not pushed
+ *    as 0. How many growkits are on the shelf is not something this lab tracks,
+ *    and a 0 would delist the article in every shop Billbee feeds.
+ *  • **An expired release counts as 0, not as unknown.** That is exactly the case
+ *    where the shops have to stop offering.
+ *  • **A species with no release counts as 0** — but it is reported back in
+ *    `unknownSpecies` when the lab has never released that name at all, because
+ *    the commonest cause is a spelling that does not match `Name (KÜRZEL)`, and
+ *    silently offering nothing looks identical to being sold out.
+ *
+ * `today` is injectable so a test does not depend on the clock.
+ */
+function billbeeStockLevels(db, opts = {}) {
+  const today = opts.today || new Date().toISOString().slice(0, 10);
+  const mapped = db
+    .prepare(
+      `SELECT m.channel_sku AS sku, p.id AS productId, p.name AS name
+         FROM product_channel_map m
+         JOIN products p ON p.id = m.product_id
+        WHERE m.channel = 'billbee' AND m.channel_sku IS NOT NULL AND TRIM(m.channel_sku) <> '' AND p.active = 1
+        ORDER BY m.channel_sku`
+    )
+    .all();
+  // Live releases only. An expired one is deliberately absent here so it reads as
+  // zero grams below.
+  const released = new Map();
+  for (const r of db
+    .prepare(`SELECT species, grams FROM harvest_release WHERE valid_until IS NULL OR valid_until >= ?`)
+    .all(today))
+    released.set(String(r.species), Math.max(0, Number(r.grams) || 0));
+  // Every species the lab has ever released, expiry included: the difference
+  // between "sold out" and "this name has never been seen here".
+  const known = new Set(
+    db
+      .prepare('SELECT species FROM harvest_release')
+      .all()
+      .map((r) => String(r.species))
+  );
+  const byProduct = new Map();
+  for (const c of db
+    .prepare(
+      `SELECT product_id AS productId, species, grams, qty_per_unit AS qtyPerUnit
+         FROM product_components WHERE fulfill_type = 'harvest'`
+    )
+    .all()) {
+    if (!byProduct.has(c.productId)) byProduct.set(c.productId, []);
+    byProduct.get(c.productId).push(c);
+  }
+
+  const bySku = new Map();
+  const skipped = [];
+  const unknownSpecies = new Set();
+  for (const row of mapped) {
+    const comps = byProduct.get(row.productId) || [];
+    if (!comps.length) {
+      skipped.push({ sku: row.sku, product: row.name, reason: 'no-harvest-component' });
+      continue;
+    }
+    let qty = null;
+    let computable = true;
+    for (const c of comps) {
+      const per = (Number(c.grams) || 0) * (c.qtyPerUnit != null ? Number(c.qtyPerUnit) : 1);
+      if (!(per > 0)) {
+        // "Made from harvest" without saying how much of it. Guessing a number
+        // here would publish an amount nobody entered.
+        computable = false;
+        break;
+      }
+      const species = String(c.species || '');
+      if (species && !known.has(species)) unknownSpecies.add(species);
+      const units = Math.floor((released.get(species) || 0) / per);
+      qty = qty === null ? units : Math.min(qty, units);
+    }
+    if (!computable) {
+      skipped.push({ sku: row.sku, product: row.name, reason: 'component-without-grams' });
+      continue;
+    }
+    // Two articles can be mapped to one Billbee SKU (different listings of the
+    // same thing). One SKU can only carry one number, and the smaller recipe is
+    // the one that must not be oversold.
+    const prev = bySku.get(row.sku);
+    if (!prev || qty < prev.qty) bySku.set(row.sku, { sku: row.sku, product: row.name, qty });
+  }
+  return {
+    levels: [...bySku.values()].map((l) => ({ ...l, reason: 'Meistertracker: Freigabe' })),
+    skipped,
+    unknownSpecies: [...unknownSpecies].sort()
+  };
 }
 
 function getOrder(db, id) {
@@ -9467,6 +9577,7 @@ module.exports = {
   listChannelConfigs,
   updateChannelConfig,
   setChannelSyncState,
+  billbeeStockLevels,
   getOrder,
   setOrderStatus,
   listCustomers,

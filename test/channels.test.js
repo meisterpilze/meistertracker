@@ -43,7 +43,20 @@ describe('sales channel config', () => {
     assert.equal(wix.hasApiKey, true);
     assert.equal(wix.apiKey, undefined, 'raw apiKey never leaves the server');
     assert.equal(wix.connected, true, 'wix connected = apiKey + siteId set');
-    assert.equal(list.length, 3, 'wix/etsy/ebay');
+    assert.equal(list.length, 4, 'wix/etsy/ebay/billbee');
+  });
+
+  it('billbee counts as connected once key, login and API password are set', () => {
+    // Not accessToken like the OAuth channels, and not siteId like Wix: Billbee
+    // authenticates with an app key *and* the account it acts for.
+    db.updateChannelConfig(d, 'billbee', { apiKey: 'BB', clientId: 'jonas@example.de' });
+    const half = db.listChannelConfigs(d).find((c) => c.channel === 'billbee');
+    assert.equal(half.connected, false, 'no API password yet');
+    db.updateChannelConfig(d, 'billbee', { clientSecret: 'api-pw' });
+    const full = db.listChannelConfigs(d).find((c) => c.channel === 'billbee');
+    assert.equal(full.connected, true);
+    assert.equal(full.clientSecret, undefined, 'the API password never leaves the server');
+    assert.equal(full.hasClientSecret, true);
   });
 
   it('records sync state', () => {
@@ -366,5 +379,372 @@ describe('house number extraction from a street line', () => {
     });
     assert.equal(o.shipStreet, 'Rue de la Paix');
     assert.equal(o.shipHouse, '12');
+  });
+});
+
+describe('Billbee: orders in', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  // Unlike the other channels' helper this one carries headers: the 429 path reads
+  // Retry-After off the response.
+  const jsonRes = (status, body, headers = {}) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (k) => headers[String(k).toLowerCase()] ?? null },
+    text: async () => JSON.stringify(body)
+  });
+  const cfg = { apiKey: 'BB-KEY', clientId: 'jonas@example.de', clientSecret: 'api-pw' };
+  const order = {
+    BillBeeOrderId: 4711,
+    Id: 'shopify-1001',
+    OrderNumber: '#1001',
+    State: 3,
+    CreatedAt: '2026-08-19T08:00:00Z',
+    Currency: 'EUR',
+    TotalCost: 24.9,
+    ShippingCost: 4.9,
+    ShipWeightKg: 0.75,
+    ShippingAddress: {
+      FirstName: 'Max',
+      LastName: 'Mustermann',
+      Street: 'Hauptstr 5',
+      Zip: '91054',
+      City: 'Erlangen',
+      CountryISO2: 'DE',
+      Email: 'kunde@example.de',
+      Phone: '+4915112345678'
+    },
+    Buyer: { Platform: 'Shopify', Id: '99', FullName: 'Max Mustermann' },
+    OrderItems: [{ Quantity: 2, TotalPrice: 24.9, Product: { SKU: 'AUS-250', Title: 'Austernpilze 250 g', Id: 'p1' } }]
+  };
+
+  it('normalizes a Billbee order and keys it on the internal id', () => {
+    const o = channels._normalizeBillbee(order);
+    assert.equal(o.channel, 'billbee');
+    // Not 'shopify-1001' and not '#1001': those are the marketplace's, and two
+    // marketplaces can hand out the same one.
+    assert.equal(o.channelOrderId, '4711');
+    assert.equal(o.status, 'new');
+    assert.equal(o.customerEmail, 'kunde@example.de');
+    assert.equal(o.buyerHandle, 'shopify:99', 'platform-prefixed, the id is not Billbee-scoped');
+    assert.equal(o.shipStreet, 'Hauptstr');
+    assert.equal(o.shipHouse, '5', 'house number split out when Billbee leaves the field empty');
+    assert.equal(o.shipPostal, '91054');
+    assert.equal(o.shipWeightG, 750);
+    assert.equal(o.totalAmount, 29.8, 'TotalCost excludes shipping — it is added back, and rounded');
+    assert.equal(o.items[0].channelSku, 'AUS-250');
+    assert.equal(o.items[0].unitPrice, 12.45, 'position total ÷ quantity');
+  });
+
+  it('keeps a house number Billbee already split', () => {
+    const o = channels._normalizeBillbee({
+      BillBeeOrderId: 1,
+      ShippingAddress: { Street: 'Pommernstraße', HouseNumber: '12a' }
+    });
+    assert.equal(o.shipStreet, 'Pommernstraße');
+    assert.equal(o.shipHouse, '12a');
+  });
+
+  it('reads shipped and cancelled from the timestamp as well as the state id', () => {
+    assert.equal(channels._billbeeStatus({ State: 1 }), 'new');
+    assert.equal(channels._billbeeStatus({ State: 4 }), 'shipped');
+    assert.equal(channels._billbeeStatus({ State: 7 }), 'shipped');
+    assert.equal(channels._billbeeStatus({ State: 8 }), 'cancelled');
+    assert.equal(channels._billbeeStatus({ State: 6 }), 'cancelled');
+    // The timestamp is what makes a state id we have wrong harmless.
+    assert.equal(channels._billbeeStatus({ State: 99, ShippedAt: '2026-08-19T10:00:00Z' }), 'shipped');
+    // …but a cancelled order stays cancelled even if it once went out.
+    assert.equal(channels._billbeeStatus({ State: 8, ShippedAt: '2026-08-19T10:00:00Z' }), 'cancelled');
+  });
+
+  it('sends both credentials and pages by Billbee’s page count', async () => {
+    const seen = [];
+    const restore = mockFetch(async (url, opts) => {
+      seen.push({ url, headers: opts.headers });
+      return jsonRes(200, { Data: [order], Paging: { Page: 1, TotalPages: 2 } });
+    });
+    try {
+      const { orders, nextCursor } = await channels.billbee.fetchOrders(cfg, {});
+      assert.equal(orders.length, 1);
+      assert.equal(nextCursor, '2', 'page 1 of 2 → there is a page 2');
+      assert.ok(seen[0].url.startsWith('https://api.billbee.io/api/v1/orders?'), seen[0].url);
+      assert.ok(seen[0].url.includes('minOrderDate='), 'a sync must not walk the whole history');
+      assert.equal(seen[0].headers['X-Billbee-Api-Key'], 'BB-KEY');
+      assert.equal(
+        seen[0].headers.Authorization,
+        'Basic ' + Buffer.from('jonas@example.de:api-pw').toString('base64'),
+        'the API key identifies the app, basic auth the account'
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('stops paging on the last page and drops an order without an internal id', async () => {
+    const restore = mockFetch(async () =>
+      jsonRes(200, { Data: [order, { OrderNumber: 'no-id' }], Paging: { Page: 2, TotalPages: 2 } })
+    );
+    try {
+      const { orders, nextCursor } = await channels.billbee.fetchOrders(cfg, { cursor: '2' });
+      assert.equal(nextCursor, null);
+      assert.equal(orders.length, 1, 'an order with no BillBeeOrderId cannot be deduped — dropped, not thrown');
+    } finally {
+      restore();
+    }
+  });
+
+  it('retries once on a 429 instead of losing the page', async () => {
+    let calls = 0;
+    const restore = mockFetch(async () => {
+      calls++;
+      return calls === 1
+        ? jsonRes(429, { Message: 'too fast' }, { 'retry-after': '0' })
+        : jsonRes(200, { Data: [order], Paging: { Page: 1, TotalPages: 1 } });
+    });
+    try {
+      const { orders } = await channels.billbee.fetchOrders(cfg, {});
+      assert.equal(calls, 2);
+      assert.equal(orders.length, 1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('names the connected shops on a test — they are the ones to switch off here', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { Data: [{ Name: 'Shopify' }, { Name: 'eBay' }] }));
+    try {
+      const r = await channels.billbee.testConnection(cfg);
+      assert.deepEqual(r.shops, ['Shopify', 'eBay']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses to call out with half a credential', async () => {
+    await assert.rejects(() => channels.billbee.fetchOrders({ apiKey: 'BB-KEY' }, {}), /Benutzer/);
+    await assert.rejects(() => channels.billbee.fetchOrders({ clientId: 'a', clientSecret: 'b' }, {}), /API-Key/);
+  });
+
+  it('writes the Sendungsnummer onto the Billbee order', async () => {
+    const sent = [];
+    const restore = mockFetch(async (url, opts) => {
+      sent.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/enums/shippingcarriers')) return jsonRes(200, { Data: [{ Id: 12, Name: 'DHL' }] });
+      return jsonRes(200, { Data: { Id: 1 } });
+    });
+    try {
+      const r = await channels.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 4711 },
+        trackingNumber: 'TRK123',
+        trackingUrl: 'https://t/123',
+        carrier: 'DHL Paket'
+      });
+      assert.equal(r.ok, true);
+      const post = sent[sent.length - 1];
+      assert.ok(post.url.endsWith('/orders/4711/shipment'), post.url);
+      assert.equal(post.body.ShippingId, 'TRK123');
+      assert.equal(post.body.ShipmentType, 0);
+      assert.equal(post.body.CarrierId, 12, 'carrier ids are read from Billbee, not guessed');
+      assert.ok(post.body.Comment.includes('DHL Paket'));
+    } finally {
+      restore();
+    }
+  });
+
+  it('still sends the tracking number when the carrier list is unreachable', async () => {
+    let post = null;
+    const restore = mockFetch(async (url, opts) => {
+      if (url.includes('/enums/shippingcarriers')) return jsonRes(500, {});
+      post = JSON.parse(opts.body);
+      return jsonRes(200, {});
+    });
+    try {
+      await channels.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 8 },
+        trackingNumber: 'TRK9',
+        carrier: 'Hermes'
+      });
+      assert.equal(post.ShippingId, 'TRK9');
+      assert.equal(post.CarrierId, undefined, 'no id rather than a wrong one');
+      assert.ok(post.Comment.includes('Hermes'), 'the name still travels');
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('Billbee: stock out', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    text: async () => JSON.stringify(body)
+  });
+  const cfg = { apiKey: 'BB-KEY', clientId: 'jonas@example.de', clientSecret: 'api-pw' };
+
+  it('sends absolute quantities and lets Billbee subtract what is already sold', async () => {
+    let body = null;
+    const restore = mockFetch(async (url, opts) => {
+      body = JSON.parse(opts.body);
+      return jsonRes(200, [{ Data: { SKU: 'AUS-250', CurrentStock: 8 } }]);
+    });
+    try {
+      const r = await channels.billbee.pushStock(cfg, [{ sku: 'AUS-250', qty: 8, reason: 'Freigabe' }]);
+      assert.equal(r.pushed, 1);
+      assert.equal(r.failed, 0);
+      assert.equal(body[0].Sku, 'AUS-250');
+      assert.equal(body[0].NewQuantity, 8);
+      assert.equal(body[0].AutosubtractReservedAmount, true, 'or an open order would be sellable twice');
+    } finally {
+      restore();
+    }
+  });
+
+  it('counts a per-article error as failed instead of throwing the batch away', async () => {
+    const restore = mockFetch(async () =>
+      jsonRes(200, [{ Data: { SKU: 'A' } }, { ErrorMessage: 'SKU unbekannt', Data: { SKU: 'B' } }])
+    );
+    try {
+      const r = await channels.billbee.pushStock(cfg, [
+        { sku: 'A', qty: 1 },
+        { sku: 'B', qty: 2 }
+      ]);
+      assert.equal(r.pushed, 1);
+      assert.equal(r.failed, 1);
+      assert.equal(r.results[1].message, 'SKU unbekannt');
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not call out at all for an empty list', async () => {
+    let called = 0;
+    const restore = mockFetch(async () => {
+      called++;
+      return jsonRes(200, []);
+    });
+    try {
+      const r = await channels.billbee.pushStock(cfg, []);
+      assert.equal(called, 0);
+      assert.equal(r.pushed, 0);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('Billbee stock levels are derived from releases', () => {
+  let d, p;
+  const TODAY = '2026-08-20';
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    const now = new Date().toISOString();
+    const prod = (sku, name) =>
+      d
+        .prepare("INSERT INTO products(sku, name, category, active, created) VALUES(?, ?, 'fresh', 1, ?)")
+        .run(sku, name, now).lastInsertRowid;
+    const comp = (id, species, grams, per = 1) =>
+      d
+        .prepare(
+          `INSERT INTO product_components(product_id, fulfill_type, species, grams, qty_per_unit)
+           VALUES(?, 'harvest', ?, ?, ?)`
+        )
+        .run(id, species, grams, per);
+    const map = (sku, id) =>
+      d
+        .prepare('INSERT INTO product_channel_map(channel, channel_sku, product_id, created) VALUES(?, ?, ?, ?)')
+        .run('billbee', sku, id, now);
+    const release = (species, grams, until) =>
+      d
+        .prepare('INSERT INTO harvest_release(species, grams, valid_until, updated) VALUES(?, ?, ?, ?)')
+        .run(species, grams, until, now);
+
+    const p250 = prod('AUS-250', 'Austernpilze 250 g');
+    comp(p250, 'Austernseitling (AUS)', 250);
+    map('AUS-250', p250);
+
+    const p500 = prod('AUS-500', 'Austernpilze 500 g');
+    comp(p500, 'Austernseitling (AUS)', 500);
+    map('AUS-500', p500);
+
+    const pOld = prod('SHI-250', 'Shiitake 250 g');
+    comp(pOld, 'Shiitake (SHI)', 250);
+    map('SHI-250', pOld);
+
+    const pKit = prod('KIT-1', 'Growkit');
+    map('KIT-1', pKit); // no harvest component at all
+
+    const pTypo = prod('IGL-250', 'Igelstachelbart 250 g');
+    comp(pTypo, 'Igelstachelbart', 250); // the release is filed under "Igelstachelbart (IGL)"
+    map('IGL-250', pTypo);
+
+    release('Austernseitling (AUS)', 1200, null);
+    release('Shiitake (SHI)', 900, '2026-08-19'); // expired yesterday
+    release('Igelstachelbart (IGL)', 800, null);
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('divides the release by what one article needs, rounding down', () => {
+    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const by = Object.fromEntries(levels.map((l) => [l.sku, l.qty]));
+    assert.equal(by['AUS-250'], 4, '1200 g ÷ 250 g = 4, not 4.8');
+    assert.equal(by['AUS-500'], 2);
+  });
+
+  it('publishes an expired release as nothing left, not as unknown', () => {
+    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const shi = levels.find((l) => l.sku === 'SHI-250');
+    assert.equal(shi.qty, 0, 'the shops have to stop offering it');
+  });
+
+  it('leaves an article it cannot compute out of the push entirely', () => {
+    const { levels, skipped } = db.billbeeStockLevels(d, { today: TODAY });
+    assert.equal(
+      levels.find((l) => l.sku === 'KIT-1'),
+      undefined,
+      'a 0 would delist the growkit in every connected shop'
+    );
+    assert.ok(skipped.some((s) => s.sku === 'KIT-1' && s.reason === 'no-harvest-component'));
+  });
+
+  it('reports a species name the lab has never released', () => {
+    const { unknownSpecies } = db.billbeeStockLevels(d, { today: TODAY });
+    // Sold out and misspelled both read as zero — only this list tells them apart.
+    assert.deepEqual(unknownSpecies, ['Igelstachelbart']);
+  });
+
+  it('gives one SKU one number, the smaller one, when two articles share it', () => {
+    const now = new Date().toISOString();
+    const id = d
+      .prepare(
+        "INSERT INTO products(sku, name, category, active, created) VALUES('AUS-ALT', 'Austern alt', 'fresh', 1, ?)"
+      )
+      .run(now).lastInsertRowid;
+    d.prepare(
+      `INSERT INTO product_components(product_id, fulfill_type, species, grams, qty_per_unit)
+       VALUES(?, 'harvest', 'Austernseitling (AUS)', 250, 2)`
+    ).run(id);
+    d.prepare(
+      "INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created) VALUES('billbee', 'AUS-250', 'alt', ?, ?)"
+    ).run(id, now);
+    const { levels } = db.billbeeStockLevels(d, { today: TODAY });
+    const rows = levels.filter((l) => l.sku === 'AUS-250');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].qty, 2, '2 × 250 g per unit is the recipe that must not be oversold');
   });
 });
