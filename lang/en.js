@@ -1924,5 +1924,20 @@ window.LANG['en'] = {
   'work.installWhy': 'Put the app on your phone — it then opens from an icon, without the browser bar.',
   'work.installApple': 'To add it: tap Share below, then “Add to Home Screen”.',
   'work.installDo': 'Add to home screen',
-  'work.installDone': 'It is on your home screen now.'
+  'work.installDone': 'It is on your home screen now.',
+  'search.open': 'Search',
+  'search.placeholder': 'Search or scan',
+  'search.results': 'Results',
+  'search.keys': '↑↓ select · ↵ open',
+  'search.keyCtrl': 'Ctrl K',
+  'search.opens': 'opens {id}',
+  'search.none': 'Nothing found for “{q}”',
+  'search.more': '+ {n} more — keep typing',
+  'search.gBatches': 'Batches',
+  'search.gCultures': 'Cultures',
+  'search.gStrains': 'Strains',
+  'search.gZones': 'Zones',
+  'search.gOrders': 'Orders',
+  'search.gCustomers': 'Customers',
+  'search.gPages': 'Pages'
 };

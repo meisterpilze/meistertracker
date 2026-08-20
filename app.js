@@ -1298,10 +1298,13 @@ let _ordersFilter = '';
 function _ohEmpty(cols, msg) {
   return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
 }
+// The channel's name on its own. _ohChannel() wraps it in the pill; the search
+// index wants the words without the markup around them.
+function _ohChannelLabel(ch) {
+  return ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
+}
 function _ohChannel(ch) {
-  const label =
-    ch === 'manual' ? t('orders.manual') : ch === 'ebay' ? 'eBay' : ch ? ch.charAt(0).toUpperCase() + ch.slice(1) : '—';
-  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(label)}</span>`;
+  return `<span class="oh-ch oh-ch-${esc(ch || 'manual')}">${esc(_ohChannelLabel(ch))}</span>`;
 }
 function _ohStatus(st) {
   return `<span class="oh-st oh-st-${esc(st)}">${esc(t('orders.status.' + st))}</span>`;
@@ -1349,7 +1352,7 @@ function _renderOrdersInbox() {
   body.innerHTML = rows
     .map(
       (o) =>
-        `<tr><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
+        `<tr data-find="order:${esc(o.channelOrderId)}"><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
         `<td class="fs-xs" data-mlabel="${esc(t('orders.th.order'))}" style="font-family:monospace">${esc(o.channelOrderId)}</td>` +
         `<td data-mlabel="${esc(t('orders.th.customer'))}">${esc(o.customerName || '—')}</td>` +
         `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
@@ -1456,6 +1459,11 @@ function renderOrdersMapping() {
 // Set when an eBay account-closure notification is clicked, so the row that the
 // request is about is findable in a 200-row table. Cleared on the next render.
 let _ohHighlightCustomer = null;
+// Kept for the search index. This table re-fetches on every visit and renders
+// straight from the response, so nothing here remembered a customer between
+// renders — and the palette cannot search a list that only ever existed inside
+// a .then().
+let _ohCustomerCache = [];
 function renderOrdersCustomers() {
   const body = $('orders-customers-body');
   if (!body) return;
@@ -1471,6 +1479,7 @@ function renderOrdersCustomers() {
   apiGet('/api/customers')
     .then((d) => {
       const rows = d.items || [];
+      _ohCustomerCache = rows;
       if (!rows.length) {
         body.innerHTML = _ohEmpty(cols, t('orders.noCustomers'));
         return;
@@ -1502,7 +1511,7 @@ function renderOrdersCustomers() {
           // only an id to go on.
           const hit = _ohHighlightCustomer && c.id === _ohHighlightCustomer;
           return (
-            `<tr${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
+            `<tr data-find="customer:${esc(String(c.id))}"${hit ? ' style="outline:2px solid var(--c-red-dark);outline-offset:-2px"' : ''}>` +
             `<td data-mlabel="${esc(t('orders.th.customer'))}"><strong>${esc(c.name || c.email || '—')}</strong></td>` +
             `<td data-mlabel="${esc(t('orders.th.channels'))}">${chans}</td>` +
             `<td data-mlabel="${esc(t('orders.th.orders'))}">${c.orderCount || 0}</td>` +
@@ -12041,7 +12050,7 @@ function renderZones() {
           })
           .join('')
       : '<span class="fs-xs" style="color:var(--c-text-muted)">' + t('zones.noRacks') + '</span>';
-    return `<div class="zone-row" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
+    return `<div class="zone-row" data-find="zone:${esc(z.id)}" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
       <div class="zone-row-header">
         <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
         <span class="zone-row-name">${esc(z.name)}</span>
@@ -12598,7 +12607,7 @@ function renderStrains() {
       const chargeBtn = ms.recBatchType
         ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
         : '';
-      return `<tr>
+      return `<tr data-find="strain:${ms.id}">
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span class="fs-meta" style="font-family:monospace;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td class="fs-meta" style="color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
@@ -13499,7 +13508,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -19905,6 +19914,430 @@ async function pushBatchCaldav(batch) {
   });
 })();
 
+// ═══ SUCHE ═════════════════════════════════════════════════════════════════
+//
+// One field over what this client already holds — Chargen, Kulturen, Sorten,
+// Zonen, Bestellungen, Kunden — and over the pages and sub-pages themselves,
+// because the quickest way to a page in a twelve-entry sidebar is not to go
+// looking for it in the sidebar.
+//
+// What it can index is what is in memory. batches, cultures, mushroomStrains
+// and zones arrive with /api/data and are always there; orders and customers
+// have their own endpoints and are fetched on the way into Bestellungen, so the
+// first open warms those two caches and redraws when they land. Blocking the
+// field until every source has answered would make the fast path wait for the
+// slow one on every single open, so it does not.
+//
+// Single bags are deliberately not indexed. There are twenty per batch, they
+// would outnumber everything else four to one, and a scanned bag code finds its
+// batch anyway — see rank 2.
+const GS_ORDER = ['batch', 'culture', 'strain', 'zone', 'order', 'customer', 'page'];
+const GS_GROUP = {
+  batch: 'search.gBatches',
+  culture: 'search.gCultures',
+  strain: 'search.gStrains',
+  zone: 'search.gZones',
+  order: 'search.gOrders',
+  customer: 'search.gCustomers',
+  page: 'search.gPages'
+};
+const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
+// Seven fits the box without a scrollbar. A list that scrolls is a filtered
+// table, and every page worth having one already has one.
+const GS_CAP = 7;
+let gsHits = [];
+let gsSel = 0;
+let gsWarmed = false;
+let gsReturnFocus = null;
+
+// How well a record answers `q`. Lower is better; -1 is "not an answer".
+//
+//   0  it IS the id — a scanned code, or an id typed out in full
+//   1  the id starts with it — the ordinary case while typing
+//   2  it starts with the ID — a scanned bag code (AUS-190826-02-03) naming the
+//      batch that owns it (AUS-190826-02), which is the whole reason a worker
+//      would type sixteen characters by scanner in the first place
+//   3  the id contains it
+//   4  only the subtitle does — species, zone, status, customer, Kürzel
+//
+// Rank 2 needs four characters of id or a three-letter zone (FRU) would claim
+// every query that happens to begin with those letters.
+function gsRank(rec, q) {
+  const id = String((rec && rec.id) || '').toLowerCase();
+  const sub = String((rec && rec.sub) || '').toLowerCase();
+  if (!id) return -1;
+  if (id === q) return 0;
+  if (id.startsWith(q)) return 1;
+  if (id.length >= 4 && q.startsWith(id)) return 2;
+  if (id.indexOf(q) >= 0) return 3;
+  if (sub.indexOf(q) >= 0) return 4;
+  return -1;
+}
+
+// An empty field is not an empty answer: somebody who opened this and typed
+// nothing wants a page. Sub-pages stay out of that list — forty of them would
+// bury the twelve entries the list exists to offer.
+function gsMatch(index, query) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  if (!q) return index.filter((r) => r.type === 'page' && !r.stab);
+  const scored = [];
+  index.forEach((rec) => {
+    const rank = gsRank(rec, q);
+    if (rank >= 0) scored.push({ rec: rec, rank: rank });
+  });
+  scored.sort(
+    (a, b) =>
+      a.rank - b.rank ||
+      GS_ORDER.indexOf(a.rec.type) - GS_ORDER.indexOf(b.rec.type) ||
+      String(a.rec.id).localeCompare(String(b.rec.id))
+  );
+  return scored.map((s) => s.rec);
+}
+
+// A scanner types, and it types the whole code. When the query IS an id and
+// only one record carries it there is nothing left to choose, so the palette
+// gets out of the way rather than waiting for a keypress the scanner may not
+// send. Eight characters is the floor: every id this app generates is longer,
+// and it stops a short Sorte name from teleporting a human mid-word.
+function gsAutoOpen(hits, query) {
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
+  if (q.length < 8) return null;
+  const exact = hits.filter((r) => String(r.id).toLowerCase() === q);
+  return exact.length === 1 ? exact[0] : null;
+}
+
+// Pages and sub-pages, read off the sidebar and the sub-tab strips rather than
+// listed a second time here. A page added to the sidebar is searchable without
+// anyone remembering to add it, and a renamed one is renamed once — the same
+// reason go() takes the topbar title off the nav entry it was handed.
+//
+// `style.display !== 'none'` is how this app gates by role (showAdminNav,
+// showAdminSubTab, stabLandable), so it is also how the index decides what a
+// user may be offered. A packer must not be sent to a blank Admin sub-page.
+function gsPageIndex() {
+  const out = [];
+  const label = (el) => {
+    const span = el.querySelector('[data-i18n]');
+    return span ? span.textContent.trim() : el.textContent.trim();
+  };
+  document.querySelectorAll('.sb-nav .sb-btn[data-page], .sb-footer .sb-btn[data-page]').forEach((btn) => {
+    if (btn.style.display === 'none') return;
+    out.push({ type: 'page', id: label(btn), sub: t('search.gPages'), page: btn.dataset.page, btn: btn.id });
+  });
+  document.querySelectorAll('.page > .stabs').forEach((strip) => {
+    const page = strip.parentElement.id.replace('p-', '');
+    const nav = document.querySelector('.sb-btn[data-page="' + page + '"]');
+    if (!nav || nav.style.display === 'none') return;
+    const home = strip.dataset.stabHome ? t(strip.dataset.stabHome) : label(nav);
+    strip.querySelectorAll('.stab').forEach((st) => {
+      if (!stabLandable(st)) return;
+      out.push({
+        type: 'page',
+        id: home + ' \u203a ' + label(st),
+        sub: t('search.gPages'),
+        page: page,
+        btn: nav.id,
+        stab: st.id.replace('st-' + page + '-', '')
+      });
+    });
+  });
+  return out;
+}
+
+function gsIndex() {
+  const out = [];
+  const join = (parts) => parts.filter(Boolean).join(' \u00b7 ');
+  batches.forEach((b) => {
+    const st = getStatus(b.batchId);
+    const where = Object.keys(st.c || {})
+      .filter((z) => st.c[z] > 0)
+      .map(zoneDisplayName);
+    out.push({ type: 'batch', id: b.batchId, sub: join([b.species, st.status, where.join(', ')]) });
+  });
+  cultures.forEach((c) => {
+    out.push({
+      type: 'culture',
+      id: c.id,
+      sub: join([c.strainName || c.species, c.type, GS_CULTURE_STATUS[c.status] ? t(GS_CULTURE_STATUS[c.status]) : ''])
+    });
+  });
+  mushroomStrains.forEach((ms) => {
+    const bc = batches.filter((b) => b.strainId === ms.id).length;
+    const cc = cultures.filter((c) => c.strainId === ms.id).length;
+    out.push({
+      type: 'strain',
+      id: ms.name,
+      key: ms.id,
+      sub: join([ms.kuerzel, bc ? bc + ' ' + t('strains.batches') : '', cc ? cc + ' ' + t('strains.cultures') : ''])
+    });
+  });
+  zones.forEach((z) => {
+    out.push({
+      type: 'zone',
+      id: z.id,
+      sub: join([
+        z.name && z.name !== z.id ? z.name : '',
+        ROLE_LABELS[z.role] ? t(ROLE_LABELS[z.role]) : z.role,
+        tp('dash.bags', Object.keys(getZoneBags(z.id)).length)
+      ])
+    });
+  });
+  _ordersCache.forEach((o) => {
+    out.push({
+      type: 'order',
+      id: o.channelOrderId,
+      sub: join([_ohChannelLabel(o.channel), o.customerName, t('orders.status.' + o.status)])
+    });
+  });
+  _ohCustomerCache.forEach((c) => {
+    out.push({
+      type: 'customer',
+      id: c.name || c.email || String(c.id),
+      key: c.id,
+      sub: join([(c.channels || '').split(',').filter(Boolean).map(_ohChannelLabel).join(', '), c.orderCount || 0])
+    });
+  });
+  return out.concat(gsPageIndex());
+}
+
+// Orders and customers are the two sources that are not already here. Ask once
+// per page load, in the background, and redraw whatever is on screen when the
+// answer arrives — the field stays usable throughout, it just has less to
+// search until then.
+function gsWarm() {
+  if (gsWarmed) return;
+  gsWarmed = true;
+  if (!_ordersCache.length)
+    apiGet('/api/orders?limit=500')
+      .then((d) => {
+        _ordersCache = d.items || [];
+        gsRender();
+      })
+      .catch(() => {});
+  if (!_ohCustomerCache.length)
+    apiGet('/api/customers')
+      .then((d) => {
+        _ohCustomerCache = d.items || [];
+        gsRender();
+      })
+      .catch(() => {});
+}
+
+function gsRowHtml(rec, i, q) {
+  const on = i === gsSel;
+  const mono = rec.type === 'batch' || rec.type === 'culture' || rec.type === 'zone' || rec.type === 'order';
+  return (
+    '<div class="gs-row' +
+    (on ? ' gs-on' : '') +
+    '" role="option" id="gs-o-' +
+    i +
+    '" aria-selected="' +
+    (on ? 'true' : 'false') +
+    '" data-i="' +
+    i +
+    '"><span class="gs-row-t' +
+    (mono ? ' gs-mono' : '') +
+    '">' +
+    gsMark(rec.id, q) +
+    '</span><span class="gs-row-s">' +
+    gsMark(rec.sub, q) +
+    '</span></div>'
+  );
+}
+
+// The matched run, marked in the text it was found in. esc() first — every id
+// and subtitle in here has been through a customer name or a channel payload.
+function gsMark(text, q) {
+  const s = esc(String(text == null ? '' : text));
+  if (!q) return s;
+  const at = s.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0) return s;
+  return s.slice(0, at) + '<mark>' + s.slice(at, at + q.length) + '</mark>' + s.slice(at + q.length);
+}
+
+function gsRender() {
+  const box = document.getElementById('gs-results');
+  if (!box) return;
+  const q = document.getElementById('gs-q').value.trim();
+  const all = gsMatch(gsIndex(), q);
+  gsHits = all.slice(0, GS_CAP);
+  if (gsSel >= gsHits.length) gsSel = Math.max(0, gsHits.length - 1);
+  let html = '';
+  let group = null;
+  gsHits.forEach((rec, i) => {
+    if (rec.type !== group) {
+      group = rec.type;
+      html += '<div class="gs-group">' + esc(t(GS_GROUP[group])) + '</div>';
+    }
+    html += gsRowHtml(rec, i, q);
+  });
+  if (!gsHits.length) html = '<div class="gs-empty">' + esc(t('search.none', { q: q })) + '</div>';
+  else if (all.length > GS_CAP) html += '<div class="gs-more">' + esc(t('search.more', { n: all.length - GS_CAP })) + '</div>';
+  box.innerHTML = html;
+  const hint = document.getElementById('gs-hint');
+  if (hint) hint.textContent = gsHits.length ? t('search.opens', { id: gsHits[gsSel].id }) : '';
+  document.getElementById('gs-q').setAttribute('aria-activedescendant', gsHits.length ? 'gs-o-' + gsSel : '');
+  const on = box.querySelector('.gs-on');
+  if (on) on.scrollIntoView({ block: 'nearest' });
+}
+
+function gsMove(step) {
+  if (!gsHits.length) return;
+  gsSel = (gsSel + step + gsHits.length) % gsHits.length;
+  gsRender();
+}
+
+function gsOpen() {
+  // Not on top of another dialog: navigating out from here would leave that one
+  // open over a page it was never about.
+  if (document.querySelector('.modal-bg.open:not(#m-search)')) return;
+  const bg = document.getElementById('m-search');
+  if (!bg) return;
+  gsReturnFocus = document.activeElement;
+  gsSel = 0;
+  bg.classList.add('open');
+  gsWarm();
+  const input = document.getElementById('gs-q');
+  input.value = '';
+  gsRender();
+  // The delay is the same 80 ms openNote() uses: focusing an element that is
+  // still display:none is a no-op, and on iOS it costs the keyboard.
+  setTimeout(() => input.focus(), 80);
+}
+
+function gsClose() {
+  const bg = document.getElementById('m-search');
+  if (!bg || !bg.classList.contains('open')) return;
+  bg.classList.remove('open');
+  // Back where they were, so Escape costs nothing — the palette can be opened
+  // by accident mid-form and must not eat the caret.
+  if (gsReturnFocus && gsReturnFocus.focus) {
+    try {
+      gsReturnFocus.focus();
+    } catch (e) {
+      /* element gone with the page it was on */
+    }
+  }
+  gsReturnFocus = null;
+}
+
+function gsToggle() {
+  const bg = document.getElementById('m-search');
+  if (bg && bg.classList.contains('open')) gsClose();
+  else gsOpen();
+}
+
+// Attribute-selector quoting. Customer names reach this.
+const gsAttr = (v) => String(v).replace(/["\\]/g, '\\$&');
+
+// The record's page may not have drawn yet — Bestellungen and Kunden fetch on
+// arrival, so the row exists a round-trip after the navigation. Keep looking for
+// a second and a half, then stop without a word: the page is the right page
+// either way, and a missing flash is not worth a message.
+function gsFlash(sel) {
+  let tries = 0;
+  const look = () => {
+    const el = document.querySelector(sel);
+    if (!el) {
+      if (++tries < 15) setTimeout(look, 100);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('gs-flash');
+    // Restart the animation. Without the reflow, a second hit on the same row
+    // re-adds a class the element never lost and nothing plays.
+    void el.offsetWidth;
+    el.classList.add('gs-flash');
+    setTimeout(() => el.classList.remove('gs-flash'), 1600);
+  };
+  setTimeout(look, 60);
+}
+
+// Where each type lives. goToBatch() already existed for the dashboard's "Zur
+// Charge" button and does the filter-field-plus-flash dance for batches, so
+// batches use it rather than a second version of it.
+function gsGoto(rec) {
+  if (!rec) return;
+  gsClose();
+  if (rec.type === 'batch') return goToBatch(rec.id);
+  if (rec.type === 'page') {
+    go(rec.page, rec.btn);
+    if (rec.stab) openStab(rec.page, rec.stab);
+    return;
+  }
+  if (rec.type === 'culture') {
+    go('lab', 'n-lab');
+    openStab('lab', 'cultures');
+  } else if (rec.type === 'strain') {
+    go('strains', 'n-strains');
+  } else if (rec.type === 'zone') {
+    go('zones', 'n-zones');
+  } else if (rec.type === 'order') {
+    go('orders', 'n-orders');
+    openStab('orders', 'inbox');
+  } else if (rec.type === 'customer') {
+    go('orders', 'n-orders');
+    openStab('orders', 'customers');
+  }
+  gsFlash('[data-find="' + gsAttr(rec.type + ':' + (rec.key != null ? rec.key : rec.id)) + '"]');
+}
+
+function gsInit() {
+  // ⌘K on a Mac, Strg K everywhere else. This is the only label in the app
+  // that follows the keyboard in front of the user rather than the language they
+  // chose, so the Mac branch takes data-i18n off with it — otherwise the next
+  // translatePage() would write the word back over the symbol.
+  const key = document.getElementById('sb-search-key');
+  if (key && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')) {
+    key.removeAttribute('data-i18n');
+    key.textContent = '\u2318K';
+  }
+  const input = document.getElementById('gs-q');
+  const box = document.getElementById('gs-results');
+  const bg = document.getElementById('m-search');
+  if (!input || !box || !bg) return;
+  input.addEventListener('input', () => {
+    gsSel = 0;
+    gsRender();
+    const jump = gsAutoOpen(gsHits, input.value);
+    if (jump) gsGoto(jump);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      gsMove(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      gsMove(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      gsGoto(gsHits[gsSel]);
+    }
+  });
+  box.addEventListener('click', (e) => {
+    const row = e.target.closest('.gs-row');
+    if (row) gsGoto(gsHits[+row.dataset.i]);
+  });
+  bg.addEventListener('click', (e) => {
+    if (e.target === bg) gsClose();
+  });
+  document.getElementById('gs-close').addEventListener('click', gsClose);
+  document.querySelectorAll('[data-gs-open]').forEach((btn) => btn.addEventListener('click', gsOpen));
+}
+
+// Ctrl+K everywhere, Cmd+K on a Mac. preventDefault because both browsers bind
+// it to their own search box, and this one is closer to the work.
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    gsToggle();
+  }
+});
+
 // Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
 // m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
 // so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
@@ -19916,6 +20349,10 @@ document.addEventListener('keydown', function (e) {
   const modals = [
     'm-confirm',
     'm-confirm3',
+    // gsClose() and not a class removal: the palette hands focus back to
+    // whatever had it, and Escape is the route that most needs it — it can be
+    // opened by accident in the middle of a form.
+    'm-search',
     'm-work-flow',
     'm-camscan',
     'm-cal-entry',
@@ -19953,6 +20390,7 @@ document.addEventListener('keydown', function (e) {
       // next caller to trip over, and — since askConfirm() — the promise behind
       // it never settles, so whatever awaited it is suspended for the life of
       // the page. Their own closers are what say "no".
+      else if (id === 'm-search') gsClose();
       else if (id === 'm-confirm') closeConfirm();
       else if (id === 'm-confirm3') closeConfirm3();
       else if (id === 'm-prompt') closePrompt();
@@ -21333,6 +21771,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // for the same reason as the FAB above: this inserts elements, and doing that
   // once the document is settled keeps it off the critical path.
   stabDrillInit();
+  gsInit();
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
   // Wait until the rest of the app has had a chance to fetch data + render

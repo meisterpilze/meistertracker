@@ -3788,6 +3788,234 @@ tr:hover td {
   margin-top: 16px;
 }
 
+/* ═══ SUCHE ════════════════════════════════════════════════════════════════
+   The palette. It is a .modal-bg, so it inherits the backdrop, the blur and
+   the z-index; what it overrides is the placement. A centred dialog that grows
+   downwards moves its own first row away from the eye on every keystroke, so
+   this one is pinned near the top and grows into empty space instead. */
+.gs-bg {
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 16px 16px;
+}
+.gs-box {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  /* Bounded, so the list scrolls inside the box instead of running off the
+     bottom of the screen. It never reaches this on a desk — seven results and a
+     footer come to roughly 450px — but a phone with the keyboard up has about
+     400px of viewport left, which is three rows and no way to reach the rest. */
+  max-height: 100%;
+  background: var(--c-surface);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.gs-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+}
+/* The field carries no border of its own — the row it sits in is the border.
+   !important is not needed: the input rules in this file are all element or
+   class selectors, and .gs-field input is (0,2,1). */
+.gs-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: max(16px, var(--fs-min));
+  color: var(--c-text);
+}
+.gs-field input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.gs-esc {
+  flex-shrink: 0;
+  border: 1px solid var(--c-border);
+  background: transparent;
+  color: var(--c-text-muted);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-family: monospace;
+  font-size: max(11px, var(--fs-min));
+  cursor: pointer;
+  min-height: max(24px, var(--tap-sm-min));
+}
+.gs-results {
+  overflow-y: auto;
+  /* The field and the footer stay put; this is the part that gives. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.gs-esc-x {
+  display: none;
+}
+.gs-group {
+  padding: 8px 14px 3px;
+  font-size: max(11px, var(--fs-min));
+  color: var(--c-text-muted);
+}
+.gs-row {
+  display: block;
+  padding: 7px 14px;
+  cursor: pointer;
+  min-height: max(0px, var(--tap-sm-min));
+  box-sizing: border-box;
+}
+.gs-row-t,
+.gs-row-s {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gs-row-t {
+  font-size: max(14px, var(--fs-min));
+  color: var(--c-text);
+}
+.gs-mono {
+  font-family: monospace;
+}
+.gs-row-s {
+  font-size: max(12px, var(--fs-min));
+  color: var(--c-text-sec);
+}
+/* Selection is one thing, and it is the same thing whether the keyboard or the
+   mouse put it there — an arrow key and a hovering finger must not be able to
+   light two rows at once. */
+.gs-row.gs-on,
+.gs-row:hover {
+  background: var(--c-primary-light);
+}
+.gs-row mark {
+  background: var(--c-amber-light);
+  color: inherit;
+  border-radius: 3px;
+}
+.gs-empty,
+.gs-more {
+  padding: 14px;
+  font-size: max(13px, var(--fs-min));
+  color: var(--c-text-sec);
+}
+.gs-more {
+  padding: 7px 14px 10px;
+  color: var(--c-text-muted);
+}
+.gs-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--c-border);
+  font-size: max(12px, var(--fs-min));
+  color: var(--c-text-muted);
+}
+.gs-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Where the search landed. .batch-row-flash only reaches table rows (the
+   animation is on its td children, because a tr's own background is painted
+   under the cells); zones are divs, so this pairs the two selectors and reuses
+   the keyframes rather than writing a second amber fade. */
+.gs-flash,
+.gs-flash > td {
+  animation: batch-row-flash 1.5s ease;
+}
+/* The sidebar's own entry point. It is an .sb-btn so the collapse rules already
+   know what to do with it; what the wrapper adds is .sb-nav's own horizontal
+   padding, so the button lines up with the entries it sits above rather than
+   running 10px wider on each side. */
+.sb-search-wrap {
+  padding: 12px 10px 0;
+}
+.sidebar.sb-collapsed .sb-search-wrap {
+  padding: 12px 8px 0;
+}
+.sb-search-key {
+  margin-left: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: max(10px, var(--fs-min));
+  color: var(--c-text-muted);
+}
+.sidebar.sb-collapsed .sb-search-key {
+  display: none;
+}
+.mobile-search {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--c-text-sec);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  /* Same pair as .mobile-bell, and for the same reason: 36 is the desk value
+     nothing renders, the floor is what a thumb gets. */
+  min-width: max(36px, var(--tap-sm-min));
+  min-height: max(36px, var(--tap-sm-min));
+}
+.mobile-search:hover {
+  background: var(--c-border-light);
+  color: var(--c-text);
+}
+@media (max-width: 768px) {
+  /* Nearer the top: the on-screen keyboard takes the lower half, and 10vh of a
+     phone is a strip of backdrop nobody can reach past. */
+  .gs-bg {
+    padding: 12px 10px 10px;
+  }
+  .gs-box {
+    max-width: none;
+  }
+  /* The rows are what a thumb aims at, so they get the chrome floor rather than
+     the 7px a mouse is happy with. */
+  .gs-row {
+    padding: 10px 14px;
+  }
+  /* "↑↓ wählen · ↵ öffnen" over a device with no arrow keys and no Enter is a
+     line that describes somebody else's machine — and it is 40px of a screen
+     that has a keyboard sitting on half of it. The hint beside it says which
+     result Enter would open, which is the same sentence again. */
+  .gs-foot {
+    display: none;
+  }
+  /* And the same for the word on the dismiss button. It is a real tap target
+     here rather than a reminder, so it says what tapping it does. */
+  .gs-esc-key {
+    display: none;
+  }
+  .gs-esc-x {
+    display: inline;
+  }
+  .mobile-search {
+    display: flex;
+  }
+  /* The title takes the slack so the magnifier and the bell sit together at the
+     right edge, instead of the bell's margin-left:auto splitting it with them. */
+  .mobile-topbar .sb-logo {
+    flex: 1;
+  }
+}
+
 /* Destination chips open the shared zone picker (for when a location barcode
    can't be scanned), so they need to read as tappable — and be tappable. They
    carried a cursor and nothing else, which is a mouse affordance on a control

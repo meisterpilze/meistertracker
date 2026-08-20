@@ -1942,5 +1942,20 @@ window.LANG['pt'] = {
   'work.installWhy': 'Coloque o app no celular — abre por um ícone, sem a barra do navegador.',
   'work.installApple': 'Para adicionar: toque em Compartilhar abaixo e depois em “Adicionar à Tela de Início”.',
   'work.installDo': 'Adicionar à tela inicial',
-  'work.installDone': 'Já está na tela inicial.'
+  'work.installDone': 'Já está na tela inicial.',
+  'search.open': 'Procurar',
+  'search.placeholder': 'Procurar ou ler código',
+  'search.results': 'Resultados',
+  'search.keys': '↑↓ escolher · ↵ abrir',
+  'search.keyCtrl': 'Ctrl K',
+  'search.opens': 'abre {id}',
+  'search.none': 'Nada encontrado para “{q}”',
+  'search.more': '+ {n} outros — continue a escrever',
+  'search.gBatches': 'Lotes',
+  'search.gCultures': 'Culturas',
+  'search.gStrains': 'Espécies',
+  'search.gZones': 'Zonas',
+  'search.gOrders': 'Encomendas',
+  'search.gCustomers': 'Clientes',
+  'search.gPages': 'Páginas'
 };
