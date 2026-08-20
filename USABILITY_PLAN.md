@@ -1,6 +1,6 @@
 # 🧭 Übersichtlichkeit — Design Doc
 
-> **Status:** phases 1, 2, 3, 5 and 6 shipped · phase 4 open · **Author:** design pass with Claude · **Date:** 2026-08-20
+> **Status:** all six phases shipped · **Author:** design pass with Claude · **Date:** 2026-08-20
 > **Measured against** `main` @ `d3c1c66`, at 1366×768, 1280×720 and 375×812, through
 > `scripts/static-page-server.js` — the same stripped page the mobile tooling measures.
 
@@ -226,11 +226,37 @@ differently in each. Marking and focusing answers *which one* identically everyw
 that was the complaint. Three checks choose between two fields — a ring on an empty box
 explains nothing.
 
-### Phase 4 — Find by name · §3.3
+### Phase 4 — Find by name · §3.3 · **shipped**
 
-`Ctrl/Cmd + K` and a search row in the mobile topbar. One index over batches, cultures,
-strains, zones, orders and customers; type-ahead; Enter opens the record. Pages are results
-too, so it doubles as the jump-to the 11-entry sidebar still cannot make instant.
+`Ctrl/Cmd + K`, a field at the top of the sidebar, and a magnifier in the phone topbar. One
+index over batches, cultures, strains, zones, orders and customers; type-ahead; Enter opens
+the record. Pages and sub-pages are results too, so it doubles as the jump-to the 12-entry
+sidebar cannot make instant.
+
+*Ranking is by where the match landed, not by type: an id typed out in full, then an id
+that starts with the query, then a record whose id is a **prefix** of the query — which is
+how a scanned bag code (`AUS-190826-02-07`) finds the batch that owns it. Single bags are
+not indexed; twenty per batch would outnumber every other record four to one for a case
+that rule already covers. The four-character floor on that rank is what keeps a
+three-letter zone id (`FRU`) from claiming every query beginning F-R-U.*
+
+*A scanner types the whole code. When the query **is** an id and only one record carries it,
+the palette opens it without waiting for a keypress the scanner may not send — at eight
+characters or more, which every id this app generates clears and no half-typed word does.*
+
+*Orders and customers are the only two sources not already in memory. The palette warms
+them once in the background and redraws when they land, rather than making the fast path
+wait for the slow one on every open.*
+
+*A result lands on its record: the page, scrolled to, flashed. Batches reuse `goToBatch()`,
+which already did this for the dashboard's "Zur Charge" button; the other five got a
+`data-find` hook on their row, and `test/global-search.test.js` asks the reverse question —
+for every type `gsGoto()` flashes, is there still a renderer emitting the hook? Losing one
+is silent: right page, no flash.*
+
+*On a phone the footer goes: "↑↓ wählen · ↵ öffnen" describes a keyboard that is not there,
+and it was 40px of a screen with an on-screen keyboard over half of it. The box is bounded
+and the list scrolls inside it, because with the keyboard up there is room for three rows.*
 
 ### Phase 5 — Say where you are · §3.4 · **shipped**
 
@@ -296,7 +322,7 @@ Same two tools, same rules as `MOBILE_REDESIGN.md` §8:
 - `node scripts/measure-mobile.js 375` and `320` — type, touch and overflow stay at zero.
 - `npm run mobile-audit` — the ratchet may only fall.
 - `npm test` — plus one new file per phase that pins the thing that would silently rot.
-  **1118 tests**, and each new assertion was run against the tree as it stood and fails
+  **1189 tests**, and each new assertion was run against the tree as it stood and fails
   there; a test that passes before the fix is checking nothing.
   - `test/sidebar-entries.test.js` — one entry per page, and no `go()` naming a button
     that is not in the markup.
@@ -306,6 +332,8 @@ Same two tools, same rules as `MOBILE_REDESIGN.md` §8:
     rule written to change it.
   - `test/mobile-nav.test.js` — the topbar title derived from the nav entry, and
     truncating rather than shoving the bell off the bar.
+  - `test/global-search.test.js` — the ranking run for real, and the census that asks
+    whether a renderer still emits the `data-find` hook `gsGoto()` flashes.
 - `npm run lint` — the warning ceiling is a ratchet too: **73 → 65** as the unreachable
   code went.
 
