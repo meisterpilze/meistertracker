@@ -1,6 +1,6 @@
 # 🧭 Übersichtlichkeit — Design Doc
 
-> **Status:** phases 1, 2, 3a and 5 shipped · **Author:** design pass with Claude · **Date:** 2026-08-20
+> **Status:** phases 1, 2, 3, 5 and 6 shipped · phase 4 open · **Author:** design pass with Claude · **Date:** 2026-08-20
 > **Measured against** `main` @ `d3c1c66`, at 1366×768, 1280×720 and 375×812, through
 > `scripts/static-page-server.js` — the same stripped page the mobile tooling measures.
 
@@ -183,7 +183,7 @@ so the phone block could stack the cards and could not stop them shrinking to th
 their own text (137px inside a 343px page); and the Übersicht toolbar is 382px wide at
 375px, invisible to `measure-mobile.js` for as long as the section around it was hidden.*
 
-### Phase 3 — Field-level validation and a toast · §3.5 · **3a shipped**
+### Phase 3 — Field-level validation and a toast · §3.5 · **shipped**
 
 One `toast(msg, kind)` and one `fieldError(input, msg)`, then convert the 77 sites:
 
@@ -205,13 +205,26 @@ blocking. `test/toast.test.js` holds the three cleanups that would rot silently 
 inheriting the error colour, a message leaving `role="alert"` behind, an undo offer keeping
 the tap-to-dismiss handler) and fails if a 78th `alert(` appears.
 
-**3b — not started.** The eight destructive `confirm()`s need a promise-based dialog and
-eight async call sites; the ninth, `mayLeavePage()`, never can have one, because
-`beforeunload` is synchronous by specification.
+**3b — shipped, on machinery that was already there.** `confirm2()` has taken a named
+button since it was written and deleting a pickup location already used it; the eight had
+never been moved onto it. `askConfirm()` is that dialog as a promise, so each call site
+keeps `if (!(await askConfirm(…))) return;`. The buttons read *Löschen*, *Entfernen*,
+*Stilllegen*, *Schlüssel widerrufen*, *Trotzdem fortfahren*. The ninth, `mayLeavePage()`,
+stays native and always will: `beforeunload` is synchronous by specification.
 
-**3c — not started.** Field-level errors: the message under the input that caused it,
-focus moved there. This is the half of §3.5 the bar does not fix — a toast still names a
-problem without pointing at it — and it is per-site work rather than a sweep.
+*Two bugs fell out. Escape took the class off `#m-confirm` rather than calling
+`closeConfirm()` — already wrong, since the callback stayed set for the next caller, and
+with a promise behind it the caller would have been suspended for the life of the page.
+And `#m-confirm3` was not in the Escape list at all, so the recurring-event delete dialog
+was the one modal in the app Escape could not dismiss.*
+
+**3c — shipped smaller than it was written.** Twenty checks call `fieldError(id, msg)`,
+which gives the field a red ring, the focus and a scroll while the bar keeps the words.
+The words are **not** under the input, as §3.5 asked: those twenty fields sit in grid
+cells, plain blocks and non-wrapping flex rows, and a block inserted after the input lands
+differently in each. Marking and focusing answers *which one* identically everywhere, and
+that was the complaint. Three checks choose between two fields — a ring on an empty box
+explains nothing.
 
 ### Phase 4 — Find by name · §3.3
 
@@ -230,11 +243,47 @@ page names. `data-i18n` travels with the text, so a language switch reaches it t
 over the bar and now ellipsises instead of pushing the bell and the sync dot off the edge;
 every other label in all three languages fits.*
 
-### Phase 6 — Fit the seven tiles on one phone screen · §3.6
+### Phase 6 — Fit the seven tiles on one phone screen · §3.6 · **shipped**
 
 Not a reorder — chain order is the right order and frequency order would be a guess. Take
-the height instead: on a phone the art is decoration inside a 156px box, and a 96–104px
-tile with a smaller drawing puts all seven above 812px. Measured, not assumed.
+the height instead.
+
+*And the height was not the tile's to keep: `min-height: 156px` is a good proportion for a
+tile 261px wide on a desk and pure air at full phone width. The measurement that says so —
+every tile reported its when-line **box** at 88px for one to three lines of 13px text,
+because `grid-template-rows: auto 1fr` hands the second row whatever the min-height left
+spare. Below 768px the tile is as tall as its content, floored at `--tap` rather than at a
+literal, and the drawing goes 134px → 96px or it swallows the smaller box.*
+
+*Tiles 156px → 76–95px. The page 1368px → 866px. `wk-t-harvest` 1117 → 774. Five tiles on
+the first screen instead of two and a half. The rules had to be moved **below** the base
+`.wk-tile` block to take effect at all — a media query adds no specificity, so the first
+version read correctly and changed nothing.*
+
+### Beyond the six findings — what the sweeps turned up
+
+The `.dash-top-row` bug in Phase 2 was not a one-off, so both of its shapes were looked for
+systematically rather than waited for.
+
+**An inline style against a media query that means to change it** — walked in a browser,
+190 media rules against 748 inline styles. Two real, both silent: five `.btn-sm`/`.btn-xs`
+whose inline padding beat `(pointer: coarse) { padding: 10px 14px }`, and eight fields
+whose inline `max-width` beat the `max-width: 100%` rule written for exactly them. The cap
+is data now — `--w-cap` read by `.w-cap` — the same device as `.fs-floor` and `--fs-own`.
+Two more the sweep raised and checking dismissed: `@media print` resets `.card` against
+seven inline paddings, but the same block hides every `.page`, so none of those cards is
+ever printed; and a short-landscape `.modal h3` wants 6px against an inline 4px, which is
+already tighter than the block is asking for.
+
+**An element lookup for an id that does not exist** — the shape behind the `n-orders`
+crash. Four, in two groups, both code whose UI was removed without it: `exportKpiCSV()`
+with its `#kpi-csv-period`, and the team-member editor, whose `addMember()` dereferenced
+`#member-name` unguarded. `teamMembers` itself stays — it is loaded, saved, and read by
+`getSelectableAssignees()`.
+
+`test/inline-overrides.test.js` and `test/sidebar-entries.test.js` forbid both shapes as
+greps. Neither is the full check — that needs a browser, and both files say so rather than
+implying otherwise.
 
 ---
 
@@ -246,9 +295,19 @@ Same two tools, same rules as `MOBILE_REDESIGN.md` §8:
   except where a phase says which selector moves and why.
 - `node scripts/measure-mobile.js 375` and `320` — type, touch and overflow stay at zero.
 - `npm run mobile-audit` — the ratchet may only fall.
-- `npm test` — plus one new file per phase that pins the thing that would silently rot:
-  Phase 1, that no stylesheet hides a sidebar entry by id; Phase 3, that no `alert(` or
-  `confirm(` survives in a converted region.
+- `npm test` — plus one new file per phase that pins the thing that would silently rot.
+  **1118 tests**, and each new assertion was run against the tree as it stood and fails
+  there; a test that passes before the fix is checking nothing.
+  - `test/sidebar-entries.test.js` — one entry per page, and no `go()` naming a button
+    that is not in the markup.
+  - `test/toast.test.js` — the bar's three jobs cleaning up after each other, the dialog
+    settling on every way out, no `alert(` back, and every `fieldError()` id existing.
+  - `test/inline-overrides.test.js` — the two shapes where an inline style outranks the
+    rule written to change it.
+  - `test/mobile-nav.test.js` — the topbar title derived from the nav entry, and
+    truncating rather than shoving the bell off the bar.
+- `npm run lint` — the warning ceiling is a ratchet too: **73 → 65** as the unreachable
+  code went.
 
 ---
 
