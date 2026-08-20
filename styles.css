@@ -1517,7 +1517,14 @@ canvas {
    13px in a hand, and the ratchet stops counting it because it is no longer a
    font-size the cascade cannot reach. */
 .fs-floor.fs-floor {
-  font-size: max(var(--fs-own), var(--fs-min));
+  /* The fallback is not decoration. `var(--fs-own)` with nothing to resolve is
+     invalid at computed-value time, which does not fall back to the previous
+     declaration — it makes the element inherit, silently, at whatever size its
+     parent happens to be. A class whose whole job is to pin a size would then
+     do the opposite of its job. --fs-xs is the nearest thing to "the size you
+     probably meant", and an assertion in test/mobile-tokens.test.js fails if
+     any element wearing this class arrives without its number. */
+  font-size: max(var(--fs-own, var(--fs-xs)), var(--fs-min));
 }
 
 /* A filter that sizes to its own content rather than the form grid. */

@@ -243,7 +243,11 @@ describe('the phone floors', () => {
     // happened to be the allowed one.
     const bad = [];
     for (const m of maskedCss(CSS).src.matchAll(/font-size:\s*max\(([^;]*)\);/g)) {
-      const vars = [...m[1].matchAll(/var\((--[a-z0-9-]+)\)/g)].map((v) => v[1]);
+      // The element's own number may carry a fallback — `var(--fs-own, var(--fs-xs))`
+      // — and that inner token is not the floor, so it is removed before the
+      // check rather than allowed by name.
+      const expr = m[1].replace(/var\(--fs-own,[^)]*\)\)/g, 'var(--fs-own)');
+      const vars = [...expr.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((v) => v[1]);
       if (!vars.includes('--fs-min')) bad.push(`${m[0].trim()} — no --fs-min`);
       for (const v of vars) if (v !== '--fs-min' && v !== '--fs-own') bad.push(`${m[0].trim()} — ${v}`);
     }
@@ -386,9 +390,31 @@ describe('the size utilities that replace the inline styles', () => {
     assert.ok(rule, '.fs-floor.fs-floor rule not found');
     assert.match(
       rule[0],
-      /font-size:\s*max\(var\(--fs-own\),\s*var\(--fs-min\)\)/,
+      /font-size:\s*max\(var\(--fs-own[^)]*\)[^)]*\),\s*var\(--fs-min\)\)/,
       '.fs-floor no longer floors — every one-off size it carries is back under 13px on a phone'
     );
+    assert.match(
+      rule[0],
+      /var\(--fs-own,\s*var\(--fs-[a-z]+\)\)/,
+      '.fs-floor lost its fallback: an element wearing it without --fs-own now makes the whole declaration ' +
+        'invalid, and the element inherits whatever its parent happens to be'
+    );
+  });
+
+  // The class carries no number of its own — the element brings it. An element
+  // that wears the class and forgets the property gets the fallback rather than
+  // nothing, which is the CSS half of the same guard; this is the loud half.
+  it('never wears the floor class without bringing a size', () => {
+    const bare = [];
+    for (const [name, src] of [
+      ['index.html', HTML],
+      ['app.js', APP]
+    ]) {
+      for (const m of src.matchAll(/<[^<>]*\bfs-floor\b[^<>]*>/g)) {
+        if (!m[0].includes('--fs-own')) bare.push(`${name}: ${m[0].slice(0, 70)}`);
+      }
+    }
+    assert.deepEqual(bare, [], `${bare.length} element(s) carry .fs-floor with no --fs-own: ${bare.join(' | ')}`);
   });
 
   it('leaves no sub-floor inline size behind in index.html', () => {
