@@ -1,6 +1,6 @@
 # 🧭 Übersichtlichkeit — Design Doc
 
-> **Status:** proposed · **Author:** design pass with Claude · **Date:** 2026-08-20
+> **Status:** phases 1, 2, 3a and 5 shipped · **Author:** design pass with Claude · **Date:** 2026-08-20
 > **Measured against** `main` @ `d3c1c66`, at 1366×768, 1280×720 and 375×812, through
 > `scripts/static-page-server.js` — the same stripped page the mobile tooling measures.
 
@@ -139,7 +139,7 @@ one and nothing on day two hundred.
 Each is a PR, shippable and revertible on its own, and each is checked against
 `scripts/capture-desktop-baseline.js --compare` and `scripts/measure-mobile.js`.
 
-### Phase 1 — Give the sidebar back its floor · §3.1
+### Phase 1 — Give the sidebar back its floor · §3.1 · **shipped**
 
 Fold the five `#n-orders-*` entries into one **Verkauf** entry that opens `p-orders` on its
 default sub-view, and un-hide `p-orders`'s own `.stabs` strip. Both halves already exist:
@@ -147,10 +147,21 @@ the strip is in the DOM, and below 769px `.stabs` is already the drill-down list
 the mobile redesign built. Nothing new is invented; a hidden thing is shown and five
 buttons become one.
 
-*Expected: 15 entries → 11. `.sb-nav` needs ~560px, fits at 720px with the group labels.
-Abholungen stays top-level — it is a different page, not an orders sub-view.*
+*Measured: 15 entries → 11, `.sb-nav` 778px → 611px at 1366×768 and 563px at 1280×720 —
+in both cases exactly what is available, nothing below the fold. Abholungen stayed
+top-level: it is a different page, not an orders sub-view.*
 
-### Phase 2 — One "what now", not two · §3.2
+Two things fell out rather than being decided. `go()` lands on the strip's active pill the
+way Admin already does, instead of calling `renderOrders()` and letting the four other
+views draw over it. And `go('orders', 'n-orders')` at [app.js:792](app.js:792) — the eBay
+account-closure notification — had been naming a button that did not exist; `go()`
+dereferences `btnId` with no guard, so that link threw and the admin landed nowhere.
+
+➖ **The first sub-tab and the section share a name.** "Bestellungen › Bestellungen", the
+same shape as "Admin › Server". Renaming the tab (*Eingang*?) is a domain call, not a
+layout one, and is left open deliberately.
+
+### Phase 2 — One "what now", not two · §3.2 · **shipped, and it emptied a mode**
 
 - Delete the two duplicate primary buttons from the Dashboard.
 - Move the *today* list — `#dash-batch-tasks` and `#dash-alerts` — to the top of `p-work`,
@@ -158,7 +169,21 @@ Abholungen stays top-level — it is a different page, not an orders sub-view.*
   itself.
 - The Dashboard keeps what only it has: KPIs, history, charts.
 
-### Phase 3 — Field-level validation and a toast · §3.5
+*What was not foreseen: `#dash-farm-section` held nothing but those two buttons and that
+row, so moving them emptied the Dashboard's Farm mode entirely. The Farm/Overview toggle
+went with it — a toggle to a blank screen is worse than no toggle — and the page is the
+Übersicht it used to be half of. `dashMode` retired with them, and took a coupling nobody
+could have guessed at: two `dashMode === 'farm' &&` conditions in `renderStatus()` decided
+whether the location sections on the **Chargen** page opened, so switching the Dashboard to
+Übersicht once left every zone on a different page collapsed with no visible cause.*
+
+*Two phone defects had been latent behind the mode and are fixed with it: the tasks/alerts
+row carried `align-items: flex-start` inline, which outranks every rule in the stylesheet —
+so the phone block could stack the cards and could not stop them shrinking to the width of
+their own text (137px inside a 343px page); and the Übersicht toolbar is 382px wide at
+375px, invisible to `measure-mobile.js` for as long as the section around it was hidden.*
+
+### Phase 3 — Field-level validation and a toast · §3.5 · **3a shipped**
 
 One `toast(msg, kind)` and one `fieldError(input, msg)`, then convert the 77 sites:
 
@@ -169,7 +194,24 @@ One `toast(msg, kind)` and one `fieldError(input, msg)`, then convert the 77 sit
 | "the server said no" | 22 | `toast(…, 'err')`, sticky until tapped, raw text mapped to a sentence |
 | destructive `confirm()` | 9 | the existing `.modal` with a named danger button |
 
-Convertible page by page; the helper lands first with two call sites.
+**3a — shipped, and it was not page by page.** The bar already existed: `flashUndoBar()` is
+the undo snackbar with its button hidden, positioned clear of the bottom nav and the scan
+button by Phase 0 of the mobile redesign. `toast(msg, kind)` is that bar with an error skin,
+`role="alert"` and six seconds instead of two and a half; a tap dismisses it. All 77 sites
+converted in one sweep, because the shape was uniform — and checked before rather than
+after: only four are not immediately followed by a `return`, and all four are followed by a
+re-render, which is what should happen while the message is up. Nothing depended on the
+blocking. `test/toast.test.js` holds the three cleanups that would rot silently (a receipt
+inheriting the error colour, a message leaving `role="alert"` behind, an undo offer keeping
+the tap-to-dismiss handler) and fails if a 78th `alert(` appears.
+
+**3b — not started.** The eight destructive `confirm()`s need a promise-based dialog and
+eight async call sites; the ninth, `mayLeavePage()`, never can have one, because
+`beforeunload` is synchronous by specification.
+
+**3c — not started.** Field-level errors: the message under the input that caused it,
+focus moved there. This is the half of §3.5 the bar does not fix — a toast still names a
+problem without pointing at it — and it is per-site work rather than a sweep.
 
 ### Phase 4 — Find by name · §3.3
 
@@ -177,10 +219,16 @@ Convertible page by page; the helper lands first with two call sites.
 strains, zones, orders and customers; type-ahead; Enter opens the record. Pages are results
 too, so it doubles as the jump-to the 11-entry sidebar still cannot make instant.
 
-### Phase 5 — Say where you are · §3.4
+### Phase 5 — Say where you are · §3.4 · **shipped**
 
 `go()` writes the current page's `nav.*` label into the mobile topbar, replacing the
 wordmark below 769px. Free on the desktop, which has the sidebar.
+
+*The label is read off the nav entry `go()` was already handed, not from a second table of
+page names. `data-i18n` travels with the text, so a language switch reaches it through
+`translatePage()`. Measured at 320px: pt `nav.workSteps` — "Etapas de trabalho" — is 4px
+over the bar and now ellipsises instead of pushing the bell and the sync dot off the edge;
+every other label in all three languages fits.*
 
 ### Phase 6 — Fit the seven tiles on one phone screen · §3.6
 
