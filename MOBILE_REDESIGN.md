@@ -343,6 +343,32 @@ Per page, reviewable, revertible.
 ratcheted in CI (§8) so it can only ever go down — the same technique `npm run lint`
 already uses with `--max-warnings 73`.
 
+> **[corrected] — the count reached zero, and it was a sweep after all.**
+>
+> The paragraph above rules out the sweep for one stated reason: *no browser test to catch
+> a regression*. That premise stopped being true when `scripts/measure-mobile.js` was
+> built, and the sweep is what the premise had been protecting against, not the number of
+> sites. What actually landed:
+>
+> - **index.html, 241 sites in one commit**, verified by capturing the computed font-size
+>   of every element in the document — 2528 of them — before and after. First run: 13 had
+>   changed. After doubling the class name: **0 changed, 2528 compared.**
+> - **app.js, 254 sites in one commit**, where no census can reach markup that only exists
+>   at runtime. Verified instead by extracting every distinct before/after *shape* the diff
+>   produced — 36 of them, covering every tag, every prior class, and both card-mode
+>   tables — and rendering both forms in a real `.card` and a real `.t-cards` row at 1440px
+>   and 375px. **All 36 identical at both widths.**
+>
+> Two of the 254 were never inline: `app.js` writes a print window's `<style>` block as a
+> string, and the scan had been counting its rules. Sixteen more were sizes on no scale at
+> all, and they keep their number on the element as `--fs-own` rather than being rounded
+> onto one — see Phase 5.
+>
+> The per-page instinct was still right for everything *else* in Phases 2–4. It was wrong
+> here specifically because inline font sizes are not a per-page problem; they are one
+> mechanism scattered across every page, and a per-page version would have been twenty
+> commits each carrying the same risk with less coverage than one measured sweep.
+
 ---
 
 ## 7. Phases
@@ -437,11 +463,12 @@ work, and it is the first thing Phase 2 does.
   doing with a real mechanism — the bottom nav emitting the list it owns — not with five
   hardcoded selectors.
 
-  ➖ **`.sb-group-label` is 10px**, the smallest text in the app and three below the floor,
-  on all five drawer headings. Left alone on purpose: it is a base-rule size serving both
-  devices, and 10px is a deliberate desktop value, so lifting it needs its own token — the
-  per-component work §7 files under Phase 2. Noted here because the drawer is navigation
-  chrome and this is the one thing in it Phase 1 did not fix.
+  ➖ ✅ **`.sb-group-label` was 10px**, the smallest text in the app and three below the
+  floor, on all five drawer headings. Deferred here to "its own token" and then closed by
+  something cheaper: Phase 2's `max(10px, var(--fs-min))` floor, which reads 13px in a
+  hand and leaves the deliberate 10px desktop value exactly where it was. No token needed.
+  This entry is left in place rather than deleted because the reasoning that deferred it —
+  *a base-rule size needs a paired token* — was the assumption the floors replaced.
 
 ### Phase 2 — Feld pages, one PR each
 
