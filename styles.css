@@ -1683,11 +1683,11 @@ canvas {
      `.sp.active` on specificity alone (0,4,0 against 0,2,0).
 
      `.stab-drill` is not decoration: it is added by stabDrillInit(), so this
-     reaches only the pages that were given a back row. Without it the rule also
-     hides the sub-pages of Bestellungen — whose strip is display:none on every
-     device, so it is never drilled and never can be — and that page renders
-     blank on a phone. It also means the whole mechanism is inert if the script
-     does not run, which is the right way round. */
+     reaches only the pages that were given a back row — any page whose strip is
+     hidden is skipped there and would otherwise render blank on a phone, every
+     sub-page hidden and no index to reach them by. (Bestellungen was that page
+     until its five views stopped being sidebar entries.) It also means the whole
+     mechanism is inert if the script does not run, which is the right way round. */
   .page.stab-drill:not(.stab-drilled) .sp {
     display: none;
   }
@@ -1925,6 +1925,26 @@ textarea:focus {
 .btn-r:hover {
   background: #fee2e2;
 }
+/* A width the desk caps and a phone does not. The number arrives as data on the
+   element (`--w-cap: 480px`) rather than as an inline `max-width` declaration,
+   because an inline declaration wins against every rule in this file — including
+   the phone rule that exists to undo exactly this cap. */
+/* The field a validation message is about. Not a colour alone — a 3px ring, so
+   it survives a red/green colour deficiency and a bright greenhouse — and it is
+   removed on the next keystroke by fieldError() rather than on submit, because a
+   ring that outlives the mistake makes a field look broken while it is being
+   fixed. */
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+  border-color: var(--c-red);
+  box-shadow: 0 0 0 3px var(--c-red-light);
+}
+
+.w-cap {
+  max-width: var(--w-cap);
+}
+
 .btn-sm {
   padding: 5px 10px;
   font-size: max(12px, var(--fs-min));
@@ -3461,43 +3481,18 @@ tr:hover td {
   font-weight: 600;
   color: var(--c-text);
 }
-/* ═══ DASHBOARD VIEW TOGGLE ════════════════════════════════════ */
-.dash-view-toggle {
-  display: flex;
-  background: var(--c-border-light);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
-  width: fit-content;
-  margin-bottom: 14px;
-}
-.dash-view-btn {
+/* ═══ OVERVIEW PERIOD TOGGLE ════════════════════════════════════ */
+/* The period pills and the CSV button. Wrapping is not decoration: measured at
+   375px the row is 382px wide, and it was invisible to scripts/measure-mobile.js
+   for as long as the section around it carried an inline display:none. */
+.ov-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 18px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--c-text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-  min-height: var(--tap-sm-min);
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.dash-view-btn.active {
-  background: var(--c-surface);
-  color: var(--c-text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-.dash-view-btn svg {
-  flex-shrink: 0;
-}
-
-/* ═══ OVERVIEW PERIOD TOGGLE ════════════════════════════════════ */
 .ov-period-toggle {
   display: flex;
   background: var(--c-border-light);
@@ -3779,6 +3774,13 @@ tr:hover td {
   margin-bottom: 14px;
   line-height: 1.6;
 }
+/* The question in a confirm dialog can be several lines — the stock shortage
+   lists one line per material — and it arrives as a string with \n in it,
+   because that is the shape it had when window.confirm() rendered it. Collapsed
+   to spaces, a three-material shortage reads as one run-on sentence. */
+#m-body {
+  white-space: pre-line;
+}
 .modal-btns {
   display: flex;
   gap: 10px;
@@ -3859,6 +3861,15 @@ tr:hover td {
     transform 0.2s ease,
     opacity 0.2s ease;
 }
+/* The error skin. Same bar, same place, same size — only the colour and the
+   role change, because a message that moves to a different corner depending on
+   whether it is good news is a message the eye has to hunt for. Dark red rather
+   than the app's --c-red: this bar sits on #14201a in both themes, and a light
+   surface colour on it is unreadable. */
+.undo-bar.is-err {
+  background: #3a1618;
+  color: #ffe1e1;
+}
 .undo-bar.show {
   transform: translate(-50%, 0);
   opacity: 1;
@@ -3895,6 +3906,18 @@ tr:hover td {
   .undo-bar {
     bottom: calc(var(--fab-bottom) + 56px + 12px + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Batch tasks and Alerts: side by side on a desk, stacked in a hand. These four
+   were an inline style, and an inline value outranks every rule in the sheet — so
+   the phone block below could turn the row into a column and could not touch the
+   alignment, leaving both cards at the width of their own text. Measured at 375px:
+   137px of card inside a 343px page. */
+.dash-top-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
 }
 
 /* ═══ DESKTOP: batch tasks own a full-width row ════════════════ */
@@ -3946,6 +3969,20 @@ tr:hover td {
   .mobile-topbar {
     display: flex;
   }
+  /* The title gives, the chrome does not. The bar holds the page's name now, and
+     the longest of them — pt `nav.workSteps`, "Etapas de trabalho" — is 4px over a
+     320px bar. Without these the overflow pushes the bell and the sync dot off the
+     right edge instead; .sb-logo carries flex-shrink: 0, and both it and the span
+     need min-width: 0 before an ellipsis can happen at all. */
+  .mobile-topbar .sb-logo {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  #topbar-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .content-wrap {
     margin-left: 0;
   }
@@ -3966,6 +4003,14 @@ tr:hover td {
   /* Constrain inline-sized inputs so they can't overflow narrow viewports */
   input[style*='width:'],
   select[style*='width:'] {
+    max-width: 100%;
+  }
+  /* Eight fields the rule above was written for and could not reach: their cap
+     was an inline `max-width`, which outranks every rule in this sheet. It is a
+     custom property now, so the cascade decides again — same device as
+     .fs-floor and --fs-own. Two of the eight declare no inline width at all, so
+     the attribute selector does not match them either; this is what covers them. */
+  .w-cap {
     max-width: 100%;
   }
   /* WCAG-size touch targets for calendar toolbar on mobile */
@@ -4073,6 +4118,7 @@ tr:hover td {
   }
   .dash-top-row {
     flex-direction: column;
+    align-items: stretch;
   }
   .dash-top-row #dash-alerts-card {
     flex: 0 0 auto !important;
@@ -4108,14 +4154,6 @@ tr:hover td {
   }
 }
 @media (max-width: 480px) {
-  .dash-view-toggle {
-    width: 100%;
-  }
-  .dash-view-btn {
-    flex: 1;
-    justify-content: center;
-    padding: 7px 10px;
-  }
   .dash-search-inline {
     width: 140px;
   }
@@ -5523,29 +5561,6 @@ tr:hover td {
   color: var(--c-text-muted);
   margin-top: 3px;
 }
-.wk-todo-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--c-amber-light);
-  border: 1px solid var(--c-amber-border);
-  color: var(--c-amber-dark);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  margin: 12px 0 14px;
-}
-.wk-todo-strip .btn {
-  margin-left: auto;
-  /* (0,2,0) — beats the site-wide `.btn-sm` coarse rule below, so the one
-     button on the landing page gets the full --tap rather than 44. */
-  min-height: var(--tap);
-  border-color: var(--c-amber-dark);
-  color: var(--c-amber-dark);
-}
-
 /* Aufs Handy legen: dieselbe Bauart wie der Hinweis oben, aber ruhiger — das
    ist ein Angebot, keine Aufgabe. Die eigene [hidden]-Regel ist nötig, weil
    display:flex eine Autoren-Regel ist und sonst die des Browsers schlägt;
@@ -5678,6 +5693,36 @@ tr:hover td {
   color: var(--c-text-muted);
   line-height: 1.4;
   max-width: 64%;
+}
+
+/* The phone tile, after the four rules above rather than before them: a media
+   query adds no specificity, so between two `.wk-tile` rules the later one wins
+   and the base min-height would simply have stood. */
+@media (max-width: 768px) {
+  /* And in one column the height is the content's, not a number's. `min-height:
+     156px` is a good proportion for a tile 261px wide on a desk; stretched full
+     width it is 35-70px of air per tile, seven times over. Measured at 375px:
+     every tile reported its when-line box as 88px tall for one to three lines of
+     13px text, because `grid-template-rows: auto 1fr` hands the second row
+     whatever the min-height left spare — the box was filling the air rather than
+     needing it.
+
+     The floor stays a floor: --tap, the same one every other control on a Feld
+     screen answers to. No tile comes near it — the shortest is a title and one
+     line — which is why it is written as the token rather than a literal.
+
+     The drawing shrinks with the box or it swallows it, and the when-line takes
+     back the width the drawing gives up. */
+  .wk-tile {
+    min-height: var(--tap);
+    padding: 14px 16px;
+  }
+  .wk-tile-art {
+    width: 96px;
+  }
+  .wk-tile-when {
+    max-width: 72%;
+  }
 }
 
 /* ── flow modal ─────────────────────────────────────────────────────────── */

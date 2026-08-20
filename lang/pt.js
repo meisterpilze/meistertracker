@@ -7,6 +7,7 @@ window.LANG['pt'] = {
   'common.close': 'Fechar',
   'common.ok': 'OK',
   'common.confirm': 'Confirmar',
+  'common.proceed': 'Continuar mesmo assim',
   'common.delete': 'Apagar',
   'common.loading': 'A carregar\u2026',
   'common.error': 'Erro',
@@ -27,10 +28,6 @@ window.LANG['pt'] = {
   'nav.calendar': 'Calendário',
   'nav.orders': 'Encomendas',
   'nav.sales': 'Vendas',
-  'nav.ordersInbox': 'Encomendas',
-  'nav.ordersDemand': 'O que produzir',
-  'nav.ordersMapping': 'Produtos',
-  'nav.ordersCustomers': 'Clientes',
   'nav.pickups': 'Levantamentos',
   'nav.adminBack': 'Voltar',
   'nav.backToList': 'Voltar \u00e0 lista',
@@ -79,7 +76,7 @@ window.LANG['pt'] = {
   'pickupLoc.reactivate': 'Reativar',
   'pickupLoc.confirmRetire':
     'Desativar "{name}"? Deixa de poder ser escolhido em novas marcações. As existentes mantêm-no.',
-  'orders.inbox': 'Encomendas',
+  'orders.inbox': 'Entrada',
   'orders.tomake': 'O que produzir',
   'orders.mapping': 'Associação de produtos',
   'orders.customers': 'Clientes',
@@ -288,8 +285,6 @@ window.LANG['pt'] = {
   'dash.harvestBySpecies': 'Colheita por esp\u00e9cie (kg)',
   'dash.noHarvestData': 'Sem dados de colheita ainda',
   'dash.liveStatus': 'Status dos lotes ao vivo',
-  'dash.modeFarm': 'Fazenda',
-  'dash.modeOverview': 'Visão geral',
   'dash.ov.qualityEff': 'Qualidade & eficiência',
   'dash.ov.substrates': 'Substratos',
   'dash.ov.bagsCreated': 'Sacos criados',
@@ -559,6 +554,7 @@ window.LANG['pt'] = {
     'A composi\u00e7\u00e3o do substrato deve totalizar 100% (madeira dura + farelo de trigo = {sum}%). Ajuste os valores.',
   'batch.noSubstrateWarn':
     'Nenhuma composi\u00e7\u00e3o de substrato informada \u2014 NENHUM material ser\u00e1 deduzido do estoque para este lote.\n\nCriar mesmo assim?',
+  'batch.noSubstrateTitle': 'Não debitar material?',
   'batch.grainNeeded': 'Gr\u00e3os necess\u00e1rios:',
   'batch.inStock': 'Em estoque:',
   'batch.sufficient': 'suficiente',
@@ -701,9 +697,6 @@ window.LANG['pt'] = {
   'todo.dueToday': 'Vence hoje',
   // Days
   // Team
-  'team.membersDesc':
-    'Adicione membros da equipe para atribuir tarefas individualmente. Cada membro pode ter seu pr\u00f3prio calend\u00e1rio CalDAV.',
-  'team.empty': 'Ainda n\u00e3o h\u00e1 membros na equipe. Adicione seu primeiro membro abaixo.',
   // CalDAV
   'caldav.title': 'Servidor de calend\u00e1rio CalDAV',
   'caldav.desc':
@@ -1455,7 +1448,6 @@ window.LANG['pt'] = {
   'lab.kb': 'Grainspawn',
   'msq.grainKg': 'kg por saco',
   'msq.grainPreview': '{n} saco(s) de grainspawn serão criados.',
-  'nav.ordersVersand': 'Envio',
   'orders.versandTab': 'Envio',
   'orders.th.orderId': 'ID da encomenda',
   'settings.tabVersand': 'Envio',
@@ -1771,8 +1763,6 @@ window.LANG['pt'] = {
   'stage.incubation': 'Incubação',
   'stage.fruiting': 'Frutificação',
   'dash.splitBatches.stale': '> 24 h sem movimento',
-  'dash.actionNewBatch': '+ Novo lote',
-  'dash.actionLabWork': '+ Trabalho de laborat\u00f3rio',
   'dash.harvestNoFruiting': 'Nenhum lote pronto para colheita no momento.',
   // Scan log
   'log.entries': '{n} entradas',
@@ -1782,6 +1772,7 @@ window.LANG['pt'] = {
   // Inventory cards
   'inv.lowStock': 'ESTOQUE BAIXO',
   'inv.shortageWarn': 'Estoque insuficiente para este lote:',
+  'inv.shortageTitle': 'Stock insuficiente',
   'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a quantidade em falta não é registrada.)',
   'inv.alertBelow': 'Alerta abaixo de {n}kg',
   'inv.logDelivery': '+ Registar entrega',
@@ -1833,8 +1824,6 @@ window.LANG['pt'] = {
   'nav.lookup': 'Consultar',
   'work.title': 'O que você fez?',
   'work.sub': 'Escolha a etapa — o app pergunta o resto.',
-  'work.dontKnow': 'Não sabe o que está pendente?',
-  'work.todayOpen': 'Para hoje',
   'work.lab': 'Registrar trabalho na sala limpa',
   'work.labWhen': 'Slant, placa, cultura líquida, seringas, grão-a-grão',
   'work.grain': 'Preparar inóculo de grão',

@@ -1369,7 +1369,13 @@
             <path d="M9 15l2 2 4-4" /></svg
           ><span data-i18n="nav.pickups">Abholungen</span>
         </button>
-        <button class="sb-btn" id="n-orders-inbox">
+        <!-- One entry, five views. The five that used to stand here all called
+             go('orders', ...) and then openStab() on the same page — sub-tabs promoted to
+             the top level, while Admin's thirteen stayed nested behind one. The sidebar
+             paid for the inconsistency: at 1366x768 it needed 778px and had 611, so Kunden
+             and Versand were off the screen with nothing to say they existed. The strip
+             below #p-orders is the list now, on both devices — see USABILITY_PLAN.md. -->
+        <button class="sb-btn" id="n-orders">
           <svg
             width="18"
             height="18"
@@ -1384,75 +1390,7 @@
             <path
               d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
             /></svg
-          ><span data-i18n="nav.ordersInbox">Bestellungen</span>
-        </button>
-        <button class="sb-btn" id="n-orders-demand">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" /></svg
-          ><span data-i18n="nav.ordersDemand">Was muss ich machen</span>
-        </button>
-        <button class="sb-btn" id="n-orders-mapping">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-            <line x1="7" y1="7" x2="7.01" y2="7" /></svg
-          ><span data-i18n="nav.ordersMapping">Produkte</span>
-        </button>
-        <button class="sb-btn" id="n-orders-customers">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 00-3-3.87" />
-            <path d="M16 3.13a4 4 0 010 7.75" /></svg
-          ><span data-i18n="nav.ordersCustomers">Kunden</span>
-        </button>
-        <button class="sb-btn" id="n-orders-versand">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="1" y="3" width="15" height="13" />
-            <path d="M16 8h4l3 3v5h-7V8z" />
-            <circle cx="5.5" cy="18.5" r="2.5" />
-            <circle cx="18.5" cy="18.5" r="2.5" /></svg
-          ><span data-i18n="nav.ordersVersand">Versand</span>
+          ><span data-i18n="nav.orders">Bestellungen</span>
         </button>
       </nav>
       <!-- Admin navigation — takes the sidebar over while the Admin section is open, on a
@@ -1737,11 +1675,17 @@
           <path d="M3 12h18M3 6h18M3 18h18" />
         </svg>
       </button>
+      <!-- The page's name, not the app's. A phone has no sidebar to read the
+           highlight off, and the bottom bar covers five of the twelve pages — open
+           the drawer, tap Abholungen, watch it close, and nothing on the screen said
+           where you landed. go() writes the label here from the nav entry it was
+           handed, so the two cannot drift; data-i18n goes with it, so a language
+           switch reaches it through translatePage() like any other string. -->
       <div class="sb-logo">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="5" />
           <path d="M12 13v5M8 21h8" /></svg
-        ><span class="sb-logo-text">Meistertracker</span>
+        ><span class="sb-logo-text" id="topbar-title" data-i18n="nav.workSteps">Arbeitsgänge</span>
       </div>
       <button
         class="mobile-bell"
@@ -2098,9 +2042,97 @@
               </div>
             </div>
           </div>
-          <div class="wk-todo-strip" id="wk-todo-strip">
-            <span data-i18n="work.dontKnow">Weißt du nicht, was ansteht?</span>
-            <button class="btn btn-sm" id="wk-goto-today" data-i18n="work.todayOpen">Heute zu tun</button>
+          <!-- What is due, above the seven jobs that do it. This lived on the
+               Dashboard, and the two screens pointed at each other: a strip here read
+               "Weißt du nicht, was ansteht?" and sent you there, and the first thing
+               there was two buttons that came straight back — the same redundancy the
+               speed-dial FAB was deleted for. One screen answers both halves now, and
+               the Dashboard keeps what only it has. -->
+          <!-- Batch tasks + Alerts side by side -->
+          <div class="dash-top-row">
+            <!-- Batch tasks (worker-first — top of page) -->
+            <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
+              <!-- No All/Urgent-only filter: the urgency sections below ARE the
+                   filter, and "urgent only" hid the sections it duplicated. -->
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
+              </div>
+              <div id="dash-batch-tasks"></div>
+              <details
+                class="dash-legend fs-xs"
+                style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
+              >
+                <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
+                  Color guide
+                </summary>
+                <div style="padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span class="pdot med" style="margin-top: 3px"></span
+                    ><span data-i18n="dash.legend.orangeDot"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span class="pdot high" style="margin-top: 3px"></span
+                    ><span data-i18n="dash.legend.redDot"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 4px;
+                        height: 14px;
+                        background: #888;
+                        border-radius: 2px;
+                        margin-top: 1px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.species"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 14px;
+                        height: 10px;
+                        background: var(--c-red-light);
+                        border: 1px solid var(--c-red);
+                        border-radius: 3px;
+                        margin-top: 3px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.overdue"></span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px">
+                    <span
+                      style="
+                        display: inline-block;
+                        width: 14px;
+                        height: 5px;
+                        background: var(--c-red);
+                        border-radius: 2px;
+                        margin-top: 5px;
+                        flex-shrink: 0;
+                      "
+                    ></span
+                    ><span data-i18n="dash.legend.capacity"></span>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <!-- Alerts (inventory + overdue batches + capacity) -->
+            <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
+              <div style="margin-bottom: 6px">
+                <div class="sec fs-xs" style="margin: 0" data-i18n="dash.alerts">Alerts</div>
+              </div>
+              <div id="dash-alerts"></div>
+            </div>
+
+            <!-- Split batches (bags of the same batch across multiple stages) used
+                 to be its own card here. It is now the LIEGENGEBLIEBEN section of
+                 the Batch tasks card: same data (getSplitBatches), but read as an
+                 instruction alongside the dated work instead of a separate table. -->
           </div>
           <div class="wk-tiles">
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
@@ -2244,162 +2276,14 @@
 
         <!-- ══ DASHBOARD ══ -->
         <div class="page" id="p-dash">
-          <!-- Farm / Overview view toggle -->
-          <div class="dash-view-toggle">
-            <button class="dash-view-btn active" id="dash-view-farm" onclick="setDashMode('farm')">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span data-i18n="dash.modeFarm">Farm</span>
-            </button>
-            <button class="dash-view-btn" id="dash-view-overview" onclick="setDashMode('overview')">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-              <span data-i18n="dash.modeOverview">Overview</span>
-            </button>
-          </div>
-
-          <!-- Farm-only sections (hidden in Overview mode) -->
-          <div id="dash-farm-section">
-            <!-- The two creation flows that start real work keep a one-tap button
-                 here, on the screen where you decide what to do next. The complete
-                 set lives on Arbeitsgänge — the first bottom-nav entry, one tap from
-                 anywhere — which is why the floating + speed-dial that repeated these
-                 same three calls is gone. -->
-            <div style="display: flex; gap: 8px; margin-bottom: 10px">
-              <button
-                id="dash-act-newbatch"
-                class="btn btn-p"
-                style="flex: 1; min-width: 0; padding: 11px 10px; font-weight: 600; font-size: 14px"
-                data-i18n="dash.actionNewBatch"
-              >
-                + New batch
-              </button>
-              <button
-                id="dash-act-labwork"
-                class="btn btn-p"
-                style="flex: 1; min-width: 0; padding: 11px 10px; font-weight: 600; font-size: 14px"
-                data-i18n="dash.actionLabWork"
-              >
-                + Lab work
-              </button>
-            </div>
-
-            <!-- Batch tasks + Alerts side by side -->
-            <div class="dash-top-row" style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px">
-              <!-- Batch tasks (worker-first — top of page) -->
-              <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
-                <!-- No All/Urgent-only filter: the urgency sections below ARE the
-                     filter, and "urgent only" hid the sections it duplicated. -->
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                  <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
-                </div>
-                <div id="dash-batch-tasks"></div>
-                <details
-                  class="dash-legend fs-xs"
-                  style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
-                >
-                  <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
-                    Color guide
-                  </summary>
-                  <div style="padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px">
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span class="pdot med" style="margin-top: 3px"></span
-                      ><span data-i18n="dash.legend.orangeDot"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span class="pdot high" style="margin-top: 3px"></span
-                      ><span data-i18n="dash.legend.redDot"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 4px;
-                          height: 14px;
-                          background: #888;
-                          border-radius: 2px;
-                          margin-top: 1px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.species"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 14px;
-                          height: 10px;
-                          background: var(--c-red-light);
-                          border: 1px solid var(--c-red);
-                          border-radius: 3px;
-                          margin-top: 3px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.overdue"></span>
-                    </div>
-                    <div style="display: flex; align-items: flex-start; gap: 8px">
-                      <span
-                        style="
-                          display: inline-block;
-                          width: 14px;
-                          height: 5px;
-                          background: var(--c-red);
-                          border-radius: 2px;
-                          margin-top: 5px;
-                          flex-shrink: 0;
-                        "
-                      ></span
-                      ><span data-i18n="dash.legend.capacity"></span>
-                    </div>
-                  </div>
-                </details>
-              </div>
-
-              <!-- Alerts (inventory + overdue batches + capacity) -->
-              <div class="card" id="dash-alerts-card" style="padding: 12px 16px; flex: 1; display: none">
-                <div style="margin-bottom: 6px">
-                  <div class="sec fs-xs" style="margin: 0" data-i18n="dash.alerts">Alerts</div>
-                </div>
-                <div id="dash-alerts"></div>
-              </div>
-
-              <!-- Split batches (bags of the same batch across multiple stages) used
-                   to be its own card here. It is now the LIEGENGEBLIEBEN section of
-                   the Batch tasks card: same data (getSplitBatches), but read as an
-                   instruction alongside the dated work instead of a separate table. -->
-            </div>
-          </div>
-          <!-- end dash-farm-section -->
-
-          <!-- Charts section — visible in Overview mode only -->
-          <div id="dash-charts-section" style="display: none">
-            <!-- Top bar: Period toggle + CSV download -->
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+          <!-- The whole page. It used to be one of two modes behind a Farm/Overview
+               toggle; the other mode held the day's work, which now sits on
+               Arbeitsgänge where the jobs it names are started. See USABILITY_PLAN.md. -->
+          <div id="dash-charts-section">
+            <!-- Top bar: Period toggle + CSV download. It wraps, which it never had to
+                 while this whole section sat behind display:none in the Farm mode — three
+                 period pills and a CSV button come to 382px at 375. -->
+            <div class="ov-toolbar">
               <div class="ov-period-toggle" style="margin-bottom: 0">
                 <button
                   class="ov-period-btn active"
@@ -2426,7 +2310,7 @@
                   This year
                 </button>
               </div>
-              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV" style="padding: 4px 10px">
+              <button class="btn btn-sm" onclick="exportOverviewCSV()" title="Download CSV">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                   <polyline points="7 10 12 15 17 10" />
@@ -2477,14 +2361,16 @@
             </div>
 
             <!-- KPI History (trend charts from daily snapshots) -->
-            <div id="ov-kpi-history" style="display: none">
+            <!-- Shown with the page. It used to be un-hidden by applyDashMode(), which
+                 went with the Farm/Overview toggle; the empty state inside is what
+                 handles "not enough snapshots yet". -->
+            <div id="ov-kpi-history">
               <div style="display: flex; align-items: center; justify-content: space-between">
                 <div class="ov-kpi-group-label" data-i18n="dash.ov.history">KPI History</div>
                 <button
                   class="btn btn-sm fs-xs"
                   onclick="takeKpiSnapshot()"
                   title="Update today's snapshot"
-                  style="padding: 3px 8px"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="23 4 23 10 17 10" />
@@ -2734,7 +2620,7 @@
                         type="button"
                         id="nb-create-strain-btn"
                         class="btn btn-sm btn-p fs-xs"
-                        style="margin-left: 6px; padding: 3px 8px"
+                        style="margin-left: 6px"
                         data-i18n="strains.createNow"
                       >
                         Jetzt Pilzsorte anlegen →
@@ -3197,11 +3083,11 @@
 
         <!-- ══ LAB ══ -->
         <div class="page" id="p-orders">
-          <!-- Sub-tab bar hidden: the four views are now top-level "Verkauf" sidebar entries
-               that deep-link via openStab. The stab buttons stay in the DOM (their render
-               hooks fire through openStab) but are not shown. -->
-          <div class="stabs" style="display: none">
-            <button class="stab active" id="st-orders-inbox" data-i18n="orders.inbox">Bestellungen</button>
+          <!-- The strip is the section's own list again, on both devices: five pills on a
+               desk, a drill-down index in a hand. It was hidden while the five views were
+               top-level sidebar entries, which cost the sidebar more room than it had. -->
+          <div class="stabs" data-stab-home="nav.orders">
+            <button class="stab active" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
             <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
             <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
@@ -3863,7 +3749,7 @@
                         <button
                           type="button"
                           class="btn btn-sm gs-line-rm"
-                          style="display: none; padding: 4px 8px; color: var(--c-red)"
+                          style="display: none; color: var(--c-red)"
                           title="Remove"
                         >
                           &times;
@@ -4835,7 +4721,7 @@
                     class="btn btn-sm fs-xs"
                     data-i18n-title="caldav.copyUrl"
                     title="Copy URL"
-                    style="white-space: nowrap; padding: 4px 8px"
+                    style="white-space: nowrap"
                     data-i18n="common.copy"
                   >
                     Copy
@@ -4950,12 +4836,12 @@
                     >Subdomain</label
                   >
                   <div style="display: flex; align-items: center; gap: 4px">
-                    <input
+                    <input class="w-cap"
                       type="text"
                       id="duckdns-domain"
                       data-i18n-placeholder="duckdns.subdomainPlaceholder"
                       placeholder="myserver"
-                      style="flex: 1; max-width: 200px"
+                      style="flex: 1; --w-cap: 200px"
                     />
                     <span style="font-size: 13px; color: var(--c-text-muted)">.duckdns.org</span>
                   </div>
@@ -4966,11 +4852,11 @@
                     data-i18n="duckdns.token"
                     >DuckDNS token</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="password"
                     id="duckdns-token"
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -5165,11 +5051,11 @@
                     data-i18n="harvestFeed.url"
                     >Receiver URL</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="url"
                     id="harvestfeed-url"
                     placeholder="https://example.org/harvest"
-                    style="max-width: 480px; width: 100%"
+                    style="width: 100%; --w-cap: 480px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -5185,7 +5071,7 @@
                     >Shared secret</label
                   >
                   <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center">
-                    <input type="password" id="harvestfeed-secret" style="max-width: 380px; width: 100%; flex: 1" />
+                    <input class="w-cap" type="password" id="harvestfeed-secret" style="width: 100%; flex: 1; --w-cap: 380px" />
                     <button id="harvestfeed-gen-btn" class="btn btn-sm" data-i18n="harvestFeed.generate">
                       Generate
                     </button>
@@ -5217,11 +5103,11 @@
                     data-i18n="harvestFeed.site"
                     >Name of this farm in the feed (optional)</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="text"
                     id="harvestfeed-site"
                     maxlength="64"
-                    style="max-width: 240px; width: 100%"
+                    style="width: 100%; --w-cap: 240px"
                     data-i18n-placeholder="harvestFeed.sitePh"
                     placeholder="e.g. north-farm"
                   />
@@ -5328,11 +5214,11 @@
                     data-i18n="printer.bridgeUrl"
                     >Bridge URL</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="text"
                     id="printer-bridge-url"
                     placeholder="https://192.168.1.50:9100"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 2px" data-i18n="printer.urlHint">
                     LAN address of the Windows PC running scripts/print-bridge.ps1, with port (default 9100).
@@ -5344,12 +5230,12 @@
                     data-i18n="printer.bridgeToken"
                     >Bridge token (optional)</label
                   >
-                  <input
+                  <input class="w-cap"
                     type="password"
                     id="printer-bridge-token"
                     placeholder="leave empty to keep current"
                     data-i18n-placeholder="printer.tokenPlaceholder"
-                    style="max-width: 350px; width: 100%"
+                    style="width: 100%; --w-cap: 350px"
                   />
                   <div class="fs-xs"
                     style="color: var(--c-text-muted); margin-top: 2px"
@@ -6024,7 +5910,7 @@
                 without an error anywhere — the shop just kept showing nothing.
                 Only species this database has actually recorded can be picked.
               -->
-              <select id="harvestrelease-new" style="max-width: 260px"></select>
+              <select class="w-cap" id="harvestrelease-new" style="--w-cap: 260px"></select>
               <button id="harvestrelease-add-btn" class="btn btn-sm" data-i18n="harvestFeed.add">Add</button>
               <span style="flex: 1"></span>
               <!--

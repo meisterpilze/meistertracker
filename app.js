@@ -429,7 +429,6 @@ function safeColor(c, fallback) {
 
 // ─── AUTH ────────────────────────────────────────────────────
 let currentUser = null;
-let dashMode = localStorage.getItem('mp-dash-mode') || 'farm';
 let ovPeriod = localStorage.getItem('mp-ov-period') || 'week';
 async function authFetch(url, opts) {
   const r = await fetch(url, opts);
@@ -976,7 +975,7 @@ const PAGES = {
   cal: 'n-cal',
   settings: 'n-settings',
   strains: 'n-strains',
-  orders: 'n-orders-inbox',
+  orders: 'n-orders',
   pickups: 'n-pickups'
 };
 // ─── UNSAVED WORK ────────────────────────────────────────────────────────────
@@ -1048,18 +1047,30 @@ function go(page, btnId) {
   document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn').forEach((b) => b.classList.remove('active'));
   document.querySelectorAll('.bottom-nav-btn').forEach((b) => b.classList.remove('active'));
   document.getElementById('p-' + page).classList.add('active');
-  document.getElementById(btnId).classList.add('active');
+  const navBtn = document.getElementById(btnId);
+  navBtn.classList.add('active');
+  // The mobile topbar says which page this is. Read off the entry that opened it
+  // rather than a second table of names: a page added to the sidebar is named
+  // here without anyone remembering to, and a renamed one is renamed once.
+  const title = document.getElementById('topbar-title');
+  const label = navBtn.querySelector('[data-i18n]');
+  if (title && label) {
+    title.dataset.i18n = label.dataset.i18n;
+    title.textContent = label.textContent;
+  }
   // Mirror active state onto the mobile bottom nav for the four pages it covers.
   const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
   if (bnBtn) bnBtn.classList.add('active');
-  if (page === 'dash') {
-    renderDashAlerts();
-    renderDashBatchTasks();
-  }
   // The pipeline strip and the "where is everything" list live on the Chargen
   // page now, and lab stock on Labor — each section carries its own overview
   // instead of the dashboard carrying all of them. renderStatus fills both
   // #metrics and #dash-locations, so it belongs with the page that shows them.
+  // The day's work is the top of Arbeitsgänge now, above the seven jobs that do
+  // it — it was the Dashboard's Farm mode, which was two buttons and this row.
+  if (page === 'work') {
+    renderDashAlerts();
+    renderDashBatchTasks();
+  }
   if (page === 'batch') {
     renderStatus();
     renderBatches();
@@ -1091,8 +1102,18 @@ function go(page, btnId) {
     const stab = document.querySelector('#p-settings .stab.active');
     if (stab) stab.click();
   }
+  // The history charts load on first arrival. applyDashMode() used to do this on
+  // the way into Overview mode; the mode is gone and the page is the Overview.
+  if (page === 'dash' && !kpiHistoryData) loadKpiHistory();
   if (page === 'strains') renderStrains();
-  if (page === 'orders') renderOrders();
+  // Same rule as Admin above, and for the same reason: the strip handler already
+  // knows what its panel needs. Rendering the inbox here instead drew a list the
+  // user may not have asked for, every time — the four other views then drew
+  // over it from openStab().
+  if (page === 'orders') {
+    const stab = document.querySelector('#p-orders .stab.active');
+    if (stab) stab.click();
+  }
   if (page === 'pickups') renderPickups();
   updateTodoBadge();
   // Every page, Admin included, is somewhere the user has now arrived, so the
@@ -1193,8 +1214,9 @@ function stabLandable(stab) {
 // look like; this only sets the class, so above 769px it is inert.
 function stabDrillInit() {
   document.querySelectorAll('.page > .stabs').forEach((strip) => {
-    // Bestellungen navigates from the sidebar and hides its strip on every
-    // device, so it has no index to go back to.
+    // A strip that is hidden is not an index anyone can go back to, so a page
+    // carrying one gets no back row. Nothing hides one today — Bestellungen was
+    // the last, and its five views were sidebar entries at the time.
     if (strip.style.display === 'none') return;
     const page = strip.parentElement;
     const home = strip.dataset.stabHome;
@@ -2153,21 +2175,113 @@ function _ohProductDelete() {
 }
 
 // ─── MODALS ──────────────────────────────────────────────────
-function confirm2(title, body, label, cb) {
+function confirm2(title, body, label, cb, cancelCb) {
   document.getElementById('m-title').textContent = title;
   document.getElementById('m-body').textContent = body;
-  document.getElementById('m-ok').textContent = label || 'Confirm';
+  document.getElementById('m-ok').textContent = label || t('common.confirm');
   confirmCb = cb;
+  confirmCancelCb = cancelCb || null;
   document.getElementById('m-confirm').classList.add('open');
 }
 function closeConfirm() {
   document.getElementById('m-confirm').classList.remove('open');
+  // Read and clear before calling: a cancel handler that opens another dialog
+  // would otherwise find this one's callbacks still in place.
+  const cancel = confirmCancelCb;
   confirmCb = null;
+  confirmCancelCb = null;
+  if (cancel) cancel();
 }
 document.getElementById('m-ok').onclick = () => {
-  if (confirmCb) confirmCb();
-  closeConfirm();
+  const cb = confirmCb;
+  confirmCb = null;
+  // Cleared first, or closing after a Yes would report a No as well.
+  confirmCancelCb = null;
+  document.getElementById('m-confirm').classList.remove('open');
+  if (cb) cb();
 };
+
+/**
+ * Say which field is wrong by marking it, not only by describing it.
+ *
+ * The bar fixed three of the four things wrong with alert() and left the fourth:
+ * a message that names a problem without pointing at it. "Menge eingeben" over a
+ * form with nine inputs is a puzzle, and the answer is obvious only to whoever
+ * wrote the check.
+ *
+ * So the field gets the red ring, the focus and the scroll, and the bar still
+ * carries the words. The words are deliberately *not* moved under the input: the
+ * twenty-eight fields this is called for sit in grid cells, plain blocks and
+ * non-wrapping flex rows, and a block inserted after the input lands differently
+ * in each. Marking and focusing is what answers "which one", and it does so the
+ * same way everywhere.
+ *
+ * The ring clears on the next keystroke in that field, because a ring that
+ * outlives the mistake is a field that looks broken while it is being fixed.
+ *
+ * @param {string|Element} el the input, or its id
+ * @param {string} msg what is wrong with it
+ */
+function fieldError(el, msg) {
+  const input = typeof el === 'string' ? document.getElementById(el) : el;
+  // No element is not a reason to say nothing: a renamed id falls back to what
+  // every one of these call sites did before, rather than failing silently.
+  if (!input) return toast(msg, 'err');
+  toast(msg, 'err');
+  input.classList.add('is-invalid');
+  input.setAttribute('aria-invalid', 'true');
+  const clear = () => {
+    input.classList.remove('is-invalid');
+    input.removeAttribute('aria-invalid');
+  };
+  input.addEventListener('input', clear, { once: true });
+  input.addEventListener('change', clear, { once: true });
+  // A field two screens down is not pointed at by being focused alone; and
+  // focus() on a hidden or disabled input is a no-op, which is why the ring is
+  // set first and does not depend on it.
+  try {
+    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    input.focus({ preventScroll: true });
+  } catch (e) {
+    /* an input the browser will not focus is still marked */
+  }
+}
+
+/**
+ * The dialog confirm2() opens, as a promise, so a caller can keep the shape it
+ * had with window.confirm(): `if (!(await askConfirm(…))) return;`.
+ *
+ * Eight irreversible actions in this app asked through window.confirm(), and the
+ * button that agrees to one is labelled **OK**. "Kamera löschen?" answered with
+ * OK is a worse button than one that says Löschen: the label is the last thing
+ * read before the thing happens, and OK does not say what it does. confirm2()
+ * has taken a label since it was written — these eight had simply never been
+ * moved onto it.
+ *
+ * It settles both ways. Cancel, the backdrop and closeConfirm() all resolve
+ * false, because an await that never settles leaves the rest of the caller
+ * suspended for the life of the page.
+ *
+ * The ninth confirm() stays native: mayLeavePage() runs from `beforeunload`,
+ * which is synchronous by specification, and a promise there resolves after the
+ * tab is already gone.
+ *
+ * @param {string} title  the action, short — it is also the button's label
+ * @param {string} body   what happens if they say yes
+ * @param {string} label  the button. Never "OK".
+ * @returns {Promise<boolean>}
+ */
+function askConfirm(title, body, label) {
+  return new Promise((resolve) => {
+    confirm2(
+      title,
+      body,
+      label,
+      () => resolve(true),
+      () => resolve(false)
+    );
+  });
+}
 document.getElementById('si-close').onclick = closeSubstrateInfo;
 document.getElementById('m-subinfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-subinfo') closeSubstrateInfo();
@@ -2176,6 +2290,7 @@ document.getElementById('m-confirm').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm') closeConfirm();
 });
 
+let confirmCancelCb = null;
 let confirm3CbA = null;
 let confirm3CbB = null;
 function confirm3(title, body, labelA, labelB, cbA, cbB) {
@@ -2297,11 +2412,11 @@ function confirmBatchAdd() {
     loc = document.getElementById('ba-loc').value,
     batch = batches.find((x) => x.batchId === id);
   if (!id || !batch) {
-    alert(t('batchadd.selectBatch'));
+    fieldError('ba-batch', t('batchadd.selectBatch'));
     return;
   }
   if (!loc) {
-    alert(t('batchadd.selectLoc'));
+    fieldError('ba-loc', t('batchadd.selectLoc'));
     return;
   }
   const now = new Date().toISOString();
@@ -2536,7 +2651,6 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
 }
 
 function renderOverviewKPIs() {
-  if (dashMode !== 'overview') return;
   const weekEl = document.getElementById('ov-kpi-week');
   const substratesEl = document.getElementById('ov-kpi-substrates');
   const qualEl = document.getElementById('ov-kpi-quality');
@@ -3109,11 +3223,6 @@ function renderKpiHistory() {
   const emptyEl = document.getElementById('ov-history-empty');
   const chartsEl = document.getElementById('ov-history-charts');
   if (!wrap) return;
-  if (dashMode !== 'overview') {
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = '';
   // P-02: Chart.js may not be loaded yet (idle preload). Defer.
   if (typeof Chart === 'undefined') {
     loadVendorLibs().then(() => renderKpiHistory());
@@ -3417,14 +3526,14 @@ async function takeKpiSnapshot() {
   try {
     const r = await fetch('/api/kpi-snapshots/now', { method: 'POST' });
     if (r.status === 401 || r.status === 403) {
-      alert(t('dash.ov.snapshotAuthErr') || 'Admin login required');
+      toast(t('dash.ov.snapshotAuthErr') || 'Admin login required', 'err');
       return;
     }
     if (!r.ok) throw new Error('Failed');
     await loadKpiHistory();
   } catch (e) {
     console.error('Snapshot failed', e);
-    alert(t('dash.ov.snapshotErr') || 'Snapshot failed');
+    toast(t('dash.ov.snapshotErr') || 'Snapshot failed', 'err');
   }
 }
 
@@ -3440,120 +3549,6 @@ function _kpiGroupKey(dateStr, period) {
     return thu.getFullYear() + '-W' + String(isoWeekNumber(thu)).padStart(2, '0');
   }
   return dateStr;
-}
-
-function _kpiAggregate(rows, period) {
-  if (period === 'daily') return rows;
-  const sumF = ['bags_created', 'grain_used_kg', 'harvest_kg', 'hardwood_used_kg', 'wheatbran_used_kg'];
-  const lastF = [
-    'avg_yield_g',
-    'contam_rate_pct',
-    'contam_bags',
-    'total_bags_placed',
-    'days_since_contam',
-    'flush_2plus',
-    'bags_spawn',
-    'bags_incubation',
-    'bags_fruiting',
-    'bags_contaminated',
-    'total_batches',
-    'stock_hardwood_kg',
-    'stock_wheatbran_kg',
-    'stock_grain_kg'
-  ];
-  const groups = {};
-  const order = [];
-  rows.forEach((r) => {
-    const k = _kpiGroupKey(r.date, period);
-    if (!groups[k]) {
-      groups[k] = { key: k, rows: [] };
-      order.push(k);
-    }
-    groups[k].rows.push(r);
-  });
-  return order.map((k) => {
-    const g = groups[k];
-    const last = g.rows[g.rows.length - 1];
-    const agg = { date: g.key + ' (' + g.rows[0].date + ' \u2013 ' + last.date + ')' };
-    sumF.forEach((f) => {
-      agg[f] = +g.rows.reduce((s, r) => s + (r[f] || 0), 0).toFixed(2);
-    });
-    lastF.forEach((f) => {
-      agg[f] = last[f];
-    });
-    return agg;
-  });
-}
-
-async function exportKpiCSV() {
-  try {
-    const r = await fetch('/api/kpi-snapshots');
-    if (!r.ok) throw new Error('Failed');
-    const j = await r.json();
-    const raw = j.items || [];
-    if (!raw.length) {
-      alert(t('dash.ov.historyNoData'));
-      return;
-    }
-    const period = (document.getElementById('kpi-csv-period') || {}).value || 'weekly';
-    const rows = _kpiAggregate(raw, period);
-    const hdr = [
-      'Period',
-      'Bags created',
-      'Grain used (kg)',
-      'Harvest (kg)',
-      'Hardwood used (kg)',
-      'Wheat bran used (kg)',
-      'Avg yield (g)',
-      'Contam rate (%)',
-      'Contam bags',
-      'Total bags placed',
-      'Days since contam',
-      'Flush 2+',
-      'Bags spawn',
-      'Bags incubation',
-      'Bags fruiting',
-      'Bags contaminated',
-      'Total batches',
-      'Stock hardwood (kg)',
-      'Stock wheat bran (kg)',
-      'Stock grain (kg)'
-    ];
-    const csvRows = rows.map((s) => [
-      s.date,
-      s.bags_created,
-      s.grain_used_kg,
-      s.harvest_kg,
-      s.hardwood_used_kg,
-      s.wheatbran_used_kg,
-      s.avg_yield_g,
-      s.contam_rate_pct,
-      s.contam_bags,
-      s.total_bags_placed,
-      s.days_since_contam,
-      s.flush_2plus,
-      s.bags_spawn,
-      s.bags_incubation,
-      s.bags_fruiting,
-      s.bags_contaminated,
-      s.total_batches,
-      s.stock_hardwood_kg,
-      s.stock_wheatbran_kg,
-      s.stock_grain_kg
-    ]);
-    const csv =
-      '\uFEFF' +
-      [hdr, ...csvRows]
-        .map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';'))
-        .join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'kpi_' + period + '_' + new Date().toISOString().slice(0, 10) + '.csv';
-    a.click();
-  } catch (e) {
-    console.error('KPI CSV export failed', e);
-  }
 }
 
 function exportOverviewCSV() {
@@ -3706,16 +3701,12 @@ function renderStatus() {
     el.innerHTML = '<div class="empty">' + t('dash.noZones') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview') renderOverviewKPIs();
-    applyDashMode();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
-    if (dashMode === 'overview') renderOverviewKPIs();
-    applyDashMode();
     return;
   }
 
@@ -3776,7 +3767,6 @@ function renderStatus() {
   const tdone = batchData.filter((d) => d.status === 'DONE').length;
   renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
   renderOverviewKPIs();
-  applyDashMode();
   updateActionBar();
 }
 
@@ -3852,7 +3842,10 @@ function renderRackSection(zone, racks, filtered) {
   const zoneHasUrgent = filtered.some(
     (d) => d.ov && Object.keys(d.c).some((zid) => zid === zone || racks.includes(zid))
   );
-  const sectionClass = 'location-section' + (dashMode === 'farm' && zoneHasUrgent ? '' : ' collapsed');
+  // Open when there is something to see. This used to read `dashMode === 'farm' &&`
+  // — a toggle on the Dashboard silently deciding how the Chargen page looked, so
+  // switching to Übersicht once left every zone here collapsed with no visible cause.
+  const sectionClass = 'location-section' + (zoneHasUrgent ? '' : ' collapsed');
   return `<div class="${sectionClass}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
@@ -3932,7 +3925,7 @@ function renderFruitingSection(fruitingZones, filtered) {
     })
     .join('');
 
-  const fruitSectionClass = 'location-section' + (dashMode === 'farm' && totalBags > 0 ? '' : ' collapsed');
+  const fruitSectionClass = 'location-section' + (totalBags > 0 ? '' : ' collapsed');
   return `<div class="${fruitSectionClass}" data-zone="fruiting">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
@@ -4145,25 +4138,6 @@ function locSelectAllVisible() {
   });
   renderStatus();
 }
-function setDashMode(mode) {
-  dashMode = mode;
-  localStorage.setItem('mp-dash-mode', mode);
-  applyDashMode();
-  renderStatus();
-}
-function applyDashMode() {
-  const farmBtn = document.getElementById('dash-view-farm');
-  const ovBtn = document.getElementById('dash-view-overview');
-  const charts = document.getElementById('dash-charts-section');
-  const farmSection = document.getElementById('dash-farm-section');
-  if (farmBtn) farmBtn.classList.toggle('active', dashMode === 'farm');
-  if (ovBtn) ovBtn.classList.toggle('active', dashMode === 'overview');
-  if (charts) charts.style.display = dashMode === 'overview' ? '' : 'none';
-  if (farmSection) farmSection.style.display = dashMode === 'farm' ? '' : 'none';
-  const histWrap = document.getElementById('ov-kpi-history');
-  if (histWrap) histWrap.style.display = dashMode === 'overview' ? '' : 'none';
-  if (dashMode === 'overview' && !kpiHistoryData) loadKpiHistory();
-}
 function setOvPeriod(p) {
   ovPeriod = p;
   localStorage.setItem('mp-ov-period', p);
@@ -4373,7 +4347,7 @@ function printWorkList() {
     'ipt></body></html>';
   const win = window.open('', '_blank');
   if (!win) {
-    alert(t('worklist.popupBlocked'));
+    toast(t('worklist.popupBlocked'), 'err');
     return;
   }
   win.document.write(html);
@@ -4543,22 +4517,60 @@ function showUndoBar(msg, undoCb) {
     hideUndoBar();
     if (undoCb) undoCb();
   };
+  bar.onclick = null;
+  bar.classList.remove('is-err');
+  bar.setAttribute('role', 'status');
+  bar.setAttribute('aria-live', 'polite');
   bar.classList.add('show');
   clearTimeout(_undoTimer);
   _undoTimer = setTimeout(hideUndoBar, 8000);
 }
-function flashUndoBar(msg) {
+// The app's own message line, and the reason it exists twice over. flashUndoBar
+// is the receipt half — the bar with no button on it — and `toast` is the same
+// bar carrying what used to go through alert() 77 times.
+//
+// alert() was the wrong control for that in four ways, and the fourth is why it
+// could not simply be styled: it is not the app. On a phone it renders as
+// `192.168.x.x sagt:` in the OS font, ignoring the theme and the 56px touch
+// floor everything else in this app now guarantees. It also blocks — a gloved
+// thumb has to find one small OK before anything else can happen — and it
+// detaches the message from the field that caused it, so the user dismisses a
+// sentence and then has to work out which of nine inputs it meant. This bar
+// fixes the first three. The fourth, putting the message under its own field,
+// is field-level validation and is not this change.
+//
+// Errors are read out assertively and sit for six seconds rather than two and a
+// half, because a validation message that leaves before the eye reaches it is a
+// message nobody got. A tap dismisses either kind.
+function toast(msg, kind) {
   const bar = document.getElementById('undo-bar');
   if (!bar) return;
+  const err = kind === 'err';
   document.getElementById('undo-msg').textContent = msg;
   document.getElementById('undo-btn').style.display = 'none';
+  bar.classList.toggle('is-err', err);
+  bar.setAttribute('role', err ? 'alert' : 'status');
+  bar.setAttribute('aria-live', err ? 'assertive' : 'polite');
+  // Tap anywhere to dismiss. Only on this path: an undo offer that vanished
+  // under a stray tap would take the undo with it.
+  bar.onclick = hideUndoBar;
   bar.classList.add('show');
   clearTimeout(_undoTimer);
-  _undoTimer = setTimeout(hideUndoBar, 2500);
+  _undoTimer = setTimeout(hideUndoBar, err ? 6000 : 2500);
+}
+function flashUndoBar(msg) {
+  toast(msg);
 }
 function hideUndoBar() {
   const bar = document.getElementById('undo-bar');
-  if (bar) bar.classList.remove('show');
+  if (!bar) return;
+  bar.classList.remove('show');
+  // Dropped on the way out, not on the way in: the bar fades rather than
+  // vanishing, and removing the skin while it is still visible recolours it
+  // mid-fade. The next caller sets its own anyway.
+  setTimeout(() => {
+    if (!bar.classList.contains('show')) bar.classList.remove('is-err');
+  }, 250);
 }
 function _snapshotBeforeMove(batchList, dest, lastByBag) {
   const snap = [];
@@ -5127,7 +5139,7 @@ function saveRhythmEditor() {
   }
   apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
     if (res && res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     weekRhythm = map;
@@ -5514,7 +5526,7 @@ function editRhythmTarget(date, target) {
     }
     apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       const row = rhythmTasks.find((x) => x.date === date);
@@ -5543,7 +5555,7 @@ function logRhythmProgress(date, target, done) {
     }
     apiPost('/api/rhythm-task', { date, doneQty: n }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       // Update in place so the row reflects the new figure without waiting for
@@ -6516,10 +6528,10 @@ function _zcSelectMissing() {
   document.getElementById('m-zonecheck').classList.remove('open');
   return selectedLocBags.size;
 }
-function locRemoveSelected() {
+async function locRemoveSelected() {
   if (!selectedLocBags.size) return;
   const n = selectedLocBags.size;
-  if (!confirm(t('scanFb.confirmRemove', { n: n }))) return;
+  if (!(await askConfirm(t('dash.remove'), t('scanFb.confirmRemove', { n: n }), t('dash.remove')))) return;
   const now = new Date().toISOString();
   const entries = [];
   selectedLocBags.forEach((d, bagId) => {
@@ -7015,7 +7027,10 @@ function nbApplyDefaults() {
   renderNbGrainBanner();
   nbSubSum(); // also refreshes the material preview
 }
-function createBatch() {
+// async since the two warnings inside became dialogs rather than window.confirm().
+// Both internal callers invoke it as their last statement and ignore the result,
+// and $('btn-24') is a click handler, so nothing was waiting on it before either.
+async function createBatch() {
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
@@ -7023,7 +7038,7 @@ function createBatch() {
     if (!mushroomStrains.length) {
       confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
     } else {
-      alert(t('strains.noStrainsHint'));
+      toast(t('strains.noStrainsHint'), 'err');
     }
     return;
   }
@@ -7034,7 +7049,7 @@ function createBatch() {
     days = parseInt(document.getElementById('nb-days').value) || 14;
   const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
-    alert(t('batch.fillQty'));
+    fieldError('nb-qty', t('batch.fillQty'));
     return;
   }
   // v67: portioned out of an existing mix. None of the composition and delta
@@ -7046,7 +7061,7 @@ function createBatch() {
     return;
   }
   if (!bagKg) {
-    alert(t('batch.enterWeight'));
+    fieldError('nb-weight', t('batch.enterWeight'));
     return;
   }
   const hw = parseDecimal(document.getElementById('nb-hw').value) || 0,
@@ -7070,7 +7085,9 @@ function createBatch() {
   // under-deducted by half.
   const subTotal = hw + wb + coir;
   if ((hw || wb || coir) && Math.abs(subTotal - 100) > 0.01) {
-    alert(t('batch.substrateExceeds', { sum: subTotal }));
+    // The sum is of three fields; the first that carries a number is the one
+    // the cursor lands in, because a ring on an empty field explains nothing.
+    fieldError(hw ? 'nb-hw' : wb ? 'nb-wb' : 'nb-coir', t('batch.substrateExceeds', { sum: subTotal }));
     return;
   }
   // Nothing to deduct at all: the substrate block below is skipped and the batch
@@ -7079,7 +7096,10 @@ function createBatch() {
   // untouched form — the inputs only carry placeholders, so a collapsed
   // "Substrat" section read as 70/30 while actually submitting 0/0, and stock
   // drifted with no signal. Make the no-op explicit instead of silent.
-  if (!hw && !wb && !coir && !grainKg && !window.confirm(t('batch.noSubstrateWarn'))) return;
+  if (!hw && !wb && !coir && !grainKg) {
+    const weiter = await askConfirm(t('batch.noSubstrateTitle'), t('batch.noSubstrateWarn'), t('common.proceed'));
+    if (!weiter) return;
+  }
   const substrate =
     hw || wb || coir
       ? {
@@ -7125,11 +7145,13 @@ function createBatch() {
       _shortages.push(
         'Grain: ' + (_stock.grain || 0).toFixed(1) + ' kg vorhanden, ' + _grainUsed.toFixed(1) + ' kg nötig'
       );
-    if (
-      _shortages.length &&
-      !window.confirm(t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'))
-    ) {
-      return;
+    if (_shortages.length) {
+      const weiter = await askConfirm(
+        t('inv.shortageTitle'),
+        t('inv.shortageWarn') + '\n\n' + _shortages.join('\n') + '\n\n' + t('inv.shortageProceed'),
+        t('common.proceed')
+      );
+      if (!weiter) return;
     }
   }
   const batchId = genBatchId(ms.name);
@@ -7213,7 +7235,7 @@ function createBatch() {
         if (i >= 0) batches.splice(i, 1);
         // Roll back the optimistic stock mutation too — server didn't apply the deltas.
         inventory.stock = stockSnapshot;
-        alert(t('batch.saveFailed') + r.error);
+        toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
         renderStatus();
         return;
@@ -7585,7 +7607,7 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim()
     });
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await loadData();
@@ -7593,7 +7615,7 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
     nbSubstrateNeed();
     // Der Ablauf zeigt statt des Hinweisfensters seine Quittung.
     if (opts && opts.onDone) return opts.onDone(r);
-    alert(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
+    toast(t('sub.batchDone', { id: r.batchId, kg: r.drawKg.toFixed(1), left: r.remainingKg.toFixed(1) }));
   };
   // A mix can come out heavier than the arithmetic said, so this warns rather
   // than blocks — but it has to be said out loud, because the leftover figure is
@@ -7808,7 +7830,7 @@ function deleteSubstrate(subId) {
   confirm2(t('sub.deleteTitle'), t('sub.deleteMsg', { id: subId }), t('sub.delete'), async () => {
     const r = await apiDelete('/api/substrate-batches/' + encodeURIComponent(subId));
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await loadData();
@@ -7830,7 +7852,7 @@ function writeOffSubstrate(subId, leftKg) {
       note: t('sub.writeOffNote')
     });
     if (!r || r.error) {
-      alert(t('sub.failed', { err: (r && r.error) || '?' }));
+      toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
     await refreshSubstrateBatches();
@@ -7859,14 +7881,14 @@ async function printBatchLabelsInline() {
   const id = res ? res.dataset.batchId : null;
   const b = batches.find((x) => x.batchId === id) || batches[batches.length - 1];
   if (!b) {
-    alert(t('print.selectBatchFirst'));
+    toast(t('print.selectBatchFirst'), 'err');
     return;
   }
   const modeEl = document.getElementById('print-mode');
   const qrEl = document.getElementById('bag-qr');
   const zpl = makeBagZPL(b.bags, b, modeEl ? modeEl.value : 'full', qrEl ? qrEl.checked : true);
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -8602,7 +8624,7 @@ function confirmAddBags() {
   if (!b) return;
   const qty = parseInt(document.getElementById('ab-qty').value) || 0;
   if (qty < 1) {
-    alert(t('addBags.enterQty'));
+    fieldError('ab-qty', t('addBags.enterQty'));
     return;
   }
   const confirmBtn = document.getElementById('addbags-confirm-btn');
@@ -8742,7 +8764,7 @@ function confirmHarvest(keepScanning) {
   const g = parseDecimal(document.getElementById('hp-grams').value),
     f = parseInt(document.getElementById('hp-flush').value) || 1;
   if (!g || g <= 0) {
-    alert(t('harvest.enterWeight'));
+    fieldError('hp-grams', t('harvest.enterWeight'));
     return;
   }
   // Only when the field is on screen. Reading it regardless would send whatever
@@ -8753,7 +8775,7 @@ function confirmHarvest(keepScanning) {
   // scan modal has moved on is a message about a bag that is already back on the
   // shelf.
   if (rel > g) {
-    alert(t('harvest.releaseTooHigh'));
+    fieldError('hp-release', t('harvest.releaseTooHigh'));
     return;
   }
   const p = scan.harvestBag;
@@ -9066,51 +9088,6 @@ function updateTodoBadge() {
   const bd = buildAutoTasks().filter((t) => t.urgent || t.warn).length + getInvAlerts().length;
   const de = document.getElementById('n-dash');
   if (de) de.classList.toggle('alert', bd > 0);
-}
-
-// ─── TEAM MEMBERS ───────────────────────────────────────────
-function renderTeam() {
-  const el = document.getElementById('team-list');
-  if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
-  if (!el) return;
-  if (!teamMembers.length) {
-    el.innerHTML = '<div class="empty" style="padding:1rem">' + t('team.empty') + '</div>';
-    return;
-  }
-  el.innerHTML = teamMembers
-    .map(
-      (m) =>
-        `<div class="member-row"><span class="name">${esc(m.name)}</span>${m.role ? `<span class="fs-xs" style="color:var(--c-text-muted)">${esc(m.role)}</span>` : ''}<button class="btn btn-sm btn-r" onclick="removeMember(${m.id})">×</button></div>`
-    )
-    .join('');
-}
-function addMember() {
-  const name = document.getElementById('member-name').value.trim();
-  if (!name) return;
-  const role = document.getElementById('member-role').value.trim();
-  if (teamMembers.some((m) => m.name.toLowerCase() === name.toLowerCase())) return;
-  const member = { name, role: role || null, added: new Date().toISOString() };
-  teamMembers.push(member);
-  document.getElementById('member-name').value = '';
-  document.getElementById('member-role').value = '';
-  apiPost('/api/team', member).then((r) => {
-    if (r && r.id) member.id = r.id;
-    renderTeam();
-  });
-}
-function removeMember(id) {
-  const m = teamMembers.find((x) => x.id === id);
-  if (!m) return;
-  confirm2(
-    'Remove member?',
-    'Remove ' + m.name + ' from the team. Their existing task assignments remain.',
-    'Remove',
-    () => {
-      teamMembers = teamMembers.filter((x) => x.id !== id);
-      apiDelete('/api/team/' + id);
-      renderTeam();
-    }
-  );
 }
 
 // ─── CalDAV SYNC ────────────────────────────────────────────
@@ -10585,7 +10562,7 @@ function renderCameraFlags(flags) {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
         loadCameraTab();
       } catch (e) {
-        alert(t('common.error') + ': ' + (e.message || ''));
+        toast(t('common.error') + ': ' + (e.message || ''), 'err');
       }
     })
   );
@@ -10683,13 +10660,13 @@ async function saveCameraEdit() {
 async function deleteCamera(id) {
   const cam = _cam.cameras.find((c) => c.id === id);
   if (!cam) return;
-  if (!confirm(t('cam.confirmDelete', { name: cam.name }))) return;
+  if (!(await askConfirm(t('cam.delete'), t('cam.confirmDelete', { name: cam.name }), t('cam.delete')))) return;
   try {
     const r = await authFetch('/api/camera/cameras/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     loadCameraTab();
   } catch (e) {
-    alert(t('common.error') + ': ' + (e.message || ''));
+    toast(t('common.error') + ': ' + (e.message || ''), 'err');
   }
 }
 
@@ -10790,7 +10767,7 @@ function initCameraPxCalib() {
     if (!_cam.pxDistance) return;
     const mm = parseDecimal(mmInput.value);
     if (!Number.isFinite(mm) || mm <= 0) {
-      alert(t('cam.invalidMm'));
+      toast(t('cam.invalidMm'), 'err');
       return;
     }
     const ratio = _cam.pxDistance / mm;
@@ -10992,7 +10969,7 @@ async function generateMcpToken() {
   }
 }
 async function revokeMcpToken() {
-  if (!confirm(t('mcp.revokeKeyConfirm'))) return;
+  if (!(await askConfirm(t('mcp.revokeKey'), t('mcp.revokeKeyConfirm'), t('mcp.revokeKey')))) return;
   try {
     const r = await authFetch('/api/mcp/token', { method: 'DELETE' });
     const data = await r.json();
@@ -11128,7 +11105,8 @@ async function loadOAuthClients() {
   }
 }
 async function deleteOAuthClient(clientId, isAuto) {
-  if (!confirm(isAuto ? t('mcp.confirmDeleteAuto') : t('mcp.confirmDelete'))) return;
+  const frage = isAuto ? t('mcp.confirmDeleteAuto') : t('mcp.confirmDelete');
+  if (!(await askConfirm(t('mcp.deleteClient'), frage, t('mcp.deleteClient')))) return;
   try {
     const r = await authFetch('/api/mcp/oauth-clients/' + encodeURIComponent(clientId), { method: 'DELETE' });
     const data = await r.json();
@@ -11507,7 +11485,7 @@ function logDelivery() {
   const kg = parseDecimal(document.getElementById('del-kg').value) || 0;
   const note = document.getElementById('del-note').value.trim();
   if (kg <= 0) {
-    alert(t('inv.enterQty'));
+    fieldError('del-kg', t('inv.enterQty'));
     return;
   }
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
@@ -11551,7 +11529,9 @@ function logAdjustment() {
     delta = parseDecimal(deltaVal) || 0;
     newStock = Math.max(0, cur + delta);
   } else {
-    alert(t('inv.enterAmount'));
+    // Neither box filled in, so point at the absolute one — it is the first of
+    // the pair and the one that needs no arithmetic to use.
+    fieldError('adj-absolute', t('inv.enterAmount'));
     return;
   }
   const prevStock = inventory.stock[mat] || 0;
@@ -11741,7 +11721,7 @@ function editSupplier(id) {
       notes: document.getElementById('sup-notes').value.trim()
     };
     if (!s.name) {
-      alert(t('zones.nameRequired'));
+      fieldError('sup-name', t('zones.nameRequired'));
       return;
     }
     if (existing) s.id = existing.id;
@@ -11834,7 +11814,7 @@ function editPickupLocation(id) {
       active: existing ? existing.active !== false : true
     };
     if (!l.name) {
-      alert(t('zones.nameRequired'));
+      toast(t('zones.nameRequired'), 'err');
       return;
     }
     if (existing) l.id = existing.id;
@@ -11852,7 +11832,8 @@ function editPickupLocation(id) {
 async function retirePickupLocation(id) {
   const l = pickupLocations.find((x) => x.id === id);
   if (!l) return;
-  if (!confirm(t('pickupLoc.confirmRetire', { name: l.name }))) return;
+  if (!(await askConfirm(t('pickupLoc.retire'), t('pickupLoc.confirmRetire', { name: l.name }), t('pickupLoc.retire'))))
+    return;
   const r = await apiDelete('/api/pickup-locations/' + id);
   if (!r) return;
   l.active = false;
@@ -12203,12 +12184,12 @@ async function reorderZoneWithinRole(sourceId, targetId, before, role) {
   try {
     const res = await apiPost('/api/zones/reorder', { order: fullOrder });
     if (res && res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       await loadData();
     }
   } catch (err) {
     console.error('reorder zones error:', err);
-    alert(t('zones.errorReorder', { err: err.message || 'unknown error' }));
+    toast(t('zones.errorReorder', { err: err.message || 'unknown error' }), 'err');
     await loadData();
   }
 }
@@ -12220,20 +12201,20 @@ async function addZone() {
     .replace(/[^A-Z0-9]/g, '_')
     .replace(/^_+|_+$/g, '');
   if (!id || id.length < 2) {
-    alert(t('zones.errShort'));
+    fieldError('zone-name', t('zones.errShort'));
     return;
   }
   if (nameRaw.length > 50) {
-    alert(t('zones.errLong'));
+    toast(t('zones.errLong'), 'err');
     return;
   }
   if (!/^[A-Z]/.test(id)) {
-    alert(t('zones.errIdStart'));
+    toast(t('zones.errIdStart'), 'err');
     return;
   }
   const dup = zones.find((z) => z.id === id);
   if (dup) {
-    alert(t('zones.errExists') + ' (' + dup.name + ')');
+    toast(t('zones.errExists') + ' (' + dup.name + ')', 'err');
     return;
   }
   const role = document.getElementById('zone-role').value;
@@ -12258,17 +12239,17 @@ async function addZone() {
       ]
     : [];
   if (racks.some((r) => r === id + '_' || r.length <= id.length + 1)) {
-    alert(t('zones.errRackEmpty'));
+    toast(t('zones.errRackEmpty'), 'err');
     return;
   }
   if (racks.length > 50) {
-    alert(t('zones.errTooManyRacks'));
+    toast(t('zones.errTooManyRacks'), 'err');
     return;
   }
   const capVal = document.getElementById('zone-capacity').value.trim();
   const maxCapacity = capVal ? parseInt(capVal, 10) : null;
   if (maxCapacity !== null && (!Number.isFinite(maxCapacity) || maxCapacity < 1)) {
-    alert(t('zones.errCapacity'));
+    fieldError('zone-capacity', t('zones.errCapacity'));
     return;
   }
   try {
@@ -12284,7 +12265,7 @@ async function addZone() {
       created: now
     });
     if (res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     zones.push({
@@ -12306,7 +12287,7 @@ async function addZone() {
     document.getElementById('zone-capacity').value = '';
   } catch (e) {
     console.error('addZone error:', e);
-    alert(t('zones.errorCreate', { err: e.message || 'unknown error' }));
+    toast(t('zones.errorCreate', { err: e.message || 'unknown error' }), 'err');
   }
 }
 function renameZone(id) {
@@ -12318,7 +12299,7 @@ function renameZone(id) {
     if (newName === z.name) return;
     apiPatch('/api/zones/' + encodeURIComponent(id) + '/name', { name: newName }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       z.name = newName;
@@ -12352,7 +12333,7 @@ function editZoneCapacity(id) {
     if ((z.maxCapacity || null) === cap) return;
     apiPatch('/api/zones/' + encodeURIComponent(id) + '/capacity', { maxCapacity: cap }).then((res) => {
       if (res && res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       z.maxCapacity = cap;
@@ -12369,7 +12350,7 @@ function removeZone(id) {
   confirm2(t('zones.deleteTitle'), t('zones.deleteMsg', { name: z.name }), t('zones.delete'), async () => {
     const res = await apiDelete('/api/zones/' + encodeURIComponent(id));
     if (res.error) {
-      alert(res.error);
+      toast(res.error, 'err');
       return;
     }
     zones = zones.filter((x) => x.id !== id);
@@ -12389,12 +12370,12 @@ function addRackToZone(zoneId) {
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
     if (ALL_RACKS.includes(rackId)) {
-      alert(t('zones.errRackExists'));
+      toast(t('zones.errRackExists'), 'err');
       return;
     }
     apiPost('/api/zones/' + encodeURIComponent(zoneId) + '/racks', { id: rackId }).then((res) => {
       if (res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       const zone = zones.find((z) => z.id === zoneId);
@@ -12409,7 +12390,7 @@ function removeRack(rackId) {
   confirm2(t('zones.rackDeleteTitle'), t('zones.rackDeleteMsg', { name: rackId }), t('zones.delete'), () => {
     apiDelete('/api/racks/' + encodeURIComponent(rackId)).then((res) => {
       if (res.error) {
-        alert(res.error);
+        toast(res.error, 'err');
         return;
       }
       zones.forEach((z) => {
@@ -12465,7 +12446,7 @@ async function executeBulkMoveToRack(zoneId, rackId) {
   const res = await apiPost('/api/scan-log', { entries });
   if (handleZoneMismatch(res, entries)) return; // I-12
   if (res.error) {
-    alert(res.error);
+    toast(res.error, 'err');
     return;
   }
   entries.forEach((e) => scanLog.push(e));
@@ -12639,11 +12620,11 @@ function saveMStrain() {
   const desc = document.getElementById('ms-desc').value.trim();
   const editId = document.getElementById('ms-edit-id').value;
   if (!name || !kuerzel) {
-    alert(t('strains.required'));
+    fieldError(name ? 'ms-kuerzel' : 'ms-name', t('strains.required'));
     return;
   }
   if (kuerzel.length < 2 || kuerzel.length > 4) {
-    alert(t('strains.kuerzelLength'));
+    fieldError('ms-kuerzel', t('strains.kuerzelLength'));
     return;
   }
   const rec = _msReadRecipe();
@@ -12665,7 +12646,7 @@ function saveMStrain() {
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
     if (r && r.error) {
-      alert(t('common.error') + ': ' + r.error);
+      toast(t('common.error') + ': ' + r.error, 'err');
       return;
     }
     if (!editId && r && r.id) {
@@ -12774,7 +12755,7 @@ function deleteMStrain(id) {
   confirm2(t('strains.deleteTitle'), t('strains.deleteMsg', { name: ms.name }), t('strains.delete'), () => {
     apiDelete('/api/mushroom-strains/' + id).then((r) => {
       if (r && r.error) {
-        alert(t('common.error') + ': ' + r.error);
+        toast(t('common.error') + ': ' + r.error, 'err');
         return;
       }
       mushroomStrains = mushroomStrains.filter((x) => x.id !== id);
@@ -12973,7 +12954,7 @@ function msQuickCharge(id) {
   const ms = mushroomStrains.find((x) => x.id === id);
   if (!ms) return;
   if (!ms.recBatchType) {
-    alert(t('msq.noRecipe'));
+    toast(t('msq.noRecipe'), 'err');
     return;
   }
   msQuickOpen('charge', ms);
@@ -13257,14 +13238,14 @@ function msqRestoreAfterScan(prefix) {
 function msQuickConfirm() {
   if (!_msQuickCtx) return;
   if (!_msQuickCtx.ms) {
-    alert(t('msq.pickSortePrompt'));
+    toast(t('msq.pickSortePrompt'), 'err');
     return;
   }
   const ms = _msQuickCtx.ms;
   const mode = _msQuickCtx.mode;
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
   if (qty < 1) {
-    alert(t('batch.fillQty'));
+    fieldError('ms-q-qty', t('batch.fillQty'));
     return;
   }
   _msqSaveQty(mode, qty);
@@ -13286,7 +13267,7 @@ function msQuickConfirm() {
       // would reach createGrainBatch as "no lines" and alert against a dialog
       // that is already gone, discarding everything typed.
       if (grainKg <= 0) {
-        alert(t('batch.enterWeight'));
+        toast(t('batch.enterWeight'), 'err');
         return;
       }
       setv('lw-st', ms.id);
@@ -13685,7 +13666,7 @@ function logLabWork() {
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
   if (!ms) {
-    alert(t('lab.selectPilzsorte'));
+    fieldError('lw-st', t('lab.selectPilzsorte'));
     return;
   }
   const sp = ms.name,
@@ -13693,7 +13674,7 @@ function logLabWork() {
   const parentId = document.getElementById('lw-parent')?.value || null,
     qty = parseInt(document.getElementById('lw-qty').value) || 1;
   if (type === 'G2G') {
-    alert(t('lab.g2gNote'));
+    toast(t('lab.g2gNote'), 'err');
     return;
   }
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
@@ -13863,7 +13844,7 @@ function createGrainBatch() {
     if (!mushroomStrains.length) {
       confirm2(t('strains.noStrainsHint'), '', t('strains.createNow'), goCreateStrain);
     } else {
-      alert(t('strains.noStrainsHint'));
+      toast(t('strains.noStrainsHint'), 'err');
     }
     return;
   }
@@ -13871,7 +13852,7 @@ function createGrainBatch() {
     st = ms.kuerzel;
   const lines = gsReadLines();
   if (!lines.length) {
-    alert(t('batch.fillQty'));
+    toast(t('batch.fillQty'), 'err');
     return;
   }
   const days = parseInt(document.getElementById('gs-days').value) || 14;
@@ -13955,7 +13936,7 @@ function createGrainBatch() {
         if (i >= 0) batches.splice(i, 1);
         // Roll back the optimistic stock mutation — server didn't apply the deltas.
         inventory.stock = stockSnapshot;
-        alert(t('batch.saveFailed') + r.error);
+        toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
         renderStatus();
         return;
@@ -15555,7 +15536,7 @@ function makeBagZPL(bags, batch, detail, qr) {
     .join('\n');
   if (legacyFallbackIds.length) {
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
-    alert(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }));
+    toast(t('print.warnNumericBarcodes', { list: legacyFallbackIds.join(', ') }), 'err');
   }
   return zpl;
 }
@@ -15578,7 +15559,7 @@ function toggleBagRange() {
 async function printBagLabels() {
   const b = batches.find((x) => x.batchId === document.getElementById('print-batch').value);
   if (!b) {
-    alert(t('print.selectBatchFirst'));
+    toast(t('print.selectBatchFirst'), 'err');
     return;
   }
   let bags = b.bags;
@@ -15590,7 +15571,7 @@ async function printBagLabels() {
       return n >= from && n <= to;
     });
     if (!bags.length) {
-      alert(t('print.noBagsInRange'));
+      toast(t('print.noBagsInRange'), 'err');
       return;
     }
   }
@@ -15601,7 +15582,7 @@ async function printBagLabels() {
     document.getElementById('bag-qr').checked
   );
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -15619,12 +15600,12 @@ async function printBagLabels() {
 async function printLabLabels() {
   const ids = [...selectedLabIds];
   if (!ids.length) {
-    alert(t('print.selectCulture'));
+    toast(t('print.selectCulture'), 'err');
     return;
   }
   const zpl = makeLabZPL(ids, document.getElementById('lab-mode').value, document.getElementById('lab-qr').checked);
   if (!zpl || !zpl.includes('^XA')) {
-    alert(t('print.noLabels'));
+    toast(t('print.noLabels'), 'err');
     return;
   }
   const err = await sendToPrinter(zpl);
@@ -17381,10 +17362,10 @@ async function toggleUserShip(id, canShip) {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
     }
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
   loadUsersTab();
 }
@@ -17401,10 +17382,10 @@ async function toggleUserRelease(id, canRelease) {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
     }
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
   loadUsersTab();
 }
@@ -17414,11 +17395,11 @@ async function addUser() {
   const p = document.getElementById('new-password').value;
   const role = document.getElementById('new-role').value;
   if (!u || !p) {
-    alert(t('users.required'));
+    fieldError(u ? 'new-password' : 'new-username', t('users.required'));
     return;
   }
   if (p.length < 8) {
-    alert(t('users.minPw'));
+    fieldError('new-password', t('users.minPw'));
     return;
   }
   try {
@@ -17429,29 +17410,29 @@ async function addUser() {
     });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
       return;
     }
     document.getElementById('new-username').value = '';
     document.getElementById('new-password').value = '';
     loadUsersTab();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
 }
 
 async function deleteUser(id) {
-  if (!confirm(t('users.deleteConfirm'))) return;
+  if (!(await askConfirm(t('common.delete'), t('users.deleteConfirm'), t('common.delete')))) return;
   try {
     const r = await authFetch('/api/users/' + id, { method: 'DELETE' });
     if (!r.ok) {
       const d = await r.json();
-      alert(d.error || 'Failed');
+      toast(d.error || 'Failed', 'err');
       return;
     }
     loadUsersTab();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, 'err');
   }
 }
 
@@ -19927,11 +19908,14 @@ async function pushBatchCaldav(batch) {
 // Escape key closes the topmost open modal. Ordered by z-index (top → bottom):
 // m-confirm is z-index 210, everything else is 200 — so m-confirm must come first
 // so that a stacked confirm (e.g. bag-info → Remove → confirm) closes before the
-// modal underneath.
+// modal underneath. m-confirm3 sits with it: it was missing from this list
+// entirely, so the recurring-event delete dialog was the one modal in the app
+// that Escape could not dismiss.
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
   const modals = [
     'm-confirm',
+    'm-confirm3',
     'm-work-flow',
     'm-camscan',
     'm-cal-entry',
@@ -19964,6 +19948,14 @@ document.addEventListener('keydown', function (e) {
       // 'open' class would leave the camera live (LED on, battery drain,
       // barcodes still firing processScan) behind a hidden modal.
       else if (id === 'm-camscan') closeCamScan();
+      // The three ask-a-question dialogs hold a callback for the answer, and
+      // taking the class off is not answering: the callback stays set for the
+      // next caller to trip over, and — since askConfirm() — the promise behind
+      // it never settles, so whatever awaited it is suspended for the life of
+      // the page. Their own closers are what say "no".
+      else if (id === 'm-confirm') closeConfirm();
+      else if (id === 'm-confirm3') closeConfirm3();
+      else if (id === 'm-prompt') closePrompt();
       else el.classList.remove('open');
       return;
     }
@@ -20602,28 +20594,11 @@ function initEventListeners() {
     pickupsPast = false;
     go('pickups', 'n-pickups');
   });
-  // "Verkauf" group: four top-level entries that open the orders page at the
-  // matching view (the sub-tab bar is hidden; openStab still fires the render).
-  $('n-orders-inbox').addEventListener('click', () => {
-    go('orders', 'n-orders-inbox');
-    openStab('orders', 'inbox');
-  });
-  $('n-orders-demand').addEventListener('click', () => {
-    go('orders', 'n-orders-demand');
-    openStab('orders', 'tomake');
-  });
-  $('n-orders-mapping').addEventListener('click', () => {
-    go('orders', 'n-orders-mapping');
-    openStab('orders', 'mapping');
-  });
-  $('n-orders-customers').addEventListener('click', () => {
-    go('orders', 'n-orders-customers');
-    openStab('orders', 'customers');
-  });
-  $('n-orders-versand').addEventListener('click', () => {
-    go('orders', 'n-orders-versand');
-    openStab('orders', 'versand');
-  });
+  // One entry for the section, and the view it lands on is decided the way Admin
+  // decides it — by clicking the strip's own active pill, inside go(). Five
+  // entries each naming their own sub-tab was the same wiring written five
+  // times, and it is what pushed two of them off a 1366x768 sidebar.
+  $('n-orders').addEventListener('click', () => go('orders', 'n-orders'));
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
   $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
   $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
@@ -20822,11 +20797,6 @@ function initEventListeners() {
         break;
     }
   });
-  // The two creation flows keep one-tap buttons here, on the screen where you
-  // decide what to do next. Every other page reaches them through Arbeitsgänge.
-  $('dash-act-newbatch').addEventListener('click', msQuickChargeNew);
-  $('dash-act-labwork').addEventListener('click', msQuickLaborNew);
-  applyDashMode();
   initDashCollapse();
 
   // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
@@ -22027,8 +21997,6 @@ window.addEventListener('appinstalled', () => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', fn);
   });
-  const today = document.getElementById('wk-goto-today');
-  if (today) today.addEventListener('click', () => go('dash', 'n-dash'));
   const inst = document.getElementById('wk-install-btn');
   if (inst) inst.addEventListener('click', wkInstall);
   // Für den Apple-Weg und für den Fall, dass beforeinstallprompt schon durch
@@ -22309,7 +22277,7 @@ function wkbCreate() {
   // _sbList wird im Hintergrund aufgefrischt, und derselbe Tipp buchte sonst
   // klammheimlich Pellets und Kleie vom Lager statt aus dem Ansatz.
   if (!mix && WKB.subId) {
-    alert(t('work.bMixGone', { id: WKB.subId }));
+    toast(t('work.bMixGone', { id: WKB.subId }), 'err');
     WKB.subId = '';
     WKB.step = 2;
     wkbRender();
@@ -22328,7 +22296,7 @@ function wkbCreate() {
       // sein. Dann gehört WKF nicht mehr uns — die Bestätigung sagt es dem
       // Fenster, statt den fremden Bildschirm mit unserer Quittung zu ersetzen.
       if (WKF.kind !== 'batch') {
-        alert(t('work.bDone', { n: WKB.qty, name: ms.name }));
+        toast(t('work.bDone', { n: WKB.qty, name: ms.name }));
         return;
       }
       WKF.receipt = {
@@ -22619,7 +22587,7 @@ function wkmSubmit(subId, kg, label) {
         // Auch der Fehlschlag braucht ein Zuhause: ist der Ablauf schon zu, malt
         // wkmRender() ins Leere und der Arbeiter hielte den Ansatz für angelegt.
         if (WKF.kind !== 'mix') {
-          alert(t('common.error') + ': ' + err);
+          toast(t('common.error') + ': ' + err, 'err');
           return;
         }
         WKM.fehler = err;
@@ -22632,7 +22600,7 @@ function wkmSubmit(subId, kg, label) {
       // sein. Dann gehört WKF nicht mehr uns: die Bestätigung geht ins Fenster,
       // statt den fremden Bildschirm zu überschreiben oder still zu verpuffen.
       if (WKF.kind !== 'mix') {
-        alert(t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }) + ' — ' + (r.subId || subId));
+        toast(t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }) + ' — ' + (r.subId || subId));
         return;
       }
       // Die Vorschau kann inzwischen ersetzt worden sein; die Quittung nennt dann

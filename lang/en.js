@@ -7,6 +7,7 @@ window.LANG['en'] = {
   'common.close': 'Close',
   'common.ok': 'OK',
   'common.confirm': 'Confirm',
+  'common.proceed': 'Proceed anyway',
   'common.delete': 'Delete',
   'common.loading': 'Loading…',
   'common.error': 'Error',
@@ -27,10 +28,6 @@ window.LANG['en'] = {
   'nav.calendar': 'Calendar',
   'nav.orders': 'Orders',
   'nav.sales': 'Sales',
-  'nav.ordersInbox': 'Orders',
-  'nav.ordersDemand': 'To make',
-  'nav.ordersMapping': 'Products',
-  'nav.ordersCustomers': 'Customers',
   'nav.pickups': 'Pickups',
   'nav.adminBack': 'Back',
   'nav.backToList': 'Back to the list',
@@ -79,7 +76,7 @@ window.LANG['en'] = {
   'pickupLoc.reactivate': 'Reinstate',
   'pickupLoc.confirmRetire': 'Retire "{name}"? New appointments can no longer pick it. Existing ones keep it.',
   // Order hub (Phase 0)
-  'orders.inbox': 'Orders',
+  'orders.inbox': 'Inbox',
   'orders.tomake': 'What to make',
   'orders.mapping': 'Product mapping',
   'orders.customers': 'Customers',
@@ -342,7 +339,6 @@ window.LANG['en'] = {
   'msq.grainKg': 'kg per bag',
   'msq.grainPreview': '{n} grainspawn bag(s) will be created.',
   // Versand (Phase 4)
-  'nav.ordersVersand': 'Shipping',
   'orders.versandTab': 'Shipping',
   'orders.th.orderId': 'Order ID',
   'settings.tabVersand': 'Shipping',
@@ -476,8 +472,6 @@ window.LANG['en'] = {
   'dash.harvestBySpecies': 'Harvest by species (kg)',
   'dash.noHarvestData': 'No harvest data yet',
   'dash.liveStatus': 'Live batch status',
-  'dash.modeFarm': 'Farm',
-  'dash.modeOverview': 'Overview',
   'dash.ov.qualityEff': 'Quality & efficiency',
   'dash.ov.substrates': 'Substrates',
   'dash.ov.bagsCreated': 'Bags created',
@@ -712,6 +706,7 @@ window.LANG['en'] = {
   'batch.substrateExceeds': 'Substrate composition must total 100% (hardwood + wheat bran = {sum}%). Please adjust.',
   'batch.noSubstrateWarn':
     'No substrate composition given — NO material will be deducted from stock for this batch.\n\nCreate anyway?',
+  'batch.noSubstrateTitle': 'Book no material?',
   'batch.grainNeeded': 'Grain needed:',
   'batch.inStock': 'In stock:',
   'batch.sufficient': 'sufficient',
@@ -854,9 +849,6 @@ window.LANG['en'] = {
   'todo.dueToday': 'Due today',
   // Days
   // Team
-  'team.membersDesc':
-    'Add team members so you can assign tasks to individuals. Each member can optionally get their own synced CalDAV calendar.',
-  'team.empty': 'No team members yet. Add your first member below.',
   // CalDAV
   'caldav.title': 'CalDAV calendar server',
   'caldav.desc':
@@ -1753,8 +1745,6 @@ window.LANG['en'] = {
   'stage.incubation': 'Incubation',
   'stage.fruiting': 'Fruiting',
   'dash.splitBatches.stale': '> 24 h unmoved',
-  'dash.actionNewBatch': '+ New batch',
-  'dash.actionLabWork': '+ Lab work',
   'dash.harvestNoFruiting': 'No batches are ready to harvest right now.',
   // Scan log
   'log.entries': '{n} entries',
@@ -1764,6 +1754,7 @@ window.LANG['en'] = {
   // Inventory cards
   'inv.lowStock': 'LOW STOCK',
   'inv.shortageWarn': 'Not enough stock for this batch:',
+  'inv.shortageTitle': 'Not enough stock',
   'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the missing amount is not recorded.)',
   'inv.alertBelow': 'Alert below {n}kg',
   'inv.logDelivery': '+ Log delivery',
@@ -1815,8 +1806,6 @@ window.LANG['en'] = {
   'nav.lookup': 'Look up',
   'work.title': 'What did you do?',
   'work.sub': 'Pick the work step — the app asks for the rest.',
-  'work.dontKnow': 'Don\'t know what\'s due?',
-  'work.todayOpen': 'Due today',
   'work.lab': 'Log clean room work',
   'work.labWhen': 'Slant, petri, liquid culture, syringes, grain-to-grain',
   'work.grain': 'Start grain spawn',

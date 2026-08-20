@@ -33,7 +33,9 @@ const STRAINS = [
 ];
 
 function createBatchBody() {
-  const m = SRC.match(/^function createBatch\(\) \{[\s\S]*?\n\}/m);
+  // `async` since its two material warnings became dialogs rather than
+  // window.confirm() — optional here so this keeps matching either way.
+  const m = SRC.match(/^(?:async )?function createBatch\(\) \{[\s\S]*?\n\}/m);
   assert.ok(m, 'createBatch() not found in app.js — the test needs updating with it');
   return m[0];
 }

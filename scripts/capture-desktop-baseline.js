@@ -28,7 +28,7 @@ const WIDTH = 1440;
 // Paste this into the browser console on the served page. Kept here rather than
 // in a comment so "before" and "after" are provably the same measurement.
 const SNIPPET = `(function(){
-  var SEL = ['body','.main','.card','.sec','.btn','.btn.btn-sm','.btn-xs','.stab','.stabs','.sb-btn','.sb-group-label','table','th','td','.modal','.modal h3','.modal p','.bottom-nav-btn','.wk-tile','.wk-tile-t','.wk-tile-when','.wk-todo-strip','.wk-head','.mobile-topbar','.sidebar','.chip','.sb-header','.scan-tab','input','select','textarea'];
+  var SEL = ['body','.main','.card','.sec','.btn','.btn.btn-sm','.btn-xs','.stab','.stabs','.sb-btn','.sb-group-label','table','th','td','.modal','.modal h3','.modal p','.bottom-nav-btn','.wk-tile','.wk-tile-t','.wk-tile-when','.wk-head','.mobile-topbar','.sidebar','.chip','.sb-header','.scan-tab','input','select','textarea'];
   var PROPS = ['fontSize','lineHeight','paddingTop','paddingRight','paddingBottom','paddingLeft','minHeight','borderRadius','marginBottom','fontWeight','gap'];
   var styles = {};
   SEL.forEach(function(s){
