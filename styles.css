@@ -3455,42 +3455,6 @@ tr:hover td {
   font-weight: 600;
   color: var(--c-text);
 }
-/* ═══ DASHBOARD VIEW TOGGLE ════════════════════════════════════ */
-.dash-view-toggle {
-  display: flex;
-  background: var(--c-border-light);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
-  width: fit-content;
-  margin-bottom: 14px;
-}
-.dash-view-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 18px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--c-text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-  min-height: var(--tap-sm-min);
-}
-.dash-view-btn.active {
-  background: var(--c-surface);
-  color: var(--c-text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-.dash-view-btn svg {
-  flex-shrink: 0;
-}
-
 /* ═══ OVERVIEW PERIOD TOGGLE ════════════════════════════════════ */
 /* The period pills and the CSV button. Wrapping is not decoration: measured at
    375px the row is 382px wide, and it was invisible to scripts/measure-mobile.js
@@ -4140,14 +4104,6 @@ tr:hover td {
   }
 }
 @media (max-width: 480px) {
-  .dash-view-toggle {
-    width: 100%;
-  }
-  .dash-view-btn {
-    flex: 1;
-    justify-content: center;
-    padding: 7px 10px;
-  }
   .dash-search-inline {
     width: 140px;
   }
