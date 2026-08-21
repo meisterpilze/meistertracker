@@ -3,59 +3,95 @@
   "_bands": "`from` and `to` mean WHOLLY inside that band. A line written for 769 and up does not cover a finding that starts at 320: that would make the ratchet a blanket rather than a line.",
   "_broad_on_purpose": "Some lines below cover a whole band on a whole axis rather than naming elements one by one, and that is a decision, not laziness. 'Every fine-pointer overflow between 320 and 440px' is 94 findings across all twelve pages, and they are not 94 decisions: the app has no narrow-window layout at all down there. Ninety-four lines would pretend otherwise, would need editing every time a label changed, and would still all disappear on the same day. The cost is real and stated here: while such a line stands, a NEW overflow inside its band is not flagged. Each one names the package that removes it.",
   "_2026_08_21_static": "First run of the automatic stand over index.html's own markup. Two of its three findings were artifacts of measuring without app.js and were fixed in the stand rather than ratcheted: the fourteen settings pills (hidden by body.admin-mode, which app.js:1026 always sets on that page) and #mcp-save-btn (12px because its label comes from the dictionary at runtime).",
-  "_2026_08_21_app": "First run of --app, and the first time anything measured this app with its own data in it. 152 findings, none of which the static mode could see, because the pages it renders are empty without app.js. The headline is ZOOMED OUT: eleven of the twelve pages are wider than a phone, so the phone shrinks the whole page instead of scrolling it. The dashboard at 320px renders at 53 percent. That is not a table being awkward, it is the entire application at half size on an iPhone SE, and both previous mobile rounds reported green over it.",
+  "_2026_08_21_app": "First run of --app, and the first time anything measured this app with its own data in it. The stand's own first attempt got the biggest number WRONG and it is worth writing down why. It swept the widths inside a page, so every page was opened at 1920px and measured at 320, and it reported eleven pages rendering at 53 to 90 percent on a phone. Opened at 320 the dashboard renders at 89 percent, not 53. The 53 was real but it belonged to a different situation, and the file now keeps the two apart: ZOOMED OUT is what a phone sees when it opens the page, AFTER A JUMP is what happens when the window changes size in one step and nothing re-renders. The second one is Julian's split screen, and it is the larger of the two.",
   "ratchet": [
+    {
+      "kind": "jumped",
+      "pointer": "coarse",
+      "mode": "app",
+      "package": "P3",
+      "reason": "Nine of twelve pages do not follow when the window changes size in one step. Jumped from 1920 to 320 the dashboard's layout viewport stays 600px wide, so the page renders at 53 percent; calendar 477, lab 472, Chargen 456, Lager 445, Zonen 422, Drucken 413, Einstellungen 400, Abholungen 397. Opened at 320 those same pages are 320 to 360, so this is not the layout being too wide, it is something sized once for the column it was born in and never re-measured. It happens on a rotation, on a split view snapping, and on a window being maximised: exactly the screenshot this plan started from. P3 replaces window-derived widths with container queries, which have no such moment."
+    },
     {
       "kind": "widened",
       "pointer": "coarse",
+      "at": "n-dash",
       "from": 320,
-      "to": 460,
-      "package": "P3",
+      "to": 340,
       "mode": "app",
-      "reason": "Eleven of twelve pages are wider than the screen below 460px, so the browser widens the LAYOUT viewport instead of scrolling and renders the page zoomed out: dashboard 53% at 320px, calendar 60%, lab 68%, Chargen 70%. `body{overflow-x:hidden}` does not prevent this, which is measured and not assumed -- the widening happened with that rule in place, and hiding the scrollbar is exactly why nobody saw it. The cause is one cause: nothing on these pages is laid out against the space it actually has. P3 gives the boxes container queries so the content fits the box instead of the box being told a width."
+      "package": "P3",
+      "reason": "Opened on a 320px phone the dashboard is genuinely 360px wide, so the phone renders it at 89 percent. The widest thing on it is the period toggle (Diese Woche / Diesen Monat / Dieses Jahr) at 344px, which is also the OVERFLOW line below: one cause, two symptoms, depending on whether the meta viewport applies."
+    },
+    {
+      "kind": "widened",
+      "pointer": "coarse",
+      "at": "n-lab",
+      "from": 769,
+      "to": 860,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The lab page is 864px wide between 769 and 860px, so a tablet in that band renders it at 89 percent. 769 is where the sidebar comes back and takes its width off the content, which is exactly the band nobody measured."
+    },
+    {
+      "kind": "over",
+      "at": "bn-cal",
+      "to": 320,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The bottom navigation's Kalender entry hangs 14px past the right edge at exactly 320px, the narrowest phone still sold, on both pointer axes. Five buttons and one of them does not fit."
+    },
+    {
+      "kind": "over",
+      "at": "span",
+      "to": 320,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The label inside that same bottom-nav button, 10px past the edge. Same fix, and it is listed separately because the outermost-offender filter cannot pair them: the span's reported path is not a prefix-match of the button's."
     },
     {
       "kind": "over",
       "pointer": "fine",
+      "at": "p-dash",
       "from": 320,
-      "to": 440,
-      "package": "P3",
+      "to": 340,
       "mode": "app",
-      "reason": "The same defect seen from the other axis, and worth keeping as its own line because it looks different: with a MOUSE the browser does not honour the meta viewport, so instead of shrinking the page it lets 94 elements hang past the right edge -- toolbars, filter rows, zone names, the period toggle on the dashboard. Same band, same cause, same package. A narrow desktop window and a phone are the same layout problem wearing two faces, which is rule R1 stated as a measurement."
+      "package": "P3",
+      "reason": "The dashboard's period toggle and its 'Dieses Jahr' button hang 17 to 40px past the edge below 360px with a mouse. Three pills in a row that do not wrap. Same cause as the ZOOMED OUT line for n-dash above; with a mouse the meta viewport does not apply, so it overflows instead of shrinking."
     },
     {
       "kind": "over",
-      "pointer": "coarse",
-      "from": 320,
-      "to": 320,
-      "package": "P3",
+      "pointer": "fine",
+      "at": "st-lab-contam",
+      "from": 769,
+      "to": 800,
       "mode": "app",
-      "reason": "The bottom navigation's Kalender entry hangs 14px past the right edge at exactly 320px, the narrowest phone still sold. It survives the widened viewport because the bottom bar is fixed and does not scale with it."
+      "package": "P3",
+      "reason": "The lab's Kontamination tab hangs up to 33px past the edge between 769 and 800px. Same band and same cause as the lab's ZOOMED OUT line: at 769 the sidebar returns and the content column loses its width without the tab strip noticing."
     },
     {
       "kind": "touch",
       "pointer": "fine",
       "from": 769,
       "maxPx": 23,
-      "package": "P1",
       "mode": "app",
-      "reason": "Thirteen controls on a desktop are between 13 and 22px tall, under the 24px of WCAG 2.5.8 Target Size (Minimum), level AA: the sort buttons in the Chargen table header, 'Bearb.' and 'Drucken' in Sorten and Labor, 'Wochenrhythmus bearbeiten' at 13px. They are correct under a coarse pointer at every width, because the token layer keys the desktop override on `hover: hover` and coarse devices keep the phone numbers -- half of R1 is already right here. The missing half is that the fine axis has no floor of its own: `--tap` resolves to `auto` there, and 24px is a floor for every pointer, not only for a finger."
+      "package": "P1",
+      "reason": "Controls on a desktop between 13 and 22px tall, under the 24px of WCAG 2.5.8 Target Size (Minimum), level AA: the sort buttons in the Chargen table header, 'Bearb.' and 'Drucken' in Sorten and Labor, 'Wochenrhythmus bearbeiten' at 13px. They are correct under a coarse pointer at every width, because the token layer keys the desktop override on `hover: hover` and coarse devices keep the phone numbers -- half of R1 is already right here. The missing half is that the fine axis has no floor of its own: `--tap` resolves to `auto` there, and 24px is a floor for every pointer, not only for a finger."
     },
     {
       "kind": "touch",
       "pointer": "coarse",
       "at": "cal-day",
       "from": 769,
-      "package": "P1",
       "mode": "app",
+      "package": "P1",
       "reason": "Every cell of the month grid is 28px tall under a finger, at every width from 769px up -- a tablet, and a tablet is where a month view gets used standing up. Seven columns of 44px need 308px, so there is room for it at any of these widths; the cells are 28px because the grid sizes its rows by content and nothing floors them. Same package as the line above: the floor follows the pointer."
     },
     {
       "kind": "touch",
       "at": "location-section-header",
       "from": 769,
-      "package": "P1",
       "mode": "app",
+      "package": "P1",
       "reason": "The collapsible location header in the Chargen list is 21px tall on both axes above 769px. On the coarse axis that is under 44 and on the fine one under 24, so it is the same control failing both floors at once."
     },
     {
@@ -64,9 +100,9 @@
       "at": "summary.fs-meta",
       "from": 769,
       "maxPx": 23,
-      "package": "P1",
       "mode": "markup",
-      "reason": "The <summary> of #nb-sub-section is 18px tall on a desktop, under WCAG 2.5.8's 24px. Found by the static run before --app existed, and kept as its own line because it is in index.html's markup rather than in anything app.js renders: it is the one finding both modes can see."
+      "package": "P1",
+      "reason": "The <summary> of #nb-sub-section is 18px tall on a desktop, under WCAG 2.5.8's 24px. Found by the static run before --app existed, and kept as its own line because it is in index.html's markup rather than in anything app.js renders: the live app never measures it, because the form it sits in is collapsed."
     }
   ],
   "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both.",
