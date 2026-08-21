@@ -51,6 +51,23 @@ describe('the breakpoints are read, not typed', () => {
     );
   });
 
+  it('names a breakpoint outside the swept range instead of passing it', () => {
+    // The regression this pins. widthBand and uncovered both used to clamp the
+    // triple to from..to, so a breakpoint outside the range contributed no
+    // width AND reported no gap: the run printed its all-clear for the one
+    // switch it had never opened a window at. Both directions, because both
+    // ends had the same guard.
+    for (const px of [2000, 280]) {
+      const rule = [{ px, axis: 'viewport', count: 1, from: ['min-width'] }];
+      assert.ok(widthBand(rule).includes(px), `${px}px never reaches the band`);
+      assert.deepEqual(
+        uncovered(rule, [320, 1920]).map((g) => g.px),
+        [px],
+        `${px}px is outside the sweep and has to be named, not silently dropped`
+      );
+    }
+  });
+
   it('fails loudly when a new breakpoint appears', () => {
     const { list } = breakpoints();
     const band = widthBand(list);
