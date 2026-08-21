@@ -13507,7 +13507,12 @@ function msQuickConfirm() {
         if (qtyEl) qtyEl.value = qty;
       }
       setv('gs-days', parseInt(document.getElementById('ms-q-days').value) || 14);
-      setv('gs-rh', getAvgComp().grainRhPct);
+      // Die Feuchte der Sorte, nicht der Schnitt über alle: ms steht hier, und
+      // der Zweig 40 Zeilen tiefer liest sie längst so. getAvgComp() mittelt
+      // recGrainRhPct über die Rezepte — für eine Sorte, deren Rezept den Wert
+      // trägt, ist das die ungenauere Zahl, und sie entscheidet, wie viel
+      // trockenes Korn vom Lagerbestand abgeht.
+      setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
       fillCultureSelect('gs-culture', ['PD', 'LC']);
       const gsc = document.getElementById('gs-culture');
       if (gsc) gsc.value = sourceCulture;
