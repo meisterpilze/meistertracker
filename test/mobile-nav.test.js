@@ -436,7 +436,14 @@ describe('the drawer that outlived its breakpoint', () => {
       /innerWidth/,
       'toggleSidebar() reads the window width again, so the two branches can still disagree with the drawer'
     );
-    assert.match(APP, /window\.matchMedia\('\(max-width: 768px\)'\)/, 'nothing asks the phone query any more');
+    // Anchored to sbPhone, because the bare literal appears twice elsewhere in
+    // this file for the calendar, and both predate this fix: the assertion
+    // passed with the whole sidebar block deleted.
+    assert.match(
+      APP,
+      /const sbPhone = [^;]*matchMedia\('\(max-width: 768px\)'\)/,
+      'nothing asks the phone query any more'
+    );
   });
 
   it('puts the drawer back to nothing when the breakpoint is crossed', () => {
@@ -445,6 +452,24 @@ describe('the drawer that outlived its breakpoint', () => {
       /sbPhone\.addEventListener\('change'/,
       'nothing listens for the crossing, so a drawer opened on one side survives on the other'
     );
+  });
+
+  it('puts the DESKTOP state back to nothing too when the breakpoint is crossed', () => {
+    // The other half of the same disease. sb-collapsed is set at exactly two
+    // places and used to be removed by nothing else, while
+    // `.sidebar.sb-collapsed { width: var(--sidebar-collapsed) }` sits outside
+    // any min-width block, so the phone block never takes it back. Collapse on
+    // a desk, narrow the window, tap the hamburger: a 64px drawer with every
+    // label gone.
+    const HANDLER = APP.match(/sbPhone\.addEventListener\('change'[\s\S]*?\n  \}\);/);
+    assert.ok(HANDLER, 'nothing listens for the crossing any more');
+    assert.match(HANDLER[0], /sbClose\(\)/, 'the crossing no longer closes the drawer');
+    assert.match(HANDLER[0], /sbUncollapse\(\)/, 'the crossing leaves the desktop collapse standing');
+    const UNCOLLAPSE = APP.match(/function sbUncollapse\(\) \{[\s\S]*?\n\}/);
+    assert.ok(UNCOLLAPSE, 'sbUncollapse() is gone');
+    for (const cls of ['sb-collapsed', 'sb-is-collapsed']) {
+      assert.match(UNCOLLAPSE[0], new RegExp("remove\\('" + cls + "'\\)"), `sbUncollapse() leaves ${cls} standing`);
+    }
   });
 
   it('takes the three classes off in one place', () => {

@@ -961,13 +961,25 @@ function toggleSidebar() {
 }
 
 // The drawer's three classes, off. Every route out of the drawer goes through
-// here: navigating, Escape, and crossing the breakpoint. Three call sites that
-// each removed their own subset is how one of them came to remove none.
+// here: navigating, Escape, tapping the veil, and crossing the breakpoint. Four
+// call sites that each removed their own subset is how one of them came to
+// remove none.
 function sbClose() {
   document.getElementById('sidebar').classList.remove('sb-open');
   document.getElementById('sb-overlay').classList.remove('sb-show');
   document.body.classList.remove('sb-mobile-open');
   sbSyncInert();
+}
+
+// The other arrangement's state, off. Collapsing is a desktop idea, and the
+// rules that carry it out (styles.css:454-461) sit outside any min-width block,
+// so the phone block never takes them back. A sidebar collapsed on a desk and
+// then met on a phone opens full width with every label, every group heading
+// and the logo text set to display:none. Same disease as the veil this fix is
+// about, in the direction the crossing handler claimed to cover.
+function sbUncollapse() {
+  document.getElementById('sidebar').classList.remove('sb-collapsed');
+  document.body.classList.remove('sb-is-collapsed');
 }
 
 // Close sidebar on mobile when navigating
@@ -988,10 +1000,16 @@ function sbSyncInert() {
   sb.inert = sbIsPhone() && !sb.classList.contains('sb-open');
 }
 
-// Crossing the line in either direction puts the drawer back to nothing. Below
-// it that means closed; above it the three classes describe a state the desktop
-// arrangement does not have.
-if (sbPhone) sbPhone.addEventListener('change', () => sbClose());
+// Crossing the line in either direction puts BOTH arrangements' state back to
+// nothing, because either one is meaningless in the other. Below the line the
+// drawer's three classes are what must go; above it, the collapse. Doing only
+// half of that is the bug this fix was opened about.
+if (sbPhone) {
+  sbPhone.addEventListener('change', () => {
+    sbClose();
+    sbUncollapse();
+  });
+}
 
 // ─── NAV ─────────────────────────────────────────────────────
 const PAGES = {
