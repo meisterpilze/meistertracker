@@ -19,8 +19,10 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 
-const { breakpoints, widthBand, uncovered, POINTERS, ROOT_PX } = require('../scripts/mobile-size-scan.js');
+const { breakpoints, widthBand, uncovered, POINTERS, ROOT_PX, maskedCss } = require('../scripts/mobile-size-scan.js');
 
 describe('the breakpoints are read, not typed', () => {
   it('finds them in styles.css', () => {
@@ -122,5 +124,30 @@ describe('the input axis', () => {
     assert.equal(fine.tapFloor, 24, 'WCAG 2.5.8 Target Size (Minimum), level AA');
     assert.equal(coarse.tapFloor, 44, "Apple's HIG and WCAG 2.5.5, level AAA");
     assert.ok(coarse.tapFloor > fine.tapFloor);
+  });
+});
+
+describe('what the stand needs in order to stay honest', () => {
+  it('does not clip the page instead of scrolling it', () => {
+    // Comments blanked first, or the paragraph inside the body rule explaining
+    // why the declaration is gone would itself trip the assertion.
+    const css = maskedCss(fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')).src;
+    const body = css.match(/\nbody \{[\s\S]*?\n\}/);
+    assert.ok(body, 'no body rule in styles.css');
+    // `overflow-x: hidden` on body removes the sideways scrollbar, which is the
+    // one signal a person would have noticed, and that turned "no horizontal
+    // scroll" into a claim nobody could disprove. Both mobile rounds made it.
+    //
+    // Measured on 2026-08-21 with scripts/measure-mobile.js --app before
+    // removing it: 96 overflow findings with the rule, 98 without. It was
+    // hiding two, both on the calendar's agenda row. And it did not do the job
+    // it was there for -- eleven of twelve pages still widened the layout
+    // viewport on a phone with it in place, because that is the meta viewport
+    // and not a scrollbar.
+    assert.doesNotMatch(
+      body[0],
+      /overflow-x:\s*hidden/,
+      'body{overflow-x:hidden} is back, and with it a claim that cannot be measured'
+    );
   });
 });

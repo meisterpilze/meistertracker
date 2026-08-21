@@ -282,7 +282,17 @@ body {
   color: var(--c-text);
   font-size: var(--fs-base);
   line-height: 1.5;
-  overflow-x: hidden;
+  /* body used to carry `overflow-x: hidden`, and its absence is deliberate.
+     It suppressed the sideways scrollbar, which is the one signal a person
+     would have noticed, and that made "no horizontal scroll" a claim nobody
+     could disprove: two mobile rounds asserted it and neither measured it.
+     Measured before removing it, with scripts/measure-mobile.js --app on
+     2026-08-21: it was hiding exactly two findings, both on the calendar's
+     agenda row, 96 against 98. And it did not do the job it was there for.
+     Eleven of the twelve pages still widened the layout viewport on a phone
+     with the rule in place, because that is the meta viewport and not a
+     scrollbar: the dashboard rendered at 53% at 320px either way.
+     test/breakpoint-coverage.test.js keeps it gone. */
 }
 
 /* ═══ SIDEBAR ═══════════════════════════════════════════════════ */
