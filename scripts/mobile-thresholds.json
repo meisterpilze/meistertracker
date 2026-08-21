@@ -1,0 +1,19 @@
+{
+  "_": "Findings that are open today, each with a reason and the package that closes it. The run is green on today's state and every package takes lines out; a line that stops matching is reported as removable, so this file shrinks instead of growing. Anything no line covers is new and counts. This is the tracker's half of a pair -- the shop has neubau/theme-pruefung/mobil/schwellen.json in the private repo.",
+
+  "_bands": "`from` and `to` mean WHOLLY inside that band. A line written for 769 and up does not cover a finding that starts at 320: that would make the ratchet a blanket rather than a line.",
+
+  "_2026_08_21": "First run of the automatic stand, and the first time anything measured this app above 768px with a mouse. Two of the three findings it produced were artifacts of measuring without app.js and were fixed in the stand instead of ratcheted here: the fourteen settings pills (hidden by body.admin-mode, which app.js:1026 always sets on that page) and #mcp-save-btn (12px because its label comes from the dictionary at runtime). Only the third one below is real.",
+
+  "ratchet": [
+    {
+      "kind": "touch",
+      "pointer": "fine",
+      "at": "summary.fs-meta",
+      "from": 769,
+      "maxPx": 23,
+      "package": "P1",
+      "reason": "The <summary> of #nb-sub-section is 18px tall on a desktop, under the 24px of WCAG 2.5.8 Target Size (Minimum), level AA. It is fine under a coarse pointer at every width, because the token layer keys the desktop override on `hover: hover` and coarse devices keep the phone numbers -- which is rule R1 already done right. What is missing is the other half: the fine axis has no floor of its own, `--tap` resolves to `auto` there, and 24px is a floor for every pointer and not only for a finger. P1 gives the mouse its own number instead of leaving it at 'intrinsic height'."
+    }
+  ]
+}

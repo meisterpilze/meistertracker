@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "AGPL-3.0-or-later",
   "author": "Meisterpilze UG",
-  "description": "Lab management system for mushroom cultivation — barcode scanning, batch / culture / harvest tracking, label printing, CalDAV sync.",
+  "description": "Lab management system for mushroom cultivation \u2014 barcode scanning, batch / culture / harvest tracking, label printing, CalDAV sync.",
   "homepage": "https://meistertracker.com",
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
     "test": "node --test test/*.test.js",
     "mcp": "node mcp-server.js",
     "mobile-audit": "node scripts/mobile-audit.js",
+    "measure-mobile": "node scripts/measure-mobile.js",
     "lint": "eslint --max-warnings 65 app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js test/",
     "lint:fix": "eslint --fix app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js test/",
     "format": "prettier --write server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js styles.css test/",
@@ -33,6 +34,7 @@
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "license-checker-rseidelsohn": "^5.0.1",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "puppeteer-core": "^23.11.1"
   }
 }
