@@ -794,9 +794,13 @@ async function main() {
           TYPE_FLOOR,
           Math.max(point.tapFloor, TOUCH_FELD)
         );
-        scanned = m.scanned;
-        hiddenCount = m.hidden;
-        unfilledCount = m.unfilled;
+        // The largest any single measurement saw, not the last one. These were
+        // plain assignments in the innermost loop, so the summary reported
+        // whichever width and station happened to finish last as though it
+        // described the whole run.
+        scanned = Math.max(scanned, m.scanned);
+        hiddenCount = Math.max(hiddenCount, m.hidden);
+        unfilledCount = Math.max(unfilledCount, m.unfilled);
         if (APP) geoeffnet.set(`${point.name}|${stop.name}|${width}`, m.viewport);
         if (m.viewport !== width) {
           // Not an error in the stand: the finding. Under a coarse pointer
@@ -909,7 +913,7 @@ async function main() {
   console.log(
     `\n${BAND.length} widths × ${POINTS.length} pointers × ${stops} ${APP ? 'pages' : 'pass'} = ` +
       `${BAND.length * POINTS.length * stops} measurements ` +
-      `in ${Math.round((Date.now() - started) / 1000)}s — ${scanned} elements, ${hiddenCount} still hidden, ` +
+      `in ${Math.round((Date.now() - started) / 1000)}s — at most ${scanned} elements, ${hiddenCount} still hidden, ` +
       `${unfilledCount} controls still waiting for their label (--app fills them).`
   );
 
