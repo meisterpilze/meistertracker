@@ -212,15 +212,6 @@ const SP_COLORS = [
 // no two read alike — chestnut pushed orange, pioppino cooled to olive, maitake
 // taken fully grey. Phoenix is nudged toward salmon so it parts from King Oyster
 // tan, and Pearl Oyster to blue-grey so it parts from Maitake.
-// Growth stages, in order. The split-batch card colours by stage, taking the hue
-// from the operator's own zone config so it matches the Zonen page and the
-// pipeline KPI strip; the fallbacks are the KPI defaults.
-const STAGE_SEQ = ['spawn', 'incubation', 'fruiting'];
-const STAGE_FALLBACK = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981' };
-function stageColor(role) {
-  const z = zones.find((x) => x.role === role && x.color);
-  return (z && z.color) || STAGE_FALLBACK[role] || '#888888';
-}
 const SP_REAL = {
   'pink oyster': '#E8618C',
   'blue oyster': '#4A7FB5',
@@ -267,9 +258,6 @@ function zoneDisplayName(id) {
     if (rack) return (zone.name || zone.id) + '/' + (id.slice(zone.id.length + 1) || id);
   }
   return id;
-}
-function zoneByRole(role) {
-  return zones.filter((z) => z.role === role);
 }
 function rebuildZoneConstants() {
   ZONES = zones.map((z) => z.id);
@@ -938,17 +926,6 @@ function connectSSE() {
   } catch (e) {
     /* SSE not supported — polling fallback active */
   }
-}
-function disconnectSSE() {
-  if (_sse) {
-    _sse.close();
-    _sse = null;
-  }
-  if (_sseReconnectTimer) {
-    clearTimeout(_sseReconnectTimer);
-    _sseReconnectTimer = null;
-  }
-  _sseRetryDelay = 1000;
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
@@ -3648,19 +3625,6 @@ async function takeKpiSnapshot() {
   }
 }
 
-function _kpiGroupKey(dateStr, period) {
-  const d = new Date(dateStr + 'T00:00:00');
-  if (period === 'monthly') return dateStr.slice(0, 7);
-  if (period === 'weekly') {
-    // Thursday of this week determines the ISO week-year. Reuse the correct
-    // isoWeekNumber() helper — the previous ad-hoc formula used a Sunday-based
-    // getDay() and was off by one week for every date in 2024 and 2025.
-    const thu = new Date(d);
-    thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
-    return thu.getFullYear() + '-W' + String(isoWeekNumber(thu)).padStart(2, '0');
-  }
-  return dateStr;
-}
 
 function exportOverviewCSV() {
   const nowDate = new Date();
@@ -6339,9 +6303,6 @@ function toggleLocBag(bagId, batchId, loc) {
   if (el) el.classList.toggle('selected', selectedLocBags.has(bagId));
   updateActionBar();
 }
-function locSelectAll() {
-  locSelectAllVisible();
-}
 // Most-recently-used move/placement destinations, newest-first and de-duped,
 // so the common moves (Inkubation → Fruchtung / Kontamination) are one tap
 // instead of a scroll through every zone + rack. Sourced from scanLog, which
@@ -6739,10 +6700,6 @@ function locUndo() {
   });
 }
 
-// ─── BATCHES ─────────────────────────────────────────────────
-function nbTypeChange() {
-  nbPreview();
-}
 // The number field and the buttons used to sit on top of each other, both
 // setting the same value, and nothing said which one counted. The buttons now
 // carry the two sizes actually used; the field only appears for a weight that
@@ -11418,11 +11375,6 @@ const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af
 const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8' };
 const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a' };
 
-function invLog(mat, deltaKg, type, ref, time) {
-  if (!inventory.log) inventory.log = [];
-  const running = inventory.stock[mat] || 0;
-  inventory.log.push({ time: time || new Date().toISOString(), mat, deltaKg, running, type, ref });
-}
 
 // Wie weit zurück gezählt wird, um zu gewichten. Kurz genug, dass eine
 // Umstellung im Sortiment durchschlägt, lang genug, dass eine ruhige Woche
@@ -15265,31 +15217,6 @@ function _cdDelete() {
 let bsBatchId = null;
 let bsSelected = new Set();
 
-function openBagSelectModal(initialBagId, batchId) {
-  const b = batches.find((x) => x.batchId.toUpperCase() === (batchId || '').toUpperCase());
-  if (!b) return;
-  bsBatchId = b.batchId;
-  bsSelected = new Set();
-  // Pre-select the scanned bag if it's a real bag in this batch and still movable.
-  if (initialBagId) {
-    const canonical = b.bags.find((x) => x.toUpperCase() === initialBagId.toUpperCase());
-    if (canonical) {
-      const last = [...scanLog]
-        .reverse()
-        .find(
-          (e) =>
-            (e.bag || '').toUpperCase() === canonical.toUpperCase() &&
-            (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
-        );
-      if (last && last.action !== 'REMOVE') bsSelected.add(canonical);
-    }
-  }
-  renderBagSelect();
-  closeCamScan();
-  closeScanModal();
-  document.getElementById('m-baginfo').classList.remove('open');
-  document.getElementById('m-bagselect').classList.add('open');
-}
 
 function renderBagSelect() {
   const b = batches.find((x) => x.batchId === bsBatchId);
@@ -19586,21 +19513,12 @@ function parseTaskAssignees(val) {
 function openEventModal(date, time, existing) {
   openEntryModal(existing ? 'event' : 'custom', date, time, existing);
 }
-function openTaskModal(date, existing) {
-  openEntryModal('task', date, null, existing);
-}
 
 function closeEntryModal() {
   document.getElementById('m-cal-entry').classList.remove('open');
   const idEl = document.getElementById('cal-entry-id');
   idEl.dataset.moveType = '';
   idEl.dataset.moveId = '';
-}
-function closeEventModal() {
-  closeEntryModal();
-}
-function closeCalTaskModal() {
-  closeEntryModal();
 }
 
 function toggleEntryTimeInputs() {
@@ -19899,29 +19817,6 @@ function onCalMonthEventClick(type, id) {
   if (ev) onCalEventClick(ev);
 }
 
-function openEventMoveModal(ev) {
-  document.getElementById('cal-entry-title').textContent = t('calEntry.moveTitle');
-  document.getElementById('cal-entry-id').value = '';
-  document.getElementById('cal-entry-mode').value = 'move';
-  document.getElementById('cal-entry-name').value = ev.label;
-  document.getElementById('cal-entry-name').disabled = true;
-  document.getElementById('cal-entry-date').value = ev.date;
-  document.getElementById('cal-entry-enddate-wrap').style.display = 'none';
-  document.getElementById('cal-entry-allday-wrap').style.display = 'none';
-  document.getElementById('cal-entry-times').style.display = 'none';
-  document.getElementById('cal-entry-prio-wrap').style.display = 'none';
-  document.getElementById('cal-entry-desc').closest('div').style.display = 'none';
-  document.getElementById('cal-entry-task-assign-wrap').style.display = 'none';
-  document.getElementById('cal-entry-ev-assign-wrap').style.display = 'none';
-  const recWrapMove = document.getElementById('cal-entry-recurrence-wrap');
-  if (recWrapMove) recWrapMove.style.display = 'none';
-  document.getElementById('cal-entry-private-wrap').style.display = 'none';
-  document.getElementById('cal-entry-del-btn').style.display = 'none';
-  document.getElementById('cal-entry-type-select').closest('.g2').style.display = 'none';
-  document.getElementById('cal-entry-id').dataset.moveType = ev.type;
-  document.getElementById('cal-entry-id').dataset.moveId = ev.id;
-  document.getElementById('m-cal-entry').classList.add('open');
-}
 
 async function pushEventCaldav(ev) {
   if (!caldav.enabled) return;
@@ -20038,9 +19933,6 @@ function toggleAssignee(name) {
   if (i >= 0) calEvSelectedAssignees.splice(i, 1);
   else calEvSelectedAssignees.push(name);
   renderAssigneePicker();
-}
-function getSelectedAssigneeIds() {
-  return calEvSelectedAssignees.slice();
 }
 // Delegated click handlers for assignee picker (avoids inline onclick XSS)
 (function () {

@@ -1406,7 +1406,6 @@ window.LANG['en'] = {
   'cal.legend.external': 'External events',
   'cal.days': 'Mo,Tu,We,Th,Fr,Sa,Su',
   'cal.months': 'January,February,March,April,May,June,July,August,September,October,November,December',
-  'calEntry.moveTitle': 'Move entry',
   'calDetail.close': 'Close',
   'calDetail.edit': 'Edit',
   'calDetail.changeDate': 'Change due date',
