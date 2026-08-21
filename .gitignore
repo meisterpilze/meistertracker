@@ -63,3 +63,8 @@ CONTEXT.md
 *-strategy.md
 /strategy/
 /planning/
+
+# The measuring stand marks the database it created with one of these, so it
+# can tell its own fixture from a real one. Committing it would arm every
+# checkout to delete a real database. *.db above does not match it.
+*.throwaway
