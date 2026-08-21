@@ -634,17 +634,6 @@ window.LANG['de'] = {
   'dash.overdue': '\u00dcberf\u00e4llig',
   'dash.harvested': 'Geerntet',
   'dash.rackN': 'Regal {n}',
-  'dash.legend.title': 'Farb\u00fcbersicht',
-  'dash.legend.species':
-    'Farbiger Balken links an Batch-Karten — jede Art bekommt ihre eigene Farbe, damit man sie auf einen Blick erkennt.',
-  'dash.legend.orangeDot':
-    'Oranger Punkt in Batch-Aufgaben — Warnung, Aufgabe wird bald f\u00e4llig oder ben\u00f6tigt Aufmerksamkeit.',
-  'dash.legend.redDot':
-    'Roter Punkt in Batch-Aufgaben — dringend, \u00fcberf\u00e4llig oder kritische Aktion erforderlich.',
-  'dash.legend.overdue':
-    'Rosa hinterlegte Batch-Karte — Batch ist \u00fcberf\u00e4llig (F\u00e4lligkeitsdatum \u00fcberschritten, noch in Inkubation).',
-  'dash.legend.capacity':
-    'Roter Kapazit\u00e4tsbalken — Standort hat seine konfigurierte Maximalkapazit\u00e4t \u00fcberschritten.',
   // Status
   'status.action.harvest': 'Ernte / pr\u00fcfen',
   'status.action.moveTent': 'Ins Zelt umziehen',
@@ -1981,5 +1970,9 @@ window.LANG['de'] = {
   'work.bMixFrom': 'Mischung aus {id}',
   'work.bMixLine': '{hw} % Hartholz / {wb} % Kleie · {rh} % Wassergehalt',
   'work.bMixFixed': 'So wurde der Ansatz angesetzt. Daran ändert das Rezept der Sorte nichts mehr.',
-  'work.bFromMix': ' (aus {id})'
+  'work.bFromMix': ' (aus {id})',
+  'inv.avgFromProduction': 'Aus {n} Rezepten gerechnet, gewichtet nach {bags} Beuteln der letzten {days} Tage.',
+  'inv.avgFromRecipes': 'Aus {n} Rezepten gerechnet — noch keine Produktion im Zeitfenster, also zählt jedes Rezept gleich.',
+  'inv.avgFromStored': 'Noch kein Rezept hinterlegt — es gilt der zuletzt gespeicherte Wert.',
+  'inv.avgCompNote': 'Damit nimmt 1 Block à {bag} kg rund {hw} kg Hartholz und {wb} kg Kleie (Trockengewicht nach Abzug von {rh} % Wasser). 1 Körnerbrut-Tüte à {gbag} kg nimmt rund {grain} kg trockenes Korn (nach Abzug von {grh} % Wasser).'
 };

@@ -2334,12 +2334,13 @@ tr:hover td {
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
   border: 1px solid var(--c-border);
-  /* --sp-color first: the species stripe is set inline on every batch-tasks row,
-     but was only read by the .urgent / .warn rules below, so a row that was
-     neither (a split batch moved recently, a batch due later this week) fell back
-     to a neutral border while the colour guide still promised the stripe.
-     --action-color is kept as the calendar's own override. */
-  border-left: 4px solid var(--sp-color, var(--action-color, var(--c-border)));
+  /* Der Streifen beantwortet genau eine Frage: wie dringend ist diese Zeile.
+     Vorher stand hier die Sortenfarbe, während Rahmen und Hintergrund derselben
+     Zeile den Zustand färbten — Rot hieß dann „Reishi" oder „dringend", je
+     nachdem, worauf man sah. Die Sorte steht jetzt als Punkt neben ihrem Namen,
+     wo sie nie gestört hat. --action-color bleibt die Übersteuerung des
+     Kalenders. */
+  border-left: 4px solid var(--action-color, var(--c-border));
   background: var(--c-surface);
   transition: box-shadow 0.15s;
 }
@@ -2350,12 +2351,12 @@ tr:hover td {
 }
 .todo-row.urgent {
   border-color: #fecaca;
-  border-left-color: var(--sp-color, #fecaca);
+  border-left-color: var(--c-red);
   background: #fff5f5;
 }
 .todo-row.warn {
   border-color: #fde68a;
-  border-left-color: var(--sp-color, #fde68a);
+  border-left-color: var(--c-amber);
   background: #fffbeb;
 }
 .todo-row input[type='checkbox'] {
@@ -2381,39 +2382,6 @@ tr:hover td {
    (red/amber/green) with no text fallback — fails for color-blind users
    per audit Section 3.4. Bumped to 14 px with a letter inside (H/M/L)
    so the priority is legible without relying on color. */
-.pdot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: max(9px, var(--fs-min));
-  font-weight: 700;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  line-height: 1;
-}
-.pdot.high {
-  background: #ef4444;
-}
-.pdot.high::before {
-  content: 'H';
-}
-.pdot.med {
-  background: #f59e0b;
-}
-.pdot.med::before {
-  content: 'M';
-}
-.pdot.low {
-  background: #22c55e;
-}
-.pdot.low::before {
-  content: 'L';
-}
 .bc-cell {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
@@ -3355,7 +3323,7 @@ tr:hover td {
   border-radius: var(--radius-sm);
   background: var(--c-bg);
   border: 1px solid var(--c-border-light);
-  border-left: 3px solid var(--sp-color, var(--c-border-light));
+  border-left: 3px solid var(--c-border-light);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -3367,7 +3335,7 @@ tr:hover td {
 }
 .batch-card.batch-overdue {
   border-color: #fecaca;
-  border-left-color: var(--sp-color, #fecaca);
+  border-left-color: var(--c-red);
   background: #fff5f5;
 }
 .batch-card-header {
@@ -4173,6 +4141,28 @@ tr:hover td {
    die Liste und nicht über die halbe Karte: rechts, klein, zurückgenommen —
    und nur eingeblendet, wenn eine Liste da ist (renderDashBatchTasks). Hier
    steht bewusst kein display, damit das hidden-Attribut wirkt. */
+/* Der Durchschnitt wird gerechnet, nicht getippt — also sieht er auch nicht wie
+   ein Eingabefeld aus. Gleiche Höhe wie ein Feld, damit die Reihe nicht
+   springt, aber ohne Rahmen und ohne Cursor. */
+.avg-wert {
+  font-size: 13px;
+  padding: 5px 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+}
+.avg-einheit {
+  font-weight: 400;
+  color: var(--c-text-muted);
+  margin-left: 2px;
+}
+
+/* Über der Grenze: schraffiert statt nur rot. Rot war schon dreimal vergeben,
+   und eine Schraffur liest auch, wer Farben schlecht unterscheidet. */
+.kap-voll {
+  background-image: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.5) 0 3px, rgb(255 255 255 / 0) 3px 6px);
+}
+
 .dash-legend {
   margin-top: 6px;
   text-align: right;
