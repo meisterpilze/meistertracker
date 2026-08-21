@@ -22,6 +22,7 @@ const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const SPRACHEN = ['de', 'en', 'pt'];
@@ -82,6 +83,27 @@ function translatedAttrs() {
 // as literal text, which is the same class of bug as a missing key.
 function placeholders(text) {
   return [...String(text).matchAll(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g)].map((m) => m[0]).sort();
+}
+
+// A key written twice in the same file does not throw and does not show up in
+// the loaded dictionary: the object literal keeps the last one and drops the
+// first without a word. Three keys carried two different German texts that way
+// — `inv.alertBelow` said "Warnung unter {n}kg" in one place and "Alarm unter
+// {n}kg" 700 lines further down, and only the second was ever on screen. So this
+// has to read the source text; `require()`ing the file is exactly what hides it.
+//
+// Split on \r?\n: the working tree is CRLF on Windows and LF on CI.
+function doppelteSchluessel(sprache) {
+  const src = fs.readFileSync(path.join(ROOT, 'lang', sprache + '.js'), 'utf8');
+  const gesehen = new Map();
+  const doppelt = [];
+  src.split(/\r?\n/).forEach((line, i) => {
+    const m = line.match(/^\s*'((?:[^'\\]|\\.)*)'\s*:/);
+    if (!m) return;
+    if (gesehen.has(m[1])) doppelt.push(m[1] + ' (lines ' + gesehen.get(m[1]) + ' and ' + (i + 1) + ')');
+    else gesehen.set(m[1], i + 1);
+  });
+  return doppelt;
 }
 
 describe('translations', () => {
@@ -152,6 +174,55 @@ describe('translations', () => {
       for (const s of SPRACHEN) {
         assert.deepEqual(placeholders(dicts[s][k]), wanted, s + ' changed the placeholders in ' + k);
       }
+    }
+  });
+
+  // The guard for the failure above: a duplicate is invisible in every other
+  // check in this file, because they all read the dictionary after the second
+  // definition has already won.
+  it('defines every key exactly once per file', () => {
+    for (const s of SPRACHEN) {
+      assert.deepEqual(
+        doppelteSchluessel(s),
+        [],
+        s + '.js defines these keys twice — the second one silently wins and the first is dead text'
+      );
+    }
+  });
+
+  // A translation nothing asks for is dead weight, and the way it goes unnoticed
+  // is a report with a standing count in it: once section 2 says "61" every
+  // week, nobody reads the 62nd line. So the count is held at zero, and keys the
+  // code builds at runtime (`t('rhythm.day.' + d)`) are resolved by the audit
+  // rather than parked in that list — they are referenced, just not by name.
+  //
+  // Runs the audit rather than reimplementing it: two copies of this logic would
+  // drift, and the copy in the test is the one nobody updates.
+  it('leaves no translation nothing asks for', () => {
+    const bericht = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'i18n-audit.js')], {
+      encoding: 'utf8'
+    });
+    const m = bericht.match(/## 2\. Orphan keys[^\n]*— (\d+)/);
+    assert.ok(m, 'die Waisen-Zeile steht nicht im Bericht — das Audit hat sich geändert');
+    const waisen = bericht
+      .split(/\r?\n/)
+      .slice(bericht.split(/\r?\n/).findIndex((l) => l.startsWith('## 2. Orphan')))
+      .filter((l) => l.startsWith('  - '))
+      .map((l) => l.slice(4).trim());
+    assert.deepEqual(
+      waisen.slice(0, Number(m[1])),
+      [],
+      'diese Schlüssel stehen in den Sprachdateien, aber kein Pfad fragt danach'
+    );
+  });
+
+  // The parser above has the same blind spot as any regex: if it stops matching
+  // the file's shape it finds nothing, and finding nothing makes the test pass.
+  it('reads the locale files it is supposed to check', () => {
+    for (const s of SPRACHEN) {
+      const src = fs.readFileSync(path.join(ROOT, 'lang', s + '.js'), 'utf8');
+      const treffer = src.split(/\r?\n/).filter((l) => /^\s*'((?:[^'\\]|\\.)*)'\s*:/.test(l)).length;
+      assert.ok(treffer > 1000, s + '.js: only ' + treffer + ' key lines matched, the extraction is broken');
     }
   });
 });
