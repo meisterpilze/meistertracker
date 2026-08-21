@@ -43,10 +43,10 @@ const ZONES = [
   { id: 'LAG', name: 'Kühllager Pommernstraße', role: 'storage', color: '#0ea5e9', sortOrder: 3 }
 ];
 
-function iso(daysFromNow) {
-  // No Date.now() surprises to explain later: the caller passes a base so the
-  // same fixture can be rebuilt to the same shape.
-  return (base) => new Date(base + daysFromNow * 86400000).toISOString();
+// No Date.now() surprises to explain later: the caller passes a base so the
+// same fixture can be rebuilt to the same shape.
+function iso(base, daysFromNow) {
+  return new Date(base + daysFromNow * 86400000).toISOString();
 }
 
 const BATCHES = [
@@ -92,8 +92,8 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
       bagKg: 2.5,
       batchType: 'bags',
       notes: LANG_NOTE,
-      created: iso(b.offset)(base),
-      due: iso(b.offset + b.days)(base),
+      created: iso(base, b.offset),
+      due: iso(base, b.offset + b.days),
       substrate: { hardwood: 60, wheatbran: 20, rh: 55, gypsum: 2, coir: 18 },
       // `id`, not `bagId`: writeAll reads item.id for a bag object (db.js:2905)
       // and item.bagId binds undefined, which SQLite refuses.
@@ -103,7 +103,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
       }))
     })),
     scanLog: BATCHES.slice(0, 4).map((b, i) => ({
-      time: iso(b.offset + 1)(base),
+      time: iso(base, b.offset + 1),
       action: b.status === 'fruchtung' ? 'fruiting' : 'incubation',
       batch: b.id,
       bag: `${b.id}-01`,
@@ -113,7 +113,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
       strain: STRAINS[b.strain].name
     })),
     harvests: BATCHES.slice(1, 4).map((b, i) => ({
-      time: iso(b.offset + b.days)(base),
+      time: iso(base, b.offset + b.days),
       batch: b.id,
       bag: `${b.id}-01`,
       species: STRAINS[b.strain].species,
@@ -129,7 +129,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
       species: s.species,
       strain: s.name,
       strainText: `${s.name} (${s.kuerzel})`,
-      created: iso(-40 + i * 5)(base),
+      created: iso(base, -40 + i * 5),
       notes: LANG_NOTE,
       status: 'active'
     })),
@@ -138,28 +138,28 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
         text: 'Fruchtungskammer 2 entkeimen und Luftbefeuchter-Filter tauschen',
         done: false,
         priority: 'high',
-        created: iso(-2)(base),
+        created: iso(base, -2),
         assignee: 'Julian Zienert',
-        dueDate: iso(1)(base).slice(0, 10)
+        dueDate: iso(base, 1).slice(0, 10)
       },
       {
         text: 'Körnerbrut für die Woche 36 ansetzen, 12 Gläser Weizen',
         done: false,
         priority: 'med',
-        created: iso(-1)(base),
-        dueDate: iso(3)(base).slice(0, 10)
+        created: iso(base, -1),
+        dueDate: iso(base, 3).slice(0, 10)
       },
       {
         text: 'Marktstand Erlangen Neustädter Kirchenplatz vorbereiten',
         done: true,
         priority: 'low',
-        created: iso(-4)(base),
-        dueDate: iso(-1)(base).slice(0, 10)
+        created: iso(base, -4),
+        dueDate: iso(base, -1).slice(0, 10)
       }
     ],
     teamMembers: [
-      { name: 'Julian Zienert', role: 'admin', added: iso(-90)(base) },
-      { name: 'Jonas', role: 'user', added: iso(-60)(base) }
+      { name: 'Julian Zienert', role: 'admin', added: iso(base, -90) },
+      { name: 'Jonas', role: 'user', added: iso(base, -60) }
     ]
   };
 
