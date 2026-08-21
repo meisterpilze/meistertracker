@@ -4464,8 +4464,8 @@ function renderDashAlerts() {
   el.innerHTML = allAlerts
     .map((a) => {
       const btn = a.attentionKey
-        ? `<button class="btn btn-sm fs-xs" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
-        : `<button class="btn btn-sm fs-xs" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? '#dc2626' : '#ea580c'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
+        ? `<button class="btn btn-sm fs-xs" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? 'var(--c-red-strong)' : 'var(--c-amber-strong)'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
+        : `<button class="btn btn-sm fs-xs" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? 'var(--c-red-strong)' : 'var(--c-amber-strong)'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
       return `<div class="fs-meta" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
     })
     .join('');
@@ -5969,7 +5969,7 @@ function renderBatchAttentionBanner() {
   }
   banner.innerHTML =
     `<div style="flex:1">${esc(batchAttentionFilter.label)}</div>` +
-    `<button class="btn btn-sm fs-xs" data-action="clear-attention" style="padding:2px 8px;background:#ea580c;color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
+    `<button class="btn btn-sm fs-xs" data-action="clear-attention" style="padding:2px 8px;background:var(--c-amber-strong);color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
 }
 
 // Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
