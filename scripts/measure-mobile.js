@@ -285,6 +285,7 @@ function measure(typeFloor, touchFloor) {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.right > pvw + 1 && !scrolls(el)) {
         over.push({
+          el, // dropped again by outermost(); only the DOM knows what nests
           // where() already prefixes the page id; the caller used to add it a
           // second time, so every overflow line read "p-settings p-settings …".
           at: where(el),
@@ -301,11 +302,22 @@ function measure(typeFloor, touchFloor) {
     p.style.display = wasPage[j];
   });
   document.body.classList.toggle('admin-mode', wasAdmin);
+  // Only the outermost offender per branch: a div 40px too wide drags its
+  // heading, its text and its buttons past the edge too, and they are one fix.
+  // This has to happen HERE, in the page, because it is a question about the
+  // DOM. The caller used to ask it of the `at` strings instead, and where()
+  // returns "<pageId> <tag><selector>" with exactly one space in it, never a
+  // nesting path, so `startsWith(other + ' ')` was never true and the filter
+  // passed everything through while the comment said otherwise.
+  const outermost = (rows) =>
+    rows
+      .filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el)))
+      .map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
     touch,
-    over,
+    over: outermost(over),
     hidden,
     unfilled,
     scanned: all.length,
@@ -367,14 +379,20 @@ function measureLive(typeFloor, touchFloor) {
       });
     }
     if (cs.position !== 'fixed' && r.width > 0 && r.right > vw + 1 && !scrolls(el)) {
-      over.push({ at: where(el), px: Math.round(r.right - vw), text: txt.slice(0, 40) });
+      over.push({ el, at: where(el), px: Math.round(r.right - vw), text: txt.slice(0, 40) });
     }
   }
+  // Same question, same answer, and it has to be asked in the page: see the
+  // note on outermost() in measure() above.
+  const outermost = (rows) =>
+    rows
+      .filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el)))
+      .map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
     touch,
-    over,
+    over: outermost(over),
     hidden: all.length - visible,
     scanned: all.length,
     unfilled: 0,
@@ -783,10 +801,9 @@ async function main() {
         }
         for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
         for (const r of m.touch) rows.push({ kind: 'touch', pointer: point.name, width, ...r });
-        // Only the outermost offender per branch: a div 40px too wide reports
-        // its heading, its text and its buttons too, and they are all one fix.
-        const outer = m.over.filter((r, i) => !m.over.some((o, j) => j !== i && r.at.startsWith(o.at + ' ')));
-        for (const r of outer) rows.push({ kind: 'over', pointer: point.name, width, ...r });
+        // Already reduced to the outermost offender per branch, inside the
+        // page, where the DOM can answer what nests inside what.
+        for (const r of m.over) rows.push({ kind: 'over', pointer: point.name, width, ...r });
       }
     }
 
