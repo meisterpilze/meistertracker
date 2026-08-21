@@ -9427,14 +9427,12 @@ async function saveLeEnabled() {
   const box = document.getElementById('duckdns-le-enabled');
   const want = box.checked;
   try {
-    const r = await authFetch('/api/duckdns/config');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const cur = await r.json();
-    const res = await apiPost('/api/duckdns/config', {
-      enabled: !!cur.enabled,
-      domain: cur.domain || '',
-      leEnabled: want
-    });
+    // One request. The read-modify-write this replaces existed only to re-send
+    // `enabled` and `domain` unchanged, and the server keeps an absent field at
+    // its stored value now, as it always did for the token. It also closes the
+    // window between the GET and the POST, in which a Save from elsewhere was
+    // overwritten with the value this call had read a moment earlier.
+    const res = await apiPost('/api/duckdns/config', { leEnabled: want });
     if (res.error) throw new Error(res.error);
     showLeStatus(t('duckdns.saved'), 'var(--c-green-dark)');
   } catch (e) {

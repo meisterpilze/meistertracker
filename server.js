@@ -8352,10 +8352,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        if (!data.token) {
-          const existing = db.getDuckdnsCfg(database);
-          data.token = existing.token || '';
-        }
+        // A field that is absent keeps its stored value. The token has worked
+        // this way from the start, and extending it to the other two lets a
+        // caller change one setting without re-sending the rest -- which is
+        // what the Let's Encrypt tick wants, and what forced it to do a GET
+        // first and re-send `enabled` and `domain` unchanged. That read and
+        // that write are not one operation: a Save in another tab between them
+        // was overwritten with the value this one had read before it.
+        const existing = db.getDuckdnsCfg(database);
+        if (!data.token) data.token = existing.token || '';
+        if (data.enabled === undefined) data.enabled = existing.enabled;
+        if (data.domain === undefined) data.domain = existing.domain || '';
         db.updateDuckdnsCfg(database, data);
         startDuckdnsUpdater();
         log('info', 'DuckDNS config updated', { actor: req.authUser.username });
