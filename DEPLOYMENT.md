@@ -278,16 +278,27 @@ journalctl -u meistertracker-duckdns.service --since today
 
 Remove it again with `sudo bash scripts/install-duckdns-fallback.sh --uninstall`.
 
-**Windows (Task Scheduler):** the same script, from an elevated PowerShell:
+`update_server.sh` checks after each deploy whether the timer is there, and
+prints the command if it is not — but only on a machine where DuckDNS is
+actually configured and systemd is present. It never installs anything itself:
+it runs as the application user, and writing to `/etc/systemd/system` needs
+root. This is the same shape as `pm2 startup` above, for the same reason.
 
-```
-powershell -ExecutionPolicy Bypass -File .\install-duckdns-fallback.ps1
-```
+**Windows (Task Scheduler):** double-click `install-duckdns-fallback.bat` and
+answer the UAC prompt. That is the whole installation — the script asks Windows
+for administrator rights itself, so it does not matter which shell you start it
+from.
+
+Administrator is needed for one thing and nothing else: a task registered by an
+ordinary user only runs while that user is signed in, which misses the case this
+exists for — the machine rebooted and nobody logged in. Running without a
+session needs S4U, and registering S4U needs elevation. The job itself runs
+unprivileged; it reads a database file and makes one HTTPS request.
 
 This is separate from `install-autostart.ps1` and does not replace it: that one
 starts the server, this one covers the times it is not started. Check with
 `Get-ScheduledTaskInfo -TaskName MeisterTrackerDuckDNS` — last result `0` is
-good. Remove it with the same script and `-Uninstall`.
+good. Remove it with `install-duckdns-fallback.bat -Uninstall`.
 
 > **Both installers refuse to run from a git worktree,** and so does the script
 > itself. A worktree usually carries a copy of the same token, and a timer

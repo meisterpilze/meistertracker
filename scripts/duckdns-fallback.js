@@ -37,6 +37,9 @@
 //   --force  update regardless of how recently the server did, for testing the
 //            installation without waiting twelve minutes for a real gap
 //   --quiet  print nothing on the ordinary "server is alive" path
+//   --check  answer "is DuckDNS configured here?" and do nothing else. No
+//            network, no writes. update_server.sh uses it so the reminder to
+//            install this only appears on machines where it would help.
 //
 // Exit codes: 0 nothing to do or updated, 1 the update was refused or failed,
 // 2 misconfigured or unusable database. systemd records a non-zero exit against
@@ -134,6 +137,7 @@ async function main(argv, opts) {
   const env = o.env || process.env;
   const force = argv.includes('--force');
   const quiet = argv.includes('--quiet');
+  const check = argv.includes('--check');
   const say = o.out || ((msg) => process.stdout.write('duckdns-fallback: ' + msg + '\n'));
   const warn = o.err || ((msg) => process.stderr.write('duckdns-fallback: ' + msg + '\n'));
 
@@ -160,6 +164,11 @@ async function main(argv, opts) {
 
   const { db, cfg } = opened;
   try {
+    if (check) {
+      const configured = !!(cfg.enabled && cfg.domain && cfg.token);
+      if (!quiet) say(configured ? 'duckdns is configured' : 'duckdns is not configured');
+      return configured ? 0 : 1;
+    }
     const verdict = shouldRun(cfg, o.now == null ? Date.now() : o.now, force);
     if (!verdict.run) {
       if (!quiet) say('standing by (' + verdict.why + ')');

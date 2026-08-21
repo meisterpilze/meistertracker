@@ -123,6 +123,27 @@ backup_data() {
     fi
 }
 
+# The DuckDNS fallback timer is a one-time root step, and one-time root steps are
+# the ones that get put off and then forgotten. This never installs anything —
+# it cannot, it runs as the application user — it just refuses to let the gap
+# stay invisible. Every branch bails out quietly rather than failing a deploy
+# over a reminder.
+check_duckdns_fallback() {
+    if [ "$IS_WORKTREE" = true ]; then return 0; fi
+    if ! command -v systemctl >/dev/null 2>&1; then return 0; fi
+    if [ -f /etc/systemd/system/meistertracker-duckdns.timer ]; then return 0; fi
+    # Only worth saying on a machine where DuckDNS is actually in use. --check
+    # reads one row and makes no request.
+    if ! node scripts/duckdns-fallback.js --check --quiet >/dev/null 2>&1; then return 0; fi
+    echo ""
+    echo "  NOTE: DuckDNS is configured, but the fallback timer is not installed."
+    echo "        Without it nothing updates the address while this server is"
+    echo "        down — which is exactly when the address changes. One-time:"
+    echo ""
+    echo "            sudo bash scripts/install-duckdns-fallback.sh"
+    echo ""
+}
+
 do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
     check_node
@@ -179,6 +200,7 @@ do_update() {
 
     echo "==== Update Completed Successfully ===="
     echo "Run 'pm2 logs $PM2_PROCESS_NAME' to see output."
+    check_duckdns_fallback
 }
 
 do_start() {
@@ -203,6 +225,7 @@ do_start() {
     pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
     pm2 save
     echo "==== Server Started ===="
+    check_duckdns_fallback
 }
 
 do_stop() {

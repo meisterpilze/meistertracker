@@ -194,6 +194,38 @@ describe('end to end, against a throwaway database', () => {
     fs.unlinkSync(p);
   });
 
+  it('--check answers whether DuckDNS is configured, without asking duckdns', async () => {
+    // update_server.sh reads this exit code to decide whether the reminder to
+    // install the timer is worth printing. A reminder on a machine that does
+    // not use DuckDNS is noise, and noise in a deploy log is how the useful
+    // lines stop being read.
+    let calls = 0;
+    const seen = (dbFile) =>
+      run(dbFile, { argv: ['--check'], deps: { httpGet: () => (calls++, Promise.resolve(okReply)) } });
+
+    const configured = tempDb({ last_ip_update: null });
+    assert.equal(await seen(configured), 0);
+    fs.unlinkSync(configured);
+
+    const off = tempDb({ enabled: 0, last_ip_update: null });
+    assert.equal(await seen(off), 1);
+    fs.unlinkSync(off);
+
+    const halfway = tempDb({ token: '', last_ip_update: null });
+    assert.equal(await seen(halfway), 1);
+    fs.unlinkSync(halfway);
+
+    assert.equal(calls, 0, '--check must never touch the network');
+  });
+
+  it('--check does not update, even when the server has been quiet for hours', async () => {
+    let calls = 0;
+    const p = tempDb({ last_ip_update: new Date(Date.now() - 6 * 3600 * 1000).toISOString() });
+    assert.equal(await run(p, { argv: ['--check'], deps: { httpGet: () => (calls++, Promise.resolve(okReply)) } }), 0);
+    assert.equal(calls, 0);
+    fs.unlinkSync(p);
+  });
+
   it('refuses from a worktree even with everything else in order', async () => {
     const p = tempDb({ last_ip_update: null });
     let calls = 0;
@@ -271,8 +303,71 @@ describe('the systemd units', () => {
   });
 });
 
+describe('the deploy-time reminder', () => {
+  const sh = fs.readFileSync(path.join(ROOT, 'update_server.sh'), 'utf8');
+
+  it('exists and runs after both start paths', () => {
+    assert.match(sh, /^check_duckdns_fallback\(\) \{/m);
+    assert.equal((sh.match(/^ *check_duckdns_fallback$/gm) || []).length, 2);
+  });
+
+  it('names the command instead of describing it', () => {
+    assert.ok(sh.includes('sudo bash scripts/install-duckdns-fallback.sh'));
+  });
+
+  it('only speaks up where it could help', () => {
+    const fn = sh.slice(sh.indexOf('check_duckdns_fallback() {'));
+    assert.ok(fn.includes('IS_WORKTREE'), 'a worktree deploy must stay quiet');
+    assert.ok(fn.includes('systemctl'), 'no systemd, no timer to install');
+    assert.ok(fn.includes('/etc/systemd/system/meistertracker-duckdns.timer'), 'already installed, nothing to say');
+    assert.ok(fn.includes('--check'), 'DuckDNS unused, nothing to say');
+  });
+
+  it('cannot fail a deploy over a reminder', () => {
+    // update_server.sh runs under `set -e`, where a bare `[ -f x ] && return 0`
+    // that finds no file ends the whole script. Every branch here is an `if`
+    // for that reason, and the reminder runs after the success line anyway.
+    const fn = sh.slice(sh.indexOf('check_duckdns_fallback() {'), sh.indexOf('do_update() {'));
+    assert.ok(!/&&\s*return/.test(fn), 'use if blocks, not && chains, under set -e');
+    for (const call of ['node scripts/duckdns-fallback.js --check']) {
+      assert.ok(fn.includes(call + ' --quiet >/dev/null 2>&1'), 'the probe must not print or throw');
+    }
+  });
+});
+
 describe('the Windows task', () => {
   const ps = fs.readFileSync(path.join(ROOT, 'install-duckdns-fallback.ps1'), 'utf8');
+  const bat = fs.readFileSync(path.join(ROOT, 'install-duckdns-fallback.bat'), 'utf8');
+
+  it('asks Windows for rights instead of telling the reader to find them', () => {
+    assert.match(ps, /-Verb RunAs/);
+    assert.match(ps, /Start-Process/);
+  });
+
+  it('carries the real user across the elevation boundary', () => {
+    // UAC can be answered with a different account's credentials, and then
+    // $env:USERNAME in the elevated child is that administrator rather than the
+    // person who owns meistertracker.db. The task would be registered for
+    // somebody with no business reading it and fail every five minutes.
+    assert.match(ps, /-TargetUser/);
+    assert.match(ps, /if \(\$TargetUser\) \{ \$TargetUser \}/);
+  });
+
+  it('forwards -Uninstall through the elevation rather than losing it', () => {
+    assert.match(ps, /if \(\$Uninstall\) \{ \$argv \+= '-Uninstall' \}/);
+  });
+
+  it('holds the elevated window open long enough to read the result', () => {
+    assert.match(ps, /if \(\$Elevated\) \{ Read-Host/);
+  });
+
+  it('has a wrapper that is one double-click, pointing at the same script', () => {
+    assert.ok(bat.includes('install-duckdns-fallback.ps1'));
+    assert.match(bat, /-ExecutionPolicy Bypass/);
+    // No PAUSE: the elevated child already holds itself open, and pausing here
+    // too would mean two prompts for one install.
+    assert.ok(!/^\s*pause\s*$/im.test(bat));
+  });
 
   it('runs the same script, on the same cadence', () => {
     assert.ok(ps.includes('duckdns-fallback.js'));
