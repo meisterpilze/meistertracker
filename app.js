@@ -1442,8 +1442,8 @@ function renderOrdersMapping() {
 
 // The mappings that already stand for the channel chosen in the form, so a typo
 // is visible and can be corrected by mapping the same SKU again (the insert is an
-// upsert). Without this list the Billbee stock push is a black box: it publishes
-// exactly these rows and nothing else.
+// upsert). Without this list the mapping is a black box: these rows are what
+// every incoming order line is resolved against, and nothing else.
 function renderFixedMappings() {
   const box = $('orders-fixmap-list');
   const sel = $('oh-fixmap-channel');

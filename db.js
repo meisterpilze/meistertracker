@@ -2184,9 +2184,9 @@ const MIGRATIONS = [
       // copy pointing at whatever product was chosen that day.
       //
       // Stopping the leak does not empty the bucket: the rows are already in
-      // every database this has ever run against, and the Billbee stock push
-      // takes the *smallest* quantity per article number, so an old wrong mapping
-      // can still outvote the correction that was supposed to replace it.
+      // every database this has ever run against, and resolveProductId takes
+      // whichever row SQLite hands back first, so an old wrong mapping can still
+      // outvote the correction that was supposed to replace it.
       //
       // The newest row wins, by id. That is the correction: whoever last chose a
       // product for this article number meant it.
@@ -8800,15 +8800,17 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
     // ⚠️ The ON CONFLICT below cannot carry this on its own. SQLite counts NULLs
     // as distinct in a UNIQUE index, so (channel, 'AUS-250', NULL) never collides
     // with itself and re-mapping a mistyped SKU *added* a second row instead of
-    // correcting the first. Both rows then answered for one article number: the
-    // Billbee stock push takes the smallest quantity per SKU, so the correction
-    // could lose to the mistake it was meant to replace. `IS` is null-safe
-    // equality, which `=` is not.
+    // correcting the first. Both rows then answered for one article number, and
+    // resolveProductId takes whichever one SQLite hands back first, so the
+    // correction could lose to the mistake it was meant to replace and the order
+    // line be made as the wrong product. `IS` is null-safe equality, which `=`
+    // is not.
     //
     // In one transaction: the delete and the insert are a single correction, and
-    // a crash between them would leave the article mapped to nothing at all —
-    // which is worse than the duplicate this replaces, because the stock push
-    // would then stop mentioning it and the shop would keep its last number.
+    // a crash between them would leave the article mapped to nothing at all,
+    // which is worse than the duplicate this replaces: an ordered line then
+    // resolves to no product and drops out of the production plan entirely,
+    // rather than landing on one of two.
     // A SAVEPOINT rather than BEGIN, which is what the rest of this file uses:
     // it nests, so a caller that already holds a transaction does not turn this
     // into "cannot start a transaction within a transaction" one day.
@@ -8862,10 +8864,10 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
  *
  * listUnmappedItems() answers a different question — which *ordered* lines still
  * need a product — and for a long while it was the only way into
- * product_channel_map, because the screen was built around it. That leaves the
- * Billbee stock push unreachable by construction: it publishes what an article
- * has in stock so that somebody can order it, and the article could only be
- * mapped once somebody already had.
+ * product_channel_map, because the screen was built around it. That left the
+ * first order for any article unresolvable by construction: a line finds its
+ * product only through a mapping, and the mapping could only be made once a line
+ * had already arrived without one.
  */
 function listChannelMappings(db, channel) {
   return db

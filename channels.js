@@ -585,9 +585,9 @@ const BILLBEE_PAGE_SIZE = 250; // the documented maximum
 const BILLBEE_WINDOW_DAYS = 30;
 
 // One queue for every Billbee call in this process, spaced by BILLBEE_MIN_GAP_MS.
-// Per endpoint would be closer to what Billbee actually limits, but the sync and
-// the stock push never run hot at the same time, and one queue cannot be got
-// wrong.
+// Per endpoint would be closer to what Billbee actually limits, but the sync is
+// the only thing here that pages, the Sendungsnummer goes back one call at a
+// time, and one queue cannot be got wrong.
 let _billbeeQueue = Promise.resolve();
 let _billbeeLast = 0;
 function _billbeeGate(fn) {
