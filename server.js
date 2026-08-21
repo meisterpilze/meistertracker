@@ -117,7 +117,12 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
-const DB_FILE = path.join(DIR, 'meistertracker.db');
+// Beside the code by default, which is what the farm PC and every worktree
+// expect. MT_DB_FILE exists for instances that must NOT write there: the
+// measuring stand runs this file against a seeded fixture, and a fixture
+// landing on top of real records is the one accident worth designing out
+// rather than guarding against.
+const DB_FILE = process.env.MT_DB_FILE || path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
 // Windows printer name — must match exactly what shows in Devices and Printers

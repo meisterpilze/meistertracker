@@ -87,6 +87,7 @@
 // Fine-pointer hits are printed under the count, never added to it.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { build, serve } = require('./static-page-server.js');
 const { ROOT, floor, tapFloor, breakpoints, widthBand, uncovered, POINTERS } = require('./mobile-size-scan.js');
@@ -407,62 +408,33 @@ function measureLive(typeFloor, touchFloor) {
 }
 
 // ── The throwaway instance --app runs against ──────────────────────────────
-const DB_FILE = path.join(ROOT, 'meistertracker.db');
-const MARKER = DB_FILE + '.throwaway';
-const MADE = [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm', MARKER];
+// The database goes into a temp directory, not the checkout, because server.js
+// now takes MT_DB_FILE. That removes the accident rather than guarding it: a
+// seeded fixture can no longer land on top of real records, whatever happens
+// to this process.
+//
+// What used to stand here instead was a marker file, a delete list and an
+// ownership check, roughly thirty lines, all of it apologising for a hardcoded
+// path. The marker was written before the database existed, no error path
+// removed it, and *.db in .gitignore did not match it, so a stale one could be
+// committed and then authorise deleting a real database.
+//
+// server.js still derives data/, backups/ and calendars/ from __dirname, so a
+// run creates those in the checkout if they are not already there. They are
+// created empty and removed again below. Generalising those three the same way
+// is a wider change through inline path.join(DIR, 'data', ...) calls in the
+// photo paths, and it is not what this measuring stand needs to be safe.
+// Made on demand: a markup run never spawns a server and must not leave a
+// temp directory behind for the privilege of not using it.
+let WEGWERF_DIR = null;
+function wegwerfDb() {
+  if (!WEGWERF_DIR) WEGWERF_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mt-messstand-'));
+  return path.join(WEGWERF_DIR, 'meistertracker.db');
+}
 const MADE_DIRS = [path.join(ROOT, 'backups'), path.join(ROOT, 'data'), path.join(ROOT, 'calendars')];
 
-// server.js takes its database path from __dirname and nothing overrides it, so
-// --app writes into the checkout it runs from. That is fine in a worktree and
-// would be a catastrophe in one somebody works in: a seeded fixture landing on
-// top of real records. The marker file is the whole safety, so it has to name
-// WHICH database it vouches for.
-//
-// The first version only asked whether a marker existed. That is not the same
-// question. The marker was written before openDb created the file, so a crash
-// in between left a marker with no database; no error path removed it either.
-// Once a stale marker sat in a checkout that later acquired a real database,
-// the existence test passed and the real database was deleted -- the exact
-// accident the marker was introduced to prevent.
-function markerPasst() {
-  if (!fs.existsSync(MARKER) || !fs.existsSync(DB_FILE)) return false;
-  try {
-    const m = JSON.parse(fs.readFileSync(MARKER, 'utf8'));
-    const st = fs.statSync(DB_FILE);
-    return m.ino === st.ino && m.dev === st.dev && m.geboren === st.birthtimeMs;
-  } catch {
-    return false;
-  }
-}
-
-function claimThrowaway() {
-  if (fs.existsSync(DB_FILE) && !markerPasst()) {
-    const warum = fs.existsSync(MARKER)
-      ? 'there is a marker, but it names a different database'
-      : 'it was not created by this script';
-    console.error(`\n✗ ${DB_FILE} already exists and ${warum}.`);
-    console.error('  --app seeds a fixture and deletes the database afterwards; it will not touch');
-    console.error('  one it does not own. Run it in a worktree, or move that file aside first.');
-    process.exit(2);
-  }
-  for (const f of MADE) if (fs.existsSync(f)) fs.rmSync(f, { force: true });
-}
-
-// Written only once the database exists, and stamped with which one it is.
-function stampThrowaway() {
-  const st = fs.statSync(DB_FILE);
-  fs.writeFileSync(
-    MARKER,
-    JSON.stringify(
-      { ino: st.ino, dev: st.dev, geboren: st.birthtimeMs, wer: 'scripts/measure-mobile.js --app' },
-      null,
-      1
-    )
-  );
-}
-
 function dropThrowaway(dirsExistedBefore) {
-  for (const f of MADE) if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+  if (WEGWERF_DIR) fs.rmSync(WEGWERF_DIR, { recursive: true, force: true });
   for (const d of MADE_DIRS) {
     if (!dirsExistedBefore.has(d) && fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true });
   }
@@ -471,12 +443,12 @@ function dropThrowaway(dirsExistedBefore) {
 // Everything a run opens, in one place, so one function can close it from any
 // path. Cleanup used to live only on the happy path: a thrown page.evaluate, a
 // timed-out waitForFunction or a Ctrl-C left server.js alive on its port,
-// writing into the checkout, and left the database and its marker behind.
+// writing into the checkout, and left the fixture behind.
 const OFFEN = { browser: null, server: null, child: null, dirsBefore: new Set(), app: false };
 let aufgeraeumt = false;
 
 // The last word, and synchronous on purpose. An async handler racing an
-// interrupt loses: measured here, the handler deleted the fixture while main()
+// interrupt loses: measured, the handler deleted the fixture while main()
 // carried on and spawned the server, which created it again, and only then did
 // process.exit fire. `exit` handlers run with everything else stopped, so this
 // one cannot be overtaken, and fs.rmSync and kill both work there.
@@ -645,9 +617,8 @@ async function main() {
     dirsBefore = new Set(MADE_DIRS.filter((d) => fs.existsSync(d)));
     OFFEN.dirsBefore = dirsBefore;
     OFFEN.app = true;
-    claimThrowaway();
-    const database = dbApi.openDb(DB_FILE);
-    stampThrowaway();
+    const dbPfad = wegwerfDb();
+    const database = dbApi.openDb(dbPfad);
     seed(database);
     // Never typed and never needed: the run signs in by planting the session
     // cookie below, and createUser just insists on a password. A literal one
@@ -664,7 +635,14 @@ async function main() {
       // growing rooms, and this instance has a seeded fixture whose only
       // account is an admin. On loopback the run is nobody's business but this
       // machine's.
-      env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', WORKTREE_MODE: '1', LOG_FORMAT: 'text' },
+      env: {
+        ...process.env,
+        PORT: String(port),
+        HOST: '127.0.0.1',
+        MT_DB_FILE: dbPfad,
+        WORKTREE_MODE: '1',
+        LOG_FORMAT: 'text'
+      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     const log = [];
@@ -696,11 +674,11 @@ async function main() {
     await new Promise((ok) => server.on('listening', ok));
     port = server.address().port;
   }
-  const browser = await puppeteer.launch({
+  const browser = (OFFEN.browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'shell',
     args: ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1']
-  });
+  }));
 
   const started = Date.now();
   const rows = [];
@@ -1058,4 +1036,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ROOT, span, markerPasst, stampThrowaway, MARKER, DB_FILE };
+module.exports = { ROOT, span };
