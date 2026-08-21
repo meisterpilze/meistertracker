@@ -53,6 +53,16 @@ function build() {
 
 const mode = (p) => fs.statSync(p).mode & 0o777;
 
+// The four tests below assert a POSIX permission bitmask. NTFS has no such
+// thing: Node reports 0666 for every file it creates on Windows and chmod is a
+// no-op there, so they fail on a developer's machine while saying nothing about
+// the code. The deployment target is Linux, CI is Linux, and that is where the
+// assertion is worth making — so skip the mode checks off POSIX rather than
+// weaken them. Everything else in this file reads source text and runs
+// everywhere, including the EPERM test below, which stubs chmod itself.
+const POSIX = process.platform !== 'win32';
+const notPosix = { skip: POSIX ? false : 'POSIX file modes: Windows reports 0666 and chmod is a no-op' };
+
 describe('private key files', () => {
   let dir;
   before(() => {
@@ -62,14 +72,14 @@ describe('private key files', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('writes a new key readable only by the owner', () => {
+  it('writes a new key readable only by the owner', notPosix, () => {
     const { writePrivateFile } = build();
     const f = path.join(dir, 'fresh.key');
     writePrivateFile(f, '-----BEGIN PRIVATE KEY-----\n');
     assert.equal(mode(f), 0o600, 'expected 0600, got 0' + mode(f).toString(8));
   });
 
-  it('tightens a key that is already there — the renewal case', () => {
+  it('tightens a key that is already there — the renewal case', notPosix, () => {
     const { writePrivateFile } = build();
     const f = path.join(dir, 'old.key');
     // Exactly what a host deployed before this fix has on disk.
@@ -81,7 +91,7 @@ describe('private key files', () => {
     assert.equal(fs.readFileSync(f, 'utf8'), 'renewed');
   });
 
-  it('does not survive a umask that would loosen it', () => {
+  it('does not survive a umask that would loosen it', notPosix, () => {
     const { writePrivateFile } = build();
     const prev = process.umask(0o000);
     try {
@@ -93,7 +103,7 @@ describe('private key files', () => {
     }
   });
 
-  it('creates the key directory 0700, and tightens an existing one', () => {
+  it('creates the key directory 0700, and tightens an existing one', notPosix, () => {
     const { ensurePrivateDir } = build();
     const fresh = path.join(dir, 'certs-new');
     ensurePrivateDir(fresh);
