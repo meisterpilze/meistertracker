@@ -320,9 +320,7 @@ function measure(typeFloor, touchFloor) {
   // nesting path, so `startsWith(other + ' ')` was never true and the filter
   // passed everything through while the comment said otherwise.
   const outermost = (rows) =>
-    rows
-      .filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el)))
-      .map(({ el, ...rest }) => rest);
+    rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
@@ -395,9 +393,7 @@ function measureLive(typeFloor, touchFloor) {
   // Same question, same answer, and it has to be asked in the page: see the
   // note on outermost() in measure() above.
   const outermost = (rows) =>
-    rows
-      .filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el)))
-      .map(({ el, ...rest }) => rest);
+    rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
@@ -457,7 +453,11 @@ function stampThrowaway() {
   const st = fs.statSync(DB_FILE);
   fs.writeFileSync(
     MARKER,
-    JSON.stringify({ ino: st.ino, dev: st.dev, geboren: st.birthtimeMs, wer: 'scripts/measure-mobile.js --app' }, null, 1)
+    JSON.stringify(
+      { ino: st.ino, dev: st.dev, geboren: st.birthtimeMs, wer: 'scripts/measure-mobile.js --app' },
+      null,
+      1
+    )
   );
 }
 
@@ -783,16 +783,25 @@ async function main() {
           // the next page would then be measured underneath it.
           await page.keyboard.press('Escape');
           await page.evaluate((id) => document.getElementById(id).click(), stop.open);
-          await new Promise((ok) => setTimeout(ok, 60));
+          // Wait for the thing we asked for, not for a guess at how long it
+          // takes. app.js:1036 marks the clicked sidebar button `active` in the
+          // same turn it shows the page. The blind sleeps this replaces were
+          // simultaneously too long on a fast render (60ms x 94 widths x 12
+          // stations x 2 pointers is over two minutes of nothing) and no
+          // guarantee at all on a slow one, which is where the intermittent
+          // "Cannot read properties of null" in the jump pass came from.
+          await page
+            .waitForFunction(
+              (id) => document.getElementById(id)?.classList.contains('active'),
+              { timeout: 5000 },
+              stop.open
+            )
+            .catch(() => {});
         }
         // The HIGHER of the two floors, so the caller can split. The page used
         // to be told only point.tapFloor, so nothing between that and the Feld
         // floor was ever collected and the Feld report below was unreachable.
-        const m = await page.evaluate(
-          APP ? measureLive : measure,
-          TYPE_FLOOR,
-          Math.max(point.tapFloor, TOUCH_FELD)
-        );
+        const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, Math.max(point.tapFloor, TOUCH_FELD));
         // The largest any single measurement saw, not the last one. These were
         // plain assignments in the innermost loop, so the summary reported
         // whichever width and station happened to finish last as though it
@@ -872,7 +881,13 @@ async function main() {
           });
           await page.keyboard.press('Escape');
           await page.evaluate((id) => document.getElementById(id).click(), stop.open);
-          await new Promise((ok) => setTimeout(ok, 80));
+          await page
+            .waitForFunction(
+              (id) => document.getElementById(id)?.classList.contains('active'),
+              { timeout: 5000 },
+              stop.open
+            )
+            .catch(() => {});
           await page.setViewport({
             width: jump.to,
             height: 900,
