@@ -22648,7 +22648,18 @@ function initEventListeners() {
   });
   $('tgl-17').addEventListener('click', toggleSidebar);
   $('sync-dot-m').addEventListener('click', loadData);
-  $('sb-overlay').addEventListener('click', toggleSidebar);
+  // The veil only exists while the drawer is open, so tapping it can only ever
+  // mean close. It went through toggleSidebar(), which re-asks which
+  // arrangement we are in and would collapse the docked sidebar if the answer
+  // had changed since the drawer opened. It is also the busiest way out of the
+  // drawer and the one sbClose()'s comment did not list. The divergence was
+  // already visible: Escape closed and handed focus back to the opener, a veil
+  // tap closed and left focus nowhere.
+  $('sb-overlay').addEventListener('click', () => {
+    sbClose();
+    const opener = document.getElementById('tgl-17');
+    if (opener) opener.focus();
+  });
 
   // Scan modal
   $('scan-overlay').addEventListener('click', closeScanModal);

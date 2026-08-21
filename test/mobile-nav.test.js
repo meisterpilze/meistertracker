@@ -487,6 +487,18 @@ describe('the drawer that outlived its breakpoint', () => {
     );
   });
 
+  it('lifts the drawer when the veil is tapped, the same way as everything else', () => {
+    // The busiest way out of the drawer, and the one that used to take a
+    // different route: toggleSidebar() re-asks which arrangement we are in, so
+    // it could collapse the docked sidebar instead, and it left focus nowhere
+    // while Escape handed it back to the opener.
+    const VEIL = APP.match(/\$\('sb-overlay'\)\.addEventListener\('click'[\s\S]*?\n  \}\);/);
+    assert.ok(VEIL, 'nothing listens on the veil any more');
+    assert.doesNotMatch(VEIL[0], /toggleSidebar/, 'the veil re-branches on the arrangement again');
+    assert.match(VEIL[0], /sbClose\(\)/, 'the veil no longer closes the drawer');
+    assert.match(VEIL[0], /tgl-17/, 'the veil leaves keyboard focus nowhere');
+  });
+
   it('lets Escape lift the drawer, like every dialog in the app', () => {
     // It is modal in every way that matters: an overlay over the page with the
     // taps behind it swallowed. It was the one such surface Escape could not
