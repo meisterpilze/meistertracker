@@ -131,24 +131,32 @@ function breakpoints(css = readCss()) {
 // shop's header sat on two lines for two hundred pixels with no @media rule in
 // sight. The triples catch what goes wrong exactly at the switch: a rule that
 // applies at G and is never taken back at G+1 is invisible from one side.
+// `from` and `to` bound the SWEEP, never the triples. A breakpoint is worth
+// measuring because the stylesheet switches there, not because it happens to
+// fall inside a range somebody typed. The first version clamped the triples to
+// from..to as well, so `@media (min-width: 2000px)` contributed no width AND
+// reported no gap: the gate printed its all-clear for precisely the breakpoint
+// nobody had opened a window at. Both halves of that came from the same guard,
+// which is why it read as consistent.
 function widthBand(list, { from = 320, to = 1920, step = 20 } = {}) {
   const out = new Set();
   for (let w = from; w <= to; w += step) out.add(w);
   out.add(to);
   for (const g of list) {
     if (g.axis !== 'viewport') continue; // a container breakpoint is not a window width
-    for (const w of [g.px - 1, g.px, g.px + 1]) if (w >= from && w <= to) out.add(w);
+    for (const w of [g.px - 1, g.px, g.px + 1]) if (w >= 1) out.add(w);
   }
   return [...out].sort((a, b) => a - b);
 }
 
 // The gate. Not "the list looks complete" but "name the breakpoint it misses".
-function uncovered(list, widths, { from = 320, to = 1920 } = {}) {
+// No range filter here either, for the same reason.
+function uncovered(list, widths) {
   const have = new Set(widths);
   const gaps = [];
   for (const g of list) {
     if (g.axis !== 'viewport') continue;
-    const missing = [g.px - 1, g.px, g.px + 1].filter((w) => w >= from && w <= to && !have.has(w));
+    const missing = [g.px - 1, g.px, g.px + 1].filter((w) => w >= 1 && !have.has(w));
     if (missing.length) gaps.push({ px: g.px, missing, from: g.from });
   }
   return gaps;
