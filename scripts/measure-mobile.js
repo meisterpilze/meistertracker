@@ -182,6 +182,63 @@ function gate() {
   }
 }
 
+// ── The helpers both measurements use, written once ────────────────────────
+// Injected with evaluateOnNewDocument, because a function handed to
+// page.evaluate is serialised and cannot reach anything outside itself. Before
+// this they were written out TWICE, character for character: the TOUCH selector
+// list, where(), ownText(), scrolls(), and after the last fix outermost() as
+// well. Adding a control class to one copy and not the other would have
+// silently changed what only one mode measures, and neither run would have
+// failed. That is the failure the header of mobile-size-scan.js was written
+// about, where it had already happened.
+function helferQuelle() {
+  window.__mess = {
+    TOUCH:
+      'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]',
+    where: function (el) {
+      let p = el.tagName.toLowerCase();
+      if (el.id) p += '#' + el.id;
+      else if (el.className && typeof el.className === 'string' && el.className.trim())
+        p += '.' + el.className.trim().split(/\s+/)[0];
+      const page = el.closest('.page');
+      return (page && page.id ? page.id + ' ' : '') + p;
+    },
+    ownText: function (el) {
+      for (let n = el.firstChild; n; n = n.nextSibling)
+        if (n.nodeType === 3 && n.nodeValue.trim()) return n.nodeValue.trim();
+      return '';
+    },
+    // An ancestor that scrolls sideways on purpose absorbs its children's
+    // width. Without this every cell of every wide table reports separately and
+    // the list is thousands long, all of it describing one wrapper working
+    // correctly.
+    scrolls: function (el) {
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const ox = getComputedStyle(a).overflowX;
+        if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
+      }
+      return false;
+    },
+    // An element whose label arrives from the dictionary at runtime is empty
+    // here, and an empty button is its padding: #mcp-save-btn measures 12px
+    // tall and reports as a touch-target defect that does not exist. Skipped
+    // rather than guessed at, and counted so the limit stays visible in the
+    // output. Filling them in here would mean a second implementation of
+    // app.js's dictionary pass, agreeing with the real one exactly until
+    // somebody changed one of them. --app runs the real one.
+    awaitingText: function (el) {
+      return el.hasAttribute('data-i18n') && !el.textContent.trim();
+    },
+    // Only the outermost offender per branch: a div 40px too wide drags its
+    // heading, its text and its buttons past the edge too, and they are one
+    // fix. Asked of the DOM, because the label string where() builds is not a
+    // nesting path and the caller used to ask it of that instead.
+    outermost: function (rows) {
+      return rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
+    }
+  };
+}
+
 // ── The measurement, run inside the page ───────────────────────────────────
 // Was a string pasted by hand; it is a function now, and the reason it survived
 // almost unchanged is that the logic was never the problem. The delivery was.
@@ -194,48 +251,12 @@ function measure(typeFloor, touchFloor) {
   const reveal = document.createElement('style');
   reveal.textContent = '.page,.sp,.modal-bg,details>*{display:block !important}.modal-bg{position:static !important}';
   document.head.appendChild(reveal);
-  const TOUCH =
-    'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]';
-  const where = function (el) {
-    let p = el.tagName.toLowerCase();
-    if (el.id) p += '#' + el.id;
-    else if (el.className && typeof el.className === 'string' && el.className.trim())
-      p += '.' + el.className.trim().split(/\s+/)[0];
-    const page = el.closest('.page');
-    return (page && page.id ? page.id + ' ' : '') + p;
-  };
-  const ownText = function (el) {
-    for (let n = el.firstChild; n; n = n.nextSibling)
-      if (n.nodeType === 3 && n.nodeValue.trim()) return n.nodeValue.trim();
-    return '';
-  };
-  // An ancestor that scrolls sideways on purpose absorbs its children's width.
-  // Without this every cell of every wide table reports separately and the list
-  // is thousands long, all of it describing one wrapper working correctly.
-  const scrolls = function (el) {
-    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
-      const ox = getComputedStyle(a).overflowX;
-      if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
-    }
-    return false;
-  };
+  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
   const over = [];
   let hidden = 0;
   let unfilled = 0;
-  // An element whose label arrives from the dictionary at runtime is empty
-  // here, and an empty button is its padding: #mcp-save-btn measures 12px tall
-  // and reports as a touch-target defect that does not exist. Its markup is
-  // `<button class="btn btn-sm btn-p" data-i18n="mcp.save"></button>`.
-  //
-  // Skipped rather than guessed at, and counted so the limit stays visible in
-  // the output. Filling them in here would mean a second implementation of
-  // app.js's dictionary pass, which would agree with the real one exactly until
-  // somebody changed one of them. --app runs the real one.
-  const awaitingText = function (el) {
-    return el.hasAttribute('data-i18n') && !el.textContent.trim();
-  };
   const all = document.querySelectorAll('body *');
   for (let i = 0; i < all.length; i++) {
     const el = all[i];
@@ -313,15 +334,6 @@ function measure(typeFloor, touchFloor) {
     p.style.display = wasPage[j];
   });
   document.body.classList.toggle('admin-mode', wasAdmin);
-  // Only the outermost offender per branch: a div 40px too wide drags its
-  // heading, its text and its buttons past the edge too, and they are one fix.
-  // This has to happen HERE, in the page, because it is a question about the
-  // DOM. The caller used to ask it of the `at` strings instead, and where()
-  // returns "<pageId> <tag><selector>" with exactly one space in it, never a
-  // nesting path, so `startsWith(other + ' ')` was never true and the filter
-  // passed everything through while the comment said otherwise.
-  const outermost = (rows) =>
-    rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
@@ -341,28 +353,7 @@ function measure(typeFloor, touchFloor) {
 // page is open, because a nav entry was clicked, exactly as a user meets it.
 /* global document, window, getComputedStyle */
 function measureLive(typeFloor, touchFloor) {
-  const TOUCH =
-    'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]';
-  const where = function (el) {
-    let p = el.tagName.toLowerCase();
-    if (el.id) p += '#' + el.id;
-    else if (el.className && typeof el.className === 'string' && el.className.trim())
-      p += '.' + el.className.trim().split(/\s+/)[0];
-    const page = el.closest('.page');
-    return (page && page.id ? page.id + ' ' : '') + p;
-  };
-  const ownText = function (el) {
-    for (let n = el.firstChild; n; n = n.nextSibling)
-      if (n.nodeType === 3 && n.nodeValue.trim()) return n.nodeValue.trim();
-    return '';
-  };
-  const scrolls = function (el) {
-    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
-      const ox = getComputedStyle(a).overflowX;
-      if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
-    }
-    return false;
-  };
+  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
   const over = [];
@@ -391,10 +382,6 @@ function measureLive(typeFloor, touchFloor) {
       over.push({ el, at: where(el), px: Math.round(r.right - vw), text: txt.slice(0, 40) });
     }
   }
-  // Same question, same answer, and it has to be asked in the page: see the
-  // note on outermost() in measure() above.
-  const outermost = (rows) =>
-    rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
   return {
     viewport: window.innerWidth,
     type,
@@ -694,6 +681,7 @@ async function main() {
   const uebersprungeneSpruenge = new Set();
   for (const point of POINTS) {
     const page = await browser.newPage();
+    await page.evaluateOnNewDocument(helferQuelle);
     if (cookie) {
       // The session cookie is HttpOnly and, over plain http, plainly named
       // `session` (server.js:1210 picks __Host-session only under https).
