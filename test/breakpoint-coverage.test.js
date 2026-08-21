@@ -156,11 +156,13 @@ describe('what the stand needs in order to stay honest', () => {
     // scroll" into a claim nobody could disprove. Both mobile rounds made it.
     //
     // Measured on 2026-08-21 with scripts/measure-mobile.js --app before
-    // removing it: 96 overflow findings with the rule, 98 without. It was
-    // hiding two, both on the calendar's agenda row. And it did not do the job
-    // it was there for -- eleven of twelve pages still widened the layout
-    // viewport on a phone with it in place, because that is the meta viewport
-    // and not a scrollbar.
+    // removing it, and again on 2026-08-22 once the outermost-offender filter
+    // was fixed: with the ratchet emptied, 46 touch / 4 overflow / 2 zoomed-out
+    // either way, and 14 after-a-jump without against 13 with. One finding
+    // hidden, not two, and a jump one rather than an overflow. What holds
+    // either way is that it did not do the job it was there for: the pages that
+    // widen their layout viewport on a phone do it with the rule in place,
+    // because that is the meta viewport and not a scrollbar.
     assert.doesNotMatch(
       body[0],
       /overflow-x:\s*hidden/,

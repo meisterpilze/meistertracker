@@ -271,13 +271,17 @@ body {
      It suppressed the sideways scrollbar, which is the one signal a person
      would have noticed, and that made "no horizontal scroll" a claim nobody
      could disprove: two mobile rounds asserted it and neither measured it.
-     Measured before removing it, with scripts/measure-mobile.js --app on
-     2026-08-21: it was hiding exactly two findings, both on the calendar's
-     agenda row, 96 against 98. And it did not do the job it was there for.
-     Eleven of the twelve pages still widened the layout viewport on a phone
-     with the rule in place, because that is the meta viewport and not a
-     scrollbar: the dashboard rendered at 53% at 320px either way.
-     test/breakpoint-coverage.test.js keeps it gone. */
+     Re-measured on 2026-08-22 with scripts/measure-mobile.js --app, both ways,
+     with the ratchet emptied so raw findings show: 46 touch, 4 overflow and
+     2 zoomed-out either way, and 14 after-a-jump without the rule against 13
+     with it. So it hid exactly ONE finding, and a jump one, not an overflow.
+     (The first version of this comment said two overflow findings, 96 against
+     98. That was counted while the outermost-offender filter was broken and
+     every nested child counted separately.)
+     What has not changed is the second half: the rule did not do the job it
+     was there for. The pages that widen their layout viewport on a phone widen
+     it with the rule in place, because that is the meta viewport and not a
+     scrollbar. test/breakpoint-coverage.test.js keeps it gone. */
 }
 
 /* ═══ SIDEBAR ═══════════════════════════════════════════════════ */
