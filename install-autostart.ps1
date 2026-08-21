@@ -25,8 +25,13 @@
   server at all, after the boot the task was added to protect.
 
 .NOTES
-  Uninstall with:  Unregister-ScheduledTask -TaskName MeisterTracker -Confirm:$false
+  -Uninstall removes the task again. -Status shows whether it is registered.
 #>
+
+param(
+    [switch] $Uninstall,
+    [switch] $Status
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -34,11 +39,47 @@ $TaskName = 'MeisterTracker'
 $Wrapper  = Join-Path $PSScriptRoot 'autostart.bat'
 $User     = "$env:USERDOMAIN\$env:USERNAME"
 
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) {
-    throw "This needs an elevated shell. Right-click PowerShell -> 'Als Administrator ausfuehren', then run it again."
+# Same shape as scripts/print-bridge.ps1, which has done this for a while:
+# elevate rather than tell the operator to start over in a different window, and
+# offer the way back out. Telling someone to type
+# `Unregister-ScheduledTask ...` from a comment they can only read by opening
+# the file is not an uninstall path.
+function Test-IsAdmin {
+    $current = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return ([Security.Principal.WindowsPrincipal]$current).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+
+function Invoke-AsAdmin {
+    param([string[]] $ForwardedArgs)
+    Write-Host 'Re-launching with administrator privileges...' -ForegroundColor Yellow
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $ForwardedArgs
+    Start-Process powershell -ArgumentList $argList -Verb RunAs
+    exit 0
+}
+
+if ($Status) {
+    $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($t) {
+        Write-Host "Registered. RunLevel: $($t.Principal.RunLevel), LogonType: $($t.Principal.LogonType)"
+        Get-ScheduledTaskInfo -TaskName $TaskName | Format-List TaskName, LastRunTime, LastTaskResult, NumberOfMissedRuns
+    } else {
+        Write-Host "Not registered."
+    }
+    exit 0
+}
+
+if (-not (Test-IsAdmin)) {
+    $forward = @()
+    if ($Uninstall) { $forward += '-Uninstall' }
+    Invoke-AsAdmin -ForwardedArgs $forward
+}
+
+if ($Uninstall) {
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "Task '$TaskName' removed. The server will not come back at the next boot."
+    exit 0
+}
+
 if (-not (Test-Path $Wrapper)) {
     throw "autostart.bat not found next to this script (expected at $Wrapper)."
 }
