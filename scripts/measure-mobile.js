@@ -384,17 +384,46 @@ const MADE_DIRS = [path.join(ROOT, 'backups'), path.join(ROOT, 'data'), path.joi
 // server.js takes its database path from __dirname and nothing overrides it, so
 // --app writes into the checkout it runs from. That is fine in a worktree and
 // would be a catastrophe in one somebody works in: a seeded fixture landing on
-// top of real records. The marker file is the whole safety: a database this
-// script created carries one, and one it did not carry stops the run.
+// top of real records. The marker file is the whole safety, so it has to name
+// WHICH database it vouches for.
+//
+// The first version only asked whether a marker existed. That is not the same
+// question. The marker was written before openDb created the file, so a crash
+// in between left a marker with no database; no error path removed it either.
+// Once a stale marker sat in a checkout that later acquired a real database,
+// the existence test passed and the real database was deleted -- the exact
+// accident the marker was introduced to prevent.
+function markerPasst() {
+  if (!fs.existsSync(MARKER) || !fs.existsSync(DB_FILE)) return false;
+  try {
+    const m = JSON.parse(fs.readFileSync(MARKER, 'utf8'));
+    const st = fs.statSync(DB_FILE);
+    return m.ino === st.ino && m.dev === st.dev && m.geboren === st.birthtimeMs;
+  } catch {
+    return false;
+  }
+}
+
 function claimThrowaway() {
-  if (fs.existsSync(DB_FILE) && !fs.existsSync(MARKER)) {
-    console.error(`\n✗ ${DB_FILE} already exists and was not created by this script.`);
+  if (fs.existsSync(DB_FILE) && !markerPasst()) {
+    const warum = fs.existsSync(MARKER)
+      ? 'there is a marker, but it names a different database'
+      : 'it was not created by this script';
+    console.error(`\n✗ ${DB_FILE} already exists and ${warum}.`);
     console.error('  --app seeds a fixture and deletes the database afterwards; it will not touch');
     console.error('  one it does not own. Run it in a worktree, or move that file aside first.');
     process.exit(2);
   }
   for (const f of MADE) if (fs.existsSync(f)) fs.rmSync(f, { force: true });
-  fs.writeFileSync(MARKER, 'Created by scripts/measure-mobile.js --app. Safe to delete.\n');
+}
+
+// Written only once the database exists, and stamped with which one it is.
+function stampThrowaway() {
+  const st = fs.statSync(DB_FILE);
+  fs.writeFileSync(
+    MARKER,
+    JSON.stringify({ ino: st.ino, dev: st.dev, geboren: st.birthtimeMs, wer: 'scripts/measure-mobile.js --app' }, null, 1)
+  );
 }
 
 function dropThrowaway(dirsExistedBefore) {
@@ -533,6 +562,7 @@ async function main() {
     dirsBefore = new Set(MADE_DIRS.filter((d) => fs.existsSync(d)));
     claimThrowaway();
     const database = dbApi.openDb(DB_FILE);
+    stampThrowaway();
     seed(database);
     // Never typed and never needed: the run signs in by planting the session
     // cookie below, and createUser just insists on a password. A literal one
