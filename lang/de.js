@@ -1977,5 +1977,9 @@ window.LANG['de'] = {
   'search.gZones': 'Zonen',
   'search.gOrders': 'Bestellungen',
   'search.gCustomers': 'Kunden',
-  'search.gPages': 'Seiten'
+  'search.gPages': 'Seiten',
+  'work.bMixFrom': 'Mischung aus {id}',
+  'work.bMixLine': '{hw} % Hartholz / {wb} % Kleie · {rh} % Wassergehalt',
+  'work.bMixFixed': 'So wurde der Ansatz angesetzt. Daran ändert das Rezept der Sorte nichts mehr.',
+  'work.bFromMix': ' (aus {id})'
 };

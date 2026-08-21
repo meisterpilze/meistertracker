@@ -37,6 +37,10 @@ const TEILE = [
   [/^function wkfHarvestReceiptText\(r\) \{[\s\S]*?\r?\n\}/m, 'wkfHarvestReceiptText()'],
   [/^function wkIstApple\(ua, touchPoints\) \{[\s\S]*?\r?\n\}/m, 'wkIstApple()'],
   [/^function wkOpenMixes\(\) \{[\s\S]*?\r?\n\}/m, 'wkOpenMixes()'],
+  [/^function wkbStrain\(\) \{[\s\S]*?\r?\n\}/m, 'wkbStrain()'],
+  [/^function wkbRecipe\(\) \{[\s\S]*?\r?\n\}/m, 'wkbRecipe()'],
+  [/^function wkbMix\(\) \{[\s\S]*?\r?\n\}/m, 'wkbMix()'],
+  [/^function wkbMischung\(\) \{[\s\S]*?\r?\n\}/m, 'wkbMischung()'],
   [/^function wkmStock\(\) \{[\s\S]*?\r?\n\}/m, 'wkmStock()'],
   [/^function wkmShortfalls\(\) \{[\s\S]*?\r?\n\}/m, 'wkmShortfalls()']
 ];
@@ -48,17 +52,28 @@ const TEILE_SRC = hebe(TEILE);
 // Die Attrappen: nur das, was die gehobenen Funktionen wirklich anfassen.
 // t() gibt die Platzhalter mit zurück, damit die Quittungstests sehen, mit
 // welchen Zahlen die Zeile geschrieben wurde.
-function bauen({ harvests = [], sbList = [], preview = null, stock = {}, lang = 'de', flushOverride = null } = {}) {
+function bauen({
+  harvests = [],
+  sbList = [],
+  preview = null,
+  stock = {},
+  lang = 'de',
+  flushOverride = null,
+  strains = [],
+  wkb = {}
+} = {}) {
   const quelle = `
     let currentLang = ${JSON.stringify(lang)};
     const harvests = ${JSON.stringify(harvests)};
     const _sbList = ${JSON.stringify(sbList)};
+    const mushroomStrains = ${JSON.stringify(strains)};
     const inventory = { stock: ${JSON.stringify(stock)} };
     const WKM = { preview: ${JSON.stringify(preview)} };
     const WKF = { flushOverride: ${JSON.stringify(flushOverride)} };
+    const WKB = Object.assign({ strainId: null, subId: '', hw: null, wb: null, rh: null, days: null }, ${JSON.stringify(wkb)});
     const t = (k, p) => (p ? k + ' ' + JSON.stringify(p) : k);
     ${TEILE_SRC}
-    return { fmtKg, wkBagHarvested, wkBagFlush, wkfBagFlush, wkfHarvestReceiptText, wkIstApple, wkOpenMixes, wkmShortfalls, WKF };
+    return { fmtKg, wkBagHarvested, wkBagFlush, wkfBagFlush, wkfHarvestReceiptText, wkIstApple, wkOpenMixes, wkbMischung, wkbRecipe, wkmShortfalls, WKF };
   `;
   return new Function(quelle)();
 }
@@ -214,6 +229,61 @@ describe('Arbeitsgänge — aufs Handy legen', () => {
     const w = bauen({});
     assert.equal(w.wkIstApple(ANDROID, 5), false);
     assert.equal(w.wkIstApple(WINDOWS, 0), false);
+  });
+});
+
+describe('Arbeitsgänge — woraus die Beutel wirklich bestehen', () => {
+  // Der Server nimmt die Zusammensetzung aus dem Ansatz, nicht aus der Sorte
+  // (createBagBatchFromSubstrate in db.js). Der Assistent zeigte trotzdem das
+  // Sorten-Rezept an — man las 70/30 bei 61 % und bekam 65/35 bei 62 % gebucht.
+  const SORTE = {
+    id: 3,
+    name: 'Black Pearl King Oyster',
+    recHardwoodPct: 70,
+    recWheatbranPct: 30,
+    recRhPct: 61,
+    recIncDays: 14
+  };
+  const ANSATZ = {
+    subId: 'SUB-260806-01',
+    status: 'open',
+    remainingKg: 300,
+    composition: { hardwoodPct: 65, wheatbranPct: 35, cornPct: 0, gypsumPct: 1, rhPct: 62 }
+  };
+
+  it('nimmt die Mischung des Ansatzes, wenn einer gewählt ist', () => {
+    const w = bauen({ strains: [SORTE], sbList: [ANSATZ], wkb: { strainId: 3, subId: 'SUB-260806-01' } });
+    assert.deepEqual(w.wkbMischung(), { hw: 65, wb: 35, rh: 62, ausAnsatz: 'SUB-260806-01' });
+  });
+
+  it('nimmt das Rezept der Sorte, wenn kein Ansatz gewählt ist', () => {
+    const w = bauen({ strains: [SORTE], sbList: [ANSATZ], wkb: { strainId: 3, subId: '' } });
+    assert.deepEqual(w.wkbMischung(), { hw: 70, wb: 30, rh: 61, ausAnsatz: null });
+  });
+
+  it('lässt ein von Hand geändertes Rezept gelten — aber nur ohne Ansatz', () => {
+    const eigen = { strainId: 3, hw: 60, wb: 40, rh: 58 };
+    const ohne = bauen({ strains: [SORTE], sbList: [ANSATZ], wkb: { ...eigen, subId: '' } });
+    assert.deepEqual(ohne.wkbMischung(), { hw: 60, wb: 40, rh: 58, ausAnsatz: null });
+    // Mit Ansatz zählt die Handeingabe nicht, weil der Server sie auch nicht
+    // bucht. Ein Feld, das nichts bewirkt, darf gar nicht erst etwas behaupten.
+    const mit = bauen({ strains: [SORTE], sbList: [ANSATZ], wkb: { ...eigen, subId: 'SUB-260806-01' } });
+    assert.deepEqual(mit.wkbMischung(), { hw: 65, wb: 35, rh: 62, ausAnsatz: 'SUB-260806-01' });
+  });
+
+  it('fällt auf das Rezept zurück, wenn der Ansatz inzwischen leer ist', () => {
+    // wkbMix() geht über wkOpenMixes(); ein leergezogener Ansatz ist dort nicht
+    // mehr drin, und dann wird die Charge ohnehin vom Lager gebucht.
+    const leer = { ...ANSATZ, remainingKg: 0 };
+    const w = bauen({ strains: [SORTE], sbList: [leer], wkb: { strainId: 3, subId: 'SUB-260806-01' } });
+    assert.deepEqual(w.wkbMischung(), { hw: 70, wb: 30, rh: 61, ausAnsatz: null });
+  });
+
+  it('kommt mit einem Ansatz ohne Zusammensetzung klar', () => {
+    // Ältere Ansätze aus der Zeit vor den Prozentspalten.
+    const alt = { subId: 'SUB-ALT-01', status: 'open', remainingKg: 100 };
+    const w = bauen({ strains: [SORTE], sbList: [alt], wkb: { strainId: 3, subId: 'SUB-ALT-01' } });
+    assert.deepEqual(w.wkbMischung(), { hw: 70, wb: 30, rh: 61, ausAnsatz: null });
   });
 });
 
