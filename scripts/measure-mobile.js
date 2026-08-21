@@ -627,6 +627,12 @@ async function main() {
         PORT: String(port),
         HOST: '127.0.0.1',
         MT_DB_FILE: dbPfad,
+        // The stand makes about 1200 requests in twenty seconds; the default
+        // 300 a minute is meant for people. Raised only for this loopback
+        // instance against a fixture. Without it the second pointer's page
+        // load is answered with {"error":"Too many requests"} and the run dies
+        // waiting for an app that was never served.
+        MT_RATE_MAX: '100000',
         WORKTREE_MODE: '1',
         LOG_FORMAT: 'text'
       },

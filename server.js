@@ -4958,7 +4958,12 @@ function handleProppatch(parts, body, req, res) {
 
 // ── RATE LIMITING ────────────────────────────────────────────
 const RATE_WINDOW_MS = 60000;
-const RATE_MAX_REQUESTS = 300;
+// 300 a minute per IP is generous for people and tight for a machine, which is
+// the point. MT_RATE_MAX raises it for one case only: the measuring stand walks
+// twelve pages at ninety-five widths on two pointer axes, and every station it
+// opens makes the app fetch. A number, not an on/off, so a mistyped environment
+// still leaves a limit standing.
+const RATE_MAX_REQUESTS = parseInt(process.env.MT_RATE_MAX, 10) > 0 ? parseInt(process.env.MT_RATE_MAX, 10) : 300;
 const httpRateLimits = new Map();
 
 function checkRateLimit(ip) {
