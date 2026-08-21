@@ -246,11 +246,26 @@ describe('the calendar agenda', () => {
   // and no legend, and the two decisions are the same breakpoint written twice.
   // Move one and the phone shows a Monat/Woche/Tag toggle whose three buttons
   // all render the same list — or a grid with no way back to it. Neither throws.
-  const JS_BREAKPOINT = APP.match(/function calAgendaOnly\(\)[\s\S]*?matchMedia\('([^']+)'\)/);
+  // One query for the whole file now, so the breakpoint is read off sbPhone and
+  // calAgendaOnly() is checked to go through it rather than carrying a second
+  // copy of the number.
+  const JS_BREAKPOINT = APP.match(/const sbPhone = [^;]*matchMedia\('([^']+)'\)/);
+  const CAL_ROUTER = APP.match(/function calAgendaOnly\(\) \{[\s\S]*?\n\}/);
 
   it('decides in one place whether this is a phone', () => {
-    assert.ok(JS_BREAKPOINT, 'calAgendaOnly() no longer reads a media query — the router lost its condition');
+    assert.ok(JS_BREAKPOINT, 'sbPhone no longer reads a media query — the router lost its condition');
     assert.equal(JS_BREAKPOINT[1], '(max-width: 768px)');
+    assert.ok(CAL_ROUTER, 'calAgendaOnly() is gone');
+    assert.match(
+      CAL_ROUTER[0],
+      /sbIsPhone\(\)/,
+      'calAgendaOnly() asks its own question again, so two predicates can disagree about the arrangement'
+    );
+    assert.equal(
+      (APP.match(/matchMedia\('\(max-width: 768px\)'\)/g) || []).length,
+      1,
+      'the phone query is built more than once, so moving the breakpoint takes more than one edit'
+    );
   });
 
   it('hides the grid-only chrome at exactly that breakpoint', () => {
