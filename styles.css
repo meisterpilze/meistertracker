@@ -611,6 +611,17 @@ body.has-worktree-banner .mobile-topbar {
   display: block;
   opacity: 1;
 }
+/* The drawer is a phone arrangement and so is its overlay, but this class knew
+   nothing about width: a drawer opened at 760px and a window then widened left
+   the sheet lying over the desktop, where nothing offered to take it off. app.js
+   now clears the class on the crossing, and this is the second lock on the same
+   door. It is worth having twice, because the service worker can be serving a
+   cached app.js from before that fix while this stylesheet is already new. */
+@media (min-width: 769px) {
+  .sb-overlay.sb-show {
+    display: none;
+  }
+}
 /* The scan button sits at z-index 850, far above the sidebar's 120, so with the
    drawer open it floats over the drawer's footer and buries the Admin entry and
    the language picker. The drawer is a modal surface; the button does not act on

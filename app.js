@@ -929,11 +929,27 @@ function connectSSE() {
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
+//
+// Two arrangements behind one button, and the button asks the window which one
+// it is in. It asks at the moment of the click, and the answer can have changed
+// since the drawer opened. Open the drawer at 760px, widen the window past 769,
+// and `.sb-overlay.sb-show` stays: it is display:block at every width, and the
+// only code that takes it off refuses to run above the breakpoint. What is left
+// is a 40 percent black sheet over the whole application, and the tap that
+// should lift it now falls into the desktop branch below and collapses the
+// docked sidebar instead. Escape did not know the drawer at all. The way out
+// was a reload, and the gesture that gets you there is an ordinary one: a split
+// window being resized.
+//
+// So the phone arrangement gets a query of its own, asked once and listened to,
+// instead of a width read at click time.
+const sbPhone = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 768px)') : null;
+const sbIsPhone = () => (sbPhone ? sbPhone.matches : window.innerWidth <= 768);
+
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   const ov = document.getElementById('sb-overlay');
-  const isMobile = window.innerWidth <= 768;
-  if (isMobile) {
+  if (sbIsPhone()) {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
@@ -941,15 +957,41 @@ function toggleSidebar() {
     sb.classList.toggle('sb-collapsed');
     document.body.classList.toggle('sb-is-collapsed');
   }
+  sbSyncInert();
 }
+
+// The drawer's three classes, off. Every route out of the drawer goes through
+// here: navigating, Escape, and crossing the breakpoint. Three call sites that
+// each removed their own subset is how one of them came to remove none.
+function sbClose() {
+  document.getElementById('sidebar').classList.remove('sb-open');
+  document.getElementById('sb-overlay').classList.remove('sb-show');
+  document.body.classList.remove('sb-mobile-open');
+  sbSyncInert();
+}
+
 // Close sidebar on mobile when navigating
 function sbCloseMobile() {
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('sb-open');
-    document.getElementById('sb-overlay').classList.remove('sb-show');
-    document.body.classList.remove('sb-mobile-open');
-  }
+  if (sbIsPhone()) sbClose();
 }
+
+// A closed drawer is off-screen, not gone. `transform: translateX(-100%)` keeps
+// all fourteen of its rows in the tab order, so Tab from the top bar walks the
+// invisible navigation before it reaches the page. `inert` is what takes an
+// element out of tabbing and hit-testing without hiding it from the transition
+// that slides it back in. Docked, the sidebar is on screen and must never be
+// inert, so the flag is derived from both facts rather than toggled alongside
+// the class.
+function sbSyncInert() {
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  sb.inert = sbIsPhone() && !sb.classList.contains('sb-open');
+}
+
+// Crossing the line in either direction puts the drawer back to nothing. Below
+// it that means closed; above it the three classes describe a state the desktop
+// arrangement does not have.
+if (sbPhone) sbPhone.addEventListener('change', () => sbClose());
 
 // ─── NAV ─────────────────────────────────────────────────────
 const PAGES = {
@@ -21007,9 +21049,21 @@ document.addEventListener('keydown', function (e) {
       return;
     }
   }
+  // Nothing modal was open, so Escape belongs to the drawer. It is modal in
+  // every way that matters, an overlay over the page with the taps behind it
+  // swallowed, and it was the one such surface in this application that Escape
+  // could not lift. The focus goes back to the button that opened it, the same
+  // contract the dialogs above keep.
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('sb-open')) {
+    sbClose();
+    const opener = document.getElementById('tgl-17');
+    if (opener) opener.focus();
+  }
 });
 
 initEventListeners();
+sbSyncInert();
 loadCurrentUser();
 loadAppUsers();
 loadData();
