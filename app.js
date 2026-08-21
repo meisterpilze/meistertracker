@@ -929,11 +929,27 @@ function connectSSE() {
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────
+//
+// Two arrangements behind one button, and the button asks the window which one
+// it is in. It asks at the moment of the click, and the answer can have changed
+// since the drawer opened. Open the drawer at 760px, widen the window past 769,
+// and `.sb-overlay.sb-show` stays: it is display:block at every width, and the
+// only code that takes it off refuses to run above the breakpoint. What is left
+// is a 40 percent black sheet over the whole application, and the tap that
+// should lift it now falls into the desktop branch below and collapses the
+// docked sidebar instead. Escape did not know the drawer at all. The way out
+// was a reload, and the gesture that gets you there is an ordinary one: a split
+// window being resized.
+//
+// So the phone arrangement gets a query of its own, asked once and listened to,
+// instead of a width read at click time.
+const sbPhone = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 768px)') : null;
+const sbIsPhone = () => (sbPhone ? sbPhone.matches : window.innerWidth <= 768);
+
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   const ov = document.getElementById('sb-overlay');
-  const isMobile = window.innerWidth <= 768;
-  if (isMobile) {
+  if (sbIsPhone()) {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
@@ -941,14 +957,68 @@ function toggleSidebar() {
     sb.classList.toggle('sb-collapsed');
     document.body.classList.toggle('sb-is-collapsed');
   }
+  sbSyncInert();
 }
-// Close sidebar on mobile when navigating
+
+// The drawer's three classes, off. Every route out of the drawer goes through
+// here: navigating, Escape, tapping the veil, and crossing the breakpoint. Four
+// call sites that each removed their own subset is how one of them came to
+// remove none.
+function sbClose() {
+  document.getElementById('sidebar').classList.remove('sb-open');
+  document.getElementById('sb-overlay').classList.remove('sb-show');
+  document.body.classList.remove('sb-mobile-open');
+  sbSyncInert();
+}
+
+// The other arrangement's state, off. Collapsing is a desktop idea, and the
+// rules that carry it out (styles.css:454-461) sit outside any min-width block,
+// so the phone block never takes them back. A sidebar collapsed on a desk and
+// then met on a phone opens full width with every label, every group heading
+// and the logo text set to display:none. Same disease as the veil this fix is
+// about, in the direction the crossing handler claimed to cover.
+function sbUncollapse() {
+  document.getElementById('sidebar').classList.remove('sb-collapsed');
+  document.body.classList.remove('sb-is-collapsed');
+}
+
+// Close the drawer when navigating. No phone gate: sbClose() removes three
+// classes that the desktop arrangement never sets and derives inert from the
+// arrangement itself, so on a desk it already does nothing. The gate could only
+// ever suppress a cleanup, never enable one, and it was the last place left
+// where a state change depended on re-reading the arrangement after the fact,
+// which is the shape of the bug this branch was opened about.
 function sbCloseMobile() {
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('sb-open');
-    document.getElementById('sb-overlay').classList.remove('sb-show');
-    document.body.classList.remove('sb-mobile-open');
-  }
+  sbClose();
+}
+
+// A closed drawer is off-screen, not gone. `transform: translateX(-100%)` keeps
+// all fourteen of its rows in the tab order, and there is no tabindex anywhere
+// in this markup, so focus order is document order: the sidebar opens at
+// index.html:1255 and closes at 1764, and the top bar with its hamburger only
+// begins at 1767. The invisible rows are therefore what the FIRST Tab into the
+// page walks, and what Shift+Tab from the hamburger walks back into. (An
+// earlier version of this comment said Tab forward from the top bar, which
+// cannot happen: forward from the hamburger leads away from the drawer.)
+// `inert` is what takes an element out of tabbing and hit-testing without
+// hiding it from the transition that slides it back in. Docked, the sidebar is
+// on screen and must never be inert, so the flag is derived from both facts
+// rather than toggled alongside the class.
+function sbSyncInert() {
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  sb.inert = sbIsPhone() && !sb.classList.contains('sb-open');
+}
+
+// Crossing the line in either direction puts BOTH arrangements' state back to
+// nothing, because either one is meaningless in the other. Below the line the
+// drawer's three classes are what must go; above it, the collapse. Doing only
+// half of that is the bug this fix was opened about.
+if (sbPhone) {
+  sbPhone.addEventListener('change', () => {
+    sbClose();
+    sbUncollapse();
+  });
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -18002,8 +18072,13 @@ function markEmptyDrawerGroups() {
   });
 }
 
+// The same question the sidebar asks, so the same query answers it. It used to
+// build a fresh MediaQueryList on every renderCalendar() call and carry its own
+// copy of the 768, which meant two predicates that could disagree about which
+// arrangement the window is in. Disagreeing predicates are what this branch is
+// about.
 function calAgendaOnly() {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+  return sbIsPhone();
 }
 
 function renderCalendar() {
@@ -21007,9 +21082,21 @@ document.addEventListener('keydown', function (e) {
       return;
     }
   }
+  // Nothing modal was open, so Escape belongs to the drawer. It is modal in
+  // every way that matters, an overlay over the page with the taps behind it
+  // swallowed, and it was the one such surface in this application that Escape
+  // could not lift. The focus goes back to the button that opened it, the same
+  // contract the dialogs above keep.
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('sb-open')) {
+    sbClose();
+    const opener = document.getElementById('tgl-17');
+    if (opener) opener.focus();
+  }
 });
 
 initEventListeners();
+sbSyncInert();
 loadCurrentUser();
 loadAppUsers();
 loadData();
@@ -21716,7 +21803,18 @@ function initEventListeners() {
   });
   $('tgl-17').addEventListener('click', toggleSidebar);
   $('sync-dot-m').addEventListener('click', loadData);
-  $('sb-overlay').addEventListener('click', toggleSidebar);
+  // The veil only exists while the drawer is open, so tapping it can only ever
+  // mean close. It went through toggleSidebar(), which re-asks which
+  // arrangement we are in and would collapse the docked sidebar if the answer
+  // had changed since the drawer opened. It is also the busiest way out of the
+  // drawer and the one sbClose()'s comment did not list. The divergence was
+  // already visible: Escape closed and handed focus back to the opener, a veil
+  // tap closed and left focus nowhere.
+  $('sb-overlay').addEventListener('click', () => {
+    sbClose();
+    const opener = document.getElementById('tgl-17');
+    if (opener) opener.focus();
+  });
 
   // Scan modal
   $('scan-overlay').addEventListener('click', closeScanModal);
@@ -22114,9 +22212,13 @@ function initEventListeners() {
   // until the next navigation. Cheap to fix, invisible until someone turns the
   // device sideways, which in a lab is most of the time.
   if (typeof window.matchMedia === 'function') {
-    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
-      if (document.getElementById('cal-title')) renderCalendar();
-    });
+    // Same MediaQueryList as the sidebar's, not a second one built from the
+    // same literal.
+    if (sbPhone) {
+      sbPhone.addEventListener('change', () => {
+        if (document.getElementById('cal-title')) renderCalendar();
+      });
+    }
   }
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);

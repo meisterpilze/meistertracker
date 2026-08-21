@@ -246,11 +246,26 @@ describe('the calendar agenda', () => {
   // and no legend, and the two decisions are the same breakpoint written twice.
   // Move one and the phone shows a Monat/Woche/Tag toggle whose three buttons
   // all render the same list — or a grid with no way back to it. Neither throws.
-  const JS_BREAKPOINT = APP.match(/function calAgendaOnly\(\)[\s\S]*?matchMedia\('([^']+)'\)/);
+  // One query for the whole file now, so the breakpoint is read off sbPhone and
+  // calAgendaOnly() is checked to go through it rather than carrying a second
+  // copy of the number.
+  const JS_BREAKPOINT = APP.match(/const sbPhone = [^;]*matchMedia\('([^']+)'\)/);
+  const CAL_ROUTER = APP.match(/function calAgendaOnly\(\) \{[\s\S]*?\n\}/);
 
   it('decides in one place whether this is a phone', () => {
-    assert.ok(JS_BREAKPOINT, 'calAgendaOnly() no longer reads a media query — the router lost its condition');
+    assert.ok(JS_BREAKPOINT, 'sbPhone no longer reads a media query — the router lost its condition');
     assert.equal(JS_BREAKPOINT[1], '(max-width: 768px)');
+    assert.ok(CAL_ROUTER, 'calAgendaOnly() is gone');
+    assert.match(
+      CAL_ROUTER[0],
+      /sbIsPhone\(\)/,
+      'calAgendaOnly() asks its own question again, so two predicates can disagree about the arrangement'
+    );
+    assert.equal(
+      (APP.match(/matchMedia\('\(max-width: 768px\)'\)/g) || []).length,
+      1,
+      'the phone query is built more than once, so moving the breakpoint takes more than one edit'
+    );
   });
 
   it('hides the grid-only chrome at exactly that breakpoint', () => {
@@ -408,6 +423,129 @@ describe('the mobile topbar title', () => {
       TOPBAR_BLOCK,
       /\.mobile-topbar \.sb-logo \{[^}]*min-width: 0/s,
       '.sb-logo still cannot shrink — it carries flex-shrink: 0 in the base rule'
+    );
+  });
+});
+
+describe('the drawer that outlived its breakpoint', () => {
+  // The one finding in the responsive review that made the application
+  // unusable, and it is reached by an ordinary gesture: open the drawer in a
+  // split window, then widen the window. `.sb-overlay.sb-show` is display:block
+  // at every width, the only code that took it off refused to run above 769px,
+  // and the tap meant to lift it fell into the desktop branch of
+  // toggleSidebar() and collapsed the docked sidebar instead. Reload was the
+  // only way out.
+  //
+  // Same limit as the rest of this file: no browser here, so these prove the
+  // rules are written, not that they run.
+  const MIN_WIDTH_BLOCK = /@media[^{]*min-width[^{]*\{/g;
+  const desktopOnly = [...blocks(CSS, MIN_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+  const TOGGLE = APP.match(/function toggleSidebar\(\) \{[\s\S]*?\n\}/);
+
+  it('asks the media query, not the width at the moment of the click', () => {
+    // The width read is what made the state outlive its arrangement: the drawer
+    // was opened under one answer and closed under another.
+    assert.ok(TOGGLE, 'toggleSidebar() is gone');
+    assert.doesNotMatch(
+      TOGGLE[0],
+      /innerWidth/,
+      'toggleSidebar() reads the window width again, so the two branches can still disagree with the drawer'
+    );
+    // Anchored to sbPhone, because the bare literal appears twice elsewhere in
+    // this file for the calendar, and both predate this fix: the assertion
+    // passed with the whole sidebar block deleted.
+    assert.match(
+      APP,
+      /const sbPhone = [^;]*matchMedia\('\(max-width: 768px\)'\)/,
+      'nothing asks the phone query any more'
+    );
+  });
+
+  it('puts the drawer back to nothing when the breakpoint is crossed', () => {
+    assert.match(
+      APP,
+      /sbPhone\.addEventListener\('change'/,
+      'nothing listens for the crossing, so a drawer opened on one side survives on the other'
+    );
+  });
+
+  it('puts the DESKTOP state back to nothing too when the breakpoint is crossed', () => {
+    // The other half of the same disease. sb-collapsed is set at exactly two
+    // places and used to be removed by nothing else, while
+    // `.sidebar.sb-collapsed { width: var(--sidebar-collapsed) }` sits outside
+    // any min-width block, so the phone block never takes it back. Collapse on
+    // a desk, narrow the window, tap the hamburger: a 64px drawer with every
+    // label gone.
+    const HANDLER = APP.match(/sbPhone\.addEventListener\('change'[\s\S]*?\n  \}\);/);
+    assert.ok(HANDLER, 'nothing listens for the crossing any more');
+    assert.match(HANDLER[0], /sbClose\(\)/, 'the crossing no longer closes the drawer');
+    assert.match(HANDLER[0], /sbUncollapse\(\)/, 'the crossing leaves the desktop collapse standing');
+    const UNCOLLAPSE = APP.match(/function sbUncollapse\(\) \{[\s\S]*?\n\}/);
+    assert.ok(UNCOLLAPSE, 'sbUncollapse() is gone');
+    for (const cls of ['sb-collapsed', 'sb-is-collapsed']) {
+      assert.match(UNCOLLAPSE[0], new RegExp("remove\\('" + cls + "'\\)"), `sbUncollapse() leaves ${cls} standing`);
+    }
+  });
+
+  it('takes the three classes off in one place', () => {
+    // Three call sites each removing their own subset is how one of them came
+    // to remove none.
+    const CLOSE = APP.match(/function sbClose\(\) \{[\s\S]*?\n\}/);
+    assert.ok(CLOSE, 'sbClose() is gone');
+    for (const cls of ['sb-open', 'sb-show', 'sb-mobile-open']) {
+      assert.match(CLOSE[0], new RegExp("remove\\('" + cls + "'\\)"), `sbClose() leaves ${cls} standing`);
+    }
+    // No arrangement gate in here: sbClose() is already a no-op on a desk, so
+    // the gate could only suppress a cleanup, never enable one, and it was a
+    // state change depending on re-reading the arrangement after the fact.
+    const CLOSE_MOBILE = APP.match(/function sbCloseMobile\(\) \{[\s\S]*?\n\}/);
+    assert.ok(CLOSE_MOBILE, 'sbCloseMobile() is gone');
+    assert.match(CLOSE_MOBILE[0], /sbClose\(\)/, 'the two closers have drifted apart again');
+    assert.doesNotMatch(CLOSE_MOBILE[0], /sbIsPhone/, 'the arrangement is read at close time again');
+  });
+
+  it('lifts the drawer when the veil is tapped, the same way as everything else', () => {
+    // The busiest way out of the drawer, and the one that used to take a
+    // different route: toggleSidebar() re-asks which arrangement we are in, so
+    // it could collapse the docked sidebar instead, and it left focus nowhere
+    // while Escape handed it back to the opener.
+    const VEIL = APP.match(/\$\('sb-overlay'\)\.addEventListener\('click'[\s\S]*?\n  \}\);/);
+    assert.ok(VEIL, 'nothing listens on the veil any more');
+    assert.doesNotMatch(VEIL[0], /toggleSidebar/, 'the veil re-branches on the arrangement again');
+    assert.match(VEIL[0], /sbClose\(\)/, 'the veil no longer closes the drawer');
+    assert.match(VEIL[0], /tgl-17/, 'the veil leaves keyboard focus nowhere');
+  });
+
+  it('lets Escape lift the drawer, like every dialog in the app', () => {
+    // It is modal in every way that matters: an overlay over the page with the
+    // taps behind it swallowed. It was the one such surface Escape could not
+    // reach.
+    assert.match(APP, /classList\.contains\('sb-open'\)\) \{\s*sbClose\(\);/, 'Escape no longer closes the drawer');
+    assert.match(
+      APP,
+      /const opener = document\.getElementById\('tgl-17'\);/,
+      'Escape drops the focus instead of handing it back to the button that opened the drawer'
+    );
+  });
+
+  it('takes the closed drawer out of the tab order without hiding it', () => {
+    // Off-screen is not gone: translateX(-100%) keeps all fourteen rows
+    // tabbable. The flag has to be derived from both facts, because a docked
+    // sidebar is on screen and must never be inert.
+    assert.match(
+      APP,
+      /sb\.inert = sbIsPhone\(\) && !sb\.classList\.contains\('sb-open'\)/,
+      'the inert flag is gone or no longer derived from both the arrangement and the state'
+    );
+  });
+
+  it('keeps a second lock on the overlay in the stylesheet', () => {
+    // Worth having twice: the service worker can be handing out a cached app.js
+    // from before this fix while the stylesheet is already the new one.
+    assert.match(
+      desktopOnly,
+      /\.sb-overlay\.sb-show \{\s*display: none;/,
+      'above the breakpoint the overlay can cover the desktop again'
     );
   });
 });
