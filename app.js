@@ -5280,6 +5280,10 @@ function renderDashBatchTasks() {
   const week = buildWeekPlan();
   const anyWork = week.some((d) => d.items.length);
   const hasRhythm = Object.keys(weekRhythm).length > 0;
+  // Der Farbleitfaden erklärt Punkte und Balken in der Liste. Ohne Liste
+  // erklärt er nichts und stand trotzdem ganz oben auf der Arbeitsgang-Seite.
+  const legende = document.getElementById('dash-legend');
+  if (legende) legende.hidden = !anyWork;
   if (!anyWork && !hasRhythm) {
     el.innerHTML =
       '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
