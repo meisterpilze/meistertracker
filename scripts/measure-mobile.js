@@ -534,7 +534,12 @@ async function main() {
     claimThrowaway();
     const database = dbApi.openDb(DB_FILE);
     seed(database);
-    dbApi.createUser(database, 'messstand', 'Messstand-Wegwerf-2026!', 'admin');
+    // Never typed and never needed: the run signs in by planting the session
+    // cookie below, and createUser just insists on a password. A literal one
+    // would be a working admin password for a live instance, published in a
+    // repo anybody can read.
+    const wegwerfPasswort = require('crypto').randomBytes(24).toString('base64url');
+    dbApi.createUser(database, 'messstand', wegwerfPasswort, 'admin');
     const user = database.prepare('SELECT id FROM users WHERE username = ?').get('messstand');
     cookie = dbApi.createSession(database, user.id);
     port = await freePort();
