@@ -1463,6 +1463,15 @@ function renderOrdersMapping() {
             )
             .join('')
         : `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('orders.allMapped'))}</div>`;
+      // The standing mappings, and the one form that can create one without an
+      // order having carried the listing in first.
+      const fixSel = $('oh-fixmap-product');
+      if (fixSel) {
+        const keep = fixSel.value;
+        fixSel.innerHTML = `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}`;
+        if (keep) fixSel.value = keep;
+      }
+      renderFixedMappings();
       const cat = $('orders-catalog-body');
       if (cat) {
         cat.innerHTML = products.length
@@ -1480,6 +1489,35 @@ function renderOrdersMapping() {
     })
     .catch(() => {
       left.innerHTML = `<div style="padding:14px;color:var(--c-text-muted)">${esc(t('common.error'))}</div>`;
+    });
+}
+
+// The mappings that already stand for the channel chosen in the form, so a typo
+// is visible and can be corrected by mapping the same SKU again (the insert is an
+// upsert). Without this list the mapping is a black box: these rows are what
+// every incoming order line is resolved against, and nothing else.
+function renderFixedMappings() {
+  const box = $('orders-fixmap-list');
+  const sel = $('oh-fixmap-channel');
+  if (!box || !sel) return;
+  apiGet('/api/products/mappings?channel=' + encodeURIComponent(sel.value))
+    .then((d) => {
+      const rows = (d && d.items) || [];
+      box.innerHTML = rows.length
+        ? rows
+            .map(
+              (m) =>
+                `<div class="oh-maprow"><div style="flex:1;min-width:0">` +
+                `<span style="font-family:monospace">${esc(m.channelSku || m.listingId || '—')}</span>` +
+                ` → <strong>${esc(m.productName || '—')}</strong>` +
+                (m.productActive === 0 ? ` <span class="muted fs-xs">(${esc(t('orders.retired'))})</span>` : '') +
+                `</div></div>`
+            )
+            .join('')
+        : `<div class="muted fs-meta" style="padding:8px 2px">${esc(t('orders.fixmapNone'))}</div>`;
+    })
+    .catch(() => {
+      box.innerHTML = `<div class="muted fs-meta" style="padding:8px 2px">${esc(t('common.error'))}</div>`;
     });
 }
 
@@ -1836,6 +1874,23 @@ function ordersActionHandler(e) {
     if (f) f.click();
   } else if (action === 'oh-manual-submit') {
     _ordersManualSubmit();
+  } else if (action === 'oh-map-fixed') {
+    const channel = ($('oh-fixmap-channel') || {}).value;
+    const sku = (($('oh-fixmap-sku') || {}).value || '').trim();
+    const productId = parseInt(($('oh-fixmap-product') || {}).value || '', 10);
+    if (!sku || !productId) {
+      setFb('err', t('orders.fixmapNeeds'));
+      return;
+    }
+    apiPost('/api/products/map', { channel, channelSku: sku, productId }).then((r) => {
+      if (r && r.error) {
+        setFb('err', r.error);
+        return;
+      }
+      $('oh-fixmap-sku').value = '';
+      setFb('ok', t('orders.mapped'));
+      renderOrdersMapping();
+    });
   } else if (action === 'oh-map') {
     const row = btn.closest('.oh-maprow');
     const sel = row && row.querySelector('.oh-mapsel');
@@ -9364,9 +9419,16 @@ async function loadChannelsSettings() {
       ak.placeholder = wix.hasApiKey ? t('channels.keySet') : 'API-Key';
     }
     const st = document.getElementById('wix-status');
-    if (st && wix.lastSync) {
+    // Also shown when it has never synced but Billbee is standing in for it:
+    // "why is nothing arriving from Wix" is asked at this line, and a blank one
+    // answers nothing.
+    if (st && (wix.lastSync || wix.supersededBy)) {
       st.style.display = 'block';
-      st.textContent = wix.lastError ? '⚠ ' + wix.lastError : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
+      st.textContent = wix.supersededBy
+        ? t('channels.supersededByBillbee')
+        : wix.lastError
+          ? '⚠ ' + wix.lastError
+          : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
     }
     // eBay + Etsy (OAuth): client_id / secret / RuName + connection status.
     const fillOauth = (prefix, ch) => {
@@ -9384,12 +9446,46 @@ async function loadChannelsSettings() {
       const st2 = document.getElementById(prefix + '-status');
       if (st2) {
         const bits = [ch.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
-        if (ch.lastError) bits.push('⚠ ' + ch.lastError);
+        // Standing down outranks the last error: while Billbee carries this
+        // channel the error is whatever it was before, and reading it as the
+        // current state sends somebody debugging a connection nobody is using.
+        if (ch.supersededBy) bits.push(t('channels.supersededByBillbee'));
+        else if (ch.lastError) bits.push('⚠ ' + ch.lastError);
         else if (ch.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(ch.lastSync) }));
         st2.style.display = 'block';
         st2.textContent = bits.join(' · ');
       }
     };
+    // Billbee is neither: an app key plus the account it acts for, no OAuth.
+    const bb = (d.channels || []).find((c) => c.channel === 'billbee') || {};
+    const bbEnabled = document.getElementById('billbee-enabled');
+    if (bbEnabled) bbEnabled.checked = !!bb.enabled;
+    const bbUser = document.getElementById('billbee-user');
+    if (bbUser) bbUser.value = bb.clientId || '';
+    const bbKey = document.getElementById('billbee-apikey');
+    if (bbKey) {
+      bbKey.value = '';
+      bbKey.placeholder = bb.hasApiKey ? t('channels.keySet') : t('channels.apiKey');
+    }
+    const bbPw = document.getElementById('billbee-apipw');
+    if (bbPw) {
+      bbPw.value = '';
+      bbPw.placeholder = bb.hasClientSecret ? t('channels.keySet') : t('channels.billbeeApiPassword');
+    }
+    const bbStatus = document.getElementById('billbee-status');
+    if (bbStatus) {
+      const bits = [bb.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
+      if (bb.lastError) bits.push('⚠ ' + bb.lastError);
+      else if (bb.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(bb.lastSync) }));
+      // The trap this whole card warns about, caught in the act — except the
+      // server now holds them back rather than letting the same sale in twice,
+      // so this says what happened, not what might. Same flag the sync obeys:
+      // the page cannot promise something the server does not do.
+      const stood = (d.channels || []).filter((c) => c.supersededBy === 'billbee').map((c) => c.channel);
+      if (stood.length) bits.push(t('channels.billbeeStandsIn', { list: stood.join(', ') }));
+      bbStatus.style.display = 'block';
+      bbStatus.textContent = bits.join(' · ');
+    }
     fillOauth('ebay', (d.channels || []).find((c) => c.channel === 'ebay') || {});
     fillOauth('etsy', (d.channels || []).find((c) => c.channel === 'etsy') || {});
     // eBay account-deletion setup: never echo the stored token back, and show the
@@ -9429,6 +9525,13 @@ async function saveChannel(channel) {
     body = {
       enabled: document.getElementById('etsy-enabled').checked,
       clientId: (document.getElementById('etsy-clientid').value || '').trim() // Keystring
+    };
+  } else if (channel === 'billbee') {
+    body = {
+      enabled: document.getElementById('billbee-enabled').checked,
+      apiKey: (document.getElementById('billbee-apikey').value || '').trim(), // X-Billbee-Api-Key (blank = keep)
+      clientId: (document.getElementById('billbee-user').value || '').trim(), // Billbee login
+      clientSecret: (document.getElementById('billbee-apipw').value || '').trim() // API password (blank = keep)
     };
   } else {
     return false;
@@ -9473,7 +9576,10 @@ async function testChannel(channel) {
   }
   try {
     const r = await apiPost('/api/channels/' + channel + '/test', {});
-    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected');
+    // Billbee answers with the shops it collects from. Naming them turns the
+    // card's advice ("switch those off here") into something checkable.
+    const shops = r && Array.isArray(r.shops) && r.shops.length ? ' — ' + r.shops.join(', ') : '';
+    if (st) st.textContent = r && r.error ? '⚠ ' + r.error : '✓ ' + t('channels.connected') + shops;
   } catch (e) {
     if (st) st.textContent = '⚠ ' + t('common.error');
   }
@@ -21992,6 +22098,11 @@ function initEventListeners() {
   $('st-settings-channels').addEventListener('click', () => {
     openStab('settings', 'channels');
   });
+  const fixmapChannel = $('oh-fixmap-channel');
+  if (fixmapChannel) fixmapChannel.addEventListener('change', renderFixedMappings);
+  $('billbee-save-btn').addEventListener('click', () => saveChannel('billbee'));
+  $('billbee-test-btn').addEventListener('click', () => testChannel('billbee'));
+  $('billbee-sync-btn').addEventListener('click', () => syncChannel('billbee'));
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
   $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));

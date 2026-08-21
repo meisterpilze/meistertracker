@@ -893,6 +893,143 @@ async function withFreshChannelToken(channel) {
   }
   return { cfg, prov };
 }
+/**
+ * Pull one channel's orders and commit them. Never throws: the outcome is the
+ * return value, because both callers — the button and the timer below — have to
+ * record it rather than crash on it.
+ *
+ * Fetch pages first (network I/O), then commit them in ONE transaction: one
+ * fsync instead of one per order, and no write-lock held across the network
+ * round-trips. upsertOrder dedupes by (channel, channelOrderId). A mid-run page
+ * error (e.g. a 429) is captured, not thrown, so the pages already fetched still
+ * get committed instead of the whole run being discarded.
+ */
+async function syncChannelOrders(channel, excludeRes) {
+  let imported = 0;
+  // Billbee stands in for the direct connections while it is on — see
+  // BILLBEE_SUPERSEDES. Refused here rather than in the two callers so the timer
+  // and the "Jetzt synchronisieren" button are held to the same rule: a button
+  // that could still import the doubles the timer is avoiding would be a hole in
+  // the shape of a person having a bad day.
+  const cfgs = db.listChannelConfigs(database);
+  if ((cfgs.find((c) => c.channel === channel) || {}).supersededBy === 'billbee') {
+    const error = 'Aus, solange Billbee an ist: die Bestellungen kommen von dort';
+    // lastSync and lastCursor are passed back unchanged: setChannelSyncState
+    // writes null for anything left undefined, and nothing was synced here, so
+    // stamping "zuletzt: jetzt" over the real last sync would be a lie.
+    const prev = db.getChannelConfig(database, channel);
+    db.setChannelSyncState(database, channel, {
+      lastSync: prev.lastSync,
+      lastCursor: prev.lastCursor,
+      lastError: error
+    });
+    return { imported: 0, error, supersededBy: 'billbee' };
+  }
+  try {
+    const { cfg, prov } = await withFreshChannelToken(channel);
+    let cursor = null;
+    let pages = 0;
+    const collected = [];
+    let fetchErr = null;
+    try {
+      do {
+        const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
+        for (const o of orders) collected.push(o);
+        cursor = nextCursor;
+        pages++;
+      } while (cursor && pages < 20);
+    } catch (ePage) {
+      fetchErr = ePage;
+    }
+    database.exec('BEGIN');
+    try {
+      for (const o of collected) {
+        // A SAVEPOINT per order keeps a malformed one from poisoning the batch:
+        // it rolls back just that order, and the rest still commit together.
+        try {
+          database.exec('SAVEPOINT mt_order');
+          db.upsertOrder(database, o);
+          database.exec('RELEASE mt_order');
+          imported++;
+        } catch (e2) {
+          try {
+            database.exec('ROLLBACK TO mt_order');
+            database.exec('RELEASE mt_order');
+          } catch (e3) {
+            /* ignore */
+          }
+        }
+      }
+      database.exec('COMMIT');
+    } catch (eTx) {
+      try {
+        database.exec('ROLLBACK');
+      } catch (e4) {
+        /* ignore */
+      }
+      throw eTx;
+    }
+    // Partial success: earlier pages are committed. Record and report the error,
+    // but keep the imported orders rather than throwing the whole run away
+    // because a later page failed.
+    const error = fetchErr ? fetchErr.message || 'sync failed' : null;
+    db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: error });
+    broadcastSSE(excludeRes);
+    return { imported, error };
+  } catch (err) {
+    const error = err.message || 'sync failed';
+    db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: error });
+    return { imported, error };
+  }
+}
+
+/**
+ * Fetch every switched-on channel on a timer.
+ *
+ * Until now a sales channel was pulled only when somebody opened Settings and
+ * pressed "Jetzt synchronisieren" — so the production planning knew about an
+ * order when a human remembered to ask, which is not a plan. Being switched on is
+ * the statement that this channel's orders belong here; the timer is what makes
+ * that true without anybody's memory.
+ *
+ * Sequential, one channel after another: they share the outbound connection and
+ * Billbee's throttle is per account, so two at once buys nothing and risks a 429.
+ * Skipped in worktree mode like the harvest feed — a second copy of the server
+ * carries the same credentials and would double every import.
+ */
+const CHANNEL_POLL_MS = 15 * 60 * 1000;
+let _channelPollTimer = null;
+let _channelPollBusy = false;
+async function pollSalesChannels() {
+  if (_channelPollBusy) return;
+  _channelPollBusy = true;
+  try {
+    for (const c of db.listChannelConfigs(database)) {
+      if (!c.enabled || !c.connected) continue;
+      // syncChannelOrders would refuse these anyway; skipping them here keeps the
+      // refusal out of the log every quarter of an hour for as long as Billbee is
+      // on. The settings page reads the same flag, so it stays visible where
+      // somebody would look for it.
+      if (c.supersededBy) continue;
+      const r = await syncChannelOrders(c.channel);
+      if (r.error) log('warn', 'Channel poll failed', { channel: c.channel, error: r.error });
+      else if (r.imported) log('info', 'Channel poll imported orders', { channel: c.channel, imported: r.imported });
+    }
+  } finally {
+    _channelPollBusy = false;
+  }
+}
+function startChannelPoll() {
+  if (WORKTREE_MODE) return false;
+  if (_channelPollTimer) clearInterval(_channelPollTimer);
+  _channelPollTimer = setInterval(() => {
+    pollSalesChannels().catch((e) => log('warn', 'Channel poll errored', { error: e.message }));
+  }, CHANNEL_POLL_MS);
+  if (_channelPollTimer.unref) _channelPollTimer.unref();
+  return true;
+}
+startChannelPoll();
+
 function _oauthResultHtml(channel, ok, msg) {
   const label = channel === 'etsy' ? 'Etsy' : 'eBay';
   const icon = ok ? '✓' : '⚠';
@@ -8194,6 +8331,27 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // Products — map a channel listing → internal product (admin)
+  // The standing mappings of one channel, so they can be seen and corrected
+  // without waiting for an order to carry the listing in.
+  if (req.method === 'GET' && url === '/api/products/mappings') {
+    // Readable by everyone who can open the screen, like /api/products and
+    // /api/products/unmapped right above — it is the same page, and an admin-only
+    // read here put a red error box in front of every worker who opened it.
+    //
+    // "catalog/mapping/merge = admin" at the top of this section is about the
+    // *writes*: POST /api/products, POST /api/products/map and the customer merge
+    // all check requireAdmin, while every read beside them is open to any authed
+    // user. This row set is product names and channel article numbers — nothing
+    // /api/products does not already hand out.
+    try {
+      const channel = new URL(req.url, 'http://x').searchParams.get('channel') || '';
+      jsonOk(res, { items: channel ? db.listChannelMappings(database, channel) : [] });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   if (req.method === 'POST' && url === '/api/products/map') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -9017,7 +9175,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             let pushError = null;
             if (
               live &&
-              ['wix', 'ebay', 'etsy'].includes(order.channel) &&
+              ['wix', 'ebay', 'etsy', 'billbee'].includes(order.channel) &&
               db.getChannelConfig(database, order.channel).enabled
             ) {
               try {
@@ -9140,7 +9298,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
-  const chanCfgMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)$/);
+  const chanCfgMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay|billbee)$/);
   if (req.method === 'PATCH' && chanCfgMatch) {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -9157,6 +9315,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             if (data[k] === '' || data[k] == null) delete data[k];
           }
         );
+        // Caught while somebody is still looking at the field they typed it in.
+        // A colon breaks basic auth outright in the login, and Billbee documents
+        // it as breaking the connection in the API password — either way it
+        // arrives as a plain 401 that reads as "the key was never approved".
+        if (chanCfgMatch[1] === 'billbee') {
+          const bad = channels.billbeeCredentialProblem(data);
+          if (bad) {
+            jsonErr(res, 400, bad);
+            return;
+          }
+        }
         db.updateChannelConfig(database, chanCfgMatch[1], data);
         broadcastSSE(res);
         jsonOk(res, { channels: db.listChannelConfigs(database) });
@@ -9166,7 +9335,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
-  const chanTestMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/test$/);
+  const chanTestMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay|billbee)\/test$/);
   if (req.method === 'POST' && chanTestMatch) {
     if (requireAdmin(req, res)) return;
     (async () => {
@@ -9180,84 +9349,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     })();
     return;
   }
-  const chanSyncMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay)\/sync$/);
+  const chanSyncMatch = req.url.match(/^\/api\/channels\/(wix|etsy|ebay|billbee)\/sync$/);
   if (req.method === 'POST' && chanSyncMatch) {
     if (requireAdmin(req, res)) return;
-    const channel = chanSyncMatch[1];
     (async () => {
-      try {
-        const { cfg, prov } = await withFreshChannelToken(channel);
-        let imported = 0;
-        let cursor = null;
-        let pages = 0;
-        // Fetch pages first (network I/O), then commit them in ONE transaction:
-        // one fsync instead of one per order, and no write-lock held across the
-        // network round-trips. upsertOrder dedupes by (channel, channelOrderId).
-        // A mid-run page error (e.g. a 429) is captured, not thrown, so the
-        // pages already fetched still get committed below instead of the whole
-        // run being discarded.
-        const collected = [];
-        let fetchErr = null;
-        try {
-          do {
-            const { orders, nextCursor } = await prov.fetchOrders(cfg, { cursor });
-            for (const o of orders) collected.push(o);
-            cursor = nextCursor;
-            pages++;
-          } while (cursor && pages < 20);
-        } catch (ePage) {
-          fetchErr = ePage;
-        }
-        database.exec('BEGIN');
-        try {
-          for (const o of collected) {
-            // A SAVEPOINT per order keeps a malformed one from poisoning the batch:
-            // it rolls back just that order, and the rest still commit together.
-            try {
-              database.exec('SAVEPOINT mt_order');
-              db.upsertOrder(database, o);
-              database.exec('RELEASE mt_order');
-              imported++;
-            } catch (e2) {
-              try {
-                database.exec('ROLLBACK TO mt_order');
-                database.exec('RELEASE mt_order');
-              } catch (e3) {
-                /* ignore */
-              }
-            }
-          }
-          database.exec('COMMIT');
-        } catch (eTx) {
-          try {
-            database.exec('ROLLBACK');
-          } catch (e4) {
-            /* ignore */
-          }
-          throw eTx;
-        }
-        if (fetchErr) {
-          // Partial success: earlier pages are committed. Record and surface the
-          // error, but keep (and broadcast) the imported orders rather than
-          // throwing the whole run away when a later page fails.
-          db.setChannelSyncState(database, channel, {
-            lastSync: new Date().toISOString(),
-            lastError: fetchErr.message || 'sync failed'
-          });
-          broadcastSSE(res);
-          jsonErr(res, 502, fetchErr.message || 'sync failed');
-          return;
-        }
-        db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: null });
-        broadcastSSE(res);
-        jsonOk(res, { imported });
-      } catch (err) {
-        db.setChannelSyncState(database, channel, {
-          lastSync: new Date().toISOString(),
-          lastError: err.message || 'sync failed'
-        });
-        jsonErr(res, 502, err.message || 'sync failed');
-      }
+      const r = await syncChannelOrders(chanSyncMatch[1], res);
+      // 409, not 502: nothing upstream failed. This channel is stood down
+      // because Billbee is carrying it, and that is a conflict in this server's
+      // own configuration, not a bad gateway.
+      if (r.supersededBy) jsonErr(res, 409, r.error);
+      else if (r.error) jsonErr(res, 502, r.error);
+      else jsonOk(res, { imported: r.imported });
     })();
     return;
   }

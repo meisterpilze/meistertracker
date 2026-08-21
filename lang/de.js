@@ -104,6 +104,12 @@ window.LANG['de'] = {
   'orders.choose': 'Produkt wählen',
   'orders.assign': 'Zuordnen',
   'orders.mapped': 'Zugeordnet',
+  'orders.fixmapTitle': 'Feste Zuordnungen',
+  'orders.fixmapDesc':
+    'Welche Artikelnummer eines Kanals zu welchem Produkt gehört. Die Liste darüber füllt sich nur aus Bestellungen; hier lässt sich eine Nummer schon vorher zuordnen, dann löst die erste Bestellung dieses Artikels sofort auf ein Produkt auf.',
+  'orders.fixmapNone': 'Für diesen Kanal ist noch nichts zugeordnet.',
+  'orders.fixmapNeeds': 'Artikelnummer und Produkt wählen',
+  'orders.retired': 'ausgelistet',
   'orders.noProducts': 'Noch keine Produkte',
   'orders.customersTitle': 'Kunden',
   'orders.noCustomers': 'Noch keine Kunden',
@@ -418,6 +424,13 @@ window.LANG['de'] = {
   'channels.syncing': 'Synchronisiere …',
   'channels.synced': '{n} Bestellungen synchronisiert',
   'channels.lastSync': 'Zuletzt: {time}',
+  'channels.billbeeTitle': 'Billbee',
+  'channels.billbeeDesc':
+    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, damit die Produktionsplanung weiß, was gebraucht wird. Meistertracker liest nur — Bestand, Rechnungen und Versand bleiben in Billbee. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Sobald Billbee an ist, pausieren die Direktverbindungen zu Wix, Etsy und eBay von selbst: sonst käme jede Bestellung doppelt an, einmal über Billbee und einmal direkt.',
+  'channels.billbeeUser': 'Billbee-Benutzer (E-Mail)',
+  'channels.billbeeApiPassword': 'API-Passwort',
+  'channels.billbeeStandsIn': 'Billbee übernimmt: {list} pausiert, damit keine Bestellung doppelt ankommt',
+  'channels.supersededByBillbee': 'Pausiert, solange Billbee an ist',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',

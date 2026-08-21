@@ -548,10 +548,312 @@ const ebay = {
   }
 };
 
+// ── Billbee ──────────────────────────────────────────────────────────────────
+// https://api.billbee.io/api/v1 (spec: https://app.billbee.io/swagger/docs/v1)
+//
+// Billbee is not a shop. It is the merchant's own order hub: it already holds the
+// orders of every channel they sell on, and it already pushes stock out to all of
+// them. That makes this provider the odd one out twice over.
+//
+// **Orders arrive already merged**, each naming the shop it came from. They are
+// all imported under the channel 'billbee' rather than re-attributed to
+// 'etsy'/'ebay' the way _wixOriginChannel does, and that is deliberate: orders
+// dedupe on (channel, channelOrderId), and Billbee's order id has nothing to do
+// with eBay's. Re-attributing would file the same sale twice — once from each
+// side — instead of merging the two. So when Billbee is on, the direct connection
+// for every shop it covers belongs off. The shop name still travels in raw_json.
+//
+// It reads and never writes stock. Billbee is the commercial side of this
+// business and owns what may be sold; the lab's job with a Billbee order is to
+// make what it says. The only thing this provider writes back at all is a
+// Sendungsnummer, and only for a label bought in Meistertracker.
+//
+// Credentials reuse the existing columns, so there is no migration: api_key holds
+// the app's X-Billbee-Api-Key, client_id the Billbee login, client_secret the API
+// password from the Billbee account settings. The key has to be requested from
+// Billbee and the API switched on in the account — neither is something this code
+// can do, and both fail as a plain 401 here.
+const BILLBEE_API = 'https://api.billbee.io/api/v1';
+// Billbee throttles per endpoint: 2 calls/second for one API key + user, answered
+// with 429 + Retry-After. The sync loop pages faster than that, so the calls are
+// spaced here instead of the limit being discovered on a live account.
+const BILLBEE_MIN_GAP_MS = 550;
+const BILLBEE_PAGE_SIZE = 250; // the documented maximum
+// How far back a sync looks. Without a floor every poll would walk the entire
+// order history of every connected channel — and the sync route stops after 20
+// pages regardless, so the walk would never reach today's orders.
+const BILLBEE_WINDOW_DAYS = 30;
+
+// One queue for every Billbee call in this process, spaced by BILLBEE_MIN_GAP_MS.
+// Per endpoint would be closer to what Billbee actually limits, but the sync is
+// the only thing here that pages, the Sendungsnummer goes back one call at a
+// time, and one queue cannot be got wrong.
+let _billbeeQueue = Promise.resolve();
+let _billbeeLast = 0;
+function _billbeeGate(fn) {
+  const run = _billbeeQueue.then(async () => {
+    const wait = BILLBEE_MIN_GAP_MS - (Date.now() - _billbeeLast);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    try {
+      return await fn();
+    } finally {
+      _billbeeLast = Date.now();
+    }
+  });
+  // The chain has to survive a rejection: chaining on `run` itself would leave
+  // every later call queued behind a rejected promise and never run again.
+  _billbeeQueue = run.then(
+    () => {},
+    () => {}
+  );
+  return run;
+}
+
+/** The one credential shape Billbee cannot be given. Returns a reason, or null. */
+function billbeeCredentialProblem(cfg) {
+  if (cfg && String(cfg.clientId || '').includes(':')) return 'Billbee-Benutzer darf keinen Doppelpunkt enthalten';
+  if (cfg && String(cfg.clientSecret || '').includes(':'))
+    return 'Billbee API-Passwort darf keinen Doppelpunkt enthalten';
+  return null;
+}
+function _billbeeHeaders(cfg, hasBody) {
+  const h = {
+    'X-Billbee-Api-Key': cfg.apiKey,
+    Authorization: 'Basic ' + Buffer.from(cfg.clientId + ':' + cfg.clientSecret).toString('base64'),
+    Accept: 'application/json'
+  };
+  if (hasBody) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+async function _billbeeFetch(cfg, pathAndQuery, opts = {}, label = 'Billbee') {
+  if (!cfg.apiKey) throw new Error('Billbee API-Key fehlt');
+  if (!cfg.clientId || !cfg.clientSecret) throw new Error('Billbee Benutzer + API-Passwort erforderlich');
+  // Basic auth splits user from password on the first colon, so a colon in the
+  // login breaks the header outright — and Billbee's own documentation says a
+  // colon in the API password breaks the connection at their end too. Both would
+  // otherwise arrive as a plain 401, which reads as "the key was never approved"
+  // and sends somebody off requesting a new one.
+  const badCredential = billbeeCredentialProblem(cfg);
+  if (badCredential) throw new Error(badCredential);
+  const url = BILLBEE_API + pathAndQuery;
+  const init = { ...opts, headers: _billbeeHeaders(cfg, !!opts.body) };
+  let res = await _billbeeGate(() => tfetch(url, init));
+  if (res.status === 429) {
+    // Retry once, honouring Retry-After. Capped, because this wait sits inside the
+    // caller's own request: a minute of sleeping would look like a hung server.
+    const asked = parseInt(res.headers.get('retry-after') || '', 10);
+    const after = Math.min(Number.isFinite(asked) && asked >= 0 ? asked : 2, 10);
+    await new Promise((r) => setTimeout(r, after * 1000));
+    res = await _billbeeGate(() => tfetch(url, init));
+  }
+  return _json(res, label);
+}
+
+// Billbee's carrier ids are account-independent but the spec does not list them,
+// so they are read once per process from the API instead of being hard-coded from
+// a guess. A miss is not an error: the Sendungsnummer is what matters, and the
+// carrier name still travels in the comment.
+let _billbeeCarriers = null;
+async function _billbeeCarrierId(cfg, carrier) {
+  const want = String(carrier || '')
+    .trim()
+    .toLowerCase();
+  if (!want) return null;
+  if (!_billbeeCarriers) {
+    let j;
+    try {
+      j = await _billbeeFetch(cfg, '/enums/shippingcarriers', {}, 'Billbee Versanddienstleister');
+    } catch {
+      // Not cached: a transient failure must not disable carrier ids for the
+      // lifetime of the server.
+      return null;
+    }
+    const data = (j && j.Data) || j || {};
+    // The endpoint is typed as a bare object in the spec. Accept both shapes it
+    // can take — a list of {Id, Name} and an id → name map — rather than pick one.
+    const rows = Array.isArray(data)
+      ? data.map((e) => ({ id: Number(e.Id != null ? e.Id : e.id), name: String(e.Name || e.name || '') }))
+      : Object.entries(data).map(([k, v]) => ({ id: Number(k), name: String(v == null ? '' : v) }));
+    _billbeeCarriers = rows.filter((r) => Number.isFinite(r.id) && r.name);
+  }
+  const exact = _billbeeCarriers.find((c) => c.name.toLowerCase() === want);
+  if (exact) return exact.id;
+  // Otherwise the *longest* name that overlaps, not the first one in Billbee's
+  // list: for 'deutsche post', a list holding both "Post" and "Deutsche Post"
+  // used to answer with whichever came first, so the shipment could be filed
+  // under the wrong carrier and the buyer got a tracking link that never resolves.
+  let best = null;
+  for (const c of _billbeeCarriers) {
+    const n = c.name.toLowerCase();
+    if (!want.includes(n) && !n.includes(want)) continue;
+    if (!best || n.length > best.name.length) best = { id: c.id, name: n };
+  }
+  return best ? best.id : null;
+}
+
+// Billbee's OrderStateEnum: 4 = shipped, 6 = deleted, 7 = closed, 8 = cancelled.
+// ShippedAt is checked alongside the number and is what makes a wrong one
+// harmless — a shipped order carries the timestamp whatever its state id says.
+function _billbeeStatus(o) {
+  const s = Number(o.State);
+  if (s === 6 || s === 8) return 'cancelled';
+  if (o.ShippedAt || s === 4 || s === 7) return 'shipped';
+  return 'new';
+}
+
+/**
+ * What a lab is allowed to learn from a Billbee order.
+ *
+ * Billbee's copy is the commercial record: buyer name, e-mail, telephone,
+ * delivery address. A lab needs none of it — its job with an order is to make
+ * what the order says — and this server runs on a farm's own machine behind a
+ * home line, so the safest place for a customer's address is the one that
+ * already has it and is built to hold it.
+ *
+ * So the import keeps the order's identity, its state, its money and its
+ * articles, and drops the person. `raw_json` is filtered too: storing the whole
+ * order there would have moved the address rather than left it.
+ */
+function _billbeeLabRecord(o) {
+  const buyer = o.Buyer || {};
+  return {
+    BillBeeOrderId: o.BillBeeOrderId,
+    OrderNumber: o.OrderNumber || null,
+    // Where it came from, in the order Billbee fills the three: the shop's own
+    // name, the account it arrived on, then the bare platform. All three name a
+    // marketplace, none of them names a person.
+    ShopName: buyer.BillbeeShopName || o.ApiAccountName || buyer.Platform || null,
+    State: o.State != null ? o.State : null,
+    CreatedAt: o.CreatedAt || null,
+    ShippedAt: o.ShippedAt || null,
+    Currency: o.Currency || null,
+    // The link back into Billbee, for the human who wants the rest of the order:
+    // it lives there, one click away, and does not have to live here.
+    WebUrl: o.WebUrl || null
+  };
+}
+
+function _normalizeBillbee(o) {
+  const ship = o.ShippingAddress || {};
+  const items = (o.OrderItems || [])
+    // Coupons and discounts arrive as positions like any other. They are not
+    // things to make, and importing them parks a "Gutschein" line in the mapping
+    // screen for ever, waiting to be bound to a product that cannot exist.
+    .filter((li) => li && !li.IsCoupon)
+    .map((li) => {
+      const p = li.Product || {};
+      // A missing quantity means one. Number(null) is 0, so the null case has to
+      // be excluded before the finite check, or a position without a quantity
+      // would import as zero.
+      const qty = li.Quantity != null && Number.isFinite(Number(li.Quantity)) ? Number(li.Quantity) : 1;
+      return {
+        channelSku: p.SKU || p.SkuOrId || li.InvoiceSKU || null,
+        listingId: p.Id != null ? String(p.Id) : null,
+        title: p.Title || null,
+        qty,
+        // Billbee reports the position total (unit price × quantity); the hub
+        // stores the unit price.
+        unitPrice: li.TotalPrice != null && qty ? Math.round((Number(li.TotalPrice) / qty) * 10000) / 10000 : null
+      };
+    });
+  // TotalCost is documented as the total *without* shipping, unlike the other
+  // three channels' totals, so the shipping cost is added back — otherwise the
+  // hub under-reports every Billbee order by its postage.
+  //
+  // ⚠️ That reading is the API documentation's, and it cannot be checked from
+  // here; several Billbee clients treat TotalCost as the whole order. Read the
+  // wrong way it would *over*-report every order by its postage instead, and
+  // nothing about the number would look wrong. So a paid order is believed over
+  // the arithmetic: PaidAmount is what the buyer actually handed over, and it is
+  // right whichever way the documentation is meant.
+  //
+  // Rounded because it is money and this is the one channel where two figures are
+  // added: 24.90 + 4.90 lands on 29.799999999999997 in binary floating point.
+  const summed =
+    o.TotalCost != null ? Number(o.TotalCost) + (o.ShippingCost != null ? Number(o.ShippingCost) : 0) : null;
+  const paid = o.PayedAt && o.PaidAmount != null ? Number(o.PaidAmount) : null;
+  const chosen = paid != null && paid > 0 ? paid : summed;
+  const total = chosen != null && Number.isFinite(chosen) ? Math.round(chosen * 100) / 100 : null;
+  return {
+    channel: 'billbee',
+    // The *internal* Billbee id — not Id or OrderNumber, which belong to the
+    // marketplace the order came from. It is the only key that is unique across
+    // channels, and it is the one /orders/{id}/shipment takes.
+    channelOrderId: o.BillBeeOrderId != null ? String(o.BillBeeOrderId) : null,
+    status: _billbeeStatus(o),
+    orderDate: o.CreatedAt || null,
+    // No name, no e-mail, no telephone, no address, and no customer record built
+    // from them — see _billbeeLabRecord. The country stays: it identifies nobody
+    // and it answers "how much of this goes abroad".
+    shipCountry: ship.CountryISO2 || null,
+    totalAmount: total != null && Number.isFinite(total) ? total : null,
+    currency: o.Currency || null,
+    shipWeightG:
+      o.ShipWeightKg != null && Number.isFinite(Number(o.ShipWeightKg))
+        ? Math.round(Number(o.ShipWeightKg) * 1000)
+        : null,
+    raw: _billbeeLabRecord(o),
+    items
+  };
+}
+
+const billbee = {
+  async testConnection(cfg) {
+    const j = await _billbeeFetch(cfg, '/shopaccounts?page=1&pageSize=50', {}, 'Billbee Shopkonten');
+    const shops = ((j && j.Data) || []).map((s) => s && s.Name).filter(Boolean);
+    // The connected shops are the useful answer here: they are exactly the list of
+    // channels that must now be switched off on this page.
+    return { ok: true, account: shops.length ? shops.join(', ') : 'Billbee', sample: shops.length, shops };
+  },
+  // Orders of the last BILLBEE_WINDOW_DAYS days. The cursor is `page|since`, and
+  // it carries the window start for a reason: recomputing "30 days ago" on every
+  // page moves the filter underneath the paging. An order sitting on the boundary
+  // then drops out between two requests, every later order shifts up one place,
+  // and whichever order that pushes across the page break is not returned by that
+  // sync at all — silent loss, not a delay, for an order never imported before.
+  async fetchOrders(cfg, { cursor } = {}) {
+    const [rawPage, rawSince] = String(cursor == null ? '' : cursor).split('|');
+    const page = Math.max(1, parseInt(rawPage, 10) || 1);
+    const since = rawSince || new Date(Date.now() - BILLBEE_WINDOW_DAYS * 86400000).toISOString();
+    const q = _form({ page, pageSize: BILLBEE_PAGE_SIZE, minOrderDate: since });
+    const j = await _billbeeFetch(cfg, '/orders?' + q, {}, 'Billbee Aufträge');
+    const rows = (j && j.Data) || [];
+    // An order without an internal id cannot be deduped or written back to, and
+    // upsertOrder would throw on it mid-batch. Drop it here instead.
+    const orders = rows.map(_normalizeBillbee).filter((o) => o.channelOrderId);
+    const totalPages = (j && j.Paging && j.Paging.TotalPages) || 0;
+    const nextCursor = rows.length && page < totalPages ? page + 1 + '|' + since : null;
+    return { orders, nextCursor };
+  },
+  // Write the Sendungsnummer back onto the Billbee order. Best-effort, like the
+  // other three: the caller records the outcome and never fails a bought label
+  // over a write-back error.
+  async pushTracking(cfg, { raw, trackingNumber, trackingUrl, carrier }) {
+    const id = raw && raw.BillBeeOrderId;
+    if (id == null) throw new Error('Billbee-Auftragsnummer fehlt');
+    const body = { ShippingId: trackingNumber || '', ShipmentType: 0 };
+    const carrierId = await _billbeeCarrierId(cfg, carrier);
+    if (carrierId != null) body.CarrierId = carrierId;
+    // The carrier name travels even when it mapped to an id: Billbee shows the
+    // comment on the shipment, and an unmapped carrier would arrive nameless.
+    const note = [carrier, trackingUrl].filter(Boolean).join(' · ');
+    if (note) body.Comment = note;
+    await _billbeeFetch(
+      cfg,
+      '/orders/' + encodeURIComponent(id) + '/shipment',
+      { method: 'POST', body: JSON.stringify(body) },
+      'Billbee Sendungsnummer'
+    );
+    return { ok: true };
+  }
+};
+
 function getChannelProvider(channel) {
   if (channel === 'wix') return wix;
   if (channel === 'ebay') return ebay;
   if (channel === 'etsy') return etsy;
+  if (channel === 'billbee') return billbee;
   throw new Error('unknown channel: ' + channel);
 }
 
@@ -563,9 +865,14 @@ module.exports = {
   wix,
   etsy,
   ebay,
+  billbee,
+  billbeeCredentialProblem,
   _normalizeWix,
   _normalizeEtsy,
   _normalizeEbay,
+  _normalizeBillbee,
+  _billbeeLabRecord,
+  _billbeeStatus,
   _splitHouse,
   WIX_BASE
 };

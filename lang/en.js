@@ -103,6 +103,12 @@ window.LANG['en'] = {
   'orders.choose': 'Choose product',
   'orders.assign': 'Assign',
   'orders.mapped': 'Mapped',
+  'orders.fixmapTitle': 'Standing mappings',
+  'orders.fixmapDesc':
+    'Which article number of a channel belongs to which product. The list above only fills from orders; here a number can be mapped in advance, so the first order for that article resolves to a product straight away.',
+  'orders.fixmapNone': 'Nothing mapped for this channel yet.',
+  'orders.fixmapNeeds': 'Pick an article number and a product',
+  'orders.retired': 'retired',
   'orders.noProducts': 'No products yet',
   'orders.customersTitle': 'Customers',
   'orders.noCustomers': 'No customers yet',
@@ -416,6 +422,13 @@ window.LANG['en'] = {
   'channels.syncing': 'Syncing …',
   'channels.synced': '{n} orders synced',
   'channels.lastSync': 'Last: {time}',
+  'channels.billbeeTitle': 'Billbee',
+  'channels.billbeeDesc':
+    'Billbee is not a shop but the hub: every channel\'s orders arrive from there at once, so the production planning knows what is needed. Meistertracker only reads — stock, invoices and shipping stay in Billbee. Request an API key from Billbee, switch the API on in the Billbee account and create an API password there. Once Billbee is on, the direct connections to Wix, Etsy and eBay pause by themselves: otherwise every order would arrive twice, once through Billbee and once directly.',
+  'channels.billbeeUser': 'Billbee user (email)',
+  'channels.billbeeApiPassword': 'API password',
+  'channels.billbeeStandsIn': 'Billbee stands in: {list} paused, so no order arrives twice',
+  'channels.supersededByBillbee': 'Paused while Billbee is on',
   // Scan strip
   'scan.action': 'Action',
   'scan.from': 'From',

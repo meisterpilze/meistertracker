@@ -10,6 +10,16 @@ const os = require('os');
 const db = require('../db.js');
 const channels = require('../channels.js');
 
+// A copy of channels.js with its module-level caches empty. _billbeeCarriers is
+// filled once per process, so a test about how that cache is *filled* has to have
+// one that is not filled yet.
+function freshChannels() {
+  delete require.cache[require.resolve('../channels.js')];
+  const fresh = require('../channels.js');
+  delete require.cache[require.resolve('../channels.js')];
+  return fresh;
+}
+
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_chan_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
   return { path: p, db: db.openDb(p) };
@@ -43,7 +53,20 @@ describe('sales channel config', () => {
     assert.equal(wix.hasApiKey, true);
     assert.equal(wix.apiKey, undefined, 'raw apiKey never leaves the server');
     assert.equal(wix.connected, true, 'wix connected = apiKey + siteId set');
-    assert.equal(list.length, 3, 'wix/etsy/ebay');
+    assert.equal(list.length, 4, 'wix/etsy/ebay/billbee');
+  });
+
+  it('billbee counts as connected once key, login and API password are set', () => {
+    // Not accessToken like the OAuth channels, and not siteId like Wix: Billbee
+    // authenticates with an app key *and* the account it acts for.
+    db.updateChannelConfig(d, 'billbee', { apiKey: 'BB', clientId: 'jonas@example.de' });
+    const half = db.listChannelConfigs(d).find((c) => c.channel === 'billbee');
+    assert.equal(half.connected, false, 'no API password yet');
+    db.updateChannelConfig(d, 'billbee', { clientSecret: 'api-pw' });
+    const full = db.listChannelConfigs(d).find((c) => c.channel === 'billbee');
+    assert.equal(full.connected, true);
+    assert.equal(full.clientSecret, undefined, 'the API password never leaves the server');
+    assert.equal(full.hasClientSecret, true);
   });
 
   it('records sync state', () => {
@@ -51,6 +74,63 @@ describe('sales channel config', () => {
     const cfg = db.getChannelConfig(d, 'wix');
     assert.equal(cfg.lastSync, '2026-06-16T00:00:00Z');
     assert.equal(cfg.lastError, null);
+  });
+});
+
+// Billbee already holds the orders of every shop it collects from. Connected
+// here directly *as well*, the same sale arrives twice under two ids that have
+// nothing to do with each other — BillBeeOrderId and the marketplace's own — so
+// upsertOrder files both and the production planning makes it twice. The rule
+// that stops it lives in listChannelConfigs so the settings page and the sync
+// cannot disagree about it.
+describe('Billbee stands in for the direct connections', () => {
+  let d, p;
+  const on = (c, f) => db.updateChannelConfig(d, c, { enabled: true, ...f });
+  const flags = () => Object.fromEntries(db.listChannelConfigs(d).map((c) => [c.channel, c.supersededBy]));
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    on('wix', { apiKey: 'K', siteId: 'S' });
+    on('etsy', { accessToken: 'T' });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('supersedes nothing while Billbee is off', () => {
+    on('billbee', { apiKey: 'BB', clientId: 'jonas@example.de', clientSecret: 'pw' });
+    db.updateChannelConfig(d, 'billbee', { enabled: false });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
+  });
+
+  it('supersedes nothing while Billbee is on but not connected', () => {
+    // Half a credential imports no orders, so standing the others down for it
+    // would stop the orders altogether instead of deduplicating them.
+    db.updateChannelConfig(d, 'billbee', { enabled: true, clientSecret: '' });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
+  });
+
+  it('supersedes the connected direct channels once Billbee is on', () => {
+    db.updateChannelConfig(d, 'billbee', { clientSecret: 'pw' });
+    const f = flags();
+    assert.equal(f.wix, 'billbee');
+    assert.equal(f.etsy, 'billbee');
+    assert.equal(f.billbee, null, 'the hub never supersedes itself');
+  });
+
+  it('leaves a channel that would not pull anyway alone', () => {
+    // eBay is switched off and has no token: calling it "off because of Billbee"
+    // would paper over the real reason it is idle.
+    assert.equal(flags().ebay, null);
+    db.updateChannelConfig(d, 'ebay', { enabled: true });
+    assert.equal(flags().ebay, null, 'enabled but unconnected is still not superseded');
+    db.updateChannelConfig(d, 'ebay', { accessToken: 'T' });
+    assert.equal(flags().ebay, 'billbee');
+  });
+
+  it('hands the flag back the moment Billbee goes off', () => {
+    db.updateChannelConfig(d, 'billbee', { enabled: false });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
   });
 });
 
@@ -366,5 +446,468 @@ describe('house number extraction from a street line', () => {
     });
     assert.equal(o.shipStreet, 'Rue de la Paix');
     assert.equal(o.shipHouse, '12');
+  });
+});
+
+describe('Billbee: orders in', () => {
+  function mockFetch(handler) {
+    const orig = global.fetch;
+    global.fetch = async (url, opts) => handler(url, opts);
+    return () => {
+      global.fetch = orig;
+    };
+  }
+  // Unlike the other channels' helper this one carries headers: the 429 path reads
+  // Retry-After off the response.
+  const jsonRes = (status, body, headers = {}) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (k) => headers[String(k).toLowerCase()] ?? null },
+    text: async () => JSON.stringify(body)
+  });
+  const cfg = { apiKey: 'BB-KEY', clientId: 'jonas@example.de', clientSecret: 'api-pw' };
+  const order = {
+    BillBeeOrderId: 4711,
+    Id: 'shopify-1001',
+    OrderNumber: '#1001',
+    State: 3,
+    CreatedAt: '2026-08-19T08:00:00Z',
+    Currency: 'EUR',
+    TotalCost: 24.9,
+    ShippingCost: 4.9,
+    ShipWeightKg: 0.75,
+    ShippingAddress: {
+      FirstName: 'Max',
+      LastName: 'Mustermann',
+      Street: 'Hauptstr 5',
+      Zip: '91054',
+      City: 'Erlangen',
+      CountryISO2: 'DE',
+      Email: 'kunde@example.de',
+      Phone: '+4915112345678'
+    },
+    Buyer: { Platform: 'Shopify', Id: '99', FullName: 'Max Mustermann' },
+    OrderItems: [{ Quantity: 2, TotalPrice: 24.9, Product: { SKU: 'AUS-250', Title: 'Austernpilze 250 g', Id: 'p1' } }]
+  };
+
+  it('normalizes a Billbee order and keys it on the internal id', () => {
+    const o = channels._normalizeBillbee(order);
+    assert.equal(o.channel, 'billbee');
+    // Not 'shopify-1001' and not '#1001': those are the marketplace's, and two
+    // marketplaces can hand out the same one.
+    assert.equal(o.channelOrderId, '4711');
+    assert.equal(o.status, 'new');
+    assert.equal(o.shipCountry, 'DE');
+    assert.equal(o.shipWeightG, 750);
+    assert.equal(o.totalAmount, 29.8, 'TotalCost excludes shipping — it is added back, and rounded');
+    assert.equal(o.items[0].channelSku, 'AUS-250');
+    assert.equal(o.items[0].unitPrice, 12.45, 'position total ÷ quantity');
+    assert.equal(o.raw.ShopName, 'Shopify', 'which shop it came from survives');
+  });
+
+  it('brings no personal data into the lab, raw_json included', () => {
+    // The lab's job with an order is to make what it says. Billbee is the
+    // commercial record and is built to hold the customer; this server is a
+    // machine on a mushroom farm behind a home line. Filtering only the columns
+    // would have moved the address into raw_json rather than left it behind, so
+    // the whole record is searched here, not the fields one by one.
+    const o = channels._normalizeBillbee(order);
+    const asText = JSON.stringify(o);
+    for (const secret of ['Max', 'Mustermann', 'kunde@example.de', '+4915112345678', 'Hauptstr', 'Erlangen', '91054'])
+      assert.equal(asText.includes(secret), false, secret + ' must not reach the lab database');
+    assert.equal(o.customerName, undefined);
+    assert.equal(o.customerEmail, undefined);
+    assert.equal(o.buyerHandle, undefined);
+    assert.equal(o.shipStreet, undefined);
+  });
+
+  it('leaves a Billbee order without a customer record at all', () => {
+    const { db: d, path: p2 } = tmpDb();
+    try {
+      db.upsertOrder(d, channels._normalizeBillbee(order));
+      const row = d.prepare('SELECT customer_id, customer_name FROM orders').get();
+      assert.equal(row.customer_id, null, 'no identity, no name — so no customer');
+      assert.equal(row.customer_name, null);
+      assert.equal(d.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0, 'and no blank stranger per order');
+    } finally {
+      d.close();
+      fs.unlinkSync(p2);
+    }
+  });
+
+  it('leaves coupon positions out and reads a missing quantity as one', () => {
+    const o = channels._normalizeBillbee({
+      BillBeeOrderId: 2,
+      OrderItems: [
+        { Quantity: 1, TotalPrice: 24.9, Product: { SKU: 'AUS-250', Title: 'Austernpilze 250 g' } },
+        { IsCoupon: true, Quantity: 1, TotalPrice: -2.49, Product: { Title: 'Gutschein 10 %' } },
+        { TotalPrice: 5, Product: { SKU: 'X' } }
+      ]
+    });
+    assert.deepEqual(
+      o.items.map((i) => i.channelSku),
+      ['AUS-250', 'X'],
+      'a discount is not a thing to make, and it would sit in the mapping screen for ever'
+    );
+    assert.equal(o.items[1].qty, 1, 'Number(null) is 0 — a position without a quantity is one, not none');
+  });
+
+  it('believes a paid order over the arithmetic', () => {
+    // TotalCost is documented as excluding shipping, and that reading cannot be
+    // checked from here. What the buyer actually paid can be.
+    const paid = channels._normalizeBillbee({
+      BillBeeOrderId: 3,
+      TotalCost: 24.9,
+      ShippingCost: 4.9,
+      PayedAt: '2026-08-19T09:00:00Z',
+      PaidAmount: 24.9
+    });
+    assert.equal(paid.totalAmount, 24.9, 'PaidAmount is right whichever way the documentation is meant');
+    const unpaid = channels._normalizeBillbee({ BillBeeOrderId: 4, TotalCost: 24.9, ShippingCost: 4.9 });
+    assert.equal(unpaid.totalAmount, 29.8, 'nothing paid yet — fall back to the documented sum');
+  });
+
+  it('reads shipped and cancelled from the timestamp as well as the state id', () => {
+    assert.equal(channels._billbeeStatus({ State: 1 }), 'new');
+    assert.equal(channels._billbeeStatus({ State: 4 }), 'shipped');
+    assert.equal(channels._billbeeStatus({ State: 7 }), 'shipped');
+    assert.equal(channels._billbeeStatus({ State: 8 }), 'cancelled');
+    assert.equal(channels._billbeeStatus({ State: 6 }), 'cancelled');
+    // The timestamp is what makes a state id we have wrong harmless.
+    assert.equal(channels._billbeeStatus({ State: 99, ShippedAt: '2026-08-19T10:00:00Z' }), 'shipped');
+    // …but a cancelled order stays cancelled even if it once went out.
+    assert.equal(channels._billbeeStatus({ State: 8, ShippedAt: '2026-08-19T10:00:00Z' }), 'cancelled');
+  });
+
+  it('sends both credentials and pages by Billbee’s page count', async () => {
+    const seen = [];
+    const restore = mockFetch(async (url, opts) => {
+      seen.push({ url, headers: opts.headers });
+      return jsonRes(200, { Data: [order], Paging: { Page: 1, TotalPages: 2 } });
+    });
+    try {
+      const { orders, nextCursor } = await channels.billbee.fetchOrders(cfg, {});
+      assert.equal(orders.length, 1);
+      assert.match(nextCursor, /^2\|2\d{3}-/, 'page 1 of 2 → a page 2, and the cursor carries the window start');
+      assert.ok(seen[0].url.startsWith('https://api.billbee.io/api/v1/orders?'), seen[0].url);
+      assert.ok(seen[0].url.includes('minOrderDate='), 'a sync must not walk the whole history');
+      assert.equal(seen[0].headers['X-Billbee-Api-Key'], 'BB-KEY');
+      assert.equal(
+        seen[0].headers.Authorization,
+        'Basic ' + Buffer.from('jonas@example.de:api-pw').toString('base64'),
+        'the API key identifies the app, basic auth the account'
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('carries one window across the pages of a sync', async () => {
+    // The filter must not move underneath the paging: recomputing "30 days ago"
+    // per page drops the order sitting on the boundary out of the result set
+    // between two requests, and whichever order that shifts across the page break
+    // is never returned by that sync at all.
+    const urls = [];
+    const restore = mockFetch(async (url) => {
+      urls.push(url);
+      return jsonRes(200, { Data: [order], Paging: { Page: urls.length, TotalPages: 2 } });
+    });
+    try {
+      const first = await channels.billbee.fetchOrders(cfg, {});
+      await channels.billbee.fetchOrders(cfg, { cursor: first.nextCursor });
+      const windowOf = (u) => decodeURIComponent(u.match(/minOrderDate=([^&]+)/)[1]);
+      assert.equal(windowOf(urls[0]), windowOf(urls[1]));
+      assert.ok(urls[1].includes('page=2'), urls[1]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('stops paging on the last page and drops an order without an internal id', async () => {
+    const restore = mockFetch(async () =>
+      jsonRes(200, { Data: [order, { OrderNumber: 'no-id' }], Paging: { Page: 2, TotalPages: 2 } })
+    );
+    try {
+      const { orders, nextCursor } = await channels.billbee.fetchOrders(cfg, { cursor: '2' });
+      assert.equal(nextCursor, null);
+      assert.equal(orders.length, 1, 'an order with no BillBeeOrderId cannot be deduped — dropped, not thrown');
+    } finally {
+      restore();
+    }
+  });
+
+  it('retries once on a 429 instead of losing the page', async () => {
+    let calls = 0;
+    const restore = mockFetch(async () => {
+      calls++;
+      return calls === 1
+        ? jsonRes(429, { Message: 'too fast' }, { 'retry-after': '0' })
+        : jsonRes(200, { Data: [order], Paging: { Page: 1, TotalPages: 1 } });
+    });
+    try {
+      const { orders } = await channels.billbee.fetchOrders(cfg, {});
+      assert.equal(calls, 2);
+      assert.equal(orders.length, 1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('names the connected shops on a test — they are the ones to switch off here', async () => {
+    const restore = mockFetch(async () => jsonRes(200, { Data: [{ Name: 'Shopify' }, { Name: 'eBay' }] }));
+    try {
+      const r = await channels.billbee.testConnection(cfg);
+      assert.deepEqual(r.shops, ['Shopify', 'eBay']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses to call out with half a credential', async () => {
+    await assert.rejects(() => channels.billbee.fetchOrders({ apiKey: 'BB-KEY' }, {}), /Benutzer/);
+    await assert.rejects(() => channels.billbee.fetchOrders({ clientId: 'a', clientSecret: 'b' }, {}), /API-Key/);
+  });
+
+  it('writes the Sendungsnummer onto the Billbee order', async () => {
+    const sent = [];
+    const restore = mockFetch(async (url, opts) => {
+      sent.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
+      if (url.includes('/enums/shippingcarriers')) return jsonRes(200, { Data: [{ Id: 12, Name: 'DHL' }] });
+      return jsonRes(200, { Data: { Id: 1 } });
+    });
+    try {
+      const r = await channels.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 4711 },
+        trackingNumber: 'TRK123',
+        trackingUrl: 'https://t/123',
+        carrier: 'DHL Paket'
+      });
+      assert.equal(r.ok, true);
+      const post = sent[sent.length - 1];
+      assert.ok(post.url.endsWith('/orders/4711/shipment'), post.url);
+      assert.equal(post.body.ShippingId, 'TRK123');
+      assert.equal(post.body.ShipmentType, 0);
+      assert.equal(post.body.CarrierId, 12, 'carrier ids are read from Billbee, not guessed');
+      assert.ok(post.body.Comment.includes('DHL Paket'));
+    } finally {
+      restore();
+    }
+  });
+
+  it('picks the carrier by the longest name, not by list order', async () => {
+    const fresh = freshChannels();
+    let post = null;
+    const restore = mockFetch(async (url, opts) => {
+      if (url.includes('/enums/shippingcarriers'))
+        return jsonRes(200, {
+          Data: [
+            { Id: 3, Name: 'Post' },
+            { Id: 17, Name: 'Deutsche Post' }
+          ]
+        });
+      post = JSON.parse(opts.body);
+      return jsonRes(200, {});
+    });
+    try {
+      await fresh.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 9 },
+        trackingNumber: 'TRK7',
+        carrier: 'Deutsche Post'
+      });
+      // .find() answered with whichever overlapped first, so the shipment was
+      // filed under "Post" and the buyer got a tracking link that never resolves.
+      assert.equal(post.CarrierId, 17);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still sends the tracking number when the carrier list is unreachable', async () => {
+    // A fresh copy of the module on purpose: _billbeeCarriers is cached for the
+    // life of the process and the tests above have filled it, so against the
+    // shared copy this passed without the carrier request ever being made — the
+    // one thing it exists to exercise.
+    const fresh = freshChannels();
+    let asked = 0;
+    let post = null;
+    const restore = mockFetch(async (url, opts) => {
+      if (url.includes('/enums/shippingcarriers')) {
+        asked++;
+        return jsonRes(500, {});
+      }
+      post = JSON.parse(opts.body);
+      return jsonRes(200, {});
+    });
+    try {
+      await fresh.billbee.pushTracking(cfg, {
+        raw: { BillBeeOrderId: 8 },
+        trackingNumber: 'TRK9',
+        carrier: 'Hermes'
+      });
+      assert.equal(asked, 1, 'the carrier list was really asked for, and really failed');
+      assert.equal(post.ShippingId, 'TRK9');
+      assert.equal(post.CarrierId, undefined, 'no id rather than a wrong one');
+      assert.ok(post.Comment.includes('Hermes'), 'the name still travels');
+    } finally {
+      restore();
+    }
+  });
+
+  it('refuses a credential shape Billbee cannot use, before calling out', async () => {
+    let called = 0;
+    const restore = mockFetch(async () => {
+      called++;
+      return jsonRes(200, {});
+    });
+    try {
+      await assert.rejects(
+        () => channels.billbee.fetchOrders({ ...cfg, clientSecret: 'gehei:mnis' }, {}),
+        /Doppelpunkt/
+      );
+      await assert.rejects(() => channels.billbee.fetchOrders({ ...cfg, clientId: 'a:b' }, {}), /Doppelpunkt/);
+      assert.equal(called, 0, 'a colon arrives as a plain 401, which reads as "the key was never approved"');
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('an article can be mapped before anybody has ordered it', () => {
+  // The stock push publishes exactly the rows of product_channel_map, and for a
+  // long while the only screen that could write one was driven by
+  // listUnmappedItems() — lines of orders that already exist. So an article could
+  // only be mapped after it had been sold, which is the thing publishing stock is
+  // for. These are the two halves of the way out: the query behind the list, and
+  // the form that can add a row without an order.
+  let d, p;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('lists what stands for one channel, with the product name and whether it is retired', () => {
+    const now = new Date().toISOString();
+    const live = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('A', 'Austern 250 g', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    const gone = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('B', 'Shiitake alt', 'fresh', 0, ?)")
+      .run(now).lastInsertRowid;
+    db.mapListing(d, { channel: 'billbee', channelSku: 'AUS-250', productId: live });
+    db.mapListing(d, { channel: 'billbee', channelSku: 'SHI-250', productId: gone });
+    db.mapListing(d, { channel: 'etsy', channelSku: 'ETSY-1', productId: live });
+
+    const rows = db.listChannelMappings(d, 'billbee');
+    assert.deepEqual(
+      rows.map((r) => [r.channelSku, r.productName, r.productActive]),
+      [
+        ['AUS-250', 'Austern 250 g', 1],
+        ['SHI-250', 'Shiitake alt', 0]
+      ],
+      'one channel only, and enough to spot a typo without opening the database'
+    );
+    assert.equal(db.listChannelMappings(d, 'wix').length, 0);
+  });
+
+  it('maps the same SKU again instead of refusing it', () => {
+    const now = new Date().toISOString();
+    const other = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('C', 'Austern 500 g', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    // Correcting a mistyped mapping is the same gesture as making one.
+    db.mapListing(d, { channel: 'billbee', channelSku: 'AUS-250', productId: other });
+    const row = db.listChannelMappings(d, 'billbee').find((r) => r.channelSku === 'AUS-250');
+    assert.equal(row.productName, 'Austern 500 g');
+    assert.equal(db.listChannelMappings(d, 'billbee').length, 2, 'corrected, not duplicated');
+  });
+
+  it('folds away duplicates that were already in the database (migration 75)', () => {
+    // Stopping the leak does not empty the bucket: every database this has run
+    // against may already hold several rows for one article number, and the stock
+    // push takes the *smallest* quantity per number — so an old wrong mapping can
+    // still outvote the correction meant to replace it. The migration's own SQL is
+    // lifted out of db.js and run here, rather than a copy of it that could drift.
+    const quelle = fs.readFileSync(path.join(__dirname, '..', 'db.js'), 'utf8');
+    const at = quelle.indexOf('version: 75,');
+    assert.notEqual(at, -1, 'migration 75 is still the duplicate fold');
+    const open = quelle.indexOf('{', quelle.indexOf('fn(db)', at));
+    let depth = 0;
+    let body = null;
+    for (let i = open; i < quelle.length; i++) {
+      if (quelle[i] === '{') depth++;
+      else if (quelle[i] === '}' && --depth === 0) {
+        body = quelle.slice(open + 1, i);
+        break;
+      }
+    }
+    const now = new Date().toISOString();
+    const a = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('D1', 'Alt', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    const b = d
+      .prepare("INSERT INTO products(sku, name, category, active, created) VALUES('D2', 'Neu', 'fresh', 1, ?)")
+      .run(now).lastInsertRowid;
+    // Straight into the table, the way the broken upsert left them.
+    const raw = d.prepare(
+      'INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created) VALUES(?,?,?,?,?)'
+    );
+    raw.run('billbee', 'DUP-1', null, a, now);
+    raw.run('billbee', 'DUP-1', null, b, now);
+    raw.run('billbee', 'KEEP-1', null, a, now);
+    raw.run('etsy', 'DUP-1', null, a, now); // another channel's row of the same name
+    assert.equal(db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'DUP-1').length, 2);
+
+    new Function('db', body)(d);
+
+    const left = db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'DUP-1');
+    assert.equal(left.length, 1, 'one row per article number');
+    assert.equal(left[0].productName, 'Neu', 'the newest wins — whoever chose last meant it');
+    assert.equal(db.listChannelMappings(d, 'billbee').filter((r) => r.channelSku === 'KEEP-1').length, 1);
+    assert.equal(
+      db.listChannelMappings(d, 'etsy').filter((r) => r.channelSku === 'DUP-1').length,
+      1,
+      'the same article number under another channel is not a duplicate'
+    );
+  });
+
+  it('has a form that reaches the mapping route without an order', () => {
+    const ROOT = path.join(__dirname, '..');
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    for (const id of ['oh-fixmap-channel', 'oh-fixmap-sku', 'oh-fixmap-product', 'orders-fixmap-list'])
+      assert.ok(html.includes('id="' + id + '"'), 'index.html has #' + id);
+    assert.ok(html.includes('data-action="oh-map-fixed"'), 'the button carries the action');
+    assert.ok(app.includes("action === 'oh-map-fixed'"), 'and something answers it');
+    assert.ok(app.includes("apiPost('/api/products/map'"), 'through the route that already exists');
+    assert.ok(html.includes('<option value="billbee">Billbee</option>'), 'and Billbee is one of the channels offered');
+  });
+});
+
+describe('the Billbee card is actually wired', () => {
+  // Same lesson as settings-tabs.test.js: a card can be added, translated and
+  // merged while a button does nothing, because nothing throws. Worse here —
+  // `$('id')` on a missing element throws inside the one init handler, so a typo
+  // in an id does not break the Billbee card, it breaks the whole page.
+  const ROOT = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+  it('has every element app.js reaches for', () => {
+    const ids = new Set();
+    for (const m of app.matchAll(/\$\('([a-z0-9-]*billbee[a-z0-9-]*)'\)/g)) ids.add(m[1]);
+    for (const m of app.matchAll(/getElementById\('([a-z0-9-]*billbee[a-z0-9-]*)'\)/g)) ids.add(m[1]);
+    assert.ok(ids.size >= 7, 'found the Billbee element lookups: ' + ids.size);
+    for (const id of ids) assert.ok(html.includes('id="' + id + '"'), 'index.html has #' + id);
+  });
+
+  it('gives each of its buttons a listener', () => {
+    for (const id of ['billbee-save-btn', 'billbee-test-btn', 'billbee-sync-btn']) {
+      const at = app.indexOf(id);
+      assert.notEqual(at, -1, id + ' is referenced');
+      assert.ok(app.slice(at, at + 200).includes('addEventListener'), id + ' has a listener');
+    }
   });
 });

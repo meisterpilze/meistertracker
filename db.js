@@ -2171,6 +2171,31 @@ const MIGRATIONS = [
                 WHERE client_id IN (SELECT client_id FROM oauth_tokens)
                    OR client_id IN (SELECT client_id FROM oauth_codes)`);
     }
+  },
+  {
+    version: 75,
+    description: 'Fold away the duplicate listing mappings the broken upsert left behind',
+    fn(db) {
+      // mapListing() meant to correct a mapping and instead added a second row
+      // beside it: SQLite counts NULLs as distinct in a UNIQUE index, so
+      // (channel, 'AUS-250', NULL) never collided with itself and the ON CONFLICT
+      // never fired. Every mapping made without a listing id — which is every one
+      // the mapping screen makes — could therefore exist several times over, each
+      // copy pointing at whatever product was chosen that day.
+      //
+      // Stopping the leak does not empty the bucket: the rows are already in
+      // every database this has ever run against, and resolveProductId takes
+      // whichever row SQLite hands back first, so an old wrong mapping can still
+      // outvote the correction that was supposed to replace it.
+      //
+      // The newest row wins, by id. That is the correction: whoever last chose a
+      // product for this article number meant it.
+      db.exec(`DELETE FROM product_channel_map
+                WHERE id NOT IN (
+                  SELECT MAX(id) FROM product_channel_map
+                   GROUP BY channel, IFNULL(channel_sku, char(31)), IFNULL(listing_id, char(31))
+                )`);
+    }
   }
 ];
 
@@ -8772,11 +8797,47 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
   // Remember the mapping for future auto-resolution — only meaningful when a
   // sku or listing id is present (manual/title-only lines have neither).
   if (channelSku || listingId) {
-    db.prepare(
-      `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
-       VALUES(?,?,?,?,?)
-       ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
-    ).run(channel, channelSku || null, listingId || null, productId || null, now);
+    // ⚠️ The ON CONFLICT below cannot carry this on its own. SQLite counts NULLs
+    // as distinct in a UNIQUE index, so (channel, 'AUS-250', NULL) never collides
+    // with itself and re-mapping a mistyped SKU *added* a second row instead of
+    // correcting the first. Both rows then answered for one article number, and
+    // resolveProductId takes whichever one SQLite hands back first, so the
+    // correction could lose to the mistake it was meant to replace and the order
+    // line be made as the wrong product. `IS` is null-safe equality, which `=`
+    // is not.
+    //
+    // In one transaction: the delete and the insert are a single correction, and
+    // a crash between them would leave the article mapped to nothing at all,
+    // which is worse than the duplicate this replaces: an ordered line then
+    // resolves to no product and drops out of the production plan entirely,
+    // rather than landing on one of two.
+    // A SAVEPOINT rather than BEGIN, which is what the rest of this file uses:
+    // it nests, so a caller that already holds a transaction does not turn this
+    // into "cannot start a transaction within a transaction" one day.
+    db.exec('SAVEPOINT mt_map');
+    try {
+      db.prepare('DELETE FROM product_channel_map WHERE channel = ? AND channel_sku IS ? AND listing_id IS ?').run(
+        channel,
+        channelSku || null,
+        listingId || null
+      );
+      db.prepare(
+        `INSERT INTO product_channel_map(channel, channel_sku, listing_id, product_id, created)
+         VALUES(?,?,?,?,?)
+         ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
+      ).run(channel, channelSku || null, listingId || null, productId || null, now);
+      db.exec('RELEASE mt_map');
+    } catch (e) {
+      // The unwind gets its own guard: if the savepoint is already gone, throwing
+      // from here would replace the error that actually explains the failure.
+      try {
+        db.exec('ROLLBACK TO mt_map');
+        db.exec('RELEASE mt_map');
+      } catch {
+        /* the original error is the one worth having */
+      }
+      throw e;
+    }
   }
   // Back-resolve currently-unmapped order items for this listing group.
   if (productId && (channelSku || listingId)) {
@@ -8796,6 +8857,29 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
     ).run(productId, title, channel);
   }
   incrementDataVersion(db);
+}
+
+/**
+ * The standing article ↔ listing mappings of one channel.
+ *
+ * listUnmappedItems() answers a different question — which *ordered* lines still
+ * need a product — and for a long while it was the only way into
+ * product_channel_map, because the screen was built around it. That left the
+ * first order for any article unresolvable by construction: a line finds its
+ * product only through a mapping, and the mapping could only be made once a line
+ * had already arrived without one.
+ */
+function listChannelMappings(db, channel) {
+  return db
+    .prepare(
+      `SELECT m.id, m.channel, m.channel_sku AS channelSku, m.listing_id AS listingId,
+              m.product_id AS productId, p.name AS productName, p.active AS productActive
+         FROM product_channel_map m
+         LEFT JOIN products p ON p.id = m.product_id
+        WHERE m.channel = ?
+        ORDER BY m.channel_sku IS NULL, m.channel_sku, m.listing_id`
+    )
+    .all(channel);
 }
 
 function listUnmappedItems(db) {
@@ -8841,6 +8925,13 @@ function upsertCustomerFromOrder(db, o) {
   // gets fulfilled: upsertOrder keeps the ship_* fields it needs for THIS order.
   const erasedId = isIdentityErased(db, o.channel, handle);
   if (erasedId !== undefined) return erasedId;
+  // Nothing to identify and nothing to call them: no customer. Without this the
+  // insert below would mint a fresh nameless row for every such order, none of
+  // which can ever be matched again — and a channel that deliberately imports no
+  // personal data (Billbee) would fill the customer list with one blank stranger
+  // per order. An order without a customer is fine: customer_id is nullable and
+  // the hub shows a dash.
+  if (!handle && !email && !o.customerName) return null;
   let customerId = null;
   if (handle) {
     const idn = db
@@ -9222,7 +9313,15 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
 
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
-const SALES_CHANNELS = ['wix', 'etsy', 'ebay'];
+const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
+// The three Billbee stands in for. Billbee is not a shop but the merchant's own
+// order hub: it already holds the orders of every channel they sell on, so a shop
+// that is in Billbee *and* connected here directly delivers the same sale twice —
+// once as a 'billbee' order keyed on BillBeeOrderId, once as a 'wix'/'etsy'/'ebay'
+// order keyed on the marketplace's own id. Those two keys have nothing to do with
+// each other, so upsertOrder cannot merge them: it files both, and the production
+// planning makes the order twice.
+const BILLBEE_SUPERSEDES = ['wix', 'etsy', 'ebay'];
 function _ensureChannelRow(db, channel) {
   db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
     channel,
@@ -9249,8 +9348,14 @@ function getChannelConfig(db, channel) {
   };
 }
 // Client-facing list — secrets are reduced to "is set" flags, never exposed.
+//
+// This is also where the Billbee-supersedes rule is decided, once, because the
+// settings page and the sync itself have to agree on it. Until the rule lived
+// here the page warned about a double import while the server cheerfully
+// performed one: two answers to the same question, and only the harmless one was
+// shown to anybody.
 function listChannelConfigs(db) {
-  return SALES_CHANNELS.map((c) => {
+  const rows = SALES_CHANNELS.map((c) => {
     const cfg = getChannelConfig(db, c);
     return {
       channel: c,
@@ -9260,12 +9365,32 @@ function listChannelConfigs(db) {
       hasApiKey: !!cfg.apiKey,
       hasClientSecret: !!cfg.clientSecret,
       hasWebhookSecret: !!cfg.webhookSecret,
-      connected: c === 'wix' ? !!cfg.apiKey && !!cfg.siteId : !!cfg.accessToken,
+      // Each channel is "connected" once it holds what its own auth needs: Wix an
+      // API key + site, Billbee a key plus the login it belongs to, the two OAuth
+      // channels a token.
+      connected:
+        c === 'wix'
+          ? !!cfg.apiKey && !!cfg.siteId
+          : c === 'billbee'
+            ? !!cfg.apiKey && !!cfg.clientId && !!cfg.clientSecret
+            : !!cfg.accessToken,
       tokenExpires: cfg.tokenExpires,
       lastSync: cfg.lastSync,
       lastError: cfg.lastError
     };
   });
+  // Only a Billbee that would actually deliver supersedes anything: switched off,
+  // or without its key, it imports nothing, and standing the direct connections
+  // down for it would stop the orders altogether.
+  const bb = rows.find((r) => r.channel === 'billbee');
+  const hub = !!(bb && bb.enabled && bb.connected);
+  for (const r of rows) {
+    // And only a channel that would actually pull is superseded. Marking an
+    // unconnected one "off because of Billbee" would paper over the real reason
+    // it is idle, which is that it was never connected.
+    r.supersededBy = hub && BILLBEE_SUPERSEDES.includes(r.channel) && r.enabled && r.connected ? 'billbee' : null;
+  }
+  return rows;
 }
 function updateChannelConfig(db, channel, f) {
   if (!SALES_CHANNELS.includes(channel)) throw new Error('unknown channel: ' + channel);
@@ -9461,6 +9586,7 @@ module.exports = {
   mapListing,
   resolveProductId,
   listUnmappedItems,
+  listChannelMappings,
   upsertOrder,
   listOrders,
   getChannelConfig,

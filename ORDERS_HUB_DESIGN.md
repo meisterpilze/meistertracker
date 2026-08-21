@@ -395,6 +395,71 @@ You haven't applied, so the plan includes onboarding. The important correction u
 `POST /api/orders/import` (channel `ebay`, same upsert path), plus a **manual add** form. So eBay
 is in the hub from day one and the API just makes it automatic later.
 
+### 6.4 Billbee — *the hub, not a shop* (built)
+
+Jonas runs [Billbee](https://billbee.io), which already collects the orders of every channel he
+sells on. Meistertracker reads them and writes nothing but a Sendungsnummer: Billbee keeps the
+stock, the invoices, the shipping and the customer. What follows are the ways that differs from
+§6.1–6.3.
+
+- **Auth:** an application API key (`X-Billbee-Api-Key`) **plus** basic auth with the Billbee login
+  and an API password created in the Billbee account. The key has to be requested from Billbee and
+  the API switched on in the account — neither is something the code can do, and both surface as a
+  plain 401. No OAuth, so the credentials fit `sales_channel_config` unchanged: `api_key` =
+  application key, `client_id` = login, `client_secret` = API password.
+- **Read orders:** `GET /api/v1/orders`, paged (`page`, `pageSize` ≤ 250) and floored at
+  `minOrderDate` = 30 days — without a floor every poll would walk the entire order history of
+  every connected channel, and the sync route stops after 20 pages regardless. The cursor is
+  `page|since`: recomputing the floor per page moves the filter underneath the paging, and the
+  order that shift pushes across a page break is never returned by that sync at all.
+- **What is not an order:** coupon and discount positions arrive in `OrderItems` like any other
+  line and are dropped (`IsCoupon`) — they are not things to make, and they cannot map to a
+  product, so they would sit in the mapping screen for ever. An order's total prefers `PaidAmount`
+  on a paid order over `TotalCost + ShippingCost`: the sum rests on a reading of the API
+  documentation that cannot be checked from here, and read the wrong way it overstates every
+  order by its postage.
+- **Dedup — the one rule to understand:** orders are filed under the channel `billbee` and keyed on
+  `BillBeeOrderId`, never re-attributed to the shop they came from the way `_wixOriginChannel`
+  does. Orders dedupe on (channel, channelOrderId), and Billbee's order id has nothing to do with
+  eBay's, so re-attributing would file one sale twice instead of merging it. **Consequence: when
+  Billbee is on, the direct connection for every shop it covers belongs off.** The shop name still
+  travels in `raw_json`.
+- **No customer comes into the lab.** Billbee's order carries the buyer's name, e-mail, telephone
+  and delivery address; a lab needs none of it, and this server runs on a farm's own machine behind
+  a home line while Billbee is built to hold exactly that and already does. `_billbeeLabRecord()`
+  keeps the order's identity, state, money, country, articles and a link back into Billbee, and
+  drops the person — `raw_json` included, or filtering the columns would only have moved the
+  address rather than left it behind. An order with no identity and no name creates no customer row
+  at all (`upsertCustomerFromOrder` returns null), so the customer list does not fill with blank
+  strangers.
+- **Tracking write-back:** `POST /api/v1/orders/{id}/shipment`. Carrier ids are read once per
+  process from `GET /api/v1/enums/shippingcarriers` rather than hard-coded from a guess — a miss
+  costs the carrier id, never the Sendungsnummer, and the carrier name still travels in the
+  comment.
+- **Stock is read, never written.** Billbee is the commercial side of this business
+  and owns what may be sold; the lab's job with a Billbee order is to make what it says. An
+  earlier draft of this section pushed the harvest releases into Billbee with
+  `updatestockmultiple` — the owner's answer settled it: fresh produce is sold locally and for
+  cash, never through a Billbee channel, so there was nothing for that road to carry. The four
+  commits are on the branch's history if the question ever changes shape (see the note under
+  §11.1).
+- **When it runs:** every 15 minutes for every channel that is switched on *and* connected, one
+  after another (`pollSalesChannels`), plus the button. Before that timer existed a channel was
+  pulled only when somebody pressed "Jetzt synchronisieren", which made the production planning
+  depend on somebody remembering — least likely on the day it matters. Not started in a worktree
+  copy; the button still works there.
+- **Throttle:** 2 calls/second per endpoint for one key + user, answered with 429 + `Retry-After`.
+  All calls are serialised through one 550 ms queue and a 429 is retried once. The poll is
+  sequential for the same reason: two channels at once share one connection and one account
+  throttle.
+- **Credentials that cannot work are refused at the keyboard:** a colon breaks basic auth outright
+  in the login and, per Billbee's documentation, the connection in the API password. Both arrive
+  otherwise as a plain 401, which reads as "the key was never approved" and sends somebody off
+  requesting a new one.
+- **Not webhooks — for now.** Billbee can register one, which needs a URL it can reach; the server
+  has public endpoints already (the eBay deletion route is one), so this is a later step rather
+  than an impossibility. Polling reuses the sync route the other three channels use.
+
 ---
 
 ## 7. REST API surface (matches your `/api/*` style)
@@ -412,6 +477,7 @@ is in the hub from day one and the API just makes it automatic later.
 | `POST /api/products/map`              | admin  | Bind a channel listing → product         |
 | `GET/POST /api/channels/:c/config`    | admin  | Channel credentials + enable/disable     |
 | `POST /api/channels/:c/sync`          | admin  | Force a sync now                         |
+| `GET  /api/products/mappings?channel=` | worker | The standing article ↔ listing mappings of one channel |
 | `POST /api/orders/webhook/wix`         | public | Signed Wix webhook                       |
 | `GET/POST /api/orders/webhook/ebay-deletion` | public | eBay account-deletion compliance   |
 
@@ -477,6 +543,19 @@ better-than-retail rates). Candidates for Germany: **Shipcloud** (API-first, Ger
 **Sendcloud** (more turnkey, has marketplace connectors), **Billbee** (covers more of the order
 side too). *Provider choice is a separate comparison — the design below stays provider-agnostic
 behind a thin `shipping/provider.js` adapter, so swapping later is cheap.*
+
+> **Billbee is connected since §6.4 — reading only.** The owner buys domestic labels inside
+> Billbee and international ones separately, so Meistertracker is not on the label path at all for
+> this lab, and `pushTracking` only ever fires for a label bought here. That answers open question
+> 4 for Meisterpilze without answering it for the product: a lab that does want Meistertracker to
+> buy labels still needs an aggregator, and the comparison is still owed.
+>
+> The reverse direction — the lab telling Billbee what is in stock — was built and then taken out
+> again: it derived quantities from harvest releases, and this lab sells no fresh produce through
+> Billbee. The durable goods it *does* sell there (growkits, spawn, cultures) would need a
+> finished-goods stock that Meistertracker does not have: `inventory` is substrate materials, and
+> a batch is a production run, not a shelf. That is the feature to build first if the question
+> comes back.
 
 > **Division of labour:** Meistertracker stays the **brain** (orders → production → pack-ready);
 > the aggregator is only the **arm** (label + tracking). One API call between them.
