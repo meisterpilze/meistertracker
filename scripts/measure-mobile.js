@@ -786,7 +786,14 @@ async function main() {
           await page.evaluate((id) => document.getElementById(id).click(), stop.open);
           await new Promise((ok) => setTimeout(ok, 60));
         }
-        const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, point.tapFloor);
+        // The HIGHER of the two floors, so the caller can split. The page used
+        // to be told only point.tapFloor, so nothing between that and the Feld
+        // floor was ever collected and the Feld report below was unreachable.
+        const m = await page.evaluate(
+          APP ? measureLive : measure,
+          TYPE_FLOOR,
+          Math.max(point.tapFloor, TOUCH_FELD)
+        );
         scanned = m.scanned;
         hiddenCount = m.hidden;
         unfilledCount = m.unfilled;
@@ -814,7 +821,15 @@ async function main() {
           continue;
         }
         for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
-        for (const r of m.touch) rows.push({ kind: 'touch', pointer: point.name, width, ...r });
+        for (const r of m.touch) {
+          // Which of the two floors this one is under, decided per row and kept
+          // in the grouping key below. Without it a 48px control (fine, under
+          // the 56px Feld floor, reported but not counted) merges with an 18px
+          // one behind the same selector, and the merged finding's pxMax then
+          // steps over the ratchet line's maxPx and reads as a regression.
+          const band = r.px < point.tapFloor ? 'boden' : 'feld';
+          rows.push({ kind: 'touch', band, pointer: point.name, width, ...r });
+        }
         // Already reduced to the outermost offender per branch, inside the
         // page, where the DOM can answer what nests inside what.
         for (const r of m.over) rows.push({ kind: 'over', pointer: point.name, width, ...r });
@@ -906,7 +921,7 @@ async function main() {
   // point, so it comes back as a range.
   const grouped = new Map();
   for (const r of rows) {
-    const key = `${r.kind}|${r.pointer}|${r.at}|${r.text || ''}`;
+    const key = `${r.kind}|${r.band || ''}|${r.pointer}|${r.at}|${r.text || ''}`;
     if (!grouped.has(key)) grouped.set(key, { ...r, widths: [], pxMin: r.px, pxMax: r.px, details: new Map() });
     const g = grouped.get(key);
     g.widths.push(r.width);
@@ -928,8 +943,11 @@ async function main() {
   const typeFine = findings.filter((f) => f.kind === 'type' && f.pointer === 'fine');
   const over = findings.filter((f) => f.kind === 'over');
   const tapFloorOf = (f) => POINTERS.find((p) => p.name === f.pointer).tapFloor;
-  const tooSmall = findings.filter((f) => f.kind === 'touch' && f.pxMin < tapFloorOf(f));
-  const belowFeld = findings.filter((f) => f.kind === 'touch' && f.pxMin >= tapFloorOf(f));
+  const tooSmall = findings.filter((f) => f.kind === 'touch' && f.band === 'boden');
+  // Between the pointer's own floor and the Feld floor: reported, never counted.
+  // A Büro control at 48px is where section 9 put it; the same control is too
+  // small for a gloved hand in a growing room.
+  const belowFeld = findings.filter((f) => f.kind === 'touch' && f.band === 'feld');
 
   let bad = 0;
   bad += report(`TYPE: under ${TYPE_FLOOR}px with a coarse pointer, at any width`, type, BAND);
