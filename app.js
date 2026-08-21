@@ -18067,8 +18067,13 @@ function markEmptyDrawerGroups() {
   });
 }
 
+// The same question the sidebar asks, so the same query answers it. It used to
+// build a fresh MediaQueryList on every renderCalendar() call and carry its own
+// copy of the 768, which meant two predicates that could disagree about which
+// arrangement the window is in. Disagreeing predicates are what this branch is
+// about.
 function calAgendaOnly() {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+  return sbIsPhone();
 }
 
 function renderCalendar() {
@@ -22202,9 +22207,13 @@ function initEventListeners() {
   // until the next navigation. Cheap to fix, invisible until someone turns the
   // device sideways, which in a lab is most of the time.
   if (typeof window.matchMedia === 'function') {
-    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
-      if (document.getElementById('cal-title')) renderCalendar();
-    });
+    // Same MediaQueryList as the sidebar's, not a second one built from the
+    // same literal.
+    if (sbPhone) {
+      sbPhone.addEventListener('change', () => {
+        if (document.getElementById('cal-title')) renderCalendar();
+      });
+    }
   }
   // Unified calendar entry modal
   $('btn-cal-print').addEventListener('click', printCalendar);
