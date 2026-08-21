@@ -4,9 +4,26 @@
 
 /* -- CSS Variables -- */
 :root {
-  --c-primary: #16a34a;
+  /* One step down the same green, so a white label on it can be read.
+     #16a34a carries white at 3.30:1 — under the 4.5 normal text needs, on every
+     primary button, .stab.active and scan-tab count, and under 4.5 again at the
+     sixteen places this token is the text colour rather than the fill. The lab
+     reads this screen in a grow room, gloved, at arm's length, and 3.30 is the
+     kind of number you feel as squinting rather than see as a defect.
+
+     Not a new colour: #15803d was already --c-primary-hover, already on these
+     exact buttons, already past somebody's eye. Moving it from the hover state
+     to the resting state is the smallest change that clears AA — and it fixes
+     the odder half of the old arrangement, where the label only became legible
+     after you had committed to tapping it.
+
+     The hover step moves down with it to #166534, which is --c-green-dark's
+     value, so pressing still reads as a change. Nothing in the app puts dark
+     text on this colour — checked, all twenty-one background uses pair it with
+     white or carry no text — so there is nothing for the darkening to cost. */
+  --c-primary: #15803d;
   --c-primary-light: #f0fdf4;
-  --c-primary-hover: #15803d;
+  --c-primary-hover: #166534;
   --c-bg: #f8fafc;
   --c-surface: #ffffff;
   --c-border: #e2e8f0;

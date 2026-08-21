@@ -71,12 +71,15 @@ function whiteOnColour() {
 }
 
 // The brand pairings that fail today. Keyed by colour, with the count so a new
-// site using the same colour is caught too.
+// site using the same colour is caught too. The list may shrink; it must never
+// grow — and it has shrunk once already: #16a34a was the biggest entry at 13
+// sites and 3.30:1, and --c-primary moved one step down its own green to the
+// value that was already its hover. Nothing here is tolerated on purpose; each
+// is a brand colour whose change is a design decision rather than a fix.
 const KNOWN = new Map([
-  ['#16a34a', 13], // --c-primary   3.30:1 — every .btn-p, .stab.active, scan-tab count
-  ['#ef4444', 4], //  --c-red       3.76:1
-  ['#3b82f6', 1], //  --c-blue      3.68:1
-  ['#6366f1', 1] //   --c-indigo    4.47:1 — a rounding error away, but under
+  ['#ef4444', 4], // --c-red      3.76:1
+  ['#3b82f6', 1], // --c-blue     3.68:1
+  ['#6366f1', 1] //  --c-indigo   4.47:1 — a rounding error away, but under
 ]);
 
 const FLOOR = 4.5;
