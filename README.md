@@ -114,20 +114,30 @@ pm2 startup
 pm2 save
 ```
 
-**Windows** — two equally valid options:
+**Windows** — run the installer once, from an elevated PowerShell:
 
-1. **Startup folder shortcut** (per-user, runs at logon)
-   - `Win + R` → `shell:startup` → Enter
-   - Right-click in the folder → New → Shortcut → point at `C:\path\to\meistertracker\START.bat`
-   - Optional: in the shortcut Properties, set "Run" to **Minimized** so the console window doesn't pop into focus.
+```powershell
+cd C:\path\to\meistertracker
+powershell -ExecutionPolicy Bypass -File .\install-autostart.ps1
+```
 
-2. **Task Scheduler** (more robust — works even without an interactive logon)
-   - Open Task Scheduler → Create Basic Task
-   - Trigger: At log on (or At startup, if you want it before login)
-   - Action: Start a program
-     - Program: `C:\path\to\meistertracker\START.bat`
-     - "Start in": `C:\path\to\meistertracker`
-   - Optional: in the task's Settings tab, enable "Run task as soon as possible after a scheduled start is missed".
+It registers a task that starts the server at boot, before anyone logs in, and
+it points at `autostart.bat` rather than at `START.bat` directly. That matters:
+`START.bat` ends in `pause`, and with no console attached a task pointed straight
+at it sits in "Running" for ever and blocks every later run.
+
+Afterwards **delete** the Startup-folder entry if one exists
+(`Win + R` → `shell:startup`). Leaving it alongside the task is not harmless:
+the task waits one minute after boot and the login screen comes sooner, so
+signing in starts a second `START.bat` against the same working tree while the
+first is still to come, and the two fight over `git reset --hard`, one
+`node_modules`, and the process listening on the port.
+
+Uninstall with `Unregister-ScheduledTask -TaskName MeisterTracker -Confirm:$false`.
+
+The boot log lands in `autostart.log` next to the script. Under the task the
+console is hidden, so that file is the only place a warning like "git fetch
+failed. Continuing with local code." can be read.
 
 After either setup, PM2 needs to know the process list to restore. Run once after starting the server normally:
 ```cmd
