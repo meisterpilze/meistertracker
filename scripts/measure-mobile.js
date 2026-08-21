@@ -540,7 +540,11 @@ async function main() {
     port = await freePort();
     child = require('child_process').spawn(process.execPath, [path.join(ROOT, 'server.js')], {
       cwd: ROOT,
-      env: { ...process.env, PORT: String(port), WORKTREE_MODE: '1', LOG_FORMAT: 'text' },
+      // HOST is the point: server.js defaults to 0.0.0.0 for the phones in the
+      // growing rooms, and this instance has a seeded fixture whose only
+      // account is an admin. On loopback the run is nobody's business but this
+      // machine's.
+      env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', WORKTREE_MODE: '1', LOG_FORMAT: 'text' },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     const log = [];

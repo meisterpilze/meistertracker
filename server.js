@@ -108,6 +108,12 @@ const PORT = PORT_RAW >= 1 && PORT_RAW <= 65535 ? PORT_RAW : 3000;
 // banner — prevents people from confidently entering real data into a feature
 // branch instance running alongside prod.
 const WORKTREE_MODE = process.env.WORKTREE_MODE === '1' || process.env.WORKTREE_MODE === 'true';
+// The farm PC has to be reachable from the phones in the growing rooms, so the
+// default stays 0.0.0.0. HOST exists for the instances that must NOT be: the
+// measuring stand spawns this file against a fixture database whose only
+// account is an admin, and on the LAN that is an open door for as long as the
+// run takes. Set HOST=127.0.0.1 there.
+const HOST = process.env.HOST || '0.0.0.0';
 const DIR = __dirname;
 const CERT_KEY = path.join(DIR, 'certs', 'server.key');
 const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
@@ -11793,7 +11799,7 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   });
   const HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT, 10) || 80;
   legacyRedirectServer
-    .listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {
+    .listen(HTTP_REDIRECT_PORT, HOST, () => {
       log('info', 'HTTP→HTTPS redirect active on port ' + HTTP_REDIRECT_PORT);
     })
     .on('error', (e) => {
@@ -11811,7 +11817,7 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   listenServer = server;
 }
 
-listenServer.listen(PORT, '0.0.0.0', () => {
+listenServer.listen(PORT, HOST, () => {
   const ip = getLocalIP();
   console.log('');
   console.log('  Meistertracker is running!');
