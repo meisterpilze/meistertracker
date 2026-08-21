@@ -7,7 +7,7 @@ RUN npm ci --omit=dev
 # and shipping.js were missing, so the image built fine and then exited with
 # MODULE_NOT_FOUND on `docker run`. test/docker-image.test.js walks the require
 # graph against this list so the next one is caught before it ships.
-COPY server.js db.js app.js mcp-server.js channels.js harvest-feed.js shipping.js ./
+COPY server.js db.js app.js mcp-server.js channels.js harvest-feed.js shipping.js duckdns.js ./
 COPY index.html login.html login.js styles.css sw.js manifest.json openapi.yaml ./
 COPY icon-192.png icon-512.png favicon.ico ./
 COPY lib/ lib/

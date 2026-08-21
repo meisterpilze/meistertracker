@@ -9618,6 +9618,69 @@ async function loadDuckdnsSettings() {
   }
   await refreshDuckdnsStatus();
 }
+// The banner used to be green whenever an address had ever been recorded, with
+// no notion of when. That is the state a broken updater sits in: the last good
+// address from days ago, painted as health, while the name it belongs to points
+// somewhere the server no longer is. Nobody finds that by looking — they find it
+// when the site stops answering.
+//
+// So the address alone no longer decides the colour. Red means the record is or
+// may be wrong right now and somebody has to act; amber means we cannot confirm
+// it; green means the authoritative nameservers were asked and agreed. The
+// reason is always spelled out, because "DuckDNS is broken" is not something
+// anyone can act on and "token refused" is.
+function paintDuckdnsBanner(banner, s) {
+  const h = s.health || {};
+  const tone = (bg, border, fg) => {
+    banner.style.background = 'var(' + bg + ')';
+    banner.style.border = '1px solid var(' + border + ')';
+    banner.style.color = 'var(' + fg + ')';
+  };
+  const red = () => tone('--c-red-light', '--c-red-border', '--c-red-dark');
+  const amber = () => tone('--c-amber-light', '--c-amber-border', '--c-amber-dark');
+  const green = () => tone('--c-primary-light', '--c-green-border', '--c-green-dark');
+
+  const head = '<strong>' + esc(s.domain) + '</strong>' + (s.lastIp ? ' &rarr; ' + esc(s.lastIp) : '');
+  const note = (msg) => '<div style="margin-top:4px;font-size:13px">' + msg + '</div>';
+  const since = s.lastIpUpdate
+    ? ' <span style="color:var(--c-text-muted)">(' + esc(fmtDtTime(s.lastIpUpdate)) + ')</span>'
+    : '';
+  const why = h.lastError ? note(esc(t('duckdns.lastError', { error: h.lastError }))) : '';
+  const minutes = h.ageMs == null ? null : Math.round(h.ageMs / 60000);
+
+  if (!h.running) {
+    red();
+    banner.innerHTML = head + since + note(esc(t('duckdns.updaterStopped'))) + why;
+    return;
+  }
+  if (h.conflict) {
+    red();
+    banner.innerHTML = head + since + note(esc(t('duckdns.conflict'))) + why;
+    return;
+  }
+  if (h.stale) {
+    red();
+    const msg = minutes == null ? t('duckdns.noUpdateYet') : t('duckdns.stale', { min: minutes });
+    banner.innerHTML = head + since + note(esc(msg)) + why;
+    return;
+  }
+  if (!s.lastIp) {
+    amber();
+    banner.textContent = t('duckdns.noUpdateYet');
+    return;
+  }
+  if (h.verifyOk === false) {
+    amber();
+    const msg = h.observedIp
+      ? t('duckdns.mismatch', { served: h.observedIp, expected: s.lastIp })
+      : t('duckdns.recordMissing');
+    banner.innerHTML = head + since + note(esc(msg)) + why;
+    return;
+  }
+  green();
+  banner.innerHTML = head + since + (h.verifyOk === true ? note(esc(t('duckdns.verified'))) : why);
+}
+
 async function refreshDuckdnsStatus() {
   try {
     const r = await authFetch('/api/duckdns/status');
@@ -9626,22 +9689,7 @@ async function refreshDuckdnsStatus() {
     const banner = document.getElementById('duckdns-status-banner');
     if (s.enabled && s.domain) {
       banner.style.display = 'block';
-      if (s.lastIp) {
-        banner.style.background = 'var(--c-primary-light)';
-        banner.style.border = '1px solid var(--c-green-border)';
-        banner.style.color = 'var(--c-green-dark)';
-        banner.innerHTML =
-          '<strong>' +
-          s.domain +
-          '</strong> &rarr; ' +
-          s.lastIp +
-          (s.lastIpUpdate ? ' <span style="color:var(--c-text-muted)">(' + fmtDtTime(s.lastIpUpdate) + ')</span>' : '');
-      } else {
-        banner.style.background = 'var(--c-amber-light)';
-        banner.style.border = '1px solid var(--c-amber-border)';
-        banner.style.color = 'var(--c-amber-dark)';
-        banner.textContent = t('duckdns.noUpdateYet');
-      }
+      paintDuckdnsBanner(banner, s);
     } else {
       banner.style.display = 'none';
     }
