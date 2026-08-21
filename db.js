@@ -9312,6 +9312,14 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
 const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
+// The three Billbee stands in for. Billbee is not a shop but the merchant's own
+// order hub: it already holds the orders of every channel they sell on, so a shop
+// that is in Billbee *and* connected here directly delivers the same sale twice —
+// once as a 'billbee' order keyed on BillBeeOrderId, once as a 'wix'/'etsy'/'ebay'
+// order keyed on the marketplace's own id. Those two keys have nothing to do with
+// each other, so upsertOrder cannot merge them: it files both, and the production
+// planning makes the order twice.
+const BILLBEE_SUPERSEDES = ['wix', 'etsy', 'ebay'];
 function _ensureChannelRow(db, channel) {
   db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
     channel,
@@ -9338,8 +9346,14 @@ function getChannelConfig(db, channel) {
   };
 }
 // Client-facing list — secrets are reduced to "is set" flags, never exposed.
+//
+// This is also where the Billbee-supersedes rule is decided, once, because the
+// settings page and the sync itself have to agree on it. Until the rule lived
+// here the page warned about a double import while the server cheerfully
+// performed one: two answers to the same question, and only the harmless one was
+// shown to anybody.
 function listChannelConfigs(db) {
-  return SALES_CHANNELS.map((c) => {
+  const rows = SALES_CHANNELS.map((c) => {
     const cfg = getChannelConfig(db, c);
     return {
       channel: c,
@@ -9363,6 +9377,18 @@ function listChannelConfigs(db) {
       lastError: cfg.lastError
     };
   });
+  // Only a Billbee that would actually deliver supersedes anything: switched off,
+  // or without its key, it imports nothing, and standing the direct connections
+  // down for it would stop the orders altogether.
+  const bb = rows.find((r) => r.channel === 'billbee');
+  const hub = !!(bb && bb.enabled && bb.connected);
+  for (const r of rows) {
+    // And only a channel that would actually pull is superseded. Marking an
+    // unconnected one "off because of Billbee" would paper over the real reason
+    // it is idle, which is that it was never connected.
+    r.supersededBy = hub && BILLBEE_SUPERSEDES.includes(r.channel) && r.enabled && r.connected ? 'billbee' : null;
+  }
+  return rows;
 }
 function updateChannelConfig(db, channel, f) {
   if (!SALES_CHANNELS.includes(channel)) throw new Error('unknown channel: ' + channel);

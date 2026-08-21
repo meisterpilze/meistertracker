@@ -906,6 +906,25 @@ async function withFreshChannelToken(channel) {
  */
 async function syncChannelOrders(channel, excludeRes) {
   let imported = 0;
+  // Billbee stands in for the direct connections while it is on — see
+  // BILLBEE_SUPERSEDES. Refused here rather than in the two callers so the timer
+  // and the "Jetzt synchronisieren" button are held to the same rule: a button
+  // that could still import the doubles the timer is avoiding would be a hole in
+  // the shape of a person having a bad day.
+  const cfgs = db.listChannelConfigs(database);
+  if ((cfgs.find((c) => c.channel === channel) || {}).supersededBy === 'billbee') {
+    const error = 'Aus, solange Billbee an ist: die Bestellungen kommen von dort';
+    // lastSync and lastCursor are passed back unchanged: setChannelSyncState
+    // writes null for anything left undefined, and nothing was synced here, so
+    // stamping "zuletzt: jetzt" over the real last sync would be a lie.
+    const prev = db.getChannelConfig(database, channel);
+    db.setChannelSyncState(database, channel, {
+      lastSync: prev.lastSync,
+      lastCursor: prev.lastCursor,
+      lastError: error
+    });
+    return { imported: 0, error, supersededBy: 'billbee' };
+  }
   try {
     const { cfg, prov } = await withFreshChannelToken(channel);
     let cursor = null;
@@ -987,6 +1006,11 @@ async function pollSalesChannels() {
   try {
     for (const c of db.listChannelConfigs(database)) {
       if (!c.enabled || !c.connected) continue;
+      // syncChannelOrders would refuse these anyway; skipping them here keeps the
+      // refusal out of the log every quarter of an hour for as long as Billbee is
+      // on. The settings page reads the same flag, so it stays visible where
+      // somebody would look for it.
+      if (c.supersededBy) continue;
       const r = await syncChannelOrders(c.channel);
       if (r.error) log('warn', 'Channel poll failed', { channel: c.channel, error: r.error });
       else if (r.imported) log('info', 'Channel poll imported orders', { channel: c.channel, imported: r.imported });
@@ -9330,7 +9354,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     (async () => {
       const r = await syncChannelOrders(chanSyncMatch[1], res);
-      if (r.error) jsonErr(res, 502, r.error);
+      // 409, not 502: nothing upstream failed. This channel is stood down
+      // because Billbee is carrying it, and that is a conflict in this server's
+      // own configuration, not a bad gateway.
+      if (r.supersededBy) jsonErr(res, 409, r.error);
+      else if (r.error) jsonErr(res, 502, r.error);
       else jsonOk(res, { imported: r.imported });
     })();
     return;

@@ -428,10 +428,11 @@ window.LANG['en'] = {
   'channels.lastSync': 'Last: {time}',
   'channels.billbeeTitle': 'Billbee',
   'channels.billbeeDesc':
-    'Billbee is not a shop but the hub: every channel\'s orders arrive from there at once, so the production planning knows what is needed. Meistertracker only reads — stock, invoices and shipping stay in Billbee. Request an API key from Billbee, switch the API on in the Billbee account and create an API password there. Important: once Billbee is on, the direct connections to the shops Billbee already collects from belong switched off here — otherwise every order arrives twice.',
+    'Billbee is not a shop but the hub: every channel\'s orders arrive from there at once, so the production planning knows what is needed. Meistertracker only reads — stock, invoices and shipping stay in Billbee. Request an API key from Billbee, switch the API on in the Billbee account and create an API password there. Once Billbee is on, the direct connections to Wix, Etsy and eBay pause by themselves: otherwise every order would arrive twice, once through Billbee and once directly.',
   'channels.billbeeUser': 'Billbee user (email)',
   'channels.billbeeApiPassword': 'API password',
-  'channels.billbeeDoubleImport': 'Duplicate orders: {list} is also connected directly',
+  'channels.billbeeStandsIn': 'Billbee stands in: {list} paused, so no order arrives twice',
+  'channels.supersededByBillbee': 'Paused while Billbee is on',
   // Scan strip
   'scan.action': 'Action',
   'scan.from': 'From',

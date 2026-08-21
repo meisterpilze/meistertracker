@@ -42,6 +42,30 @@ function sandbox(channels, syncChannelOrders, { worktree = false } = {}) {
   return new Function('channels', 'syncChannelOrders', body)(channels, syncChannelOrders);
 }
 
+/**
+ * The real syncChannelOrders against stubs, for the one path that returns before
+ * any network call. `calls.token` counts the reach for a provider: the whole
+ * point of the guard is that it never happens.
+ */
+function syncSandbox(channels, prev = {}) {
+  const calls = { token: 0, state: [] };
+  const dbStub = {
+    listChannelConfigs: () => channels,
+    getChannelConfig: () => ({ lastSync: null, lastCursor: null, lastError: null, ...prev }),
+    setChannelSyncState: (_d, channel, s) => calls.state.push({ channel, ...s }),
+    upsertOrder: () => 1
+  };
+  const body = `
+    const log = () => {};
+    const database = { exec() {} };
+    const broadcastSSE = () => {};
+    const withFreshChannelToken = async () => { calls.token++; throw new Error('reached the provider'); };
+    ${extract('syncChannelOrders')}
+    return syncChannelOrders;
+  `;
+  return { sync: new Function('db', 'calls', body)(dbStub, calls), calls };
+}
+
 describe('the sales-channel poll', () => {
   const on = (channel) => ({ channel, enabled: true, connected: true });
 
@@ -112,6 +136,21 @@ describe('the sales-channel poll', () => {
     await first;
   });
 
+  it('leaves the channels Billbee stands in for alone', async () => {
+    const seen = [];
+    const poll = sandbox(
+      [on('billbee'), { ...on('wix'), supersededBy: 'billbee' }, { ...on('etsy'), supersededBy: 'billbee' }],
+      async (c) => {
+        seen.push(c);
+        return { imported: 1, error: null };
+      }
+    );
+    await poll();
+    // Otherwise every quarter of an hour the same sale arrives twice: once from
+    // Billbee under its own id, once from the shop under the marketplace's.
+    assert.deepEqual(seen, ['billbee'], 'the hub pulls, the shops it covers do not');
+  });
+
   it('starts no timer in a worktree copy — the button still works there', () => {
     // The pull only reads from the channel and writes into its own database, so a
     // developer pressing "Jetzt synchronisieren" in a second copy harms nobody.
@@ -146,5 +185,54 @@ describe('the sales-channel poll', () => {
     assert.ok(m, 'the interval is a named constant');
     const ms = new Function('return ' + m[1])();
     assert.ok(ms >= 60_000 && ms <= 60 * 60_000, 'often enough to be useful, rare enough to be polite');
+  });
+});
+
+// The poll skipping them is convenience; this is the actual lock. Both the timer
+// and the "Jetzt synchronisieren" button go through syncChannelOrders, so a
+// button that could still import the doubles the timer avoids would be a hole in
+// the shape of a person having a bad day.
+describe('a superseded channel does not sync', () => {
+  const on = (channel, extra) => ({ channel, enabled: true, connected: true, supersededBy: null, ...extra });
+
+  it('refuses before it reaches the provider', async () => {
+    const { sync, calls } = syncSandbox([on('billbee'), on('wix', { supersededBy: 'billbee' })]);
+    const r = await sync('wix');
+    assert.equal(calls.token, 0, 'no credential is even fetched, let alone a request sent');
+    assert.equal(r.imported, 0);
+    assert.equal(r.supersededBy, 'billbee');
+    assert.match(r.error, /Billbee/);
+  });
+
+  it('says why on the channel, without overwriting when it last really synced', async () => {
+    const { sync, calls } = syncSandbox([on('billbee'), on('etsy', { supersededBy: 'billbee' })], {
+      lastSync: '2026-08-01T09:00:00Z',
+      lastCursor: 'page-3'
+    });
+    await sync('etsy');
+    assert.equal(calls.state.length, 1);
+    const [s] = calls.state;
+    assert.equal(s.channel, 'etsy');
+    assert.match(s.lastError, /Billbee/);
+    // setChannelSyncState writes null for anything left undefined, so the two it
+    // does not mean to touch have to be handed back explicitly. Stamping
+    // "zuletzt: jetzt" on a sync that never ran would be a lie the operator
+    // reads as proof the channel is fine.
+    assert.equal(s.lastSync, '2026-08-01T09:00:00Z');
+    assert.equal(s.lastCursor, 'page-3');
+  });
+
+  it('lets an unsuperseded channel through to the provider', async () => {
+    const { sync, calls } = syncSandbox([on('billbee'), on('wix')]);
+    const r = await sync('wix');
+    assert.equal(calls.token, 1, 'the guard must not stop a channel Billbee is not carrying');
+    assert.equal(r.supersededBy, undefined);
+    assert.match(r.error, /reached the provider/);
+  });
+
+  it('never stands the hub itself down', async () => {
+    const { sync, calls } = syncSandbox([on('billbee'), on('wix', { supersededBy: 'billbee' })]);
+    await sync('billbee');
+    assert.equal(calls.token, 1);
   });
 });

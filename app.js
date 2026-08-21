@@ -9408,9 +9408,16 @@ async function loadChannelsSettings() {
       ak.placeholder = wix.hasApiKey ? t('channels.keySet') : 'API-Key';
     }
     const st = document.getElementById('wix-status');
-    if (st && wix.lastSync) {
+    // Also shown when it has never synced but Billbee is standing in for it:
+    // "why is nothing arriving from Wix" is asked at this line, and a blank one
+    // answers nothing.
+    if (st && (wix.lastSync || wix.supersededBy)) {
       st.style.display = 'block';
-      st.textContent = wix.lastError ? '⚠ ' + wix.lastError : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
+      st.textContent = wix.supersededBy
+        ? t('channels.supersededByBillbee')
+        : wix.lastError
+          ? '⚠ ' + wix.lastError
+          : '✓ ' + t('channels.lastSync', { time: fmtDt(wix.lastSync) });
     }
     // eBay + Etsy (OAuth): client_id / secret / RuName + connection status.
     const fillOauth = (prefix, ch) => {
@@ -9428,7 +9435,11 @@ async function loadChannelsSettings() {
       const st2 = document.getElementById(prefix + '-status');
       if (st2) {
         const bits = [ch.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
-        if (ch.lastError) bits.push('⚠ ' + ch.lastError);
+        // Standing down outranks the last error: while Billbee carries this
+        // channel the error is whatever it was before, and reading it as the
+        // current state sends somebody debugging a connection nobody is using.
+        if (ch.supersededBy) bits.push(t('channels.supersededByBillbee'));
+        else if (ch.lastError) bits.push('⚠ ' + ch.lastError);
         else if (ch.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(ch.lastSync) }));
         st2.style.display = 'block';
         st2.textContent = bits.join(' · ');
@@ -9455,13 +9466,12 @@ async function loadChannelsSettings() {
       const bits = [bb.connected ? '✓ ' + t('channels.linked') : t('channels.notLinked')];
       if (bb.lastError) bits.push('⚠ ' + bb.lastError);
       else if (bb.lastSync) bits.push(t('channels.lastSync', { time: fmtDt(bb.lastSync) }));
-      // The trap this whole card warns about, caught in the act: Billbee already
-      // collects from these shops, so every order they hold arrives twice.
-      const doubled = ['wix', 'ebay', 'etsy'].filter(
-        (c) => ((d.channels || []).find((x) => x.channel === c) || {}).enabled
-      );
-      if (bb.enabled && doubled.length)
-        bits.push('⚠ ' + t('channels.billbeeDoubleImport', { list: doubled.join(', ') }));
+      // The trap this whole card warns about, caught in the act — except the
+      // server now holds them back rather than letting the same sale in twice,
+      // so this says what happened, not what might. Same flag the sync obeys:
+      // the page cannot promise something the server does not do.
+      const stood = (d.channels || []).filter((c) => c.supersededBy === 'billbee').map((c) => c.channel);
+      if (stood.length) bits.push(t('channels.billbeeStandsIn', { list: stood.join(', ') }));
       bbStatus.style.display = 'block';
       bbStatus.textContent = bits.join(' · ');
     }

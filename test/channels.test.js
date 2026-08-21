@@ -77,6 +77,63 @@ describe('sales channel config', () => {
   });
 });
 
+// Billbee already holds the orders of every shop it collects from. Connected
+// here directly *as well*, the same sale arrives twice under two ids that have
+// nothing to do with each other — BillBeeOrderId and the marketplace's own — so
+// upsertOrder files both and the production planning makes it twice. The rule
+// that stops it lives in listChannelConfigs so the settings page and the sync
+// cannot disagree about it.
+describe('Billbee stands in for the direct connections', () => {
+  let d, p;
+  const on = (c, f) => db.updateChannelConfig(d, c, { enabled: true, ...f });
+  const flags = () => Object.fromEntries(db.listChannelConfigs(d).map((c) => [c.channel, c.supersededBy]));
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    on('wix', { apiKey: 'K', siteId: 'S' });
+    on('etsy', { accessToken: 'T' });
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('supersedes nothing while Billbee is off', () => {
+    on('billbee', { apiKey: 'BB', clientId: 'jonas@example.de', clientSecret: 'pw' });
+    db.updateChannelConfig(d, 'billbee', { enabled: false });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
+  });
+
+  it('supersedes nothing while Billbee is on but not connected', () => {
+    // Half a credential imports no orders, so standing the others down for it
+    // would stop the orders altogether instead of deduplicating them.
+    db.updateChannelConfig(d, 'billbee', { enabled: true, clientSecret: '' });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
+  });
+
+  it('supersedes the connected direct channels once Billbee is on', () => {
+    db.updateChannelConfig(d, 'billbee', { clientSecret: 'pw' });
+    const f = flags();
+    assert.equal(f.wix, 'billbee');
+    assert.equal(f.etsy, 'billbee');
+    assert.equal(f.billbee, null, 'the hub never supersedes itself');
+  });
+
+  it('leaves a channel that would not pull anyway alone', () => {
+    // eBay is switched off and has no token: calling it "off because of Billbee"
+    // would paper over the real reason it is idle.
+    assert.equal(flags().ebay, null);
+    db.updateChannelConfig(d, 'ebay', { enabled: true });
+    assert.equal(flags().ebay, null, 'enabled but unconnected is still not superseded');
+    db.updateChannelConfig(d, 'ebay', { accessToken: 'T' });
+    assert.equal(flags().ebay, 'billbee');
+  });
+
+  it('hands the flag back the moment Billbee goes off', () => {
+    db.updateChannelConfig(d, 'billbee', { enabled: false });
+    assert.deepEqual(flags(), { wix: null, etsy: null, ebay: null, billbee: null });
+  });
+});
+
 describe('Wix order normalization', () => {
   let d, p;
   before(() => {

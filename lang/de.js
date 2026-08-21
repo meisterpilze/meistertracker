@@ -430,10 +430,11 @@ window.LANG['de'] = {
   'channels.lastSync': 'Zuletzt: {time}',
   'channels.billbeeTitle': 'Billbee',
   'channels.billbeeDesc':
-    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, damit die Produktionsplanung weiß, was gebraucht wird. Meistertracker liest nur — Bestand, Rechnungen und Versand bleiben in Billbee. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Wichtig: Sobald Billbee an ist, gehören die Direktverbindungen zu den Shops, die Billbee schon abholt, hier aus — sonst kommt jede Bestellung doppelt.',
+    'Billbee ist kein Shop, sondern die Zentrale: von dort kommen die Bestellungen aller Kanäle auf einmal, damit die Produktionsplanung weiß, was gebraucht wird. Meistertracker liest nur — Bestand, Rechnungen und Versand bleiben in Billbee. API-Key bei Billbee anfragen, im Billbee-Konto die API einschalten und dort ein API-Passwort anlegen. Sobald Billbee an ist, pausieren die Direktverbindungen zu Wix, Etsy und eBay von selbst: sonst käme jede Bestellung doppelt an, einmal über Billbee und einmal direkt.',
   'channels.billbeeUser': 'Billbee-Benutzer (E-Mail)',
   'channels.billbeeApiPassword': 'API-Passwort',
-  'channels.billbeeDoubleImport': 'Doppelte Bestellungen: {list} ist zusätzlich direkt verbunden',
+  'channels.billbeeStandsIn': 'Billbee übernimmt: {list} pausiert, damit keine Bestellung doppelt ankommt',
+  'channels.supersededByBillbee': 'Pausiert, solange Billbee an ist',
   // Scan strip
   'scan.action': 'Aktion',
   'scan.from': 'Von',
