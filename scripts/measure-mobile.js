@@ -45,6 +45,13 @@
 // dialogs. It removes the database again afterwards and refuses to start if one
 // it did not create is already there.
 //
+// ZOOMED OUT and AFTER A JUMP are two findings, and keeping them apart is
+// the difference between a number and a wrong number. The first run of this
+// mode conflated them and claimed the dashboard renders at 53% on a phone; it
+// renders at 89%. The 53% was measured after opening the page at 1920px and
+// dragging the window to 320, which is a real situation (it is Julian's split
+// screen) but not the one the line said.
+//
 // ZOOMED OUT is the finding neither previous round could have produced, and it
 // only exists in --app under a coarse pointer. On a phone a page whose content
 // is wider than the screen does not get a sideways scrollbar: the browser
@@ -107,6 +114,19 @@ const TYPE_FLOOR = floor();
 // sitting exactly where they were put. Counting those trains you to ignore the
 // output.
 const TOUCH_FELD = tapFloor();
+
+// The jumps the second --app pass tests. Each one is a thing that happens to a
+// real window in one step rather than an arbitrary pair of numbers: a phone or
+// tablet rotating, a split view snapping, a desktop window being maximised.
+// Only `to` widths that are in the band get measured against what opening the
+// page there gives.
+const JUMPS = [
+  { name: '(desk→phone)', from: 1920, to: 320 },
+  { name: '(desk→phone)', from: 1440, to: 390 },
+  { name: '(tablet rotate)', from: 1024, to: 768 },
+  { name: '(split view)', from: 1440, to: 760 },
+  { name: '(phone rotate)', from: 844, to: 390 }
+];
 
 const GRENZEN = breakpoints();
 const BAND = ONE_WIDTH ? [ONE_WIDTH] : QUICK ? [320, 375, 768, 1440] : widthBand(GRENZEN.list);
@@ -565,6 +585,9 @@ async function main() {
   let hiddenCount = 0;
   let unfilledCount = 0;
   let stops = 0;
+  // Was Durchgang 1 an jeder Stelle gemessen hat, damit Durchgang 2 etwas hat,
+  // wogegen er vergleichen kann.
+  const geoeffnet = new Map();
   for (const point of POINTS) {
     const page = await browser.newPage();
     if (cookie) {
@@ -611,20 +634,36 @@ async function main() {
     }
     stops = stations.length;
 
-    for (const stop of stations) {
-      if (stop.open) {
-        // Escape first: a station may have left a panel or drawer open, and the
-        // next page would then be measured underneath it.
-        await page.keyboard.press('Escape');
-        await page.evaluate((id) => document.getElementById(id).click(), stop.open);
-        await new Promise((ok) => setTimeout(ok, 150));
-      }
-      for (const width of BAND) {
-        await page.setViewport({ width, height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
+    // Width outside, station inside, and that order is the whole correctness of
+    // the --app mode.
+    //
+    // The first version had it the other way round: open a page, then sweep the
+    // widths. That opens the page at 1920px and measures it at 320, and what
+    // comes back is not what a phone sees. app.js sizes some things once, when
+    // it renders — a chart sized for a 1920px column keeps that width when the
+    // window shrinks — so the dashboard reported a 600px layout viewport at
+    // 320px and the run claimed the page renders at 53%. Measured properly it
+    // is 360px and 89%. The 53% was real in its own way, but it was a finding
+    // about resizing after render, not about a phone, and it was reported as
+    // the second.
+    //
+    // Opening the page AT the width costs 12 clicks per width instead of 12 per
+    // pointer. That is the price of the number meaning what it says.
+    for (const width of BAND) {
+      await page.setViewport({ width, height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
+      for (const stop of stations) {
+        if (stop.open) {
+          // Escape first: a station may have left a panel or drawer open, and
+          // the next page would then be measured underneath it.
+          await page.keyboard.press('Escape');
+          await page.evaluate((id) => document.getElementById(id).click(), stop.open);
+          await new Promise((ok) => setTimeout(ok, 60));
+        }
         const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, point.tapFloor);
         scanned = m.scanned;
         hiddenCount = m.hidden;
         unfilledCount = m.unfilled;
+        if (APP) geoeffnet.set(`${point.name}|${stop.name}|${width}`, m.viewport);
         if (m.viewport !== width) {
           // Not an error in the stand: the finding. Under a coarse pointer
           // Chrome honours the page's meta viewport, and a page whose content
@@ -653,6 +692,64 @@ async function main() {
         // its heading, its text and its buttons too, and they are all one fix.
         const outer = m.over.filter((r, i) => !m.over.some((o, j) => j !== i && r.at.startsWith(o.at + ' ')));
         for (const r of outer) rows.push({ kind: 'over', pointer: point.name, width, ...r });
+      }
+    }
+
+    // ── Second pass: the window jumps, and nothing re-renders ────────────
+    //
+    // A named list of jumps rather than a sweep, and that is a correction of
+    // this file's own first attempt twice over.
+    //
+    // The first version swept the widths inside a station and so measured every
+    // page as if it had been opened at 1920 and dragged to 320. That is not
+    // what a phone sees, and it made the run claim the dashboard renders at 53%
+    // when opening it there gives 89%.
+    //
+    // The second version fixed that and then re-tested the drag by stepping
+    // down 20px at a time, measuring at each step. It found nothing, and the
+    // reason is that measuring IS a layout flush: stepped through with a
+    // measurement between each step, the page reflows correctly the whole way.
+    // A real device does not step. It rotates, or a split view snaps, and the
+    // window changes in one go.
+    //
+    // Measured by hand on 2026-08-21 at 320px: opened there the dashboard's
+    // layout viewport is 360px, jumped there from 1920 it is 600px. Same page,
+    // same width, and the difference is a chart that was sized once for the
+    // column it was born in. Julian's screenshot is this case.
+    if (APP) {
+      for (const jump of JUMPS) {
+        for (const stop of stations) {
+          await page.setViewport({
+            width: jump.from,
+            height: 900,
+            deviceScaleFactor: 1,
+            isMobile: coarse,
+            hasTouch: coarse
+          });
+          await page.keyboard.press('Escape');
+          await page.evaluate((id) => document.getElementById(id).click(), stop.open);
+          await new Promise((ok) => setTimeout(ok, 80));
+          await page.setViewport({
+            width: jump.to,
+            height: 900,
+            deviceScaleFactor: 1,
+            isMobile: coarse,
+            hasTouch: coarse
+          });
+          const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor);
+          const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`) ?? jump.to;
+          if (m.viewport > opened) {
+            rows.push({
+              kind: 'jumped',
+              pointer: point.name,
+              width: jump.to,
+              at: `${stop.name} ${jump.name}`,
+              px: m.viewport - opened,
+              text: '',
+              detail: `${jump.from} → ${jump.to}px: layout viewport ${m.viewport}px, opened there it is ${opened}px`
+            });
+          }
+        }
       }
     }
     await page.close();
@@ -713,8 +810,13 @@ async function main() {
   );
   bad += report('OVERFLOW: past the right edge, outside any sideways-scrolling box', over, BAND);
   bad += report(
-    'ZOOMED OUT: the page is wider than the phone, so the phone shrinks the page',
+    'ZOOMED OUT: opened at this width, the page is still wider, so the phone shrinks it',
     findings.filter((f) => f.kind === 'widened'),
+    BAND
+  );
+  bad += report(
+    'AFTER A JUMP: the window changed in one step and the page did not follow',
+    findings.filter((f) => f.kind === 'jumped'),
     BAND
   );
 
