@@ -411,3 +411,87 @@ describe('the mobile topbar title', () => {
     );
   });
 });
+
+describe('the drawer that outlived its breakpoint', () => {
+  // The one finding in the responsive review that made the application
+  // unusable, and it is reached by an ordinary gesture: open the drawer in a
+  // split window, then widen the window. `.sb-overlay.sb-show` is display:block
+  // at every width, the only code that took it off refused to run above 769px,
+  // and the tap meant to lift it fell into the desktop branch of
+  // toggleSidebar() and collapsed the docked sidebar instead. Reload was the
+  // only way out.
+  //
+  // Same limit as the rest of this file: no browser here, so these prove the
+  // rules are written, not that they run.
+  const MIN_WIDTH_BLOCK = /@media[^{]*min-width[^{]*\{/g;
+  const desktopOnly = [...blocks(CSS, MIN_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+  const TOGGLE = APP.match(/function toggleSidebar\(\) \{[\s\S]*?\n\}/);
+
+  it('asks the media query, not the width at the moment of the click', () => {
+    // The width read is what made the state outlive its arrangement: the drawer
+    // was opened under one answer and closed under another.
+    assert.ok(TOGGLE, 'toggleSidebar() is gone');
+    assert.doesNotMatch(
+      TOGGLE[0],
+      /innerWidth/,
+      'toggleSidebar() reads the window width again, so the two branches can still disagree with the drawer'
+    );
+    assert.match(APP, /window\.matchMedia\('\(max-width: 768px\)'\)/, 'nothing asks the phone query any more');
+  });
+
+  it('puts the drawer back to nothing when the breakpoint is crossed', () => {
+    assert.match(
+      APP,
+      /sbPhone\.addEventListener\('change'/,
+      'nothing listens for the crossing, so a drawer opened on one side survives on the other'
+    );
+  });
+
+  it('takes the three classes off in one place', () => {
+    // Three call sites each removing their own subset is how one of them came
+    // to remove none.
+    const CLOSE = APP.match(/function sbClose\(\) \{[\s\S]*?\n\}/);
+    assert.ok(CLOSE, 'sbClose() is gone');
+    for (const cls of ['sb-open', 'sb-show', 'sb-mobile-open']) {
+      assert.match(CLOSE[0], new RegExp("remove\\('" + cls + "'\\)"), `sbClose() leaves ${cls} standing`);
+    }
+    assert.match(
+      APP,
+      /function sbCloseMobile\(\) \{\s*if \(sbIsPhone\(\)\) sbClose\(\);/,
+      'the two closers have drifted apart again'
+    );
+  });
+
+  it('lets Escape lift the drawer, like every dialog in the app', () => {
+    // It is modal in every way that matters: an overlay over the page with the
+    // taps behind it swallowed. It was the one such surface Escape could not
+    // reach.
+    assert.match(APP, /classList\.contains\('sb-open'\)\) \{\s*sbClose\(\);/, 'Escape no longer closes the drawer');
+    assert.match(
+      APP,
+      /const opener = document\.getElementById\('tgl-17'\);/,
+      'Escape drops the focus instead of handing it back to the button that opened the drawer'
+    );
+  });
+
+  it('takes the closed drawer out of the tab order without hiding it', () => {
+    // Off-screen is not gone: translateX(-100%) keeps all fourteen rows
+    // tabbable. The flag has to be derived from both facts, because a docked
+    // sidebar is on screen and must never be inert.
+    assert.match(
+      APP,
+      /sb\.inert = sbIsPhone\(\) && !sb\.classList\.contains\('sb-open'\)/,
+      'the inert flag is gone or no longer derived from both the arrangement and the state'
+    );
+  });
+
+  it('keeps a second lock on the overlay in the stylesheet', () => {
+    // Worth having twice: the service worker can be handing out a cached app.js
+    // from before this fix while the stylesheet is already the new one.
+    assert.match(
+      desktopOnly,
+      /\.sb-overlay\.sb-show \{\s*display: none;/,
+      'above the breakpoint the overlay can cover the desktop again'
+    );
+  });
+});
