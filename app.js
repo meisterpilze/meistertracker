@@ -3887,7 +3887,7 @@ function renderRackSection(zone, racks, filtered) {
           const bd = filtered.find((f) => f.b.batchId === bid);
           const ov = bd ? bd.ov : false;
           d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
           <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
@@ -3980,7 +3980,7 @@ function renderFruitingSection(fruitingZones, filtered) {
           const due = bd ? bd.due : null;
           const ov = bd ? bd.ov : false;
           d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
         <div class="batch-card-header">
           <span class="batch-card-species">${esc(d.sp)}</span>
           <span class="batch-card-count">${d.bags.length}</span>
@@ -4003,7 +4003,7 @@ function renderFruitingSection(fruitingZones, filtered) {
       const cap = z.maxCapacity;
       const capBar = cap
         ? `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
-        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : z.color || color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
+        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div class="${entries.length > cap ? 'kap-voll' : ''}" style="height:100%;background-color:${z.color || color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
         <span class="fs-micro" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
       </div>`
         : '';
@@ -4119,7 +4119,7 @@ function renderSimpleZoneSection(zone, filtered) {
   const cards = batchEntries
     .map(([bid, d]) => {
       d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      return `<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+      return `<div class="batch-card" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
       <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span></div>
       <div class="batch-card-chips">${d.bags
@@ -4166,7 +4166,7 @@ function renderContamSection(zone, filtered) {
   const cards = batchEntries
     .map(([bid, d]) => {
       d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      return `<div class="batch-card" style="--sp-color:${spColor(d.sp)}" onclick="this.classList.toggle('expanded')">
+      return `<div class="batch-card" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header">
         <span class="batch-card-species">${esc(d.sp)}</span>
         <span class="batch-card-count">${d.bags.length}</span>
@@ -5280,10 +5280,6 @@ function renderDashBatchTasks() {
   const week = buildWeekPlan();
   const anyWork = week.some((d) => d.items.length);
   const hasRhythm = Object.keys(weekRhythm).length > 0;
-  // Der Farbleitfaden erklärt Punkte und Balken in der Liste. Ohne Liste
-  // erklärt er nichts und stand trotzdem ganz oben auf der Arbeitsgang-Seite.
-  const legende = document.getElementById('dash-legend');
-  if (legende) legende.hidden = !anyWork;
   if (!anyWork && !hasRhythm) {
     el.innerHTML =
       '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
@@ -5680,9 +5676,10 @@ function _dashPlanRowHtml(it, withRoom) {
     // The left edge carries the species colour, as it did before the redesign —
     // it is how a row is recognised at a glance without reading the id. Overdue
     // still overrides it: being late outranks knowing which mushroom it is.
-    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;--sp-color:' +
-    (it.overdue ? 'var(--c-red-dark)' : spColor(it.species)) +
-    '">' +
+    // Auch hier: der Streifen sagt den Zustand, die Sorte steht im Text.
+    '<div class="todo-row' +
+    (it.overdue ? ' urgent' : '') +
+    '" style="display:flex;align-items:center;gap:8px;padding:4px 0">' +
     '<div style="flex:1;min-width:0">' +
     '<div class="fs-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     esc(it.label) +

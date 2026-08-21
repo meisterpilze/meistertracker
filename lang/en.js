@@ -632,13 +632,6 @@ window.LANG['en'] = {
   'dash.overdue': 'Overdue',
   'dash.harvested': 'Harvested',
   'dash.rackN': 'Rack {n}',
-  'dash.legend.title': 'Color guide',
-  'dash.legend.species':
-    'Colored left stripe on batch cards — each species gets its own color so you can spot them at a glance.',
-  'dash.legend.orangeDot': 'Orange dot in batch tasks — warning, task due soon or needs attention.',
-  'dash.legend.redDot': 'Red dot in batch tasks — urgent, overdue or critical action required.',
-  'dash.legend.overdue': 'Pink-tinted batch card — batch is overdue (past its due date but still in incubation).',
-  'dash.legend.capacity': 'Red capacity bar — location is over its configured maximum capacity.',
   // Status
   'status.action.harvest': 'Harvest / check',
   'status.action.moveTent': 'Move to tent when ready',

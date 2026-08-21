@@ -438,16 +438,6 @@ window.LANG['pt'] = {
   'dash.overdue': 'Atrasado',
   'dash.harvested': 'Colhido',
   'dash.rackN': 'Estante {n}',
-  'dash.legend.title': 'Guia de cores',
-  'dash.legend.species':
-    'Faixa colorida \u00e0 esquerda dos cart\u00f5es de lote — cada esp\u00e9cie tem sua pr\u00f3pria cor para identifica\u00e7\u00e3o r\u00e1pida.',
-  'dash.legend.orangeDot':
-    'Ponto laranja nas tarefas de lote — aviso, tarefa prestes a vencer ou precisa de aten\u00e7\u00e3o.',
-  'dash.legend.redDot':
-    'Ponto vermelho nas tarefas de lote — urgente, atrasado ou a\u00e7\u00e3o cr\u00edtica necess\u00e1ria.',
-  'dash.legend.overdue':
-    'Cart\u00e3o de lote com fundo rosa — lote atrasado (ap\u00f3s a data de vencimento, ainda em incuba\u00e7\u00e3o).',
-  'dash.legend.capacity': 'Barra de capacidade vermelha — local excedeu sua capacidade m\u00e1xima configurada.',
   // Status
   'status.action.harvest': 'Colher / verificar',
   'status.action.moveTent': 'Mover para tenda quando pronto',
