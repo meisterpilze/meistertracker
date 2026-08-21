@@ -103,6 +103,18 @@ const refRegexes = [
   /dataset\.i18n(?:Placeholder|Title|Html|AriaLabel)?\s*=\s*['"`]([^'"`]+)['"`]/g
 ];
 const tpCalls = new Map(); // key (without .one/.other) -> [{file, line}]
+// Prefixes the code concatenates onto: `t('rhythm.day.' + d)` and
+// t(`orders.status.${st}`). Every key underneath one of these IS referenced —
+// just not in a form any regex can resolve to a single key. Without this they
+// pile up in section 2 as orphans that are not orphans, and a section a reader
+// has learned to skim is where the next real one hides.
+const dynPrefixes = new Set(); // 'rhythm.day.' -> [{file, line}]
+const dynLocs = new Map();
+const merkePrefix = (pre, file, line) => {
+  dynPrefixes.add(pre);
+  if (!dynLocs.has(pre)) dynLocs.set(pre, []);
+  dynLocs.get(pre).push({ file, line });
+};
 
 // String-literals shaped like an i18n key (foo.bar) — used for objects that
 // hold key names as values, e.g. `KNOWN_ZONE_I18N = { SPAWN: 'dash.zoneSpawn' }`.
@@ -128,10 +140,19 @@ for (const f of files) {
         // Skip concatenation prefixes: t('foo.' + variant) — the regex captures
         // `foo.` as the first arg, but the real key is built at runtime.
         const tail = line.slice(m.index + m[0].length).trimStart();
-        if (tail.startsWith('+')) continue;
+        if (tail.startsWith('+')) {
+          if (key.endsWith('.')) merkePrefix(key, path.basename(f), i + 1);
+          continue;
+        }
         if (!refs.has(key)) refs.set(key, []);
         refs.get(key).push({ file: path.basename(f), line: i + 1 });
       }
+    }
+    // Template form: t(`orders.status.${st}`) leaves `orders.status.` in the text.
+    const tmplRe = /([a-z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)*\.)\$\{/g;
+    let dm;
+    while ((dm = tmplRe.exec(line)) !== null) {
+      if (KEY_PREFIXES.has(dm[1].split('.')[0])) merkePrefix(dm[1], path.basename(f), i + 1);
     }
     // tp() calls separately — we verify .one/.other later
     const tpRe = /\btp\(\s*['"`]([^'"`]+)['"`]/g;
@@ -148,15 +169,21 @@ for (const f of files) {
     let lm;
     while ((lm = literalKeyRe.exec(line)) !== null) {
       const key = lm[1];
-      // Drop trailing-dot fragments like 'contam.res.' — these are concat prefixes, not keys
-      if (key.endsWith('.')) continue;
+      // Trailing-dot fragments like 'contam.res.' are concat prefixes, not keys.
+      if (key.endsWith('.')) {
+        merkePrefix(key, path.basename(f), i + 1);
+        continue;
+      }
       const top = key.split('.')[0];
       if (!KEY_PREFIXES.has(top)) continue;
       // Skip filenames / mime-y suffixes
       if (/\.(js|css|html|json|png|svg|ico|webm|enc|zpl)$/.test(key)) continue;
       // Skip concatenation prefixes followed by `+`
       const ltail = line.slice(lm.index + lm[0].length).trimStart();
-      if (ltail.startsWith('+')) continue;
+      if (ltail.startsWith('+')) {
+        merkePrefix(key + '.', path.basename(f), i + 1);
+        continue;
+      }
       if (!refs.has(key)) refs.set(key, []);
       const locs = refs.get(key);
       // Avoid double-counting if already added by a t()/data-i18n match on the same line
@@ -169,6 +196,8 @@ for (const f of files) {
 
 // ---------- 4. Orphan keys: in LANG.en but never referenced ----------
 const orphans = [];
+const dynResolved = [];
+const unterPrefix = (k) => [...dynPrefixes].find((p) => k.startsWith(p) && k.length > p.length);
 for (const k of en.keys.keys()) {
   // plural keys are referenced as bare key via tp(); check .one/.other specially
   if (k.endsWith('.one') || k.endsWith('.other')) {
@@ -176,7 +205,10 @@ for (const k of en.keys.keys()) {
     if (!tpCalls.has(base) && !refs.has(k)) orphans.push(k);
     continue;
   }
-  if (!refs.has(k)) orphans.push(k);
+  if (refs.has(k)) continue;
+  const pre = unterPrefix(k);
+  if (pre) dynResolved.push({ key: k, pre });
+  else orphans.push(k);
 }
 
 // ---------- 5. Unknown keys: referenced but not in LANG.en ----------
@@ -252,6 +284,12 @@ for (const loc of ['en', 'de', 'pt']) {
 
 section(`2. Orphan keys (defined in LANG.en, zero references) — ${orphans.length}`);
 for (const k of orphans.sort()) console.log(`  - ${k}`);
+
+section(`2b. Referenced through a built key, not by name — ${dynResolved.length}`);
+for (const { key, pre } of dynResolved.sort((a, b) => a.key.localeCompare(b.key))) {
+  const at = dynLocs.get(pre)[0];
+  console.log(`  - ${key}  ← '${pre}' + … at ${at.file}:${at.line}`);
+}
 
 section(`3. Unknown keys (referenced, not in LANG.en) — ${unknown.length}`);
 for (const { key, locs } of unknown.sort((a, b) => a.key.localeCompare(b.key))) {

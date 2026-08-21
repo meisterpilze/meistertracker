@@ -22,6 +22,7 @@ const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const SPRACHEN = ['de', 'en', 'pt'];
@@ -187,6 +188,32 @@ describe('translations', () => {
         s + '.js defines these keys twice — the second one silently wins and the first is dead text'
       );
     }
+  });
+
+  // A translation nothing asks for is dead weight, and the way it goes unnoticed
+  // is a report with a standing count in it: once section 2 says "61" every
+  // week, nobody reads the 62nd line. So the count is held at zero, and keys the
+  // code builds at runtime (`t('rhythm.day.' + d)`) are resolved by the audit
+  // rather than parked in that list — they are referenced, just not by name.
+  //
+  // Runs the audit rather than reimplementing it: two copies of this logic would
+  // drift, and the copy in the test is the one nobody updates.
+  it('leaves no translation nothing asks for', () => {
+    const bericht = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'i18n-audit.js')], {
+      encoding: 'utf8'
+    });
+    const m = bericht.match(/## 2\. Orphan keys[^\n]*— (\d+)/);
+    assert.ok(m, 'die Waisen-Zeile steht nicht im Bericht — das Audit hat sich geändert');
+    const waisen = bericht
+      .split(/\r?\n/)
+      .slice(bericht.split(/\r?\n/).findIndex((l) => l.startsWith('## 2. Orphan')))
+      .filter((l) => l.startsWith('  - '))
+      .map((l) => l.slice(4).trim());
+    assert.deepEqual(
+      waisen.slice(0, Number(m[1])),
+      [],
+      'diese Schlüssel stehen in den Sprachdateien, aber kein Pfad fragt danach'
+    );
   });
 
   // The parser above has the same blind spot as any regex: if it stops matching
