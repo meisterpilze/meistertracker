@@ -11,6 +11,7 @@ const db = require('./db.js');
 const ship = require('./shipping.js');
 const channels = require('./channels.js');
 const harvestFeed = require('./harvest-feed.js');
+const duckdns = require('./duckdns.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
@@ -1516,72 +1517,16 @@ function scheduleDailyBackup() {
 scheduleDailyBackup();
 
 // ── DUCKDNS IP UPDATE ──────────────────────────────────────
-let duckdnsInterval = null;
-
-function updateDuckdnsIP(callback) {
-  const cfg = db.getDuckdnsCfg(database);
-  if (!cfg.enabled || !cfg.domain || !cfg.token) {
-    if (callback) callback(null);
-    return;
-  }
-
-  const url =
-    'https://www.duckdns.org/update?domains=' +
-    encodeURIComponent(cfg.domain) +
-    '&token=' +
-    encodeURIComponent(cfg.token) +
-    '&verbose=true';
-
-  const ddReq = https
-    .get(url, (resp) => {
-      let data = '';
-      resp.on('data', (c) => {
-        data += c;
-      });
-      resp.on('end', () => {
-        const lines = data.trim().split('\n');
-        const ok = lines[0] === 'OK';
-        const ip = lines.length > 1 ? lines[1] : null;
-        if (ok) {
-          db.updateDuckdnsStatus(database, {
-            lastIpUpdate: new Date().toISOString(),
-            lastIp: ip || cfg.lastIp
-          });
-          log('info', 'DuckDNS IP updated', { domain: cfg.domain, ip });
-        } else {
-          log('warn', 'DuckDNS update failed', { domain: cfg.domain, response: data.trim() });
-        }
-        if (callback) callback(ok ? null : new Error('DuckDNS returned: ' + lines[0]));
-      });
-    })
-    .on('error', (e) => {
-      log('error', 'DuckDNS update error', { error: e.message });
-      if (callback) callback(e);
-    });
-  // Match the ACME helper's 30 s timeout so a stalled duckdns.org connection
-  // can't hang /api/duckdns/* or a cert-renewal step indefinitely.
-  ddReq.setTimeout(30000, () => ddReq.destroy(new Error('DuckDNS request timed out')));
-}
-
+// The updater lives in duckdns.js. What used to be here was a bare five-minute
+// timer that believed whatever duckdns.org replied; the retry, the check
+// against the authoritative nameservers, and the heartbeat that notices a
+// suspend are all over there, each with the reasoning for why it exists.
 function startDuckdnsUpdater() {
-  if (duckdnsInterval) {
-    clearInterval(duckdnsInterval);
-    duckdnsInterval = null;
-  }
   // A worktree instance shares the parent repo's settings DB only when it
   // points at the same file — but even with separate DBs the same DuckDNS
   // creds often get copied in. Skip the updater entirely so the worktree
   // never fights prod over the external A record.
-  if (WORKTREE_MODE) {
-    log('info', 'DuckDNS updater skipped (worktree mode)');
-    return;
-  }
-  const cfg = db.getDuckdnsCfg(database);
-  if (cfg.enabled && cfg.domain && cfg.token) {
-    updateDuckdnsIP();
-    duckdnsInterval = setInterval(updateDuckdnsIP, 5 * 60 * 1000);
-    log('info', 'DuckDNS updater started', { domain: cfg.domain + '.duckdns.org' });
-  }
+  return duckdns.start({ database, dbApi: db, log, skip: WORKTREE_MODE });
 }
 
 startDuckdnsUpdater();
@@ -1799,43 +1744,6 @@ function signJws(key, protectedHeader, payload) {
   return JSON.stringify({ protected: protB64, payload: payB64, signature: base64url(sig) });
 }
 
-// ── DuckDNS TXT record helpers ──
-function setDuckdnsTxt(domain, token, value, callback) {
-  const url =
-    'https://www.duckdns.org/update?domains=' +
-    encodeURIComponent(domain) +
-    '&token=' +
-    encodeURIComponent(token) +
-    '&txt=' +
-    encodeURIComponent(value) +
-    '&verbose=true';
-  const txtReq = https
-    .get(url, (resp) => {
-      let data = '';
-      resp.on('data', (c) => {
-        data += c;
-      });
-      resp.on('end', () => {
-        data.trim().startsWith('OK')
-          ? callback(null)
-          : callback(new Error('DuckDNS TXT update failed: ' + data.trim()));
-      });
-    })
-    .on('error', callback);
-  txtReq.setTimeout(30000, () => txtReq.destroy(new Error('DuckDNS TXT request timed out')));
-}
-
-function clearDuckdnsTxt(domain, token) {
-  const url =
-    'https://www.duckdns.org/update?domains=' +
-    encodeURIComponent(domain) +
-    '&token=' +
-    encodeURIComponent(token) +
-    '&txt=&clear=true&verbose=true';
-  const clrReq = https.get(url, () => {}).on('error', () => {});
-  clrReq.setTimeout(30000, () => clrReq.destroy());
-}
-
 // ── PKCS#10 CSR construction ──
 function buildCsr(domain) {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -1987,7 +1895,7 @@ function requestLetsEncryptCert(callback) {
         const keyAuth = challenge.token + '.' + thumbprint;
         const dns01 = base64url(crypto.createHash('sha256').update(keyAuth).digest());
         log('info', 'Setting DuckDNS TXT record...', { domain: cfg.domain });
-        setDuckdnsTxt(cfg.domain, cfg.token, dns01, next);
+        duckdns.setTxt({ domain: cfg.domain, token: cfg.token, value: dns01 }).then(() => next(null), next);
       },
       // 8. Wait for DNS propagation
       (next) => {
@@ -2046,7 +1954,15 @@ function requestLetsEncryptCert(callback) {
       }
     ],
     (err) => {
-      clearDuckdnsTxt(cfg.domain, cfg.token);
+      // Empty the challenge record, then re-assert the address. The cleanup
+      // used to send `clear=true`, which DuckDNS documents as clearing the
+      // address records too — on a path that runs after a *failed* renewal as
+      // well, and retries every twelve hours. duckdns.clearTxt no longer sends
+      // it, and the update behind it makes the record correct either way.
+      duckdns
+        .clearTxt({ domain: cfg.domain, token: cfg.token })
+        .then(() => duckdns.updateNow({ database, dbApi: db, log, skip: WORKTREE_MODE }))
+        .catch(() => {});
       if (err) {
         log('error', "Let's Encrypt request failed", { error: err.message });
         return callback(err);
@@ -9633,13 +9549,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'POST' && req.url === '/api/duckdns/update-ip') {
     if (requireAdmin(req, res)) return;
-    updateDuckdnsIP((err) => {
-      if (err) jsonErr(res, 500, err.message);
-      else {
+    duckdns
+      .updateNow({ database, dbApi: db, log, skip: WORKTREE_MODE })
+      .then((r) => {
+        if (!r.ok) return jsonErr(res, 500, r.reason);
         const cfg = db.getDuckdnsCfg(database);
         jsonOk(res, { lastIp: cfg.lastIp, lastIpUpdate: cfg.lastIpUpdate });
-      }
-    });
+      })
+      .catch((err) => safeErr(res, err));
     return;
   }
   if (req.method === 'POST' && req.url === '/api/duckdns/request-cert') {
@@ -9654,6 +9571,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     try {
       const cfg = db.getDuckdnsCfg(database);
+      const health = duckdns.status(cfg.lastIpUpdate);
       let certInfo = { type: 'none', exists: false };
       try {
         if (fs.existsSync(CERT_CRT)) {
@@ -9676,7 +9594,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         leEnabled: cfg.leEnabled,
         leExpiry: cfg.leExpiry,
         cert: certInfo,
-        updaterRunning: !!duckdnsInterval
+        // `updaterRunning` alone said only that a timer object existed. The UI
+        // painted a green banner off `lastIp` whenever one had ever been
+        // recorded, so an updater that had been failing for days looked
+        // identical to one that ran a minute ago. `health` carries what tells
+        // those apart: when we last tried, what broke, and what the
+        // authoritative nameservers are actually serving for this name.
+        updaterRunning: health.running,
+        health
       });
     } catch (err) {
       safeErr(res, err);
@@ -11875,6 +11800,9 @@ function shutdown(signal) {
     }
   }
   sseClients.clear();
+  // Stop the DNS loop before the drain window rather than letting an unref'd
+  // timer fire against a database that is about to close.
+  duckdns.stop();
   const servers = [listenServer];
   if (listenServer !== server) servers.push(server);
   if (legacyRedirectServer) servers.push(legacyRedirectServer);
