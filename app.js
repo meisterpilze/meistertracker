@@ -2826,7 +2826,18 @@ function renderOverviewKPIs() {
     if (z && z.role === 'contaminated') contamBagSet.add(e.bag);
   });
   const contamRate = allBagsPlaced > 0 ? +((contamBagSet.size / allBagsPlaced) * 100).toFixed(1) : 0;
-  const contamColor = contamRate === 0 ? 'var(--c-green)' : contamRate <= 5 ? 'var(--c-amber)' : 'var(--c-red)';
+  // The -dark variants, not the mid tones. `card()` puts this colour on two
+  // things: the 24px value, which sits on the white card, and the icon glyph,
+  // which sits on the tinted chip beside it. The mid tones fail both — green
+  // reads 2.3:1 on white against the 3.0 large text needs, amber 2.1, and as
+  // glyphs on their own -light backgrounds 2.1 and 1.9 against the same 3.0 for
+  // non-text. The six cards either side of these two are hand-picked darks
+  // between 3.7 and 6.4, so the two quality KPIs were the washed-out pair in a
+  // row of eight. Red is moved with them: at 3.8 it passes, but leaving it mid
+  // while its two siblings go dark makes the worst state the palest of the
+  // three. The -dark family lands 7.1-8.3 on white and 6.4-6.8 on the chips.
+  const contamColor =
+    contamRate === 0 ? 'var(--c-green-dark)' : contamRate <= 5 ? 'var(--c-amber-dark)' : 'var(--c-red-dark)';
   const contamBg =
     contamRate === 0 ? 'var(--c-green-light)' : contamRate <= 5 ? 'var(--c-amber-light)' : 'var(--c-red-light)';
 
@@ -2845,14 +2856,15 @@ function renderOverviewKPIs() {
     daysSinceContam = Math.floor((now - new Date(contamEvents[contamEvents.length - 1].time)) / 864e5);
     daysSinceLabel = daysSinceContam === 1 ? t('dash.ov.dayAgo') : t('dash.ov.daysAgo', { n: daysSinceContam });
   }
+  // Same three states, same card, same reason — see contamColor above.
   const streakColor =
     daysSinceContam === null
       ? 'var(--c-text-muted)'
       : daysSinceContam >= 14
-        ? 'var(--c-green)'
+        ? 'var(--c-green-dark)'
         : daysSinceContam >= 7
-          ? 'var(--c-amber)'
-          : 'var(--c-red)';
+          ? 'var(--c-amber-dark)'
+          : 'var(--c-red-dark)';
   const streakBg =
     daysSinceContam === null
       ? 'var(--c-bg)'
@@ -2933,7 +2945,12 @@ function renderOverviewKPIs() {
         wheatbranUsed > 0 ? fmtKg(wheatbranUsed) : '—',
         t('dash.ov.wheatbranUsed'),
         t('dash.ov.fromBatches'),
-        '#c9a227',
+        // Was #c9a227, the one card in this row that had been picked for its
+        // hue rather than its weight: 2.4:1 on the card and 2.2:1 as a glyph on
+        // its own chip, where its six neighbours run 3.7 to 6.4. Same gold, taken
+        // down to 4.7 — which lands it between the olive at 4.6 and the teal at
+        // 4.8, so the row reads as one set instead of six numbers and a faint one.
+        '#8f6f16',
         '#faf5e0'
       )
     ].join('');
