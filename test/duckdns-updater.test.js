@@ -17,10 +17,7 @@ const quiet = () => {};
 
 /** A config row shaped like the one db.getDuckdnsCfg hands out. */
 function cfgRow(over) {
-  return Object.assign(
-    { enabled: true, domain: 'example-host', token: 'a0b1c2d3-0000-0000-0000-000000000000', lastIp: null },
-    over
-  );
+  return Object.assign({ enabled: true, domain: 'example', token: 'testtoken', lastIp: null }, over);
 }
 
 /** A dbApi stand-in that records what the updater wrote. */
@@ -173,7 +170,7 @@ describe('local address signature — the DHCP change nothing was watching', () 
 
 describe('zoneOf — which nameservers are the right ones to ask', () => {
   it('strips the host label, so a duckdns name asks the duckdns servers', () => {
-    assert.equal(duckdns.zoneOf('example-host.duckdns.org'), 'duckdns.org');
+    assert.equal(duckdns.zoneOf('example.duckdns.org'), 'duckdns.org');
   });
 
   it('does not stop at two labels', () => {
@@ -202,8 +199,8 @@ describe('clockJumped — a timer that slept through the address change', () => 
 });
 
 describe('the URLs we send', () => {
-  const domain = 'example-host';
-  const token = 'a0b1c2d3-0000-0000-0000-000000000000';
+  const domain = 'example';
+  const token = 'testtoken';
 
   it('never sends an ip parameter — DuckDNS must detect the public side itself', () => {
     assert.ok(!/[?&]ip=/.test(duckdns.updateUrl(domain, token)));
@@ -512,8 +509,8 @@ describe('server wiring', () => {
   });
 
   it('builds no URL that carries clear=true, whatever the caller asks for', () => {
-    const d = 'example-host';
-    const tok = 'a0b1c2d3-0000-0000-0000-000000000000';
+    const d = 'example';
+    const tok = 'testtoken';
     for (const url of [
       duckdns.updateUrl(d, tok),
       duckdns.updateUrl(d, tok, '&txt=abc'),
