@@ -988,12 +988,17 @@ function sbCloseMobile() {
 }
 
 // A closed drawer is off-screen, not gone. `transform: translateX(-100%)` keeps
-// all fourteen of its rows in the tab order, so Tab from the top bar walks the
-// invisible navigation before it reaches the page. `inert` is what takes an
-// element out of tabbing and hit-testing without hiding it from the transition
-// that slides it back in. Docked, the sidebar is on screen and must never be
-// inert, so the flag is derived from both facts rather than toggled alongside
-// the class.
+// all fourteen of its rows in the tab order, and there is no tabindex anywhere
+// in this markup, so focus order is document order: the sidebar opens at
+// index.html:1255 and closes at 1764, and the top bar with its hamburger only
+// begins at 1767. The invisible rows are therefore what the FIRST Tab into the
+// page walks, and what Shift+Tab from the hamburger walks back into. (An
+// earlier version of this comment said Tab forward from the top bar, which
+// cannot happen: forward from the hamburger leads away from the drawer.)
+// `inert` is what takes an element out of tabbing and hit-testing without
+// hiding it from the transition that slides it back in. Docked, the sidebar is
+// on screen and must never be inert, so the flag is derived from both facts
+// rather than toggled alongside the class.
 function sbSyncInert() {
   const sb = document.getElementById('sidebar');
   if (!sb) return;
