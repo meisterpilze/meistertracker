@@ -15,7 +15,6 @@ window.LANG['en'] = {
   'common.copied': 'Copied!',
   'common.required': 'required',
   // Nav
-  'nav.main': 'Main',
   'nav.tools': 'Tools',
   'nav.dashboard': 'Dashboard',
   'nav.batches': 'Batches',
@@ -450,18 +449,8 @@ window.LANG['en'] = {
   // Harvest panel
   'harvest.logHarvest': 'Log harvest',
   'harvest.logNext': 'Save & scan next',
-  'harvest.readyToHarvest': 'Ready to harvest',
   'harvest.daysFruiting.one': '{n} day fruiting',
   'harvest.daysFruiting.other': '{n} days fruiting',
-  'harvest.daysInTent.one': '{n} day in tent',
-  'harvest.daysInTent.other': '{n} days in tent',
-  'harvest.readyIn.one': 'ready in {n} day',
-  'harvest.readyIn.other': 'ready in {n} days',
-  'harvest.readyNow': 'ready to harvest',
-  'harvest.overdueBy.one': '{n} day overdue',
-  'harvest.overdueBy.other': '{n} days overdue',
-  'harvest.inTent': 'in tent',
-  'harvest.elsewhere': 'elsewhere',
   'harvest.grams': 'Grams',
   'harvest.flush': 'Flush #',
   'harvest.cancel': 'Cancel',
@@ -590,10 +579,6 @@ window.LANG['en'] = {
   'dash.sec.today': 'Today',
   'dash.sec.week': 'This week',
   'dash.sec.left': 'Left behind',
-  'dash.tab.overdue': 'Overdue',
-  'dash.tab.today': 'Today',
-  'dash.tab.week': 'Week',
-  'dash.tab.left': 'Left',
   'dash.bagsSplitAcross': '{n} in {zone}, {rest} elsewhere',
   'dash.nothingToMove': 'Nothing left to move \u2014 list refreshed',
   'dash.grainReady': 'colonised → inoculate',
@@ -667,7 +652,6 @@ window.LANG['en'] = {
   'batch.gypsumAdded': 'Gypsum added',
   'batch.coir': 'Coir / CVG %',
   'batch.grainKg': 'Grain kg/bag',
-  'batch.grainRh': 'Grain hydration %',
   'batch.fromProduct': 'From product (optional)',
   'batch.noProduct': '— no product —',
   'batch.fromProductHint': 'Pick a product → substrate, coir & grain are computed automatically.',
@@ -848,8 +832,6 @@ window.LANG['en'] = {
   'print.tickCulturesPreview': 'Tick cultures in the list to preview labels.',
   // To-do
   'todo.batchTasks': 'Batch tasks',
-  'todo.priorityHigh': 'High priority',
-  'todo.priorityMed': 'Medium priority',
   'todo.dueAgo': 'Due {n} day(s) ago',
   'todo.dueIn': 'Due in {n} day(s)',
   'todo.dueToday': 'Due today',
@@ -1007,8 +989,6 @@ window.LANG['en'] = {
     'Download a password-encrypted full backup. Save to USB, cloud or email it to yourself.',
   'settings.downloadBackupBtn': 'Download backup',
   'settings.restoreBackupTitle': 'Restore backup',
-  'settings.restoreDescHtml':
-    'Restore from an encrypted backup file. <strong style="color:var(--c-red-dark)">Replaces all current data for everyone.</strong>',
   'settings.restoreBtn': 'Restore',
   'zoneCheck.btn': 'Check',
   'zoneCheck.title': 'Check {zone}',
@@ -1056,14 +1036,11 @@ window.LANG['en'] = {
   // Sync
   // Inventory
   'inv.stock': 'Stock',
-  'inv.logDelivery': 'Log delivery',
   'inv.usageLog': 'Usage log',
   'inv.noUsageHistory': 'No usage history yet.',
   'inv.alertThresholds': 'Alert thresholds',
   'inv.alertThresholdsDesc':
     'Set the minimum stock level that triggers a low-stock warning. Also set the standard bag size used to calculate "enough for X bags".',
-  'inv.lowStock': 'LOW STOCK',
-  'inv.alertBelow': 'Alert below {n}kg',
   'inv.logIncoming': 'Log incoming delivery',
   'inv.material': 'Material',
   'inv.currentStock': 'Current stock: {n} kg',
@@ -1081,12 +1058,6 @@ window.LANG['en'] = {
   'inv.allMaterials': 'All materials',
   'inv.enterQty': 'Enter a quantity greater than 0',
   'inv.enterAmount': 'Enter either a new total or an adjustment amount',
-  'inv.blocks':
-    '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocks <span style="font-size:10px;color:var(--c-text-muted)">(avg estimate)</span>',
-  'inv.avgCompDesc':
-    'These averages are used to calculate "\u007eX bags" on the stock cards. They are <strong>estimates only</strong> \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
-  'inv.waterPct': 'Water % (RH)',
-  'inv.blockWeight': 'Block weight (kg)',
   // Material labels
   // Table headers - inventory
   // CSV headers

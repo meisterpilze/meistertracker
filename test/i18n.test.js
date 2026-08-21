@@ -84,6 +84,27 @@ function placeholders(text) {
   return [...String(text).matchAll(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g)].map((m) => m[0]).sort();
 }
 
+// A key written twice in the same file does not throw and does not show up in
+// the loaded dictionary: the object literal keeps the last one and drops the
+// first without a word. Three keys carried two different German texts that way
+// — `inv.alertBelow` said "Warnung unter {n}kg" in one place and "Alarm unter
+// {n}kg" 700 lines further down, and only the second was ever on screen. So this
+// has to read the source text; `require()`ing the file is exactly what hides it.
+//
+// Split on \r?\n: the working tree is CRLF on Windows and LF on CI.
+function doppelteSchluessel(sprache) {
+  const src = fs.readFileSync(path.join(ROOT, 'lang', sprache + '.js'), 'utf8');
+  const gesehen = new Map();
+  const doppelt = [];
+  src.split(/\r?\n/).forEach((line, i) => {
+    const m = line.match(/^\s*'((?:[^'\\]|\\.)*)'\s*:/);
+    if (!m) return;
+    if (gesehen.has(m[1])) doppelt.push(m[1] + ' (lines ' + gesehen.get(m[1]) + ' and ' + (i + 1) + ')');
+    else gesehen.set(m[1], i + 1);
+  });
+  return doppelt;
+}
+
 describe('translations', () => {
   let dicts;
   let used;
@@ -152,6 +173,29 @@ describe('translations', () => {
       for (const s of SPRACHEN) {
         assert.deepEqual(placeholders(dicts[s][k]), wanted, s + ' changed the placeholders in ' + k);
       }
+    }
+  });
+
+  // The guard for the failure above: a duplicate is invisible in every other
+  // check in this file, because they all read the dictionary after the second
+  // definition has already won.
+  it('defines every key exactly once per file', () => {
+    for (const s of SPRACHEN) {
+      assert.deepEqual(
+        doppelteSchluessel(s),
+        [],
+        s + '.js defines these keys twice — the second one silently wins and the first is dead text'
+      );
+    }
+  });
+
+  // The parser above has the same blind spot as any regex: if it stops matching
+  // the file's shape it finds nothing, and finding nothing makes the test pass.
+  it('reads the locale files it is supposed to check', () => {
+    for (const s of SPRACHEN) {
+      const src = fs.readFileSync(path.join(ROOT, 'lang', s + '.js'), 'utf8');
+      const treffer = src.split(/\r?\n/).filter((l) => /^\s*'((?:[^'\\]|\\.)*)'\s*:/.test(l)).length;
+      assert.ok(treffer > 1000, s + '.js: only ' + treffer + ' key lines matched, the extraction is broken');
     }
   });
 });

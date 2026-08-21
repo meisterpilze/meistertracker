@@ -39,6 +39,16 @@ function parseLocaleFile(file) {
     if (end >= 0) break;
   }
   const keys = new Map(); // key -> { value, line }
+  // A second definition of the same key does not throw and does not show up in
+  // the parsed Map — the object literal keeps the last one and drops the first
+  // silently. That is how three keys carried two different German texts each
+  // without any check here noticing, so record every re-definition as we go.
+  const dups = []; // { key, first, second }
+  const merke = (key, value, line) => {
+    const da = keys.get(key);
+    if (da) dups.push({ key, first: da.line, second: line, changed: da.value !== value });
+    keys.set(key, { value, line });
+  };
   // Match: 'key': 'value' or "key": "value" — key may contain \uXXXX escapes which we decode.
   const re = /^\s*['"]((?:[^'"\\]|\\u[0-9a-fA-F]{4})+)['"]\s*:\s*(.+?),?\s*$/;
   const decode = (s) => s.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
@@ -47,20 +57,20 @@ function parseLocaleFile(file) {
     const line = lines[i];
     if (pendingKey !== null) {
       // Previous line was `'key':` with the value wrapped onto this line.
-      keys.set(pendingKey, { value: line.trim().replace(/,\s*$/, ''), line: i + 1 });
+      merke(pendingKey, line.trim().replace(/,\s*$/, ''), i + 1);
       pendingKey = null;
       continue;
     }
     const m = line.match(re);
     if (m && !m[2].startsWith('{')) {
-      keys.set(decode(m[1]), { value: m[2], line: i + 1 });
+      merke(decode(m[1]), m[2], i + 1);
     } else {
       // Two-line case: `'key':` on its own line, value on the next.
       const m2 = line.match(/^\s*['"]((?:[^'"\\]|\\u[0-9a-fA-F]{4})+)['"]\s*:\s*$/);
       if (m2) pendingKey = decode(m2[1]);
     }
   }
-  return { keys, start: start + 1, end: end + 1, file: path.basename(file) };
+  return { keys, dups, start: start + 1, end: end + 1, file: path.basename(file) };
 }
 
 const en = parseLocaleFile(path.join(LANG_DIR, 'en.js'));
@@ -257,4 +267,19 @@ for (const p of pluralIssues) {
 section(`5. Interpolation mismatches — ${interpIssues.length}`);
 for (const i of interpIssues) {
   console.log(`  - [${i.locale}] ${i.key}  missing={${i.missing.join(',')}} extra={${i.extra.join(',')}}`);
+}
+
+// Duplicates are the one finding here that is invisible from the outside: the
+// interface shows the second text, the first is dead, and nothing else in this
+// report can tell them apart. `changed` marks the ones where the two texts
+// actually differ — those are the ones a reader has been seeing the wrong half of.
+const dupTotal = [en, de, pt].reduce((n, l) => n + l.dups.length, 0);
+section(`6. Duplicate keys (defined twice in one file — the second one wins) — ${dupTotal}`);
+for (const loc of [en, de, pt]) {
+  for (const d of loc.dups) {
+    console.log(
+      `  - [${loc.file}] ${d.key}  lines ${d.first} and ${d.second}` +
+        (d.changed ? '  — DIFFERENT TEXT, line ' + d.first + ' is dead' : '')
+    );
+  }
 }

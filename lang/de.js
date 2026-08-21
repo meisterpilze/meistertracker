@@ -15,7 +15,6 @@ window.LANG['de'] = {
   'common.copied': 'Kopiert!',
   'common.required': 'erforderlich',
   // Nav
-  'nav.main': 'Hauptmenü',
   'nav.tools': 'Werkzeuge',
   'nav.dashboard': 'Dashboard',
   'nav.batches': 'Chargen',
@@ -452,18 +451,8 @@ window.LANG['de'] = {
   // Harvest panel
   'harvest.logHarvest': 'Ernte erfassen',
   'harvest.logNext': 'Speichern & weiter',
-  'harvest.readyToHarvest': 'Erntebereit',
   'harvest.daysFruiting.one': '{n} Tag im Fruchtzelt',
   'harvest.daysFruiting.other': '{n} Tage im Fruchtzelt',
-  'harvest.daysInTent.one': '{n} Tag im Zelt',
-  'harvest.daysInTent.other': '{n} Tage im Zelt',
-  'harvest.readyIn.one': 'reif in {n} Tag',
-  'harvest.readyIn.other': 'reif in {n} Tagen',
-  'harvest.readyNow': 'erntereif',
-  'harvest.overdueBy.one': '{n} Tag überfällig',
-  'harvest.overdueBy.other': '{n} Tage überfällig',
-  'harvest.inTent': 'im Zelt',
-  'harvest.elsewhere': 'woanders',
   'harvest.grams': 'Gramm',
   'harvest.flush': 'Flush #',
   'harvest.cancel': 'Abbrechen',
@@ -592,10 +581,6 @@ window.LANG['de'] = {
   'dash.sec.today': 'Heute',
   'dash.sec.week': 'Diese Woche',
   'dash.sec.left': 'Liegengeblieben',
-  'dash.tab.overdue': 'Überfällig',
-  'dash.tab.today': 'Heute',
-  'dash.tab.week': 'Woche',
-  'dash.tab.left': 'Liegen',
   'dash.bagsSplitAcross': '{n} in {zone}, {rest} anderswo',
   'dash.nothingToMove': 'Nichts mehr umzuziehen \u2014 Liste aktualisiert',
   'dash.grainReady': 'durchwachsen → beimpfen',
@@ -669,7 +654,6 @@ window.LANG['de'] = {
   'batch.gypsumAdded': 'Gips hinzugef\u00fcgt',
   'batch.coir': 'Kokos / CVG %',
   'batch.grainKg': 'Grain kg/Beutel',
-  'batch.grainRh': 'Grain Hydration %',
   'batch.fromProduct': 'Aus Produkt (optional)',
   'batch.noProduct': '\u2014 ohne Produkt \u2014',
   'batch.fromProductHint': 'Produkt w\u00e4hlen \u2192 Substrat, Kokos & Grain werden automatisch berechnet.',
@@ -851,8 +835,6 @@ window.LANG['de'] = {
   'print.tickCulturesPreview': 'Kulturen in der Liste anhaken, um Etiketten in der Vorschau zu sehen.',
   // To-do
   'todo.batchTasks': 'Chargen-Aufgaben',
-  'todo.priorityHigh': 'Hohe Priorit\u00e4t',
-  'todo.priorityMed': 'Mittlere Priorit\u00e4t',
   'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
   'todo.dueIn': 'F\u00e4llig in {n} Tag(en)',
   'todo.dueToday': 'Heute fällig',
@@ -1014,8 +996,6 @@ window.LANG['de'] = {
     'Ein passwortgeschütztes vollständiges Backup herunterladen. Auf USB, Cloud speichern oder per E-Mail senden.',
   'settings.downloadBackupBtn': 'Backup herunterladen',
   'settings.restoreBackupTitle': 'Backup wiederherstellen',
-  'settings.restoreDescHtml':
-    'Aus einer verschlüsselten Backup-Datei wiederherstellen. <strong style="color:var(--c-red-dark)">Ersetzt alle aktuellen Daten für alle Benutzer.</strong>',
   'settings.restoreBtn': 'Wiederherstellen',
   'zoneCheck.btn': 'Prüfen',
   'zoneCheck.title': '{zone} prüfen',
@@ -1064,14 +1044,11 @@ window.LANG['de'] = {
   // Sync
   // Inventory
   'inv.stock': 'Bestand',
-  'inv.logDelivery': 'Lieferung erfassen',
   'inv.usageLog': 'Verbrauchsprotokoll',
   'inv.noUsageHistory': 'Noch keine Verbrauchshistorie.',
   'inv.alertThresholds': 'Warnschwellen',
   'inv.alertThresholdsDesc':
     'Mindestbestand f\u00fcr Warnung festlegen. Auch die Standard-Beutelgr\u00f6\u00dfe f\u00fcr die Sch\u00e4tzung "reicht f\u00fcr X Beutel" einstellen.',
-  'inv.lowStock': 'NIEDRIGER BESTAND',
-  'inv.alertBelow': 'Warnung unter {n}kg',
   'inv.logIncoming': 'Eingehende Lieferung erfassen',
   'inv.material': 'Material',
   'inv.currentStock': 'Aktueller Bestand: {n} kg',
@@ -1089,12 +1066,6 @@ window.LANG['de'] = {
   'inv.allMaterials': 'Alle Materialien',
   'inv.enterQty': 'Bitte eine Menge gr\u00f6\u00dfer als 0 eingeben',
   'inv.enterAmount': 'Bitte einen neuen Gesamtwert oder Anpassungsbetrag eingeben',
-  'inv.blocks':
-    '\u2248 <strong>{n}</strong> \u00d7 {kg}kg Bl\u00f6cke <span style="font-size:10px;color:var(--c-text-muted)">(Sch\u00e4tzung)</span>',
-  'inv.avgCompDesc':
-    'Diese Durchschnittswerte berechnen "\u007eX Beutel" auf den Bestandskarten. Nur <strong>Sch\u00e4tzwerte</strong> \u2014 exakter Verbrauch wird bei Chargenerstellung mit Substratrezept erfasst.',
-  'inv.waterPct': 'Wasser % (RH)',
-  'inv.blockWeight': 'Blockgewicht (kg)',
   // Material labels
   // Table headers - inventory
   // CSV headers

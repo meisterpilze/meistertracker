@@ -15,7 +15,6 @@ window.LANG['pt'] = {
   'common.copied': 'Copiado!',
   'common.required': 'obrigatório',
   // Nav
-  'nav.main': 'Principal',
   'nav.tools': 'Ferramentas',
   'nav.dashboard': 'Painel',
   'nav.batches': 'Lotes',
@@ -256,18 +255,8 @@ window.LANG['pt'] = {
   // Harvest panel
   'harvest.logHarvest': 'Registrar colheita',
   'harvest.logNext': 'Salvar & escanear próximo',
-  'harvest.readyToHarvest': 'Prontos para colheita',
   'harvest.daysFruiting.one': '{n} dia em frutifica\u00e7\u00e3o',
   'harvest.daysFruiting.other': '{n} dias em frutifica\u00e7\u00e3o',
-  'harvest.daysInTent.one': '{n} dia na tenda',
-  'harvest.daysInTent.other': '{n} dias na tenda',
-  'harvest.readyIn.one': 'pronto em {n} dia',
-  'harvest.readyIn.other': 'pronto em {n} dias',
-  'harvest.readyNow': 'pronto a colher',
-  'harvest.overdueBy.one': '{n} dia em atraso',
-  'harvest.overdueBy.other': '{n} dias em atraso',
-  'harvest.inTent': 'na tenda',
-  'harvest.elsewhere': 'noutro local',
   'harvest.grams': 'Gramas',
   'harvest.flush': 'Flush #',
   'harvest.cancel': 'Cancelar',
@@ -396,10 +385,6 @@ window.LANG['pt'] = {
   'dash.sec.today': 'Hoje',
   'dash.sec.week': 'Esta semana',
   'dash.sec.left': 'Deixados atrás',
-  'dash.tab.overdue': 'Atraso',
-  'dash.tab.today': 'Hoje',
-  'dash.tab.week': 'Semana',
-  'dash.tab.left': 'Parados',
   'dash.bagsSplitAcross': '{n} em {zone}, {rest} noutro local',
   'dash.nothingToMove': 'Nada para mover \u2014 lista atualizada',
   'dash.grainReady': 'colonizado → inocular',
@@ -686,8 +671,6 @@ window.LANG['pt'] = {
   'print.tickCulturesPreview': 'Marque as culturas na lista para pré-visualizar etiquetas.',
   // To-do
   'todo.batchTasks': 'Tarefas dos lotes',
-  'todo.priorityHigh': 'Prioridade alta',
-  'todo.priorityMed': 'Prioridade m\u00e9dia',
   'todo.dueAgo': 'Vencido h\u00e1 {n} dia(s)',
   'todo.dueIn': 'Vence em {n} dia(s)',
   'todo.dueToday': 'Vence hoje',
@@ -848,8 +831,6 @@ window.LANG['pt'] = {
     'Baixar um backup completo protegido por senha. Salve em USB, nuvem ou envie por e-mail.',
   'settings.downloadBackupBtn': 'Baixar backup',
   'settings.restoreBackupTitle': 'Restaurar backup',
-  'settings.restoreDescHtml':
-    'Restaurar de um arquivo de backup criptografado. <strong style="color:var(--c-red-dark)">Substitui todos os dados atuais para todos os usuários.</strong>',
   'settings.restoreBtn': 'Restaurar',
   'zoneCheck.btn': 'Verificar',
   'zoneCheck.title': 'Verificar {zone}',
@@ -976,14 +957,11 @@ window.LANG['pt'] = {
   'orders.componentsShort': 'componentes em falta',
   'orders.backorder': 'encomendar',
   'inv.stock': 'Estoque',
-  'inv.logDelivery': 'Registrar entrega',
   'inv.usageLog': 'Hist\u00f3rico de uso',
   'inv.noUsageHistory': 'Ainda n\u00e3o h\u00e1 hist\u00f3rico de uso.',
   'inv.alertThresholds': 'Limites de alerta',
   'inv.alertThresholdsDesc':
     'Defina o n\u00edvel m\u00ednimo de estoque para alerta. Defina tamb\u00e9m o tamanho padr\u00e3o do saco para calcular "suficiente para X sacos".',
-  'inv.lowStock': 'ESTOQUE BAIXO',
-  'inv.alertBelow': 'Alerta abaixo de {n}kg',
   'inv.logIncoming': 'Registrar entrega recebida',
   'inv.material': 'Material',
   'inv.currentStock': 'Estoque atual: {n} kg',
@@ -1002,12 +980,6 @@ window.LANG['pt'] = {
   'inv.allMaterials': 'Todos os materiais',
   'inv.enterQty': 'Insira uma quantidade maior que 0',
   'inv.enterAmount': 'Insira um novo total ou valor de ajuste',
-  'inv.blocks':
-    '\u2248 <strong>{n}</strong> \u00d7 {kg}kg blocos <span style="font-size:10px;color:var(--c-text-muted)">(estimativa)</span>',
-  'inv.avgCompDesc':
-    'Estas m\u00e9dias calculam "\u007eX sacos" nos cart\u00f5es de estoque. S\u00e3o apenas <strong>estimativas</strong> \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica.',
-  'inv.waterPct': '\u00c1gua % (RH)',
-  'inv.blockWeight': 'Peso do bloco (kg)',
   // Material labels
   // Table headers - inventory
   // CSV headers
