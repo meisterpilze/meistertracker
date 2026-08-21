@@ -1741,6 +1741,20 @@ function requestLetsEncryptCert(callback) {
   );
 }
 
+// What the certificate on disk actually says, or null if there is none to read.
+function certExpiryOnDisk() {
+  try {
+    if (!fs.existsSync(CERT_CRT)) return null;
+    const pem = fs.readFileSync(CERT_CRT);
+    const cert = new crypto.X509Certificate(pem);
+    const d = new Date(cert.validTo);
+    return isNaN(d) ? null : d;
+  } catch (e) {
+    log('warn', 'could not read the certificate expiry from disk', { error: e.message });
+    return null;
+  }
+}
+
 function checkCertRenewal() {
   // Worktree instance must not race prod for the ACME challenge: both
   // would try to bind port 80 for http-01 and hammer the LE rate limit
@@ -1749,9 +1763,25 @@ function checkCertRenewal() {
   if (WORKTREE_MODE) return;
   const cfg = db.getDuckdnsCfg(database);
   if (!cfg.leEnabled || !cfg.domain || !cfg.token) return;
-  if (!cfg.leExpiry) return;
 
-  const expiry = new Date(cfg.leExpiry);
+  // The certificate on disk is the fact; le_expiry is a note about it, written
+  // only by a successful issuance and never read back. Returning on an empty
+  // note meant a ticked auto-renewal box could sit over a certificate that
+  // quietly expires: restore one of the backups START.bat writes at every boot,
+  // taken before the first issuance, or copy certs/ to a rebuilt machine, and
+  // le_expiry is NULL while a real certificate is right there. checkCertRenewal
+  // then returned on every twelve-hour tick, and the UI stayed calm too, because
+  // app.js tests `s.cert.type === 'letsencrypt' && s.leExpiry` and painted the
+  // no-warning branch.
+  let expiry = cfg.leExpiry ? new Date(cfg.leExpiry) : null;
+  if (!expiry || isNaN(expiry)) {
+    expiry = certExpiryOnDisk();
+    if (!expiry) return; // no note and no certificate: nothing to renew
+    log('info', 'le_expiry was empty, read the expiry off the certificate instead', {
+      expiry: expiry.toISOString()
+    });
+    db.updateDuckdnsStatus(database, { leExpiry: expiry.toISOString() });
+  }
   const daysLeft = (expiry - Date.now()) / (24 * 60 * 60 * 1000);
 
   if (daysLeft < 30) {
