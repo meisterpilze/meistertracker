@@ -20,6 +20,7 @@
     "mcp": "node mcp-server.js",
     "mobile-audit": "node scripts/mobile-audit.js",
     "measure-mobile": "node scripts/measure-mobile.js",
+    "measure-app": "node scripts/measure-mobile.js --app",
     "lint": "eslint --max-warnings 65 app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js test/",
     "lint:fix": "eslint --fix app.js login.js server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js test/",
     "format": "prettier --write server.js db.js sw.js mcp-server.js harvest-feed.js channels.js shipping.js duckdns.js scripts/duckdns-fallback.js scripts/preflight.js styles.css test/",
