@@ -2181,14 +2181,11 @@
                 <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
               </div>
               <div id="dash-batch-tasks"></div>
-              <details
-                class="dash-legend fs-xs"
-                style="margin-top: 8px; color: var(--c-text-muted); border-top: 1px solid var(--c-border); padding-top: 6px"
-              >
-                <summary style="cursor: pointer; user-select: none" data-i18n="dash.legend.title">
-                  Color guide
-                </summary>
-                <div style="padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px">
+              <!-- Klein und rechts, und über renderDashBatchTasks() nur sichtbar,
+                   wenn eine Liste da ist, deren Zeichen er erklären kann. -->
+              <details class="dash-legend fs-xs" id="dash-legend" hidden>
+                <summary data-i18n="dash.legend.title">Color guide</summary>
+                <div class="dash-legend-body">
                   <div style="display: flex; align-items: flex-start; gap: 8px">
                     <span class="pdot med" style="margin-top: 3px"></span
                     ><span data-i18n="dash.legend.orangeDot"></span>
