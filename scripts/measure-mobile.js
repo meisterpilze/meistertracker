@@ -971,7 +971,15 @@ async function main() {
   // see #nb-sub-section's <summary> because the form it sits in is collapsed,
   // and saying "the package is done" about it would take a real finding out of
   // the file.
-  const dead = (thresholds.ratchet || []).filter((r, i) => !used.has(i) && (!r.mode || r.mode === here));
+  //
+  // An UNTAGGED line belongs to both modes (mobile-thresholds.json says so), so
+  // one run alone can never establish that it is dead: the markup run does not
+  // see app-only findings and the app run does not see markup-only ones. It
+  // used to be admitted in both, which is the exact failure the mode field was
+  // added to prevent, one mode declaring the other mode's live line removable.
+  // They are listed separately instead, as not judged.
+  const dead = (thresholds.ratchet || []).filter((r, i) => !used.has(i) && r.mode === here);
+  const ungeprueft = (thresholds.ratchet || []).filter((r, i) => !used.has(i) && !r.mode);
   if (dead.length && !QUICK && !ONE_WIDTH && !ONE_POINTER) {
     console.log(`\n══ ratchet lines matching nothing ══  ${dead.length}`);
     for (const r of dead) {
@@ -980,6 +988,12 @@ async function main() {
           `${r.package ? ` (${r.package})` : ''}, line can go`
       );
     }
+  }
+
+  if (ungeprueft.length && !QUICK && !ONE_WIDTH && !ONE_POINTER) {
+    console.log(`\n· ${ungeprueft.length} ratchet line(s) carry no mode and matched nothing in this run.`);
+    console.log('  Not judged: a line without a mode belongs to both, and one run only sees one.');
+    console.log('  Run the other mode before deciding they can go.');
   }
 
   const held = findings.filter((f) => f.covered).length;
