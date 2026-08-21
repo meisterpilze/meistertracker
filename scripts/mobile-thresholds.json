@@ -69,5 +69,17 @@
       "reason": "The <summary> of #nb-sub-section is 18px tall on a desktop, under WCAG 2.5.8's 24px. Found by the static run before --app existed, and kept as its own line because it is in index.html's markup rather than in anything app.js renders: it is the one finding both modes can see."
     }
   ],
-  "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both."
+  "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both.",
+  "_assumptions": "Not findings: decisions taken WITHOUT the answer that should have decided them. They sit here so the work can go on without the answer being quietly forgotten, and each says who was asked and when it goes.",
+  "assumptions": [
+    {
+      "id": "chargentabelle-spalten",
+      "asked": "Jonas, point 61 in neubau/FUER-JONAS.md (private repo), 2026-08-21",
+      "package": "P5",
+      "assumed": ["batchId", "species", "qty", "due", "status", "actions"],
+      "folded": ["strain", "inc", "substrate", "source", "created", "notes"],
+      "why": "The twelve columns of the Chargen table need 728px in the header row alone, and at a 769px window there are 439px of content width. Which six somebody actually needs in passing is known only by the person who works with it, and no stylesheet can decide it. Until the answer arrives P5 keeps the six above visible and folds the other six into the expandable part of the card. Written down here rather than left in a commit message, because an assumption nobody can find is indistinguishable from a decision nobody made.",
+      "goes_when": "Jonas answers point 61, and the line is then either confirmed or replaced by his list."
+    }
+  ]
 }
