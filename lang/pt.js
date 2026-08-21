@@ -1329,7 +1329,6 @@ window.LANG['pt'] = {
   'cal.legend.external': 'Eventos externos',
   'cal.days': 'Seg,Ter,Qua,Qui,Sex,Sáb,Dom',
   'cal.months': 'Janeiro,Fevereiro,Março,Abril,Maio,Junho,Julho,Agosto,Setembro,Outubro,Novembro,Dezembro',
-  'calEntry.moveTitle': 'Mover entrada',
   'calDetail.close': 'Fechar',
   'calDetail.edit': 'Editar',
   'calDetail.changeDate': 'Alterar data de vencimento',
