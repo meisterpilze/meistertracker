@@ -2356,20 +2356,6 @@ tr:hover td {
   text-align: center;
   background: var(--c-surface);
 }
-.rack-card {
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  padding: 14px;
-  cursor: pointer;
-  background: var(--c-surface);
-  transition: all 0.15s;
-}
-@media (hover: hover) {
-  .rack-card:hover {
-    background: var(--c-bg);
-    box-shadow: var(--shadow);
-  }
-}
 .tag {
   display: inline-block;
   font-size: max(11px, var(--fs-min));
@@ -3443,11 +3429,6 @@ tr:hover td {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
-/* ═══ COLLAPSIBLE DASH SECTIONS (KPIs / Live status / Lab) ═════ */
-.dash-collapse {
-  margin-bottom: 10px;
-}
-
 /* ═══ PIPELINE KPI TOTAL ROW ═════════════════════════════════════ */
 .metrics-total-row {
   display: flex;
@@ -4322,7 +4303,7 @@ tr:hover td {
 @media print {
   .sidebar,
   .mobile-topbar,
-  .scan-toast,
+  .scan-toast-inline,
   #harvest-panel,
   .no-print,
   .sb-overlay {

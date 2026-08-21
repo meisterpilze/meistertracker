@@ -1416,7 +1416,6 @@ window.LANG['de'] = {
   'cal.legend.external': 'Externe Termine',
   'cal.days': 'Mo,Di,Mi,Do,Fr,Sa,So',
   'cal.months': 'Januar,Februar,März,April,Mai,Juni,Juli,August,September,Oktober,November,Dezember',
-  'calEntry.moveTitle': 'Eintrag verschieben',
   'calDetail.close': 'Schließen',
   'calDetail.edit': 'Bearbeiten',
   'calDetail.changeDate': 'Fälligkeitsdatum ändern',
