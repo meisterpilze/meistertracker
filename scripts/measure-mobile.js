@@ -89,9 +89,8 @@
 const fs = require('fs');
 const path = require('path');
 const { build, serve } = require('./static-page-server.js');
-const { floor, tapFloor, breakpoints, widthBand, uncovered, POINTERS } = require('./mobile-size-scan.js');
+const { ROOT, floor, tapFloor, breakpoints, widthBand, uncovered, POINTERS } = require('./mobile-size-scan.js');
 
-const ROOT = path.resolve(__dirname, '..');
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const THRESHOLDS = path.join(__dirname, 'mobile-thresholds.json');
 
