@@ -1958,5 +1958,9 @@ window.LANG['en'] = {
   'work.bMixFrom': 'Mix from {id}',
   'work.bMixLine': '{hw} % hardwood / {wb} % bran · {rh} % moisture',
   'work.bMixFixed': 'That is how the mix was made. The strain recipe no longer changes it.',
-  'work.bFromMix': ' (from {id})'
+  'work.bFromMix': ' (from {id})',
+  'inv.avgFromProduction': 'Computed from {n} recipes, weighted by {bags} bags made in the last {days} days.',
+  'inv.avgFromRecipes': 'Computed from {n} recipes — nothing produced in the window yet, so every recipe counts equally.',
+  'inv.avgFromStored': 'No recipe on file yet — the last saved value applies.',
+  'inv.avgCompNote': 'So one {bag} kg block takes about {hw} kg hardwood and {wb} kg bran (dry weight after removing {rh} % water). One {gbag} kg grain bag takes about {grain} kg dry grain (after removing {grh} % water).'
 };

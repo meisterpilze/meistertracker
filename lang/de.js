@@ -1981,5 +1981,9 @@ window.LANG['de'] = {
   'work.bMixFrom': 'Mischung aus {id}',
   'work.bMixLine': '{hw} % Hartholz / {wb} % Kleie · {rh} % Wassergehalt',
   'work.bMixFixed': 'So wurde der Ansatz angesetzt. Daran ändert das Rezept der Sorte nichts mehr.',
-  'work.bFromMix': ' (aus {id})'
+  'work.bFromMix': ' (aus {id})',
+  'inv.avgFromProduction': 'Aus {n} Rezepten gerechnet, gewichtet nach {bags} Beuteln der letzten {days} Tage.',
+  'inv.avgFromRecipes': 'Aus {n} Rezepten gerechnet — noch keine Produktion im Zeitfenster, also zählt jedes Rezept gleich.',
+  'inv.avgFromStored': 'Noch kein Rezept hinterlegt — es gilt der zuletzt gespeicherte Wert.',
+  'inv.avgCompNote': 'Damit nimmt 1 Block à {bag} kg rund {hw} kg Hartholz und {wb} kg Kleie (Trockengewicht nach Abzug von {rh} % Wasser). 1 Körnerbrut-Tüte à {gbag} kg nimmt rund {grain} kg trockenes Korn (nach Abzug von {grh} % Wasser).'
 };

@@ -4173,6 +4173,22 @@ tr:hover td {
    die Liste und nicht über die halbe Karte: rechts, klein, zurückgenommen —
    und nur eingeblendet, wenn eine Liste da ist (renderDashBatchTasks). Hier
    steht bewusst kein display, damit das hidden-Attribut wirkt. */
+/* Der Durchschnitt wird gerechnet, nicht getippt — also sieht er auch nicht wie
+   ein Eingabefeld aus. Gleiche Höhe wie ein Feld, damit die Reihe nicht
+   springt, aber ohne Rahmen und ohne Cursor. */
+.avg-wert {
+  font-size: 13px;
+  padding: 5px 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+}
+.avg-einheit {
+  font-weight: 400;
+  color: var(--c-text-muted);
+  margin-left: 2px;
+}
+
 .dash-legend {
   margin-top: 6px;
   text-align: right;

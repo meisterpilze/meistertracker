@@ -11386,16 +11386,80 @@ function invLog(mat, deltaKg, type, ref, time) {
   inventory.log.push({ time: time || new Date().toISOString(), mat, deltaKg, running, type, ref });
 }
 
+// Wie weit zurück gezählt wird, um zu gewichten. Kurz genug, dass eine
+// Umstellung im Sortiment durchschlägt, lang genug, dass eine ruhige Woche
+// den Durchschnitt nicht kippt.
+const AVG_FENSTER_TAGE = 90;
+
+// Beutel je Sorte im Fenster — das Gewicht, mit dem ihr Rezept zählt.
+function _avgGewichte() {
+  const grenze = Date.now() - AVG_FENSTER_TAGE * 86400000;
+  const w = {};
+  for (const b of batches) {
+    if (!b.strainId) continue;
+    const t = Date.parse(b.created);
+    if (!Number.isFinite(t) || t < grenze) continue;
+    w[b.strainId] = (w[b.strainId] || 0) + (Number(b.qty) || 0);
+  }
+  return w;
+}
+
+// Gewichtetes Mittel eines Rezeptfeldes. Null, wenn keine Sorte einen
+// brauchbaren Wert beisteuert — dann greift die nächste Stufe.
+function _avgMittel(sorten, feld, gewicht) {
+  let summe = 0;
+  let gesamt = 0;
+  for (const s of sorten) {
+    const v = Number(s[feld]);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    const g = gewicht(s);
+    if (!(g > 0)) continue;
+    summe += v * g;
+    gesamt += g;
+  }
+  return gesamt > 0 ? summe / gesamt : null;
+}
+
+// Der Durchschnitt für die Lagerschätzung — gerechnet, nicht getippt.
+//
+// Vier Stufen, absteigend: nach der Produktion der letzten 90 Tage gewichtet;
+// sonst jedes Rezept gleich; sonst der zuletzt gespeicherte Wert; sonst die
+// eingebaute Vorgabe. `quelle` sagt der Oberfläche, welche Stufe gegriffen hat,
+// damit dort nicht einfach eine Zahl ohne Herkunft steht.
 function getAvgComp() {
-  // Returns the average composition settings, with fallback defaults
-  const a = inventory.avgComposition || {};
+  const gespeichert = inventory.avgComposition || {};
+  const gew = _avgGewichte();
+  const nachProduktion = Object.keys(gew).length > 0;
+  const g = (s) => (nachProduktion ? gew[s.id] || 0 : 1);
+  const alle = (mushroomStrains || []).filter((s) => s.recBatchType);
+  // Holz und Kleie nur aus Block-Rezepten: eine CVG-Sorte hat ihre Masse im
+  // Kokos und würde den Schnitt nach unten ziehen, obwohl sie kein Holz nimmt.
+  const bloecke = alle.filter((s) => s.recBatchType !== 'grain' && (s.recSubstrate || 'holzkleie') !== 'cvg');
+  let quelle = nachProduktion ? 'produktion' : 'rezepte';
+  const stufe = (sorten, feld) => {
+    const w = _avgMittel(sorten, feld, g);
+    if (w != null) return w;
+    const m = _avgMittel(sorten, feld, () => 1);
+    if (m != null && quelle === 'produktion') quelle = 'rezepte';
+    return m;
+  };
+  const nimm = (wert, schluessel, vorgabe) => {
+    if (wert != null) return Math.round(wert * 10) / 10;
+    quelle = 'gespeichert';
+    return gespeichert[schluessel] ?? vorgabe;
+  };
   return {
-    hwPct: a.hwPct ?? 75,
-    wbPct: a.wbPct ?? 25,
-    rhPct: a.rhPct ?? 63,
-    bagKg: a.bagKg ?? 3,
-    grainBagKg: a.grainBagKg ?? 1,
-    grainRhPct: a.grainRhPct ?? 52
+    hwPct: nimm(stufe(bloecke, 'recHardwoodPct'), 'hwPct', 75),
+    wbPct: nimm(stufe(bloecke, 'recWheatbranPct'), 'wbPct', 25),
+    rhPct: nimm(stufe(bloecke, 'recRhPct'), 'rhPct', 63),
+    bagKg: nimm(stufe(bloecke, 'recBagKg'), 'bagKg', 3),
+    // Kein Rezeptfeld trägt die Größe einer Körnerbrut-Tüte. Die bleibt als
+    // Einstellung stehen, und nur die.
+    grainBagKg: gespeichert.grainBagKg ?? 1,
+    grainRhPct: nimm(stufe(alle, 'recGrainRhPct'), 'grainRhPct', 52),
+    quelle,
+    rezepte: bloecke.length,
+    beutel: Object.values(gew).reduce((s, n) => s + n, 0)
   };
 }
 
@@ -11510,30 +11574,51 @@ function renderThresholds() {
       ${t('inv.avgCompDesc')}
     </p>
     <div class="g6" style="gap:8px">
-      <div><label class="fs-xs">${t('inv.hwPct')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.hwPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('hwPct',this.value)" /></div>
-      <div><label class="fs-xs">${t('inv.wbPct')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.wbPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('wbPct',this.value)" /></div>
-      <div><label class="fs-xs">${t('inv.waterPct')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.rhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('rhPct',this.value)" /></div>
-      <div><label class="fs-xs">${t('inv.blockWeight')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.bagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('bagKg',this.value)" /></div>
+      ${[
+        ['inv.hwPct', c.hwPct, '%'],
+        ['inv.wbPct', c.wbPct, '%'],
+        ['inv.waterPct', c.rhPct, '%'],
+        ['inv.blockWeight', c.bagKg, 'kg'],
+        ['inv.grainWaterPct', c.grainRhPct, '%']
+      ]
+        .map(
+          ([k, v, e]) =>
+            `<div><label class="fs-xs">${t(k)}</label>
+               <div class="avg-wert">${esc(String(v))}<span class="avg-einheit">${e}</span></div></div>`
+        )
+        .join('')}
       <div><label class="fs-xs">${t('inv.grainBagWeight')}</label>
         <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
-      <div><label class="fs-xs">${t('inv.grainWaterPct')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.grainRhPct)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainRhPct',this.value)" /></div>
     </div>
-    <div class="fs-xs" style="margin-top:8px;color:var(--c-text-muted)">
-      With these settings: 1 × ${c.bagKg}kg block uses ~${(mtDryKg(c.bagKg, c.rhPct) * (c.hwPct / 100)).toFixed(3)}kg hardwood + ~${(mtDryKg(c.bagKg, c.rhPct) * (c.wbPct / 100)).toFixed(3)}kg wheat bran (dry weights after removing ${c.rhPct}% water). 1 × ${c.grainBagKg}kg grain bag uses ~${(mtDryKg(c.grainBagKg, c.grainRhPct)).toFixed(3)}kg dry grain (after removing ${c.grainRhPct}% water).
+    <div class="fs-xs" style="margin-top:8px;color:var(--c-text-muted);line-height:1.7">
+      <div>${esc(
+        c.quelle === 'produktion'
+          ? t('inv.avgFromProduction', { n: c.rezepte, bags: c.beutel, days: AVG_FENSTER_TAGE })
+          : c.quelle === 'rezepte'
+            ? t('inv.avgFromRecipes', { n: c.rezepte })
+            : t('inv.avgFromStored')
+      )}</div>
+      <div>${esc(
+        t('inv.avgCompNote', {
+          bag: c.bagKg,
+          hw: (mtDryKg(c.bagKg, c.rhPct) * (c.hwPct / 100)).toFixed(3),
+          wb: (mtDryKg(c.bagKg, c.rhPct) * (c.wbPct / 100)).toFixed(3),
+          rh: c.rhPct,
+          gbag: c.grainBagKg,
+          grain: mtDryKg(c.grainBagKg, c.grainRhPct).toFixed(3),
+          grh: c.grainRhPct
+        })
+      )}</div>
     </div>
   </div>`;
-
   el.innerHTML = threshHtml + compHtml;
 }
 
+// Nur noch die Körnerbrut-Tüte: alles andere kommt aus den Rezepten und ließe
+// sich hier nur scheinbar ändern.
 function updateAvgComp(key, val) {
-  if (!inventory.avgComposition)
-    inventory.avgComposition = { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 };
+  if (key !== 'grainBagKg') return;
+  if (!inventory.avgComposition) inventory.avgComposition = {};
   inventory.avgComposition[key] = parseDecimal(val) || 0;
   saveInvConfig();
   renderInvStock();

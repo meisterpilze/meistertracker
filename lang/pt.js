@@ -1976,5 +1976,9 @@ window.LANG['pt'] = {
   'work.bMixFrom': 'Mistura de {id}',
   'work.bMixLine': '{hw} % madeira / {wb} % farelo · {rh} % umidade',
   'work.bMixFixed': 'Foi assim que a mistura foi preparada. A receita da variedade não altera mais isso.',
-  'work.bFromMix': ' (de {id})'
+  'work.bFromMix': ' (de {id})',
+  'inv.avgFromProduction': 'Calculado a partir de {n} receitas, ponderado por {bags} sacos dos últimos {days} dias.',
+  'inv.avgFromRecipes': 'Calculado a partir de {n} receitas — ainda sem produção no período, então cada receita conta igual.',
+  'inv.avgFromStored': 'Ainda sem receita registrada — vale o último valor salvo.',
+  'inv.avgCompNote': 'Assim, 1 bloco de {bag} kg leva cerca de {hw} kg de madeira e {wb} kg de farelo (peso seco após remover {rh} % de água). 1 saco de grão de {gbag} kg leva cerca de {grain} kg de grão seco (após remover {grh} % de água).'
 };
