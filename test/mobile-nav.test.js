@@ -495,11 +495,13 @@ describe('the drawer that outlived its breakpoint', () => {
     for (const cls of ['sb-open', 'sb-show', 'sb-mobile-open']) {
       assert.match(CLOSE[0], new RegExp("remove\\('" + cls + "'\\)"), `sbClose() leaves ${cls} standing`);
     }
-    assert.match(
-      APP,
-      /function sbCloseMobile\(\) \{\s*if \(sbIsPhone\(\)\) sbClose\(\);/,
-      'the two closers have drifted apart again'
-    );
+    // No arrangement gate in here: sbClose() is already a no-op on a desk, so
+    // the gate could only suppress a cleanup, never enable one, and it was a
+    // state change depending on re-reading the arrangement after the fact.
+    const CLOSE_MOBILE = APP.match(/function sbCloseMobile\(\) \{[\s\S]*?\n\}/);
+    assert.ok(CLOSE_MOBILE, 'sbCloseMobile() is gone');
+    assert.match(CLOSE_MOBILE[0], /sbClose\(\)/, 'the two closers have drifted apart again');
+    assert.doesNotMatch(CLOSE_MOBILE[0], /sbIsPhone/, 'the arrangement is read at close time again');
   });
 
   it('lifts the drawer when the veil is tapped, the same way as everything else', () => {

@@ -995,9 +995,14 @@ function sbUncollapse() {
   document.body.classList.remove('sb-is-collapsed');
 }
 
-// Close sidebar on mobile when navigating
+// Close the drawer when navigating. No phone gate: sbClose() removes three
+// classes that the desktop arrangement never sets and derives inert from the
+// arrangement itself, so on a desk it already does nothing. The gate could only
+// ever suppress a cleanup, never enable one, and it was the last place left
+// where a state change depended on re-reading the arrangement after the fact,
+// which is the shape of the bug this branch was opened about.
 function sbCloseMobile() {
-  if (sbIsPhone()) sbClose();
+  sbClose();
 }
 
 // A closed drawer is off-screen, not gone. `transform: translateX(-100%)` keeps
