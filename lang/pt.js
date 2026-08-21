@@ -1972,5 +1972,9 @@ window.LANG['pt'] = {
   'search.gZones': 'Zonas',
   'search.gOrders': 'Encomendas',
   'search.gCustomers': 'Clientes',
-  'search.gPages': 'Páginas'
+  'search.gPages': 'Páginas',
+  'work.bMixFrom': 'Mistura de {id}',
+  'work.bMixLine': '{hw} % madeira / {wb} % farelo · {rh} % umidade',
+  'work.bMixFixed': 'Foi assim que a mistura foi preparada. A receita da variedade não altera mais isso.',
+  'work.bFromMix': ' (de {id})'
 };
