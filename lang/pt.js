@@ -104,6 +104,12 @@ window.LANG['pt'] = {
   'orders.choose': 'Escolher produto',
   'orders.assign': 'Associar',
   'orders.mapped': 'Associado',
+  'orders.fixmapTitle': 'Associações fixas',
+  'orders.fixmapDesc':
+    'Que número de artigo de um canal pertence a que produto. A lista acima só se enche a partir de encomendas; aqui um número pode ser associado de antemão, para que a primeira encomenda desse artigo resolva logo para um produto.',
+  'orders.fixmapNone': 'Ainda nada associado para este canal.',
+  'orders.fixmapNeeds': 'Escolhe um número de artigo e um produto',
+  'orders.retired': 'descontinuado',
   'orders.noProducts': 'Ainda sem produtos',
   'orders.customersTitle': 'Clientes',
   'orders.noCustomers': 'Ainda sem clientes',
@@ -1524,6 +1530,13 @@ window.LANG['pt'] = {
   'channels.syncing': 'A sincronizar …',
   'channels.synced': '{n} encomendas sincronizadas',
   'channels.lastSync': 'Última: {time}',
+  'channels.billbeeTitle': 'Billbee',
+  'channels.billbeeDesc':
+    'O Billbee não é uma loja, é a central: de lá chegam as encomendas de todos os canais de uma só vez, para que o planeamento da produção saiba o que é preciso. O Meistertracker só lê — stock, faturas e envios ficam no Billbee. Peça uma chave de API ao Billbee, ative a API na conta Billbee e crie aí uma palavra-passe de API. Assim que o Billbee estiver ativo, as ligações diretas ao Wix, Etsy e eBay ficam em pausa sozinhas: caso contrário cada encomenda chegaria duas vezes, uma pelo Billbee e outra diretamente.',
+  'channels.billbeeUser': 'Utilizador Billbee (e-mail)',
+  'channels.billbeeApiPassword': 'Palavra-passe da API',
+  'channels.billbeeStandsIn': 'O Billbee assume: {list} em pausa, para nenhuma encomenda chegar duas vezes',
+  'channels.supersededByBillbee': 'Em pausa enquanto o Billbee estiver ativo',
   // Print
   'print.barcodeOnly': 'S\u00f3 c\u00f3digo de barras (C\u00f3digo + ID)',
   'print.barcodeStrain': 'C\u00f3digo + variedade (+ esp\u00e9cie & notas)',
