@@ -1,0 +1,25 @@
+# Why this file exists: several tests read a source file as text and match it
+# with regexes anchored on `$` or `\n`. In a JavaScript regex `.` does not match
+# `\r`, so on a CRLF checkout `/^COPY\s+(.+)$/` matches nothing and the test
+# fails against source that is perfectly fine. Six test files broke that way on
+# Windows (33 assertions), and `prettier --check` flagged all 75 files it looks
+# at, because its endOfLine default is "lf". CI runs on Linux and saw none of it.
+#
+# The blobs in this repository are already LF — core.autocrlf=true converts on
+# checkout, not on commit — so this pins the working tree to what git already
+# stores. It changes no file content.
+*               text=auto eol=lf
+
+# The two that genuinely want CRLF. cmd.exe mis-parses a multi-line label or
+# goto in an LF batch file, and START.bat is how this app is launched.
+*.bat           text eol=crlf
+*.ps1           text eol=crlf
+
+# Never touched, never diffed.
+*.png           binary
+*.ico           binary
+
+# Vendored third-party bundles are kept byte-for-byte as upstream shipped them.
+# chart.min.js was committed with CRLF; renormalising it would rewrite 40 lines
+# of minified code we do not maintain, for no benefit.
+lib/**          -text
