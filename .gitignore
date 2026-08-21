@@ -63,3 +63,6 @@ CONTEXT.md
 *-strategy.md
 /strategy/
 /planning/
+
+# Boot log written by autostart.bat under the scheduled task.
+autostart.log
