@@ -30,6 +30,22 @@
      as aliases keeps them honest — change --c-primary and the accent follows. */
   --c-accent: var(--c-primary);
   --c-card: var(--c-surface);
+  /* The step this palette was missing.
+
+     Each family has light / border / accent / mid / dark. None of those is a
+     surface you can put white text on: the mid tones read 3.8:1 (red) and
+     2.2:1 (amber) against white, and the -dark tones are so heavy they read as
+     disabled on a small control. So every author who needed a filled button
+     picked a one-off — #dc2626 six times, #ea580c eight. That is not
+     carelessness, it is the palette being short a step, and the two guesses
+     did not land in the same place: #dc2626 clears 4.5:1, #ea580c does not.
+
+     So the step gets a name and one value per family, chosen from what the app
+     already contained: #dc2626 is kept as-is (4.83:1) and #b45309, which was
+     already here once, replaces #ea580c (3.56 -> 5.02). "Strong" means exactly
+     one thing — the tone that carries white text at 4.5:1. */
+  --c-red-strong: #dc2626;
+  --c-amber-strong: #b45309;
   /* Semantic color palette */
   --c-red: #ef4444;
   --c-red-light: #fee2e2;
