@@ -118,8 +118,10 @@ const TOUCH_FELD = tapFloor();
 // The jumps the second --app pass tests. Each one is a thing that happens to a
 // real window in one step rather than an arbitrary pair of numbers: a phone or
 // tablet rotating, a split view snapping, a desktop window being maximised.
-// Only `to` widths that are in the band get measured against what opening the
-// page there gives.
+// Every `to` width is added to the band below, so each one has a real baseline:
+// what the page does when it is OPENED at that width. Without that baseline the
+// jump pass cannot tell "did not follow the jump" from "too wide here anyway",
+// and those are the two findings this whole pass exists to separate.
 const JUMPS = [
   { name: '(desk→phone)', from: 1920, to: 320 },
   { name: '(desk→phone)', from: 1440, to: 390 },
@@ -129,7 +131,16 @@ const JUMPS = [
 ];
 
 const GRENZEN = breakpoints();
-const BAND = ONE_WIDTH ? [ONE_WIDTH] : QUICK ? [320, 375, 768, 1440] : widthBand(GRENZEN.list);
+// The jump targets belong in the band. 390 was not in it (the band steps in
+// twenties from 320 and has 380 and 400), so the two jumps that land on 390 had
+// no baseline at all and silently substituted the nominal width, charging the
+// page's own widening at 390 to the jump.
+const SPRUNGZIELE = [...new Set(JUMPS.map((j) => j.to))];
+const BAND = ONE_WIDTH
+  ? [ONE_WIDTH]
+  : QUICK
+    ? [320, 375, 768, 1440]
+    : [...new Set([...widthBand(GRENZEN.list), ...SPRUNGZIELE])].sort((a, b) => a - b);
 const POINTS = ONE_POINTER ? POINTERS.filter((p) => p.name === ONE_POINTER) : POINTERS;
 if (!POINTS.length) {
   console.error(`--pointer takes ${POINTERS.map((p) => p.name).join(' or ')}`);
@@ -701,6 +712,9 @@ async function main() {
   // Was Durchgang 1 an jeder Stelle gemessen hat, damit Durchgang 2 etwas hat,
   // wogegen er vergleichen kann.
   const geoeffnet = new Map();
+  // A jump we could not judge, because the width it lands on was not swept.
+  // Reported at the end: a silently skipped check reads as a passed one.
+  const uebersprungeneSpruenge = new Set();
   for (const point of POINTS) {
     const page = await browser.newPage();
     if (cookie) {
@@ -849,8 +863,14 @@ async function main() {
             hasTouch: coarse
           });
           const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor);
-          const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`) ?? jump.to;
-          if (m.viewport > opened) {
+          const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`);
+          if (opened === undefined) {
+            // Belt and braces: SPRUNGZIELE puts every `to` in the band, but a
+            // narrowed run (--width, --quick) can still leave one out. Say so
+            // rather than inventing the number, which is what the nominal-width
+            // fallback used to do.
+            uebersprungeneSpruenge.add(`${jump.from}→${jump.to}px ${jump.name}`);
+          } else if (m.viewport > opened) {
             rows.push({
               kind: 'jumped',
               pointer: point.name,
@@ -865,6 +885,10 @@ async function main() {
       }
     }
     await page.close();
+  }
+  if (uebersprungeneSpruenge.size) {
+    console.log(`\n· ${uebersprungeneSpruenge.size} jump(s) not judged, their landing width was not swept:`);
+    for (const j of uebersprungeneSpruenge) console.log('    ' + j);
   }
   await aufraeumen();
   console.log(
