@@ -1897,6 +1897,24 @@ textarea:focus {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
+/* The floor, applied to the element rather than to a list of classes.
+
+   §5.1 gave the phone a 56px touch target and the token layer delivered it, but
+   only the controls somebody remembered to give a class consumed it: .btn,
+   .stab, .sb-btn, the bottom nav. Twenty-five buttons had no height rule at
+   all and came out at whatever their padding made — the Woche/Monat/Jahr
+   toggle at roughly 28px, "alles gelesen" at 20px, the pack-size delete at 20.
+   Patching those twenty-five leaves the twenty-sixth to be written next week,
+   so the rule goes where a button cannot avoid it.
+
+   `button` is (0,0,1), so every class in this sheet still outranks it — .btn
+   keeps its 56px --tap, .stab its 48px --tap-sm — and this only reaches the
+   controls nothing else spoke for. --tap-sm rather than --tap because that is
+   what a control of unknown importance should get, and because it is `auto` on
+   a desk: the desktop cannot move here, which the baseline fixture checks. */
+button {
+  min-height: var(--tap-sm);
+}
 /* `hidden` muss auch auf Knöpfen wirken. Die display-Angabe unten ist eine
    Autoren-Regel und schlägt damit die [hidden]-Regel des Browsers; ohne diese
    Ausnahme bleibt ein Knopf mit hidden sichtbar (siehe .worktree-banner). */
@@ -4918,12 +4936,22 @@ tr:hover td {
   .notif-dropdown {
     left: 8px;
     right: 8px;
-    top: 56px;
+    /* Under the bar, not under the notch. The bar is 56px of content plus
+       whatever the display cutout takes — it says so itself, two rules up —
+       and this is `fixed`, so its 56px is measured from the physical top of
+       the screen, which with viewport-fit=cover is behind the status bar. On a
+       phone with no cutout the two agree and the panel sits flush; on one with
+       a notch or an island the panel opened 47-59px high and, at z-index 200
+       against the bar's 110, covered the bell that had just been tapped. */
+    top: calc(56px + env(safe-area-inset-top, 0px));
     bottom: auto;
     width: auto;
     max-width: none;
+    /* Same correction at the other end: 80px was the bar plus a margin, and the
+       home indicator is not in it. Without the inset the last row of the list
+       sits in the strip iOS reserves for its own swipe. */
     max-height: calc(100vh - 80px);
-    max-height: calc(100dvh - 80px);
+    max-height: calc(100dvh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
 }
 
