@@ -7,6 +7,7 @@
 //   node scripts/measure-mobile.js --pointer coarse
 //   node scripts/measure-mobile.js --all         # no 40-line cap on the report
 //   node scripts/measure-mobile.js --strict      # exit 1 on anything unratcheted
+//   node scripts/measure-mobile.js --app         # with app.js running on real data
 //
 // ⚠️ **This used to be hand-driven, and that is the change.** The old version
 // printed a snippet, told you to size a window to exactly 375px, and waited for
@@ -29,11 +30,29 @@
 // width: 24px is WCAG 2.5.8 Target Size (Minimum), level AA, and applies to
 // every pointer; 44px is Apple's HIG and WCAG 2.5.5, level AAA.
 //
-// What it still cannot see, stated so the output is not read as more than it
-// is: everything app.js renders at runtime — every table row, every list, every
-// dialog body. That is what `--app` exists for, and it is a different mode
-// because it needs a database. This mode is index.html's own markup under the
-// real stylesheet, which is the layer the token work edits.
+// ⚠️ **Two modes, and the second one is the point.** Without --app this
+// measures index.html's own markup under the real stylesheet, with every script
+// stripped: no auth, no fetch, no state, so only the CSS decides. That is the
+// layer the token work edits, and it is cheap and honest, but it cannot see a
+// single generated table row. Both previous plans called that half device-only
+// and stopped there.
+//
+// --app is the other half. It builds a throwaway database, seeds it through
+// db.js (scripts/measure-fixture.js), starts the real server in WORKTREE_MODE,
+// creates a session with db.createSession() and hands the cookie to Chrome, and
+// then walks the sidebar clicking every entry. What gets measured there is what
+// app.js actually rendered: the batch table, the lab list, the calendar, the
+// dialogs. It removes the database again afterwards and refuses to start if one
+// it did not create is already there.
+//
+// ZOOMED OUT is the finding neither previous round could have produced, and it
+// only exists in --app under a coarse pointer. On a phone a page whose content
+// is wider than the screen does not get a sideways scrollbar: the browser
+// honours the meta viewport, widens the LAYOUT viewport, and renders the whole
+// page smaller. Asked for 320 and told 391 means a phone shows that page at
+// 82%, with the type shrunk to match. `body{overflow-x:hidden}` does not
+// prevent it, which is measured rather than assumed: the widening happened with
+// that rule in place.
 //
 // OVERFLOW is the third thing every phase promised and none of them measured:
 // "no horizontal scroll". Reported as the elements whose right edge is past the
@@ -77,6 +96,7 @@ const flag = (name) => {
 const STRICT = args.includes('--strict');
 const ALL = args.includes('--all');
 const QUICK = args.includes('--quick');
+const APP = args.includes('--app');
 const ONE_WIDTH = Number(flag('--width') || 0) || null;
 const ONE_POINTER = flag('--pointer');
 
@@ -266,6 +286,115 @@ function measure(typeFloor, touchFloor) {
   };
 }
 
+// ── The live measurement, run inside the page with app.js running ──────────
+// Deliberately NOT the reveal trick above. With app.js running, the app decides
+// what is visible, and forcing every page to display:block would stack fourteen
+// screens into one document and measure widths nobody gets. Here exactly one
+// page is open, because a nav entry was clicked, exactly as a user meets it.
+/* global document, window, getComputedStyle */
+function measureLive(typeFloor, touchFloor) {
+  const TOUCH =
+    'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]';
+  const where = function (el) {
+    let p = el.tagName.toLowerCase();
+    if (el.id) p += '#' + el.id;
+    else if (el.className && typeof el.className === 'string' && el.className.trim())
+      p += '.' + el.className.trim().split(/\s+/)[0];
+    const page = el.closest('.page');
+    return (page && page.id ? page.id + ' ' : '') + p;
+  };
+  const ownText = function (el) {
+    for (let n = el.firstChild; n; n = n.nextSibling)
+      if (n.nodeType === 3 && n.nodeValue.trim()) return n.nodeValue.trim();
+    return '';
+  };
+  const scrolls = function (el) {
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const ox = getComputedStyle(a).overflowX;
+      if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return true;
+    }
+    return false;
+  };
+  const type = [];
+  const touch = [];
+  const over = [];
+  const vw = document.documentElement.clientWidth;
+  const all = document.querySelectorAll('body *');
+  let visible = 0;
+  for (let i = 0; i < all.length; i++) {
+    const el = all[i];
+    if (el.closest('#login-screen,noscript,template')) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    visible++;
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    const fs2 = parseFloat(cs.fontSize);
+    const txt = ownText(el);
+    if (txt && fs2 < typeFloor) type.push({ at: where(el), px: fs2, text: txt.slice(0, 40) });
+    if (el.matches(TOUCH) && r.height > 0 && r.height < touchFloor) {
+      touch.push({
+        at: where(el),
+        px: Math.round(r.height * 10) / 10,
+        text: (el.value || txt || el.getAttribute('placeholder') || '').slice(0, 40)
+      });
+    }
+    if (cs.position !== 'fixed' && r.width > 0 && r.right > vw + 1 && !scrolls(el)) {
+      over.push({ at: where(el), px: Math.round(r.right - vw), text: txt.slice(0, 40) });
+    }
+  }
+  return {
+    viewport: window.innerWidth,
+    type,
+    touch,
+    over,
+    hidden: all.length - visible,
+    scanned: all.length,
+    unfilled: 0,
+    pageWidth: document.documentElement.scrollWidth
+  };
+}
+
+// ── The throwaway instance --app runs against ──────────────────────────────
+const DB_FILE = path.join(ROOT, 'meistertracker.db');
+const MARKER = DB_FILE + '.throwaway';
+const MADE = [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm', MARKER];
+const MADE_DIRS = [path.join(ROOT, 'backups'), path.join(ROOT, 'data'), path.join(ROOT, 'calendars')];
+
+// server.js takes its database path from __dirname and nothing overrides it, so
+// --app writes into the checkout it runs from. That is fine in a worktree and
+// would be a catastrophe in one somebody works in: a seeded fixture landing on
+// top of real records. The marker file is the whole safety: a database this
+// script created carries one, and one it did not carry stops the run.
+function claimThrowaway() {
+  if (fs.existsSync(DB_FILE) && !fs.existsSync(MARKER)) {
+    console.error(`\n✗ ${DB_FILE} already exists and was not created by this script.`);
+    console.error('  --app seeds a fixture and deletes the database afterwards; it will not touch');
+    console.error('  one it does not own. Run it in a worktree, or move that file aside first.');
+    process.exit(2);
+  }
+  for (const f of MADE) if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+  fs.writeFileSync(MARKER, 'Created by scripts/measure-mobile.js --app. Safe to delete.\n');
+}
+
+function dropThrowaway(dirsExistedBefore) {
+  for (const f of MADE) if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+  for (const d of MADE_DIRS) {
+    if (!dirsExistedBefore.has(d) && fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true });
+  }
+}
+
+async function freePort() {
+  const net = require('net');
+  return new Promise((ok) => {
+    const s2 = net.createServer();
+    s2.listen(0, '127.0.0.1', () => {
+      const p2 = s2.address().port;
+      s2.close(() => ok(p2));
+    });
+  });
+}
+
 // ── The ratchet ────────────────────────────────────────────────────────────
 // Findings that are open today, each with the package that closes it. The run
 // is green on today's state and every package takes lines out. A line that
@@ -276,12 +405,18 @@ function readThresholds() {
   return JSON.parse(fs.readFileSync(THRESHOLDS, 'utf8'));
 }
 
-function ratchet(findings, lines) {
+function ratchet(findings, lines, mode) {
   const used = new Set();
   for (const f of findings) {
     f.covered = null;
     for (let i = 0; i < lines.length; i++) {
       const r = lines[i];
+      // A line says which mode it describes, and it only covers findings from
+      // that mode. Without this the broad app-mode line for fine-pointer
+      // controls above 769px also swallowed the markup-mode <summary> finding,
+      // and the <summary>'s own line was then reported as dead: a green run
+      // quietly suggesting that a real finding be deleted from the file.
+      if (r.mode && mode && r.mode !== mode) continue;
       if (r.kind !== f.kind) continue;
       if (r.pointer && r.pointer !== f.pointer) continue;
       if (r.at && !f.at.includes(r.at)) continue;
@@ -339,7 +474,11 @@ function report(title, findings, band) {
     .sort((a, b) => b.widths.length - a.widths.length || a.pxMin - b.pxMin)
     .map((f) => {
       const px = f.pxMin === f.pxMax ? `${f.pxMin}px` : `${f.pxMin}-${f.pxMax}px`;
-      return `[${f.pointer}] ${span(f.widths, band)}px  ${px}  ${f.at}${f.text ? `  "${f.text}"` : ''}`;
+      const head = `[${f.pointer}] ${span(f.widths, band)}px  ${px}  ${f.at}${f.text ? `  "${f.text}"` : ''}`;
+      if (!f.details || !f.details.size) return head;
+      const ws = [...f.details.keys()].sort((a, b) => a - b);
+      const ends = ws.length > 1 ? [ws[0], ws[ws.length - 1]] : [ws[0]];
+      return head + ends.map((w) => `\n        at ${w}px: ${f.details.get(w)}`).join('');
     });
   const cap = ALL ? lines.length : 40;
   for (const l of lines.slice(0, cap)) console.log('  ' + l);
@@ -362,9 +501,58 @@ async function main() {
     process.exit(2);
   }
 
-  const server = serve(build(), null, 0);
-  await new Promise((ok) => server.on('listening', ok));
-  const port = server.address().port;
+  // Either a two-file static server, or a real one with a database behind it.
+  let server = null;
+  let child = null;
+  let port;
+  let cookie = null;
+  let dirsBefore = new Set();
+  if (APP) {
+    const dbApi = require('./../db.js');
+    const { seed } = require('./measure-fixture.js');
+    dirsBefore = new Set(MADE_DIRS.filter((d) => fs.existsSync(d)));
+    claimThrowaway();
+    const database = dbApi.openDb(DB_FILE);
+    seed(database);
+    dbApi.createUser(database, 'messstand', 'Messstand-Wegwerf-2026!', 'admin');
+    const user = database.prepare('SELECT id FROM users WHERE username = ?').get('messstand');
+    cookie = dbApi.createSession(database, user.id);
+    port = await freePort();
+    child = require('child_process').spawn(process.execPath, [path.join(ROOT, 'server.js')], {
+      cwd: ROOT,
+      env: { ...process.env, PORT: String(port), WORKTREE_MODE: '1', LOG_FORMAT: 'text' },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    const log = [];
+    child.stdout.on('data', (c) => log.push(String(c)));
+    child.stderr.on('data', (c) => log.push(String(c)));
+    const http2 = require('http');
+    const up = async () =>
+      new Promise((ok) => {
+        http2
+          .get({ host: '127.0.0.1', port, path: '/api/health' }, (r) => {
+            r.resume();
+            ok(r.statusCode === 200);
+          })
+          .on('error', () => ok(false));
+      });
+    let waited = 0;
+    while (!(await up())) {
+      await new Promise((ok) => setTimeout(ok, 250));
+      waited += 250;
+      if (waited > 30000) {
+        child.kill();
+        dropThrowaway(dirsBefore);
+        console.error('\n✗ the server did not come up in 30s:\n' + log.join('').slice(-2000));
+        process.exit(1);
+      }
+    }
+    console.log(`\nReal server on 127.0.0.1:${port}, seeded database, signed in as messstand.`);
+  } else {
+    server = serve(build(), null, 0);
+    await new Promise((ok) => server.on('listening', ok));
+    port = server.address().port;
+  }
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'shell',
@@ -376,8 +564,16 @@ async function main() {
   let scanned = 0;
   let hiddenCount = 0;
   let unfilledCount = 0;
+  let stops = 0;
   for (const point of POINTS) {
     const page = await browser.newPage();
+    if (cookie) {
+      // The session cookie is HttpOnly and, over plain http, plainly named
+      // `session` (server.js:1210 picks __Host-session only under https).
+      // puppeteer sets HttpOnly cookies fine; a browser handed the login form
+      // could not, which is why this route exists at all.
+      await page.setCookie({ name: 'session', value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true });
+    }
     const cdp = await page.createCDPSession();
     // Over CDP because puppeteer's emulateMediaFeatures knows
     // prefers-color-scheme and prefers-reduced-motion but not pointer or hover,
@@ -395,29 +591,82 @@ async function main() {
     const coarse = point.name === 'coarse';
     await page.setViewport({ width: BAND[0], height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
     await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
-    for (const width of BAND) {
-      await page.setViewport({ width, height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
-      const m = await page.evaluate(measure, TYPE_FLOOR, point.tapFloor);
-      scanned = m.scanned;
-      hiddenCount = m.hidden;
-      unfilledCount = m.unfilled;
-      if (m.viewport !== width) {
-        console.error(`\n✗ asked for ${width}px, the page reports ${m.viewport}px.`);
-        process.exit(1);
+
+    // Where a measurement is taken. Statically that is the whole document once,
+    // and measure() walks the pages itself. With app.js running it is one
+    // sidebar entry at a time, clicked, because the app decides what is visible
+    // and forcing it would measure widths nobody gets.
+    let stations = [{ name: '(markup)', open: null }];
+    if (APP) {
+      await page.waitForFunction(() => document.querySelector('#p-dash.active, .page.active'), { timeout: 20000 });
+      // Every sidebar entry, whether or not it is on screen right now. The
+      // first version filtered on offsetParent, which at 320px means "not in
+      // the closed drawer" — so it walked 7 of the 12 pages and the report
+      // looked complete. A button in a closed drawer still clicks, and the page
+      // it opens is still a page.
+      const ids = await page.evaluate(() =>
+        [...document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn')].filter((b) => b.id).map((b) => b.id)
+      );
+      stations = ids.map((id) => ({ name: id, open: id }));
+    }
+    stops = stations.length;
+
+    for (const stop of stations) {
+      if (stop.open) {
+        // Escape first: a station may have left a panel or drawer open, and the
+        // next page would then be measured underneath it.
+        await page.keyboard.press('Escape');
+        await page.evaluate((id) => document.getElementById(id).click(), stop.open);
+        await new Promise((ok) => setTimeout(ok, 150));
       }
-      for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
-      for (const r of m.touch) rows.push({ kind: 'touch', pointer: point.name, width, ...r });
-      // Only the outermost offender per branch: a div 40px too wide reports its
-      // heading, its text and its buttons too, and they are all the one fix.
-      const outer = m.over.filter((r, i) => !m.over.some((o, j) => j !== i && r.at.startsWith(o.at + ' ')));
-      for (const r of outer) rows.push({ kind: 'over', pointer: point.name, width, ...r });
+      for (const width of BAND) {
+        await page.setViewport({ width, height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
+        const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, point.tapFloor);
+        scanned = m.scanned;
+        hiddenCount = m.hidden;
+        unfilledCount = m.unfilled;
+        if (m.viewport !== width) {
+          // Not an error in the stand: the finding. Under a coarse pointer
+          // Chrome honours the page's meta viewport, and a page whose content
+          // is wider than the screen does not get a sideways scrollbar there,
+          // it gets a WIDER LAYOUT VIEWPORT and renders zoomed out. The window
+          // was set to 320 and the page reports 391, so a phone shows the whole
+          // thing at 82% and the type shrinks with it.
+          //
+          // Nothing else on this page at this width is worth reporting, because
+          // every rectangle was laid out against a width nobody has. Hence the
+          // `continue`: one finding, not a hundred derived ones.
+          rows.push({
+            kind: 'widened',
+            pointer: point.name,
+            width,
+            at: stop.name,
+            px: m.viewport - width,
+            text: '',
+            detail: `${width} → ${m.viewport}px, renders at ${Math.round((width / m.viewport) * 100)}%`
+          });
+          continue;
+        }
+        for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
+        for (const r of m.touch) rows.push({ kind: 'touch', pointer: point.name, width, ...r });
+        // Only the outermost offender per branch: a div 40px too wide reports
+        // its heading, its text and its buttons too, and they are all one fix.
+        const outer = m.over.filter((r, i) => !m.over.some((o, j) => j !== i && r.at.startsWith(o.at + ' ')));
+        for (const r of outer) rows.push({ kind: 'over', pointer: point.name, width, ...r });
+      }
     }
     await page.close();
   }
   await browser.close();
-  server.close();
+  if (server) server.close();
+  if (child) {
+    child.kill();
+    await new Promise((ok) => setTimeout(ok, 400));
+    dropThrowaway(dirsBefore);
+  }
   console.log(
-    `\n${BAND.length} widths × ${POINTS.length} pointers = ${BAND.length * POINTS.length} measurements ` +
+    `\n${BAND.length} widths × ${POINTS.length} pointers × ${stops} ${APP ? 'pages' : 'pass'} = ` +
+      `${BAND.length * POINTS.length * stops} measurements ` +
       `in ${Math.round((Date.now() - started) / 1000)}s — ${scanned} elements, ${hiddenCount} still hidden, ` +
       `${unfilledCount} controls still waiting for their label (--app fills them).`
   );
@@ -431,16 +680,22 @@ async function main() {
   const grouped = new Map();
   for (const r of rows) {
     const key = `${r.kind}|${r.pointer}|${r.at}|${r.text || ''}`;
-    if (!grouped.has(key)) grouped.set(key, { ...r, widths: [], pxMin: r.px, pxMax: r.px });
+    if (!grouped.has(key)) grouped.set(key, { ...r, widths: [], pxMin: r.px, pxMax: r.px, details: new Map() });
     const g = grouped.get(key);
     g.widths.push(r.width);
     g.pxMin = Math.min(g.pxMin, r.px);
     g.pxMax = Math.max(g.pxMax, r.px);
+    // `detail` carries the numbers for one particular width and is deliberately
+    // NOT part of the key: with it in, the dashboard being zoomed out from 320
+    // to 460px is seven findings instead of one. The numbers are still the
+    // point, so both ends of the span are printed under the line.
+    if (r.detail) g.details.set(r.width, r.detail);
   }
   const findings = [...grouped.values()];
 
   const thresholds = readThresholds();
-  const used = ratchet(findings, thresholds.ratchet || []);
+  const here = APP ? 'app' : 'markup';
+  const used = ratchet(findings, thresholds.ratchet || [], here);
 
   const type = findings.filter((f) => f.kind === 'type' && f.pointer === 'coarse');
   const typeFine = findings.filter((f) => f.kind === 'type' && f.pointer === 'fine');
@@ -457,6 +712,11 @@ async function main() {
     BAND
   );
   bad += report('OVERFLOW: past the right edge, outside any sideways-scrolling box', over, BAND);
+  bad += report(
+    'ZOOMED OUT: the page is wider than the phone, so the phone shrinks the page',
+    findings.filter((f) => f.kind === 'widened'),
+    BAND
+  );
 
   if (typeFine.length) {
     // Reported, never counted, and the distinction is load-bearing: without it
@@ -474,12 +734,18 @@ async function main() {
     console.log('  correct on a Büro screen, too small on one used with gloves.');
   }
 
-  const dead = (thresholds.ratchet || []).filter((_, i) => !used.has(i));
+  // Only lines this mode could have matched. A markup-mode line reported as
+  // dead by the app run would be a lie in both directions: the app run cannot
+  // see #nb-sub-section's <summary> because the form it sits in is collapsed,
+  // and saying "the package is done" about it would take a real finding out of
+  // the file.
+  const dead = (thresholds.ratchet || []).filter((r, i) => !used.has(i) && (!r.mode || r.mode === here));
   if (dead.length && !QUICK && !ONE_WIDTH && !ONE_POINTER) {
     console.log(`\n══ ratchet lines matching nothing ══  ${dead.length}`);
     for (const r of dead) {
       console.log(
-        `  ${r.kind} ${r.at || '*'} ${r.text || ''}: ${r.package ? r.package + ' is done, ' : ''}line can go`
+        `  ${r.kind} ${r.pointer || 'both'} ${r.at || '*'}: nothing matches it any more` +
+          `${r.package ? ` (${r.package})` : ''}, line can go`
       );
     }
   }
@@ -487,8 +753,11 @@ async function main() {
   const held = findings.filter((f) => f.covered).length;
   console.log(
     bad
-      ? `\n${bad} open, ${held} ratcheted. This is index.html's markup only — what app.js renders needs --app.`
-      : `\nEvery floor holds across ${BAND.length} widths and ${POINTS.length} pointers. ${held} ratcheted with a reason and a package.`
+      ? `\n${bad} open, ${held} ratcheted.` +
+          (APP ? '' : " This is index.html's markup only; what app.js renders needs --app.")
+      : `\nEvery floor holds across ${BAND.length} widths and ${POINTS.length} pointers` +
+          (APP ? ` on ${stops} pages with real data.` : '.') +
+          ` ${held} ratcheted with a reason and a package.`
   );
   process.exit(STRICT && bad ? 1 : 0);
 }
