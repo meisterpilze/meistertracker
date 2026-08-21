@@ -1724,6 +1724,7 @@ window.LANG['de'] = {
     'Diese Durchschnittswerte werden f\u00fcr die "\u2248X Beutel"-Anzeige auf den Lagerkarten verwendet. Sie sind nur Sch\u00e4tzungen \u2014 der genaue Verbrauch wird erfasst, wenn eine Charge mit spezifischem Substratrezept erstellt wird.',
   'inv.hwPct': 'Hartholz %',
   'inv.wbPct': 'Weizenkleie %',
+  'inv.gypsumPct': 'Gips %',
   'inv.waterPct': 'Wasser % (RH)',
   'inv.blockWeight': 'Blockgewicht (kg)',
   'inv.grainBagWeight': 'Getreidebeutel (kg)',

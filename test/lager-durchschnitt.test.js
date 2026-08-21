@@ -159,3 +159,38 @@ describe('Lagerdurchschnitt — er kommt aus den Rezepten', () => {
     assert.equal(c.hwPct, 80, 'die leeren Rezepte ziehen den Schnitt nicht auf null');
   });
 });
+
+// Gips war der einzige Anteil dieser Schätzung, der fest eingebaut war: 1 %,
+// während rec_gypsum_pct daneben lag und der Mischlauf ihn längst las. Der
+// Rückfall auf 1 % bleibt, denn die meisten Rezepte führen Gips als Flag ohne
+// Zahl — und genau deshalb darf ein fehlender Gipsanteil nicht die Herkunft
+// aller anderen Werte umschreiben.
+describe('Gipsanteil — aus den Rezepten, aber ohne die Herkunft zu verfälschen', () => {
+  const mitGips = (id, gyp) => ({ ...holz(id, 80, 20, 62, 5, 62), recGypsumPct: gyp });
+
+  it('bleibt bei 1 %, wenn kein Rezept einen Anteil trägt', () => {
+    const c = bauen({ strains: [holz(1, 80, 20, 62, 5, 62)] }).getAvgComp();
+    assert.equal(c.gypPct, 1, 'ohne Rezeptwert rechnet die Schätzung wie vorher');
+  });
+
+  it('nimmt den Anteil, sobald die Rezepte einen tragen', () => {
+    const c = bauen({ strains: [mitGips(1, 2), mitGips(2, 3)] }).getAvgComp();
+    assert.equal(c.gypPct, 2.5);
+  });
+
+  it('lässt `quelle` in Ruhe, wenn nur der Gipsanteil fehlt', () => {
+    // Die Falle: getAvgComp() setzt quelle auf 'gespeichert', sobald ein Wert
+    // nicht aus den Rezepten kommt. Liefe Gips durch dieselbe Stufe, würde die
+    // Karte "noch kein Rezept hinterlegt" melden, obwohl Holz, Kleie und
+    // Blockgewicht sehr wohl aus den dreizehn Rezepten stammen.
+    const c = bauen({ strains: [holz(1, 80, 20, 62, 5, 62), holz(2, 70, 30, 64, 5, 52)] }).getAvgComp();
+    assert.equal(c.gypPct, 1, 'kein Rezept trägt Gips');
+    assert.equal(c.quelle, 'rezepte', 'die Herkunft der übrigen Werte bleibt, was sie ist');
+    assert.equal(c.hwPct, 75);
+  });
+
+  it('übergeht eine Null wie überall sonst, statt den Schnitt auf null zu ziehen', () => {
+    const c = bauen({ strains: [mitGips(1, 2), mitGips(2, 0)] }).getAvgComp();
+    assert.equal(c.gypPct, 2);
+  });
+});

@@ -571,6 +571,10 @@ function buildLastScanByBag() {
   }
   return m;
 }
+// Ob /api/data jemals angekommen ist. Ohne diesen Unterschied ist eine leere
+// Liste nicht von einer ungeladenen zu unterscheiden, und die Seiten behaupten
+// "noch nichts angelegt", während in Wahrheit noch nichts da ist.
+let datenGeladen = false;
 function applyData(d) {
   // P-05: invalidate per-batch status cache. scanLog is replaced wholesale,
   // so the lazy rebuild on next getStatus() will pick up the new state.
@@ -596,6 +600,7 @@ function applyData(d) {
   pickupLocations = d.pickupLocations || [];
   weekRhythm = d.weekRhythm || {};
   rhythmTasks = d.rhythmTasks || [];
+  datenGeladen = true;
   // Build barcode registry from server data
   barcodeRegistry = new Map();
   barcodeByEntity = new Map();
@@ -3787,7 +3792,8 @@ function renderStatus() {
   const el = document.getElementById('dash-locations');
   if (!el) return;
   if (!zones.length) {
-    el.innerHTML = '<div class="empty">' + t('dash.noZones') + '</div>';
+    // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
+    el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
     renderPipelineKPIs(0, 0, 0, 0, 0, 0);
     renderOverviewKPIs();
     return;
@@ -11440,6 +11446,7 @@ function getAvgComp() {
     if (m != null && quelle === 'produktion') quelle = 'rezepte';
     return m;
   };
+  const _gyp = _avgMittel(bloecke, 'recGypsumPct', g) ?? _avgMittel(bloecke, 'recGypsumPct', () => 1);
   const nimm = (wert, schluessel, vorgabe) => {
     if (wert != null) return Math.round(wert * 10) / 10;
     quelle = 'gespeichert';
@@ -11453,6 +11460,13 @@ function getAvgComp() {
     // Kein Rezeptfeld trägt die Größe einer Körnerbrut-Tüte. Die bleibt als
     // Einstellung stehen, und nur die.
     grainBagKg: gespeichert.grainBagKg ?? 1,
+    // Gips stand als einziger Anteil dieser Schätzung fest eingebaut auf 1 %,
+    // obwohl rec_gypsum_pct daneben liegt und der Mischlauf ihn längst liest.
+    // Gemittelt wird wie oben, aber an `quelle` vorbei: die meisten Rezepte
+    // führen Gips als Flag ohne Zahl, und ein fehlender Gipsanteil sagt nichts
+    // darüber, woher Holz, Kleie und Blockgewicht kommen. Trägt kein Rezept
+    // einen Anteil, bleibt es bei 1 % — dann rechnet die Schätzung wie bisher.
+    gypPct: _gyp != null ? Math.round(_gyp * 10) / 10 : (gespeichert.gypPct ?? 1),
     grainRhPct: nimm(stufe(alle, 'recGrainRhPct'), 'grainRhPct', 52),
     quelle,
     rezepte: bloecke.length,
@@ -11464,6 +11478,7 @@ function estBagsFromMat(mat, stockKg) {
   // Estimate how many fruiting blocks (or grain bags) can be made from this material
   // For HW/WB: dry matter per bag = bagKg × (1 − rh/100), split by avg %
   // For grain: dry grain per bag = grainBagKg × (1 − grainRhPct/100); stock is dry.
+  // Gypsum rides on the same dry matter, at the share the recipes carry.
   const c = getAvgComp();
   if (mat === 'grain') {
     const dryPerGrainBag = c.grainBagKg * (c.grainRhPct > 0 ? 1 - c.grainRhPct / 100 : 1);
@@ -11477,7 +11492,7 @@ function estBagsFromMat(mat, stockKg) {
   let matPerBag = 0;
   if (mat === 'hardwood') matPerBag = dryPerBag * (c.hwPct / 100);
   if (mat === 'wheatbran') matPerBag = dryPerBag * (c.wbPct / 100);
-  if (mat === 'gypsum') matPerBag = dryPerBag * 0.01;
+  if (mat === 'gypsum') matPerBag = dryPerBag * (c.gypPct / 100);
   const bags = matPerBag > 0 ? Math.floor(stockKg / matPerBag) : 0;
   return { bags, matPerBag, bagKg: c.bagKg, isGrain: false };
 }
@@ -11574,6 +11589,7 @@ function renderThresholds() {
       ${[
         ['inv.hwPct', c.hwPct, '%'],
         ['inv.wbPct', c.wbPct, '%'],
+        ['inv.gypsumPct', c.gypPct, '%'],
         ['inv.waterPct', c.rhPct, '%'],
         ['inv.blockWeight', c.bagKg, 'kg'],
         ['inv.grainWaterPct', c.grainRhPct, '%']
@@ -12231,7 +12247,11 @@ function renderZones() {
   const el = document.getElementById('zones-list');
   if (!el) return;
   if (!zones.length) {
-    el.innerHTML = '<div class="empty">' + esc(t('zones.empty')) + '</div>';
+    // Vor der ersten Antwort von /api/data ist zones die leere Vorbelegung.
+    // "Noch keine Zonen angelegt" wäre dann eine Behauptung über die Daten,
+    // die niemand geprüft hat — und schickt jemanden Zonen anlegen, die es
+    // längst gibt. Ob der Abgleich hängt, sagt der Punkt in der Kopfzeile.
+    el.innerHTML = '<div class="empty">' + esc(t(datenGeladen ? 'zones.empty' : 'common.loading')) + '</div>';
     return;
   }
   // Group zones by role in canonical order; unknown roles go last.

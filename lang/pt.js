@@ -1721,6 +1721,7 @@ window.LANG['pt'] = {
     'Estas m\u00e9dias s\u00e3o usadas para calcular "\u2248X sacos" nos cart\u00f5es de estoque. S\u00e3o apenas estimativas \u2014 o uso exato \u00e9 rastreado ao criar um lote com receita espec\u00edfica de substrato.',
   'inv.hwPct': 'Madeira dura %',
   'inv.wbPct': 'Farelo de trigo %',
+  'inv.gypsumPct': 'Gesso %',
   'inv.waterPct': '\u00c1gua % (RH)',
   'inv.blockWeight': 'Peso do bloco (kg)',
   'inv.grainBagWeight': 'Saco de gr\u00e3os (kg)',

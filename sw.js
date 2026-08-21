@@ -435,9 +435,22 @@ self.addEventListener('fetch', (e) => {
   //
   // The lang files MUST travel with app.js: t() falls back to printing the raw
   // key, so a fresh app.js paired with a stale cached locale renders new strings
-  // as "zoneCheck.btn" instead of the translation. Other static assets (CSS,
-  // vendor libs, icons) keep stale-while-revalidate below.
-  if (path === '/' || path === '/index.html' || path === '/app.js' || path.startsWith('/lang/')) {
+  // as "zoneCheck.btn" instead of the translation.
+  //
+  // styles.css travels with them for the same reason, one layer over: its URL
+  // carries no version either, it changes on every deploy that touches a rule,
+  // and app.js writes markup that expects the rules of its own build. Left on
+  // stale-while-revalidate it arrived one reload late — new markup laid out by
+  // the previous stylesheet, which reads as a broken page rather than an old
+  // one. Vendor libs and icons keep stale-while-revalidate below: /lib/ is
+  // pinned and genuinely immutable, icons do not pair with anything.
+  if (
+    path === '/' ||
+    path === '/index.html' ||
+    path === '/app.js' ||
+    path === '/styles.css' ||
+    path.startsWith('/lang/')
+  ) {
     e.respondWith(
       fetch(e.request, { signal: AbortSignal.timeout(3000) })
         .then((res) => {

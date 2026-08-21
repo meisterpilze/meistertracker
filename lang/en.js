@@ -1705,6 +1705,7 @@ window.LANG['en'] = {
     'These averages are used to calculate "\u2248X bags" on the stock cards. They are estimates only \u2014 exact usage is tracked when you create a batch with a specific substrate recipe.',
   'inv.hwPct': 'Hardwood %',
   'inv.wbPct': 'Wheat bran %',
+  'inv.gypsumPct': 'Gypsum %',
   'inv.waterPct': 'Water % (RH)',
   'inv.blockWeight': 'Block weight (kg)',
   'inv.grainBagWeight': 'Grain bag (kg)',
