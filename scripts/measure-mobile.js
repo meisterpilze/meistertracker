@@ -137,31 +137,38 @@ if (!POINTS.length) {
 }
 
 // ── The gate ───────────────────────────────────────────────────────────────
-const viewportBreaks = GRENZEN.list.filter((g) => g.axis === 'viewport');
-console.log(`Breakpoints in styles.css: ${viewportBreaks.map((g) => g.px).join(', ')}`);
-const containerBreaks = GRENZEN.list.filter((g) => g.axis === 'container');
-if (containerBreaks.length) {
-  console.log(`Container breakpoints (box axis, not window): ${containerBreaks.map((g) => g.px).join(', ')}`);
-}
-console.log(`Switches without a width: ${GRENZEN.nonWidth.map((n) => `${n.feature}:${n.value}`).join(', ') || 'none'}`);
-console.log(
-  `Widths: ${BAND.length} (${BAND[0]} to ${BAND[BAND.length - 1]}), pointers: ${POINTS.map((p) => p.name).join(' and ')}`
-);
-
-const GAPS = uncovered(GRENZEN.list, BAND);
-if (GAPS.length && !QUICK && !ONE_WIDTH) {
-  console.log(`\n✗ COVERAGE: ${GAPS.length} breakpoint(s) without a triple`);
-  for (const g of GAPS) console.log(`  ${g.px}px (${[...g.from].join('/')}): ${g.missing.join(', ')} missing`);
-  console.log('\nNothing else is reported while a breakpoint is unmeasured: it would not be worth');
-  console.log('anything. This is the exact defect both previous mobile rounds shipped green.');
-  process.exit(1);
-}
-if (GAPS.length) {
+// A function, not module-level statements: this file is importable (see
+// module.exports at the bottom), and a require() must not print a report or
+// call process.exit.
+function gate() {
+  const viewportBreaks = GRENZEN.list.filter((g) => g.axis === 'viewport');
+  console.log(`Breakpoints in styles.css: ${viewportBreaks.map((g) => g.px).join(', ')}`);
+  const containerBreaks = GRENZEN.list.filter((g) => g.axis === 'container');
+  if (containerBreaks.length) {
+    console.log(`Container breakpoints (box axis, not window): ${containerBreaks.map((g) => g.px).join(', ')}`);
+  }
   console.log(
-    `  (a narrowed run measures ${BAND.length} width(s) on purpose; run without --quick/--width for acceptance)`
+    `Switches without a width: ${GRENZEN.nonWidth.map((n) => `${n.feature}:${n.value}`).join(', ') || 'none'}`
   );
-} else {
-  console.log('✓ COVERAGE: every breakpoint measured at G-1, G, G+1');
+  console.log(
+    `Widths: ${BAND.length} (${BAND[0]} to ${BAND[BAND.length - 1]}), pointers: ${POINTS.map((p) => p.name).join(' and ')}`
+  );
+
+  const gaps = uncovered(GRENZEN.list, BAND);
+  if (gaps.length && !QUICK && !ONE_WIDTH) {
+    console.log(`\n✗ COVERAGE: ${gaps.length} breakpoint(s) without a triple`);
+    for (const g of gaps) console.log(`  ${g.px}px (${[...g.from].join('/')}): ${g.missing.join(', ')} missing`);
+    console.log('\nNothing else is reported while a breakpoint is unmeasured: it would not be worth');
+    console.log('anything. This is the exact defect both previous mobile rounds shipped green.');
+    process.exit(1);
+  }
+  if (gaps.length) {
+    console.log(
+      `  (a narrowed run measures ${BAND.length} width(s) on purpose; run without --quick/--width for acceptance)`
+    );
+  } else {
+    console.log('✓ COVERAGE: every breakpoint measured at G-1, G, G+1');
+  }
 }
 
 // ── The measurement, run inside the page ───────────────────────────────────
@@ -433,6 +440,53 @@ function dropThrowaway(dirsExistedBefore) {
   }
 }
 
+// Everything a run opens, in one place, so one function can close it from any
+// path. Cleanup used to live only on the happy path: a thrown page.evaluate, a
+// timed-out waitForFunction or a Ctrl-C left server.js alive on its port,
+// writing into the checkout, and left the database and its marker behind.
+const OFFEN = { browser: null, server: null, child: null, dirsBefore: new Set(), app: false };
+let aufgeraeumt = false;
+
+// The last word, and synchronous on purpose. An async handler racing an
+// interrupt loses: measured here, the handler deleted the fixture while main()
+// carried on and spawned the server, which created it again, and only then did
+// process.exit fire. `exit` handlers run with everything else stopped, so this
+// one cannot be overtaken, and fs.rmSync and kill both work there.
+function aufraeumenSync() {
+  if (aufgeraeumt) return;
+  aufgeraeumt = true;
+  if (OFFEN.child) {
+    try {
+      OFFEN.child.kill('SIGKILL');
+    } catch {}
+  }
+  if (OFFEN.app) {
+    try {
+      dropThrowaway(OFFEN.dirsBefore);
+    } catch {}
+  }
+}
+
+// The tidy version for the path that has time to be tidy.
+async function aufraeumen() {
+  if (aufgeraeumt) return;
+  // Each step guarded on its own: a browser that already died must not stop us
+  // from killing the server, and neither must stop us deleting the fixture.
+  try {
+    if (OFFEN.browser) await OFFEN.browser.close();
+  } catch {}
+  try {
+    if (OFFEN.server) OFFEN.server.close();
+  } catch {}
+  if (OFFEN.child) {
+    try {
+      OFFEN.child.kill();
+    } catch {}
+    await new Promise((ok) => setTimeout(ok, 400));
+  }
+  aufraeumenSync();
+}
+
 async function freePort() {
   const net = require('net');
   return new Promise((ok) => {
@@ -537,6 +591,7 @@ function report(title, findings, band) {
 
 // ── Run ────────────────────────────────────────────────────────────────────
 async function main() {
+  gate();
   let puppeteer;
   try {
     puppeteer = require('puppeteer-core');
@@ -560,6 +615,8 @@ async function main() {
     const dbApi = require('./../db.js');
     const { seed } = require('./measure-fixture.js');
     dirsBefore = new Set(MADE_DIRS.filter((d) => fs.existsSync(d)));
+    OFFEN.dirsBefore = dirsBefore;
+    OFFEN.app = true;
     claimThrowaway();
     const database = dbApi.openDb(DB_FILE);
     stampThrowaway();
@@ -573,7 +630,7 @@ async function main() {
     const user = database.prepare('SELECT id FROM users WHERE username = ?').get('messstand');
     cookie = dbApi.createSession(database, user.id);
     port = await freePort();
-    child = require('child_process').spawn(process.execPath, [path.join(ROOT, 'server.js')], {
+    child = OFFEN.child = require('child_process').spawn(process.execPath, [path.join(ROOT, 'server.js')], {
       cwd: ROOT,
       // HOST is the point: server.js defaults to 0.0.0.0 for the phones in the
       // growing rooms, and this instance has a seeded fixture whose only
@@ -600,15 +657,14 @@ async function main() {
       await new Promise((ok) => setTimeout(ok, 250));
       waited += 250;
       if (waited > 30000) {
-        child.kill();
-        dropThrowaway(dirsBefore);
         console.error('\n✗ the server did not come up in 30s:\n' + log.join('').slice(-2000));
+        await aufraeumen();
         process.exit(1);
       }
     }
     console.log(`\nReal server on 127.0.0.1:${port}, seeded database, signed in as messstand.`);
   } else {
-    server = serve(build(), null, 0);
+    server = OFFEN.server = serve(build(), null, 0);
     await new Promise((ok) => server.on('listening', ok));
     port = server.address().port;
   }
@@ -793,13 +849,7 @@ async function main() {
     }
     await page.close();
   }
-  await browser.close();
-  if (server) server.close();
-  if (child) {
-    child.kill();
-    await new Promise((ok) => setTimeout(ok, 400));
-    dropThrowaway(dirsBefore);
-  }
+  await aufraeumen();
   console.log(
     `\n${BAND.length} widths × ${POINTS.length} pointers × ${stops} ${APP ? 'pages' : 'pass'} = ` +
       `${BAND.length * POINTS.length * stops} measurements ` +
@@ -903,9 +953,18 @@ async function main() {
   process.exit(STRICT && bad ? 1 : 0);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Every way out of this process, tidy or not, goes past aufraeumenSync.
+process.on('exit', aufraeumenSync);
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => process.exit(130));
 
-module.exports = { ROOT, span };
+// Only when run as a program. `module.exports` below says this file can be
+// imported, and until now importing it started a browser and swept the whole
+// band before returning anything.
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1); // the exit handler does the rest
+  });
+}
+
+module.exports = { ROOT, span, markerPasst, stampThrowaway, MARKER, DB_FILE };
