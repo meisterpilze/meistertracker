@@ -14,6 +14,22 @@
   --c-text: #1e293b;
   --c-text-sec: #475569;
   --c-text-muted: #64748b;
+  /* Two names this sheet has always used and never defined.
+
+     --c-accent arrived with the dashboard summary strip and spread to fifteen
+     places without ever getting a value; --c-card to two. An undefined custom
+     property is not "falls back to something sensible" — the declaration is
+     invalid at computed-value time, so an inherited property takes the parent's
+     value and everything else takes its initial one. That is why the substrate
+     progress bar had a transparent fill, why "open" — the commonest substrate
+     status — drew its pill in whatever colour it inherited, and why today's
+     date in the calendar looked like every other day.
+
+     They are aliases, not new colours: every site that reads them wants the
+     surface or the brand green this sheet already has a name for. Defining them
+     as aliases keeps them honest — change --c-primary and the accent follows. */
+  --c-accent: var(--c-primary);
+  --c-card: var(--c-surface);
   /* Semantic color palette */
   --c-red: #ef4444;
   --c-red-light: #fee2e2;

@@ -5272,8 +5272,7 @@ function _dashLeftBehindRows(splits) {
       where: rest ? '(' + rest + ')' : '',
       detail: s.urgent ? t('dash.splitBatches.stale') : '',
       // s.urgent means "unmoved for over 24h", which is a warning, not an overdue
-      // date \u2014 it drives the orange dot. warn is also what keeps --sp-color live,
-      // see the .todo-row rules in styles.css.
+      // date \u2014 it drives the orange dot and the amber stripe on .todo-row.warn.
       warn: s.urgent,
       taskAction: 'view',
       bucket: 'left'
@@ -5348,17 +5347,22 @@ function _weekHeadHtml(d, off, sel) {
         (short ? ' · ' + short : '')
     ) +
     '">' +
+    // Today is the dark green, not the accent. The accent is the brand mid-tone
+    // and it is the right fill behind white — but as 9.5px and 13px text on the
+    // toolbar it reads 3.3:1, under the 4.5 small text needs. --c-green-dark is
+    // 7.1:1, and it is the same move the sheet already makes for coloured text
+    // everywhere else: mid tone fills, the -dark variant is what you read.
     '<span class="fs-floor" style="--fs-own:9.5px;display:block;font-weight:' +
     (isToday ? '700' : '600') +
     ';color:' +
-    (isToday ? 'var(--c-accent)' : 'var(--c-text-sec)') +
+    (isToday ? 'var(--c-green-dark)' : 'var(--c-text-sec)') +
     ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     esc(dayName) +
     '</span>' +
     // The date, never conditional and never a placeholder — it is the one thing
     // a day column always has.
     '<span style="display:block;font-size:13px;font-weight:700;letter-spacing:-0.3px;color:' +
-    (isToday || sel ? 'var(--c-accent)' : 'var(--c-text)') +
+    (isToday || sel ? 'var(--c-green-dark)' : 'var(--c-text)') +
     '">' +
     d.date.getDate() +
     '</span>' +
@@ -5576,9 +5580,15 @@ function _rhythmTaskRowHtml(task, outstanding) {
         ? t('rhythm.planned')
         : t('rhythm.done', { done: 0, total: target });
   return (
-    '<div class="todo-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;--sp-color:' +
-    (late ? 'var(--c-red-dark)' : ms ? spColor(ms.name) : 'var(--c-accent)') +
-    '">' +
+    // The other .todo-row producer says `urgent` and gets the red stripe; this
+    // one was left behind when the colour moved to the state. It was still
+    // writing a species colour into --sp-color, which no rule has read since
+    // that change, so a carried-over task drew the default grey stripe while
+    // the identical row in the task list drew red. Same class, same question,
+    // same answer now.
+    '<div class="todo-row' +
+    (late ? ' urgent' : '') +
+    '" style="display:flex;align-items:center;gap:8px;padding:4px 0">' +
     // The amount is the thing that changes week to week, so it is the thing you
     // can tap. Editing it here changes this date only — the recurring rhythm is
     // the usual amount, and one busy Monday must not rewrite every Monday after.
@@ -6662,12 +6672,20 @@ async function locRemoveSelected() {
   renderStatus();
   setLocFb(t('scanFb.removed', { n: n }));
 }
+// The same element and the same skin setFb uses. It said `scan-toast` for a
+// long time, which is not a class this sheet defines — the styling, the green,
+// and `display:none` all hang off `.scan-toast-inline`. Writing the wrong base
+// name dropped every one of them: the confirmation came out as bare text on the
+// page, and because the hiding rule is `.scan-toast-inline` too, removing
+// `visible` five seconds later hid nothing and it stayed there.
 function setLocFb(msg) {
   const el = document.getElementById('scan-toast');
-  el.className = 'scan-toast fb-ok visible';
+  el.className = 'scan-toast-inline fb-ok visible';
   el.innerHTML =
     msg +
-    ' <button class="fs-xs" onclick="locUndo()" style="margin-left:8px;padding:2px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;font-weight:600;pointer-events:auto">Undo</button>';
+    ' <button class="fs-xs" onclick="locUndo()" style="margin-left:8px;padding:2px 10px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-surface);cursor:pointer;font-weight:600;pointer-events:auto">' +
+    esc(t('dash.undo')) +
+    '</button>';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('visible'), 5000);
 }
