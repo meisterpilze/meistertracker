@@ -4169,6 +4169,34 @@ tr:hover td {
    the phone block below could turn the row into a column and could not touch the
    alignment, leaving both cards at the width of their own text. Measured at 375px:
    137px of card inside a 343px page. */
+/* Der Farbleitfaden erklärt die Zeichen in der Aufgabenliste. Er gehört unter
+   die Liste und nicht über die halbe Karte: rechts, klein, zurückgenommen —
+   und nur eingeblendet, wenn eine Liste da ist (renderDashBatchTasks). Hier
+   steht bewusst kein display, damit das hidden-Attribut wirkt. */
+.dash-legend {
+  margin-top: 6px;
+  text-align: right;
+  color: var(--c-text-muted);
+}
+.dash-legend > summary {
+  display: inline-block;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.7;
+}
+.dash-legend > summary:hover,
+.dash-legend[open] > summary {
+  opacity: 1;
+}
+/* Der aufgeklappte Inhalt liest sich links, auch wenn der Griff rechts sitzt. */
+.dash-legend-body {
+  text-align: left;
+  padding: 8px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .dash-top-row {
   display: flex;
   gap: 10px;
