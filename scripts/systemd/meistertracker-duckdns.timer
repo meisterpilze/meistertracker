@@ -1,0 +1,27 @@
+# Installed by scripts/install-duckdns-fallback.sh. Edit this template rather
+# than the installed copy.
+
+[Unit]
+Description=Run the MeisterTracker DuckDNS fallback every five minutes
+Documentation=https://github.com/meisterpilze/meistertracker/blob/main/DEPLOYMENT.md
+
+[Timer]
+Unit=meistertracker-duckdns.service
+
+# Two minutes after boot. Late enough that the server has had its chance to
+# start and update the record itself — in which case this finds a fresh
+# timestamp and stands down — and early enough to cover the reboot where it
+# did not come back at all.
+OnBootSec=2min
+
+# Same cadence as the server's own loop. It costs nothing while the server is
+# alive: the script reads one row, sees a recent update and exits without
+# opening a socket. Only a timestamp older than twelve minutes makes it act.
+OnUnitActiveSec=5min
+
+# Do not let systemd coalesce this into a lazy wake-up window. The whole value
+# of the job is being on time on the one occasion it is needed.
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

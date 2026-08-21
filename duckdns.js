@@ -85,6 +85,21 @@ const CLOCK_JUMP_MS = 90 * 1000;
 // as stale. Three healthy cycles plus room for a round of backoff.
 const STALE_AFTER_MS = 20 * 60 * 1000;
 
+// When the out-of-process fallback (scripts/duckdns-fallback.js) decides this
+// server has stopped updating its own record and takes over.
+//
+// Everything above only runs while the server does. The case it cannot cover is
+// the server being down — a failed deploy, a reboot where pm2 never came back —
+// because that is precisely when nothing in this file is executing, and the
+// record then points at wherever the line used to be until somebody notices.
+//
+// Two missed cycles plus slack: long enough that an ordinary restart or a round
+// of backoff does not wake it, short enough to land *before* STALE_AFTER_MS.
+// That ordering is the point — if the fallback fired later than the UI turns
+// red, the red would be telling the truth about a gap the fallback was supposed
+// to have covered. test/duckdns-fallback.test.js pins it.
+const FALLBACK_AFTER_MS = 12 * 60 * 1000;
+
 // Verify against the nameservers every N successful updates — and always right
 // after DuckDNS reports it changed something, which is when a wrong write would
 // happen. Six ticks is about half an hour of steady state.
@@ -644,6 +659,7 @@ module.exports = {
   RETRY_BASE_MS,
   RETRY_MAX_MS,
   STALE_AFTER_MS,
+  FALLBACK_AFTER_MS,
   HEARTBEAT_MS,
   CLOCK_JUMP_MS,
   VERIFY_EVERY_TICKS,

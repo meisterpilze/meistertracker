@@ -229,6 +229,75 @@ The app has built-in DuckDNS dynamic DNS and Let's Encrypt certificate managemen
 
 That's it — no Nginx, no Certbot, no system-level services beyond what you've already set up.
 
+### The gap the server cannot cover itself (recommended)
+
+The server keeps the DuckDNS record current while it runs, retries when an
+update fails, and checks against the authoritative nameservers that the record
+it wrote is the record being served.
+
+None of that happens while the server is **down**. A failed deploy, a reboot
+where PM2 never came back, a crash nobody saw — the address changes anyway, and
+the name goes on pointing at wherever the line used to be. By the time somebody
+starts the server again, the address it advertises belongs to somebody else. The
+symptom is a server that is unreachable for a reason unrelated to whether it is
+running.
+
+`scripts/duckdns-fallback.js` closes that. It runs from the system scheduler
+rather than from the server, so it is still there when the server is not.
+
+**It does not double the updates.** The server records the time of each
+successful update; the fallback reads that timestamp and stands down while it is
+fresh, without opening a socket. Only a gap of more than twelve minutes makes it
+act.
+
+**Linux (systemd):**
+
+```bash
+sudo bash scripts/install-duckdns-fallback.sh
+```
+
+That installs and starts `meistertracker-duckdns.timer` — every five minutes,
+and two minutes after boot. Check it took:
+
+```bash
+systemctl list-timers meistertracker-duckdns.timer
+```
+
+Prove it works without waiting for a real outage (`--force` skips the
+stand-down check):
+
+```bash
+sudo -u <the-user-that-owns-the-db> node scripts/duckdns-fallback.js --force
+```
+
+Read what it has been doing:
+
+```bash
+journalctl -u meistertracker-duckdns.service --since today
+```
+
+Remove it again with `sudo bash scripts/install-duckdns-fallback.sh --uninstall`.
+
+**Windows (Task Scheduler):** the same script, from an elevated PowerShell:
+
+```
+powershell -ExecutionPolicy Bypass -File .\install-duckdns-fallback.ps1
+```
+
+This is separate from `install-autostart.ps1` and does not replace it: that one
+starts the server, this one covers the times it is not started. Check with
+`Get-ScheduledTaskInfo -TaskName MeisterTrackerDuckDNS` — last result `0` is
+good. Remove it with the same script and `-Uninstall`.
+
+> **Both installers refuse to run from a git worktree,** and so does the script
+> itself. A worktree usually carries a copy of the same token, and a timer
+> inside one would quietly fight the real instance over the same record.
+
+**How you tell it is working:** Settings → DuckDNS. The banner is green only
+when the nameservers have confirmed the record; it goes red when the last
+successful update is too old, when the updater is not running, or when something
+else keeps overwriting the record — and it says which.
+
 ## 7. Path B — Nginx Reverse Proxy + Certbot (alternative)
 
 Use this path **only if** you need:

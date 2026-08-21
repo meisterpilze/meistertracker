@@ -1,0 +1,47 @@
+# Installed by scripts/install-duckdns-fallback.sh, which substitutes the
+# __PLACEHOLDERS__ below. Edit this template rather than the installed copy —
+# re-running the installer overwrites /etc/systemd/system.
+#
+# What this is for: the server updates its own DuckDNS record while it runs, so
+# this does nothing at all while it is running. It is here for the hours it is
+# not — a failed deploy, a reboot where pm2 never came back — because that is
+# exactly when the address changes without anybody putting the new one on
+# record. See scripts/duckdns-fallback.js.
+
+[Unit]
+Description=MeisterTracker DuckDNS fallback (updates the record while the server is down)
+Documentation=https://github.com/meisterpilze/meistertracker/blob/main/DEPLOYMENT.md
+# Without a route there is nothing to tell DuckDNS, and the reply would only
+# be a failure in the journal. The timer fires again in five minutes anyway.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__MT_USER__
+Group=__MT_GROUP__
+WorkingDirectory=__MT_DIR__
+ExecStart=__MT_NODE__ __MT_DIR__/scripts/duckdns-fallback.js --quiet
+# A stalled request is already bounded at 30 s inside the script; this is the
+# backstop for a process that never gets that far.
+TimeoutStartSec=120
+
+# It needs the network, the database file and nothing else. If this job is ever
+# what goes wrong, let it go wrong in a box.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__MT_DIR__
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+# AF_NETLINK is not optional despite nothing here speaking netlink: glibc's
+# getaddrinfo opens a netlink socket to enumerate the local addresses before
+# it will return anything. Leave it out and the unit cannot resolve
+# duckdns.org at all — which looks exactly like the outage it is here to fix.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
