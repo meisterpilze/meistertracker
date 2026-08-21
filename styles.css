@@ -611,12 +611,6 @@ body:has(.modal-bg.open) .cam-fab {
 .scan-overlay.scan-bg-err {
   background: rgba(180, 30, 30, 0.4);
 }
-.scan-overlay.scan-bg-info {
-  background: rgba(0, 0, 0, 0.35);
-}
-.scan-overlay.scan-bg-harvest {
-  background: rgba(146, 64, 14, 0.35);
-}
 .scan-modal {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
@@ -1822,17 +1816,6 @@ canvas {
   color: var(--c-amber-dark);
   cursor: help;
 }
-.oh-comp-row {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr 1fr 0.8fr 0.6fr auto;
-  gap: 6px;
-  margin-bottom: 6px;
-  align-items: center;
-}
-.oh-comp-row input,
-.oh-comp-row select {
-  font-size: max(12px, var(--fs-min));
-}
 
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
@@ -2010,12 +1993,6 @@ textarea.is-invalid {
   gap: 12px;
 }
 
-/* ═══ RESPONSIVE TABLES ════════════════════════════════════════ */
-.table-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
 /* ═══ METRIC CARDS ══════════════════════════════════════════════ */
 .met {
   background: var(--c-surface);
@@ -2036,12 +2013,6 @@ textarea.is-invalid {
   font-weight: 700;
   color: var(--c-text);
   line-height: 1.2;
-}
-.met-spark {
-  margin-top: 6px;
-  height: 24px;
-  display: flex;
-  align-items: flex-end;
 }
 
 /* ═══ BADGES ════════════════════════════════════════════════════ */
@@ -2123,26 +2094,6 @@ textarea.is-invalid {
 .badge-contam {
   background: #fee2e2;
   color: #991b1b;
-}
-.badge-aktiv {
-  background: #dcfce7;
-  color: #166534;
-}
-.badge-ausgeschieden {
-  background: var(--c-bg);
-  color: var(--c-text-muted);
-}
-.badge-verkauft {
-  background: #dbeafe;
-  color: #1e40af;
-}
-.badge-verschrottet {
-  background: #fee2e2;
-  color: #991b1b;
-}
-.badge-gwg {
-  background: #fef3c7;
-  color: #92400e;
 }
 
 /* ═══ TABLES ════════════════════════════════════════════════════ */
@@ -2411,18 +2362,6 @@ tr:hover td {
   margin-left: 4px;
   vertical-align: middle;
 }
-.tag-assignee {
-  background: #e0e7ff;
-  color: #3730a3;
-}
-.tag-company {
-  background: #fef3c7;
-  color: #92400e;
-}
-.tag-due {
-  background: #f0fdf4;
-  color: #166534;
-}
 .caldav-status {
   display: inline-block;
   width: 8px;
@@ -2439,21 +2378,6 @@ tr:hover td {
 }
 .caldav-status.error {
   background: var(--c-red);
-}
-.member-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--c-border);
-  margin-bottom: 6px;
-  background: var(--c-surface);
-}
-.member-row .name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 500;
 }
 
 /* Sync dots */
@@ -3086,16 +3010,6 @@ tr:hover td {
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
-.cal-week-body .drop-indicator,
-.cal-day-body .drop-indicator {
-  position: absolute;
-  left: 56px;
-  right: 0;
-  height: 2px;
-  background: var(--c-primary);
-  z-index: 20;
-  pointer-events: none;
-}
 
 /* Eight columns of numbers that mean nothing squashed. The width was inline on
    the table, which is why it survived into the card layout and forced a 640px
@@ -3517,52 +3431,6 @@ tr:hover td {
 .dash-collapse {
   margin-bottom: 10px;
 }
-.dash-collapse-sum {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 14px;
-  border-radius: var(--radius);
-  background: var(--c-surface, var(--c-card));
-  border: 1px solid var(--c-border);
-  font-size: max(11px, var(--fs-min));
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--c-text-sec);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-.dash-collapse-sum::-webkit-details-marker {
-  display: none;
-}
-.dash-collapse-sum::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border: solid currentColor;
-  border-width: 0 2px 2px 0;
-  transform: rotate(-45deg);
-  transition: transform 0.15s ease;
-  opacity: 0.65;
-  flex: none;
-}
-.dash-collapse[open] > .dash-collapse-sum::before {
-  transform: rotate(45deg);
-}
-.dash-collapse[open] > .dash-collapse-sum {
-  margin-bottom: 10px;
-}
-.dash-collapse-lab {
-  background: rgba(16, 185, 129, 0.09);
-  border-color: rgba(16, 185, 129, 0.3);
-  color: #065f46;
-}
-.dash-collapse-lab svg {
-  width: 14px;
-  height: 14px;
-}
 
 /* ═══ PIPELINE KPI TOTAL ROW ═════════════════════════════════════ */
 .metrics-total-row {
@@ -3588,20 +3456,7 @@ tr:hover td {
   margin: 0;
 }
 
-/* ═══ TASK ACTION BUTTONS + CLICKABLE BATCH ID ══════════════════ */
-.dash-task-batch-id {
-  font-family: monospace;
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 1px dashed var(--c-text-muted);
-  transition:
-    color 0.12s,
-    border-color 0.12s;
-}
-.dash-task-batch-id:hover {
-  color: var(--c-primary);
-  border-bottom-color: var(--c-primary);
-}
+/* ═══ BATCH ROW FLASH ═══════════════════════════════════════════ */
 .batch-row-flash > td {
   animation: batch-row-flash 1.5s ease;
 }
@@ -3671,19 +3526,6 @@ tr:hover td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.rack-detail-inline {
-  margin-top: 10px;
-  background: var(--c-bg);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  border: 1px solid var(--c-border-light);
-}
-.rack-detail-inline .rack-detail-close {
-  font-size: max(11px, var(--fs-min));
-  cursor: pointer;
-  color: var(--c-text-muted);
 }
 
 /* The shared confirm dialog (#m-confirm) uses textContent for body, so \n
@@ -4163,30 +4005,6 @@ tr:hover td {
   background-image: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.5) 0 3px, rgb(255 255 255 / 0) 3px 6px);
 }
 
-.dash-legend {
-  margin-top: 6px;
-  text-align: right;
-  color: var(--c-text-muted);
-}
-.dash-legend > summary {
-  display: inline-block;
-  cursor: pointer;
-  user-select: none;
-  opacity: 0.7;
-}
-.dash-legend > summary:hover,
-.dash-legend[open] > summary {
-  opacity: 1;
-}
-/* Der aufgeklappte Inhalt liest sich links, auch wenn der Griff rechts sitzt. */
-.dash-legend-body {
-  text-align: left;
-  padding: 8px 0 2px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .dash-top-row {
   display: flex;
   gap: 10px;
@@ -4214,9 +4032,6 @@ tr:hover td {
   .g5,
   .g6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .rack-grid-inc {
-    grid-template-columns: repeat(3, 1fr) !important;
   }
   .rack-grid.rack-grid-5col {
     grid-template-columns: repeat(3, 1fr);
@@ -4398,9 +4213,6 @@ tr:hover td {
     flex: 0 0 auto !important;
     width: auto !important;
   }
-  .rack-grid-inc {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
   .rack-grid.rack-grid-5col {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -4430,9 +4242,6 @@ tr:hover td {
 @media (max-width: 480px) {
   .dash-search-inline {
     width: 140px;
-  }
-  .dmp-stage-count {
-    font-size: 15px;
   }
   .card {
     border-radius: var(--radius-sm);
@@ -4538,10 +4347,6 @@ tr:hover td {
     margin-bottom: 8px;
     padding-bottom: 6px;
     border-bottom: 2px solid #333;
-  }
-  .cal-print-legend {
-    margin-bottom: 10px;
-    padding: 6px 0;
   }
   .cal-print-body .cal-grid {
     border: 1px solid #999;

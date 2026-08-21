@@ -4767,9 +4767,9 @@ function fruitingTarget() {
   const avail = fruitingZones();
   if (!avail.length) return null;
   if (_fruitingTargetKey === null) {
-    // Guarded like _dashTab: storage revoked mid-session (site data blocked,
-    // partitioned context, a backgrounded PWA evicted by iOS) must not throw
-    // inside a render and abort everything queued behind it.
+    // Guarded like the read in initDashCollapse(): storage revoked mid-session
+    // (site data blocked, partitioned context, a backgrounded PWA evicted by
+    // iOS) must not throw inside a render and abort everything queued behind it.
     try {
       _fruitingTargetKey = localStorage.getItem('mp-fruiting-target') || '';
     } catch (e) {
@@ -23449,8 +23449,8 @@ function wkbCreate() {
       wkbOpen();
       return;
     } else if (a === 'tosub') {
-      // Direkt in den Misch-Dialog, nicht auf die Chargenseite: wkOpenSubstrate()
-      // springt in das lange Formular und lässt den Arbeiter dort suchen. Die
+      // Direkt in den Misch-Dialog, nicht auf die Chargenseite: das lange
+      // Formular ließe den Arbeiter dort erst suchen. Die
       // Kachel auf der Arbeitsgang-Seite öffnet längst den Dialog; dieser Knopf
       // steht an genau der Stelle, an der man ihn am dringendsten braucht — es
       // gibt keinen Ansatz, also legen wir jetzt einen an.
