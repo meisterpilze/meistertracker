@@ -248,10 +248,20 @@
     --fs-micro: 10px;
     /* 0, so every max() in the sheet returns the literal beside it unchanged. */
     --fs-min: 0px;
-    --tap: auto;
-    --tap-sm: auto;
-    --tap-min: 0px;
-    --tap-sm-min: 0px;
+    /* ⚠️ **24 und nicht `auto`** (Paket P1, Regel R1). `auto` hieß „keine
+       Untergrenze am Rechner", und das war die fehlende Hälfte der Achse: Die
+       grobe Seite ist hier seit den Marken richtig, weil sie an `hover: hover`
+       hängt und nicht an einer Breite, aber die feine Seite hatte gar keine
+       eigene Marke. 24 px sind WCAG 2.5.8 „Target Size (Minimum)", Stufe AA,
+       und die Stufe kennt kein Eingabegerät: Sortierknöpfe der Chargentabelle,
+       „Bearb." und „Drucken" in Sorten und Labor und „Wochenrhythmus
+       bearbeiten" mit 13 px verletzen sie mit der Maus genauso wie mit dem
+       Finger. Die 56 und 48 der Handseite bleiben davon unberührt; wo im Blatt
+       `max(44px, …)` steht, gewinnt weiter die 44. */
+    --tap: 24px;
+    --tap-sm: 24px;
+    --tap-min: 24px;
+    --tap-sm-min: 24px;
     --pad-page: 24px;
     --pad-card: 20px;
     --pad-btn: 9px 16px;
@@ -1591,6 +1601,16 @@ canvas {
   max-width: 100%;
 }
 
+/* Ein `<summary>` klappt auf und zu; es ist ein Bedienelement, auch wenn es wie
+   eine Beschriftung aussieht. Das von `#nb-sub-section` war 18 px hoch und
+   damit am Rechner unter den 24 px der WCAG 2.5.8. Der statische Lauf des
+   Messstands hat es gefunden, der laufende nie: dort steckt es in einem
+   zugeklappten Formular und wird nie gemessen. */
+summary.fs-meta {
+  min-height: var(--tap-sm);
+  display: flex;
+  align-items: center;
+}
 .fs-meta.fs-meta {
   font-size: var(--fs-meta);
 }
@@ -1993,7 +2013,12 @@ button {
 }
 .btn {
   padding: var(--pad-btn);
+  /* Eine Tippfläche hat ZWEI Maße. Gemessen bei 900 px mit der Maus: der
+     Schließknopf im Labor war 23 x 24 px, also hoch genug und trotzdem unter
+     der Marke. `min-height` allein deckt jeden Knopf mit Text und keinen mit
+     einem einzelnen Zeichen darauf. */
   min-height: var(--tap);
+  min-width: var(--tap);
   border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   font-weight: 500;
@@ -2776,8 +2801,14 @@ tr:hover td {
   font-weight: 600;
   color: var(--c-text-sec);
   margin-bottom: 5px;
-  width: 28px;
-  height: 28px;
+  /* Der Kreis öffnet den Tag, ist also ein Ziel und kein Datum. Mit 28 px war
+     er unter jeder Breite ab 769 px zu klein für einen Finger, und ein
+     Monatsraster wird stehend an der Wand bedient. `--tap-sm-min` und nicht
+     `--tap-min`: 48 statt 56, weil sieben Spalten davon bei 769 px noch reichlich
+     Platz haben (109 px je Spalte) und der Kreis nicht die Zelle werden soll.
+     Am Rechner bleibt es bei 28, weil `max()` dort gegen 24 gewinnt. */
+  width: max(28px, var(--tap-sm-min));
+  height: max(28px, var(--tap-sm-min));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3278,6 +3309,11 @@ tr:hover td {
   margin-bottom: 14px;
   cursor: pointer;
   user-select: none;
+  /* Sie klappt eine ganze Ortsgruppe auf und zu, ist also ein Bedienelement
+     und kein Titel — mit 21 px war sie auf beiden Achsen unter der Marke, mit
+     der Maus unter 24 und mit dem Finger unter 44. Die Marke kommt aus dem
+     Token, damit sie der Eingabeachse folgt und nicht einer Breite. */
+  min-height: var(--tap-sm);
 }
 .location-section.collapsed .location-section-header {
   margin-bottom: 0;

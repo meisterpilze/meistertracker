@@ -268,11 +268,25 @@ describe('the phone floors', () => {
         valueIn(ROOT_BLOCK, pairToken),
         `${floorToken} and ${pairToken} disagree — two numbers for one touch floor`
       );
-      assert.equal(
-        valueIn(DESKTOP_BLOCK, floorToken),
-        '0px',
-        `the desktop value of ${floorToken} must be 0. It cannot be \`auto\` like ${pairToken}: max() with a ` +
-          'keyword is invalid CSS, the whole declaration is dropped, and the phone minimum goes with it'
+      // ⚠️ Two separate demands on this one value, and they used to be one.
+      // It must be a LENGTH, because `auto` inside max() is invalid CSS: the
+      // whole declaration is dropped and the phone minimum goes with it. And
+      // since package P1 it must be at least 24px, because that is WCAG 2.5.8
+      // Target Size (Minimum), level AA, and level AA knows nothing about
+      // input devices. It read `0px` before, which said "no floor at all on a
+      // desk" — the exact half of rule R1 the tracker was missing while the
+      // coarse half was already right.
+      const desk = valueIn(DESKTOP_BLOCK, floorToken);
+      assert.match(
+        desk,
+        /^\d+px$/,
+        `the desktop value of ${floorToken} must be a length. It cannot be \`auto\` like ${pairToken}: ` +
+          'max() with a keyword is invalid CSS, the whole declaration is dropped, and the phone ' +
+          'minimum goes with it'
+      );
+      assert.ok(
+        parseInt(desk, 10) >= 24,
+        `${floorToken} is ${desk} on a desk, under the 24px of WCAG 2.5.8 level AA (package P1)`
       );
     });
   }
