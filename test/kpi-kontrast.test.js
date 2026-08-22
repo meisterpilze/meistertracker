@@ -20,6 +20,7 @@
 // that drops below the floor fails here instead of on somebody's screen.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const { contrast } = require('./helpers/kontrast');
 const fs = require('fs');
 const path = require('path');
 
@@ -32,21 +33,6 @@ const TOKEN = new Map();
 {
   const root = CSS.slice(CSS.indexOf(':root {'), CSS.indexOf('\n}', CSS.indexOf(':root {')));
   for (const m of root.matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g)) TOKEN.set(m[1], m[2].toLowerCase());
-}
-
-function relLum(hex) {
-  const c = hex.replace('#', '');
-  const ch = [0, 2, 4].map((i) => {
-    const x = parseInt(c.substr(i, 2), 16) / 255;
-    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-
-function contrast(a, b) {
-  const l1 = relLum(a);
-  const l2 = relLum(b);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
 
 /** The var(--x) names in an assignment, in source order — one per ternary branch. */
