@@ -2279,6 +2279,30 @@ const MIGRATIONS = [
         upd.run(ZONE_SEED_COLOR[role], role, ZONE_LEGACY_COLOR[role]);
       }
     }
+  },
+  {
+    version: 78,
+    description: 'Mark which Sorten are currently in the growing programme',
+    fn(db) {
+      // Which Sorten the farm is actually growing right now. It changes with the
+      // season — shiitake in winter, oysters through the summer — and the app
+      // had nowhere to say so, which meant every derived judgement about a
+      // Sorte had to assume all of them are always wanted.
+      //
+      // That assumption is what makes a supply warning useless: a Sorte nobody
+      // is growing this half of the year has no grain and nothing incubating by
+      // definition, so it reports "start one now" every single day, forever. A
+      // warning that is always on is not a warning, and worse, it drags the
+      // real ones down with it.
+      //
+      // Defaults to 1. On an existing database every Sorte is in the programme
+      // until somebody says otherwise, which is the only safe direction: the
+      // alternative silently switches off warnings the farm may be relying on.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('mushroom_strains') WHERE name='im_programm'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE mushroom_strains ADD COLUMN im_programm INTEGER DEFAULT 1');
+    }
   }
 ];
 
@@ -7560,6 +7584,9 @@ function _strainMinFields(d) {
   const out = {};
   if ('minSpawnKg' in d) out.min_spawn_kg = num(d.minSpawnKg, 0);
   if ('minLc' in d) out.min_lc = num(d.minLc, 0);
+  // Stored as 0/1 rather than a boolean: SQLite has no boolean type, and every
+  // other flag in this schema is an integer.
+  if ('imProgramm' in d) out.im_programm = d.imProgramm ? 1 : 0;
   return out;
 }
 
@@ -7596,7 +7623,10 @@ function listMushroomStrains(db) {
       recSterilText: r.rec_steril_text || '',
       // v69 — minimum holdings, per Sorte.
       minSpawnKg: r.min_spawn_kg || 0,
-      minLc: r.min_lc || 0
+      minLc: r.min_lc || 0,
+      // v78 — is the farm growing this one at the moment? Absent column reads
+      // as yes, so a database that has not migrated yet behaves as before.
+      imProgramm: r.im_programm == null ? true : r.im_programm !== 0
     }));
 }
 

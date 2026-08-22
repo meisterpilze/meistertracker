@@ -2750,7 +2750,7 @@ function _stageBagsOf(b) {
 // Everything here comes out of data the app already has. A real days-of-cover
 // number would need a target per Sorte or consumption from the order side;
 // neither exists, so it is not guessed at.
-const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3 };
+const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3, off: 4 };
 function sorteRollup() {
   const bySorte = new Map();
   for (const b of batches) {
@@ -2795,9 +2795,17 @@ function sorteRollup() {
       if (st.fruiting === 0 && (r.nextDue == null || due < r.nextDue)) r.nextDue = due;
     }
   }
+  // Is the farm growing this one at the moment? A Sorte with no row in
+  // Pilzsorten is treated as in the programme: it is being grown, somebody just
+  // never wrote it down, and going quiet about it would hide real work.
+  const programme = new Map(
+    mushroomStrains.map((m) => [(m.name || '').trim().toLowerCase(), m.imProgramm !== false])
+  );
   const out = [...bySorte.values()];
   for (const r of out) {
     if (!r.kuerzel) r.kuerzel = abbrev(r.name);
+    const p = programme.get(r.name.trim().toLowerCase());
+    r.imProgramm = p === undefined ? true : p;
     // Blocks only — the same unit as every other number on the tile.
     r.bags = r.incubation + r.fruiting;
     r.supply =
@@ -2808,6 +2816,12 @@ function sorteRollup() {
           : r.incubation < r.fruiting
             ? 'low'
             : 'ok';
+    // Out of the programme, the light goes off entirely rather than turning
+    // green. Green would claim the supply is fine; the truth is that nobody is
+    // asking. Shiitake in summer has no grain and nothing incubating BY
+    // DEFINITION, and a red card every day for a Sorte nobody is growing
+    // teaches people to stop reading the card.
+    if (!r.imProgramm) r.supply = 'off';
   }
   // A Sorte that exists only as grain has no block batches and nothing for the
   // list below; it still belongs on the card, because "there is spawn ready and
@@ -2871,6 +2885,7 @@ function renderSorteTiles() {
   );
   const nNow = rows.filter((r) => r.supply === 'now').length;
   const nNoSpawn = rows.filter((r) => r.supply === 'nospawn').length;
+  const nOff = rows.filter((r) => r.supply === 'off').length;
 
   const totalTile =
     `<button type="button" class="stile stile-total${batchSorteFilter ? '' : ' on'}" data-action="sorte-all">` +
@@ -2890,7 +2905,7 @@ function renderSorteTiles() {
             ? t('batch.lastAgo', { n: r.lastDays })
             : '';
       return (
-        `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}"` +
+        `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}${r.imProgramm ? '' : ' stile-off'}"` +
         ` data-action="sorte-tile" data-sorte="${esc(r.name)}"` +
         ` title="${esc(r.name + ' — ' + t('batch.supply.' + r.supply + 'Why'))}">` +
         `<span class="stile-top"><span class="stile-name">${spDot(r.name)}${esc(r.name)}</span>` +
@@ -2915,7 +2930,7 @@ function renderSorteTiles() {
     };
     legend +=
       '<div class="tlegend">' +
-      ['now', 'nospawn', 'low', 'ok']
+      ['now', 'nospawn', 'low', 'ok', 'off']
         .map(
           (k) =>
             `<div><span class="sup sup-${k}">${esc(t('batch.supply.' + k))}</span> ${esc(t('batch.supply.' + k + 'Why'))}${named(k)}</div>`
@@ -2927,7 +2942,8 @@ function renderSorteTiles() {
 
   const warn =
     (nNow ? `<span class="sup sup-now">${esc(t('batch.nNeedStart', { n: nNow }))}</span>` : '') +
-    (nNoSpawn ? `<span class="sup sup-nospawn">${esc(t('batch.nNoSpawn', { n: nNoSpawn }))}</span>` : '');
+    (nNoSpawn ? `<span class="sup sup-nospawn">${esc(t('batch.nNoSpawn', { n: nNoSpawn }))}</span>` : '') +
+    (nOff ? `<span class="sup sup-off">${esc(t('batch.nOffProgramme', { n: nOff }))}</span>` : '');
 
   el.innerHTML =
     `<div class="sorten-head"><div class="sec" style="margin:0">${esc(t('batch.bySorte'))}</div>` +
@@ -5182,6 +5198,46 @@ function suggestWeekRhythm() {
 //
 // Overdue work folds onto today. It is not Tuesday's job any more; it is this
 // morning's, and leaving it on the day it was missed would show an empty today
+// A Sorte with nothing coming is work, and it was only ever visible on the
+// Chargen tab. Somebody reading the day's list had no way to learn that the
+// shiitake ran out — the list only ever knew about batches that already exist,
+// so the one thing missing from the farm was the one thing it could not say.
+//
+// These rows are DERIVED, like the move and harvest rows beside them, and that
+// is what makes "until it is actually made" work without any bookkeeping: make
+// the grain and the Sorte stops being 'now'; make the blocks and it stops being
+// 'nospawn'. There is no done flag to set, and none to forget.
+//
+// Only Sorten in this season's programme (v78) qualify. Without that, a Sorte
+// nobody is growing this half of the year has no grain and nothing incubating
+// by definition, so it would report the same gap every day forever — and a
+// warning that is always on drags the real ones down with it.
+function buildSupplyTasks() {
+  const inProgramme = new Set(
+    mushroomStrains.filter((m) => m.imProgramm !== false).map((m) => (m.name || '').trim().toLowerCase())
+  );
+  const out = [];
+  for (const r of sorteRollup()) {
+    if (r.supply !== 'now' && r.supply !== 'nospawn') continue;
+    // A Sorte with no row in Pilzsorten at all is left out rather than assumed
+    // in: the programme is the farm's own statement about what it grows, and
+    // guessing on its behalf is what this flag exists to stop.
+    if (!inProgramme.has(r.name.trim().toLowerCase())) continue;
+    out.push({
+      name: r.name,
+      supply: r.supply,
+      grain: r.grain,
+      incubation: r.incubation,
+      fruiting: r.fruiting,
+      // What to make, in the order the chain runs: no grain means grain first.
+      taskAction: r.grain === 0 ? 'make-grain' : 'make-blocks',
+      detail: t(r.supply === 'now' ? 'todo.supplyNow' : 'todo.supplyNoSpawn', { n: r.fruiting })
+    });
+  }
+  // Worst first, and stable, so the row does not jump about between renders.
+  return out.sort((a, b) => SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.name.localeCompare(b.name));
+}
+
 // beside a backlog nobody is looking at.
 function buildWeekPlan() {
   const midnight = new Date();
@@ -5199,6 +5255,23 @@ function buildWeekPlan() {
     return top;
   };
 
+  for (const s of buildSupplyTasks()) {
+    // Always today. This is not a dated job — it is a gap, and a gap is only
+    // ever "still open". It disappears the moment the batch exists, because it
+    // is derived from the same counts the Sorten card reads; there is nothing
+    // to tick off and nothing that can be forgotten in a done-list.
+    put(0, {
+      kind: 'supply',
+      species: s.name,
+      label: s.name,
+      detail: s.detail,
+      bags: 0,
+      zone: '',
+      overdue: s.supply === 'now',
+      ready: true,
+      task: s
+    });
+  }
   for (const tk of buildAutoTasks()) {
     const place = _dashTaskPlace(tk.batchId, lastByBag);
     put(Math.max(0, tk.dueIn), {
@@ -5598,6 +5671,10 @@ const PLAN_CAT_COLOR = {
   other: 'var(--c-text-muted)'
 };
 function planCategory(it) {
+  // A supply gap is answered by making something, so it counts with the other
+  // create work rather than falling into "other", where a row nobody
+  // categorised goes to be ignored.
+  if (it.kind === 'supply') return 'create';
   if (it.kind === 'grain') return 'create';
   if (it.kind === 'fruiting') return 'move';
   if (it.kind === 'harvest') return 'harvest';
@@ -5990,6 +6067,21 @@ function _bulkPillHtml(movable) {
 // logged; a manual task toggles done.
 function _planBtn(it) {
   const id = esc(it.batchId || '');
+  // The row says a Sorte has nothing coming; the button starts the thing that
+  // fixes it, with the Sorte already chosen. Grain first when there is none —
+  // blocks cannot be made without it.
+  if (it.kind === 'supply') {
+    const grain = it.task && it.task.taskAction === 'make-grain';
+    return (
+      '<button class="btn btn-sm btn-p fs-xs" data-action="' +
+      (grain ? 'supply-make-grain' : 'supply-make-batch') +
+      '" data-sorte="' +
+      esc(it.species || '') +
+      '" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t(grain ? 'todo.makeGrain' : 'todo.makeBatch')) +
+      '</button>'
+    );
+  }
   if (it.kind === 'fruiting' || it.kind === 'grain') return it.task ? dashTaskBtn(it.task) : '';
   if (it.kind === 'harvest') {
     // Opens the harvest flow on this batch instead of navigating to the batch
@@ -13113,7 +13205,7 @@ function renderStrains() {
   if (!body) return;
   _msFillRecCopyOptions(parseInt((document.getElementById('ms-edit-id') || {}).value, 10) || null);
   if (!mushroomStrains.length) {
-    body.innerHTML = '<tr><td colspan="6" class="empty">' + t('strains.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
   }
   // Count usage
@@ -13133,7 +13225,12 @@ function renderStrains() {
       const chargeBtn = ms.recBatchType
         ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
         : '';
-      return `<tr data-find="strain:${ms.id}">
+      // One tap, no dialog, no save button. This gets flipped twice a year for
+      // a handful of Sorten; a confirm step would cost more than a mis-tap,
+      // which is undone by tapping again.
+      const prog = ms.imProgramm !== false;
+      return `<tr data-find="strain:${ms.id}"${prog ? '' : ' class="ms-off"'}>
+      <td><label class="ms-prog"><input type="checkbox" ${prog ? 'checked' : ''} data-action="toggle-programm" data-id="${ms.id}" aria-label="${esc(t('strains.imProgrammAria', { name: ms.name }))}" /><span>${prog ? esc(t('strains.progOn')) : esc(t('strains.progOff'))}</span></label></td>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span class="fs-meta" style="font-family:monospace;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td class="fs-meta" style="color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
@@ -22087,6 +22184,22 @@ function initEventListeners() {
       bulkSectionToFruiting(el.dataset.bucket);
       return;
     }
+    // A supply row carries a Sorte, not a batch — the batch is what it is
+    // asking for. Both buttons open the quick-create the Pilzsorten page
+    // already uses, with the Sorte filled in.
+    if (action === 'supply-make-grain' || action === 'supply-make-batch') {
+      const name = (el.dataset.sorte || '').trim().toLowerCase();
+      const ms = mushroomStrains.find((m) => (m.name || '').trim().toLowerCase() === name);
+      if (!ms) {
+        setFb('err', t('todo.supplyNoSorte'));
+        return;
+      }
+      // msQuickCharge() already says so itself when the Sorte carries no
+      // recipe, so there is nothing to check here.
+      if (action === 'supply-make-grain') msQuickLabor(ms.id);
+      else msQuickCharge(ms.id);
+      return;
+    }
     const batch = el.dataset.batch;
     if (!batch) return;
     switch (action) {
@@ -22183,6 +22296,30 @@ function initEventListeners() {
   // The stored choice belongs on the control too, or a reload shows "Nicht
   // gruppieren" over a list that is grouped.
   $('batch-group-by').value = batchGroupBy;
+  // Which Sorten are in this season's programme. Delegated: the table is
+  // rebuilt on every sync, so a listener on the row would not survive.
+  $('strains-body').addEventListener('change', (e) => {
+    const box = e.target.closest('[data-action="toggle-programm"]');
+    if (!box) return;
+    const id = parseInt(box.dataset.id, 10);
+    const ms = mushroomStrains.find((x) => x.id === id);
+    if (!ms) return;
+    const want = box.checked;
+    const prev = ms.imProgramm !== false;
+    ms.imProgramm = want; // optimistic — the row is already drawn that way
+    renderStrains();
+    renderSorteTiles();
+    renderDashBatchTasks();
+    apiPatch('/api/mushroom-strains/' + id, { imProgramm: want }).then((r) => {
+      if (r && r.error) {
+        ms.imProgramm = prev;
+        setFb('err', t('common.error') + ': ' + r.error);
+        renderStrains();
+        renderSorteTiles();
+        renderDashBatchTasks();
+      }
+    });
+  });
   $('batch-group-by').addEventListener('change', function () {
     batchGroupBy = BATCH_GROUP_MODES.includes(this.value) ? this.value : 'none';
     try {
