@@ -840,6 +840,12 @@ function validateMushroomStrain(data) {
     if (typeof data.description !== 'string') return 'description must be a string';
     if (data.description.length > 2000) return 'description exceeds max length of 2000';
   }
+  // Whether the farm is growing this Sorte at the moment (v78). Only a real
+  // boolean is accepted: db.js stores `imProgramm ? 1 : 0`, so a string "false"
+  // would be truthy and switch the flag the wrong way round without a word.
+  if (data.imProgramm !== undefined && data.imProgramm !== null && typeof data.imProgramm !== 'boolean') {
+    return 'imProgramm must be a boolean';
+  }
   return null;
 }
 const SCAN_ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'CONTAM'];

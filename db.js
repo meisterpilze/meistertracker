@@ -7,6 +7,38 @@ const path = require('path');
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
 const MAX_SESSIONS_PER_USER = 10;
 
+// ── Zone colours ─────────────────────────────────────────────
+// The colour a zone gets when nobody has picked one. It is *data* — the seed
+// writes it into the row, the operator may change it in Settings → Zones, and
+// from then on the app shows theirs. So this constant is only ever the starting
+// point, and changing it moves nothing on an installation that already exists.
+// Migration 77 is what carries the change across, and only where the operator
+// never expressed an opinion.
+//
+// The values are muted on purpose. The originals were the full-saturation
+// Tailwind 500s, and two of the three could not be read: as the KPI strip's
+// large bold number on white, #0ea5e9 measures 2.77:1 and #10b981 2.54:1,
+// under the 3:1 that this repository holds large text to elsewhere
+// (test/kpi-kontrast.test.js). These keep the same three hues — a zone stays
+// recognisably violet, blue, green — at a third of the saturation, and land on
+// 4.20 / 4.22 / 4.20:1. Matched deliberately: a set where one member measures
+// twice its neighbours reads as one zone shouting.
+const ZONE_SEED_COLOR = {
+  spawn: '#926bb6',
+  incubation: '#4d829b',
+  fruiting: '#438871',
+  contaminated: '#ef4444'
+};
+// What the seed used to write. Migration 77 treats a row still carrying one of
+// these as "never touched" and upgrades it; anything else is a choice and is
+// left alone.
+const ZONE_LEGACY_COLOR = {
+  spawn: '#a855f7',
+  incubation: '#0ea5e9',
+  fruiting: '#10b981',
+  contaminated: '#ef4444'
+};
+
 // ── Date helpers ─────────────────────────────────────────────
 // Lab day boundary = the server's local timezone midnight (a single physical lab,
 // one timezone). KPI snapshots and "due today" comparisons should bucket events
@@ -448,11 +480,11 @@ const MIGRATIONS = [
       // the localised key no longer matches).
       const now = new Date().toISOString();
       const insZ = db.prepare('INSERT OR IGNORE INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)');
-      insZ.run('SPAWN', 'Spawn Run', 'spawn', '#a855f7', 1, now);
-      insZ.run('INC', 'Incubation', 'incubation', '#0ea5e9', 2, now);
-      insZ.run('TENT1', 'Tent 1', 'fruiting', '#10b981', 3, now);
-      insZ.run('TENT2', 'Tent 2', 'fruiting', '#10b981', 4, now);
-      insZ.run('TENT3', 'Tent 3', 'fruiting', '#10b981', 5, now);
+      insZ.run('SPAWN', 'Spawn Run', 'spawn', ZONE_SEED_COLOR.spawn, 1, now);
+      insZ.run('INC', 'Incubation', 'incubation', ZONE_SEED_COLOR.incubation, 2, now);
+      insZ.run('TENT1', 'Tent 1', 'fruiting', ZONE_SEED_COLOR.fruiting, 3, now);
+      insZ.run('TENT2', 'Tent 2', 'fruiting', ZONE_SEED_COLOR.fruiting, 4, now);
+      insZ.run('TENT3', 'Tent 3', 'fruiting', ZONE_SEED_COLOR.fruiting, 5, now);
       insZ.run('CONTAM', 'Contamination', 'contaminated', '#ef4444', 99, now);
       // Seed default racks
       const insR = db.prepare('INSERT OR IGNORE INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
@@ -2219,6 +2251,82 @@ const MIGRATIONS = [
       // `last_ip_update` goes back to meaning only the server, and the fallback
       // records itself here. Neither can now mask or throttle the other.
       db.exec('ALTER TABLE duckdns_config ADD COLUMN fallback_last TEXT');
+    }
+  },
+  {
+    version: 77,
+    description: 'Mute the seeded zone colours, leaving any the operator chose alone',
+    fn(db) {
+      // Zone colours are data, so changing ZONE_SEED_COLOR only reaches
+      // installations that do not exist yet. This carries it to the ones that
+      // do — and must not tread on anybody's choice while doing so.
+      //
+      // The rule is the narrowest one that works: a row is upgraded only if its
+      // colour is still *exactly* the value the seed wrote for that role. Any
+      // other value — a hand-picked colour, a shade from an older seed, a zone
+      // added later — is an opinion, and opinions are left alone. Matching on
+      // the role rather than the id is what lets a fourth tent, created by the
+      // operator but never recoloured, come along too.
+      //
+      // Case-insensitive because the colour input yields lowercase while older
+      // rows were seeded from these literals; comparing raw would skip exactly
+      // the rows this is for. CONTAM is in the table and unchanged, so its
+      // branch is a no-op — it is listed so that a future change to the red
+      // needs no new migration shape, only a new value.
+      const upd = db.prepare('UPDATE zones SET color = ? WHERE role = ? AND lower(color) = lower(?)');
+      for (const role of Object.keys(ZONE_SEED_COLOR)) {
+        if (ZONE_SEED_COLOR[role] === ZONE_LEGACY_COLOR[role]) continue;
+        upd.run(ZONE_SEED_COLOR[role], role, ZONE_LEGACY_COLOR[role]);
+      }
+    }
+  },
+  {
+    version: 78,
+    description: 'Mark which Sorten are currently in the growing programme',
+    fn(db) {
+      // Which Sorten the farm is actually growing right now. It changes with the
+      // season — shiitake in winter, oysters through the summer — and the app
+      // had nowhere to say so, which meant every derived judgement about a
+      // Sorte had to assume all of them are always wanted.
+      //
+      // That assumption is what makes a supply warning useless: a Sorte nobody
+      // is growing this half of the year has no grain and nothing incubating by
+      // definition, so it reports "start one now" every single day, forever. A
+      // warning that is always on is not a warning, and worse, it drags the
+      // real ones down with it.
+      //
+      // Defaults to 1. On an existing database every Sorte is in the programme
+      // until somebody says otherwise, which is the only safe direction: the
+      // alternative silently switches off warnings the farm may be relying on.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('mushroom_strains') WHERE name='im_programm'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE mushroom_strains ADD COLUMN im_programm INTEGER DEFAULT 1');
+    }
+  },
+  {
+    version: 79,
+    description: 'A minimum of its own for slants and petri dishes, beside the one liquid culture had',
+    fn(db) {
+      // v69 gave a Sorte two minimums: min_spawn_kg for grain, min_lc for
+      // liquid culture. strainMinFor() then read min_lc for every culture type
+      // that was not grain, so slants and petri dishes were held to the
+      // liquid-culture figure — or, in the branch that returned 0, to nothing
+      // at all.
+      //
+      // They are three different things kept for three different reasons: a
+      // slant is the long-term backup, a plate is what you work from, a jar of
+      // LC is what goes into grain. They are stocked in different numbers, and
+      // one figure could not be right for all three.
+      //
+      // Zero means "no minimum set", exactly as min_lc already did, so nothing
+      // begins warning until somebody enters a number.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('mushroom_strains')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('min_mc')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_mc REAL DEFAULT 0');
+      if (!cols.includes('min_pd')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_pd REAL DEFAULT 0');
     }
   }
 ];
@@ -7501,6 +7609,11 @@ function _strainMinFields(d) {
   const out = {};
   if ('minSpawnKg' in d) out.min_spawn_kg = num(d.minSpawnKg, 0);
   if ('minLc' in d) out.min_lc = num(d.minLc, 0);
+  if ('minMc' in d) out.min_mc = num(d.minMc, 0);
+  if ('minPd' in d) out.min_pd = num(d.minPd, 0);
+  // Stored as 0/1 rather than a boolean: SQLite has no boolean type, and every
+  // other flag in this schema is an integer.
+  if ('imProgramm' in d) out.im_programm = d.imProgramm ? 1 : 0;
   return out;
 }
 
@@ -7537,7 +7650,14 @@ function listMushroomStrains(db) {
       recSterilText: r.rec_steril_text || '',
       // v69 — minimum holdings, per Sorte.
       minSpawnKg: r.min_spawn_kg || 0,
-      minLc: r.min_lc || 0
+      minLc: r.min_lc || 0,
+      // v79 — slants and petri dishes, each with a minimum of their own rather
+      // than borrowing the liquid-culture one.
+      minMc: r.min_mc || 0,
+      minPd: r.min_pd || 0,
+      // v78 — is the farm growing this one at the moment? Absent column reads
+      // as yes, so a database that has not migrated yet behaves as before.
+      imProgramm: r.im_programm == null ? true : r.im_programm !== 0
     }));
 }
 
@@ -9609,6 +9729,8 @@ function computeProductionDemand(db) {
 }
 
 module.exports = {
+  ZONE_SEED_COLOR,
+  ZONE_LEGACY_COLOR,
   // ── Order hub (Phase 0) ──
   listProducts,
   getProduct,

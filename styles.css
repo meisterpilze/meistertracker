@@ -63,6 +63,21 @@
      one thing — the tone that carries white text at 4.5:1. */
   --c-red-strong: #dc2626;
   --c-amber-strong: #b45309;
+  /* ── Production stage colours ─────────────────────────────────────────
+     The Chargen tiles paint their bar and their three stage figures with
+     these. They were referenced from app.js before they existed anywhere:
+     `background: var(--st-inc)` with no fallback is invalid at computed-value
+     time and background-color does not inherit, so every segment of the
+     proportion bar rendered transparent and the bar — the point of the tile —
+     was a flat grey pill on every Sorte.
+
+     Values are the muted zone palette (ZONE_SEED_COLOR in db.js), so a phase
+     looks the same whether it is a bar segment here, a badge in the Status
+     column or a dot on a rack. Grain is the slate end: it is the raw material,
+     not yet a mushroom, and it reads as the "not started" step. */
+  --st-spawn: #6b7a8c;
+  --st-inc: #4d829b;
+  --st-fruit: #438871;
   /* Semantic color palette */
   --c-red: #ef4444;
   --c-red-light: #fee2e2;
@@ -1364,6 +1379,19 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-btn.torch-on:active {
   background: rgba(250, 204, 21, 0.6);
 }
+/* CONTAM toggle. Armed, every bag scanned opens a contamination report, so it
+   has to be as obvious as the torch that it is on — the failure mode is the
+   same shape: a mode left running that the next scan silently obeys. Unarmed it
+   stays quiet, because it sits beside the torch and the flip on a HUD that is
+   mostly camera. */
+.cam-hud-btn.on {
+  background: rgba(220, 38, 38, 0.55);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(220, 38, 38, 0.55);
+}
+.cam-hud-btn.on:active {
+  background: rgba(220, 38, 38, 0.7);
+}
 .cam-hud-done {
   background: #16a34a;
 }
@@ -2041,11 +2069,6 @@ textarea.is-invalid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-.g5 {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
 /* Six, for the one place that needs six: the average-composition row in
    Inventory. It was an inline `repeat(6,1fr)` written straight into
    renderThresholds(), and a bare 1fr is minmax(auto, 1fr) — the track cannot
@@ -2090,17 +2113,36 @@ textarea.is-invalid {
   padding: 3px 9px;
   border-radius: 99px;
 }
+/* Phase badges — the Status column of every table that lists a batch.
+
+   These are the second half of a colour decision whose first half lives in the
+   database. A zone's colour says which room a bag is in; this badge says which
+   phase a batch is in; on this farm those are the same fact seen twice, so the
+   two agreeing is not decoration, it is the point. They were both the
+   full-saturation Tailwind 500 family, and both are now the muted version of
+   the same three hues — see ZONE_SEED_COLOR in db.js.
+
+   Backgrounds are the hue at 30% saturation and 94% lightness; the text is
+   picked per hue to land on 6.0:1 against its own background, which is matched
+   across the three so none of them reads as louder than its neighbours. Small
+   text, so the floor is 4.5, not 3.
+
+   The one thing this does NOT follow is the slate-to-green ramp used inside the
+   Chargen tiles. That ramp encodes a sequence and works because the three
+   phases sit side by side in one bar. A badge stands alone in its row, with no
+   neighbour to compare against, which is the case the ramp is worst at — the
+   same reason the zone colours kept their hues. */
 .b-inc {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #ebf1f4;
+  color: #306077;
 }
 .b-tent {
-  background: #dcfce7;
-  color: #166534;
+  background: #ebf4f1;
+  color: #2a6652;
 }
 .b-spawn {
-  background: #f3e8ff;
-  color: #6b21a8;
+  background: #f0ebf4;
+  color: #7241a0;
 }
 .b-contam {
   background: #fee2e2;
@@ -3480,28 +3522,395 @@ tr:hover td {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
-/* ═══ PIPELINE KPI TOTAL ROW ═════════════════════════════════════ */
-.metrics-total-row {
+/* ═══ SORTEN TILES ═══════════════════════════════════════════════
+   Replaces the pipeline KPI strip on the Chargen tab. One tile per Sorte,
+   plus a first tile carrying the totals the strip used to carry alone.
+
+   Two tiles per row on a phone. The tile is deliberately tall enough to hold
+   its three stage counts as *labelled numbers* rather than only as a bar: the
+   bar says the proportion at a glance, the numbers say how many, and neither
+   is the only way to read the card. Nothing here means anything by colour
+   alone.
+   ════════════════════════════════════════════════════════════════ */
+.sorten-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.sorten-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.sorten-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .sorten-grid {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    gap: 10px;
+  }
+}
+.stile {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--c-surface);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+@media (hover: hover) {
+  .stile:hover {
+    border-color: var(--c-slate);
+    box-shadow: var(--shadow-md);
+  }
+}
+.stile.on {
+  border-color: var(--c-primary);
+  box-shadow: inset 0 0 0 1px var(--c-primary);
+  background: var(--c-primary-light);
+}
+/* Urgent: the whole card is outlined, not one edge. A Sorte with nothing
+   behind it is the single thing on this screen that cannot wait, and a card
+   ringed in red is found without reading — which is the point, since this grid
+   is scanned in a grow room at arm's length. The fill stays white so the grid
+   around it stays calm; the halo does the carrying. */
+.stile.urgent {
+  border: 2px solid var(--c-red-strong);
+  padding: 10px 11px;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+@media (hover: hover) {
+  .stile.urgent:hover {
+    border-color: var(--c-red-strong);
+    box-shadow:
+      0 0 0 3px rgba(220, 38, 38, 0.18),
+      var(--shadow-md);
+  }
+}
+/* Selected AND urgent keeps both marks, so neither hides the other. */
+.stile.urgent.on {
+  border-color: var(--c-red-strong);
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.18),
+    inset 0 0 0 2px var(--c-primary);
+}
+/* The totals tile. It was going to be a dark slab, which is one more colour
+   doing a job that weight already does: same card, set on the page ground with
+   a firmer edge. */
+.stile-total {
+  background: var(--c-bg);
+  border-color: var(--c-text-muted);
+}
+@media (hover: hover) {
+  .stile-total:hover {
+    border-color: var(--c-text-sec);
+  }
+}
+.stile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.stile-name {
+  font-weight: 700;
+  font-size: max(14px, var(--fs-min));
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stile-kz {
+  font-size: max(10px, var(--fs-min));
+  font-weight: 700;
+  color: var(--c-text-muted);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex: none;
+}
+.stile-total .stile-kz {
+  background: var(--c-surface);
+}
+.stile-big {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 5px;
+  flex-wrap: wrap;
 }
-.metrics-total-label {
+.stile-big b {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stile-big span {
   font-size: max(11px, var(--fs-min));
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--c-text-sec);
+  color: var(--c-text-muted);
+  font-weight: 600;
 }
-.metrics-total-value {
-  font-size: 22px;
+.sbar {
+  display: flex;
+  height: 11px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--c-border-light);
+}
+.sbar i {
+  display: block;
+  height: 100%;
+}
+.tstages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.tstage {
+  display: block;
+  min-width: 0;
+}
+.tstage b {
+  display: block;
+  font-size: max(15px, var(--fs-min));
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.tstage i {
+  display: block;
+  font-style: normal;
+  font-size: max(10px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--c-border-light);
+  padding-top: 7px;
+  margin-top: auto;
+}
+.stile-fs {
+  font-size: max(10px, var(--fs-min));
+  color: var(--c-text-muted);
+}
+
+/* The supply light. A dot and a word, not a filled pill — only the state that
+   needs acting on today carries weight, so a card of healthy Sorten reads as
+   plain text. */
+.sup {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: max(11px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-sec);
+  white-space: nowrap;
+}
+.sup::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sup-c, var(--c-slate));
+  flex: none;
+}
+.sup-now {
+  color: #7f1d1d;
+  font-weight: 700;
+  --sup-c: #b91c1c;
+}
+.sup-nospawn {
+  --sup-c: #c2410c;
+}
+.sup-low {
+  --sup-c: #a16207;
+}
+.sup-ok {
+  color: var(--c-text-muted);
+  --sup-c: #4d9c6a;
+}
+/* Out of the season's programme. Deliberately NOT green: green would claim the
+   supply is fine, when the truth is that nobody is asking. A hollow dot says
+   "no opinion", which is the honest one. */
+.sup-off {
+  color: var(--c-text-muted);
+  --sup-c: transparent;
+}
+.sup-off::before {
+  box-shadow: inset 0 0 0 1.5px var(--c-text-muted);
+}
+/* The tile stays readable — the bags are real and somebody may want to see
+   them — but steps back so the Sorten actually being grown hold the eye. */
+.stile-off {
+  background: var(--c-bg);
+  opacity: 0.72;
+}
+.stile-off .stile-name {
+  font-weight: 600;
+}
+
+/* ═══ LAB STOCK TILES ════════════════════════════════════════════
+   The Labor card reuses the Chargen tile wholesale — same chrome, same bar,
+   same supply light — because it answers the same shape of question about a
+   different shelf. Only three things are its own: a type chip, the per-Sorte
+   rows, and the fact that the tile is not a button. */
+.stile-static {
+  cursor: default;
+}
+@media (hover: hover) {
+  .stile-static:hover {
+    border-color: var(--c-border);
+    box-shadow: none;
+  }
+  .stile-static.urgent:hover {
+    border-color: var(--c-red-strong);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  }
+}
+.lab-chip {
+  font-size: max(10px, var(--fs-min));
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  margin-right: 6px;
+  flex: none;
+}
+.lab-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.lab-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: max(11px, var(--fs-min));
+  color: var(--c-text-sec);
+  min-width: 0;
+}
+.lab-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.lab-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lab-row-n {
   font-weight: 700;
   color: var(--c-text);
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.metrics-pipeline {
+/* Under its floor: the number goes red, not the whole row. The Sorte's name is
+   not the problem, the count is. */
+.lab-row.under .lab-row-n {
+  color: var(--c-red-dark);
+}
+.lab-row-min {
+  font-weight: 400;
+  color: var(--c-text-muted);
+}
+.lab-empty {
+  font-style: italic;
+}
+
+/* ═══ SORTE IN THE PROGRAMME ═════════════════════════════════════ */
+.ms-prog {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: max(12px, var(--fs-min));
+  color: var(--c-text-sec);
+  user-select: none;
+}
+.ms-prog input {
+  width: auto;
   margin: 0;
+  /* Coarse pointers get a real target; the row is tapped in a grow room. */
+  min-width: 20px;
+  min-height: 20px;
+}
+tr.ms-off td {
+  opacity: 0.6;
+}
+tr.ms-off .ms-prog {
+  opacity: 1;
+}
+
+/* Legend — folded away by default. The tiles are the screen; this is the
+   footnote, and a footnote that is always open is clutter you learn to skip. */
+.tlegend-btn {
+  margin-top: 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: max(11px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.tlegend-btn:hover {
+  color: var(--c-text-sec);
+}
+.tlegend-caret {
+  font-size: max(10px, var(--fs-min));
+}
+.tlegend {
+  padding-top: 7px;
+  border-top: 1px solid var(--c-border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: max(11px, var(--fs-min));
+  color: var(--c-text-sec);
+  line-height: 1.45;
+}
+.tlegend .sup {
+  margin-right: 6px;
+}
+.tlegend-note {
+  color: var(--c-text-muted);
+  font-style: italic;
 }
 
 /* ═══ BATCH ROW FLASH ═══════════════════════════════════════════ */
@@ -4077,7 +4486,6 @@ tr:hover td {
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -4190,7 +4598,6 @@ tr:hover td {
   }
   .g3,
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4297,7 +4704,6 @@ tr:hover td {
   .g2,
   .g3,
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1144,6 +1144,36 @@
             <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
           </div>
           <div class="cam-hud-btns">
+            <!-- Reporting contamination is done standing in front of a bad bag
+                 with the phone already in hand. The scanner could only be put
+                 into CONTAM mode by scanning the printed CONTAM barcode, which
+                 is on a sheet at the bench, not in the tent. Everything behind
+                 this button already existed; it just had no door on a phone. -->
+            <button
+              id="btn-cam-contam"
+              class="cam-hud-btn cam-hud-btn-contam"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="scan.contamAria"
+              aria-label="Kontamination melden"
+              data-i18n-title="scan.contamAria"
+              title="Kontamination melden"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              </svg>
+            </button>
             <button
               id="btn-cam-torch"
               class="cam-hud-btn"
@@ -2477,19 +2507,20 @@
           </div>
 
           <!-- Floating action bar for bag selection -->
-          <div id="loc-action-bar" class="action-bar-sticky" style="display: none"></div>
         </div>
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
-          <!-- Pipeline per stage — the header the batch list was missing -->
-          <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-            <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
-            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
-            <div id="metrics" style="margin-bottom: 10px"></div>
-          </div>
           <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
+            <!-- "Where does everything stand" used to sit on top of the batch
+                 list, which meant this page answered the same question three
+                 times: a stage strip counting bags, a room view counting the
+                 same bags by rack, and a table grouping them by stage again.
+                 The room view is a real tool — it is the only place bags can be
+                 selected and moved in bulk — so it keeps everything it had and
+                 gets its own tab instead of competing for the first screen. -->
+            <button class="stab" id="st-batch-locations" data-i18n="batch.locationsTab">Standorte</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
                  sp-batch-new panel stays in the DOM as that dialog's backing form. -->
             <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
@@ -2498,21 +2529,13 @@
           </div>
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
-            <!-- Where everything currently sits, by room -->
-            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
-              <div class="dash-locations-header">
-                <input
-                  type="text"
-                  id="status-q"
-                  class="dash-search-inline"
-                  data-i18n-aria-label="aria.searchDashboard"
-                  aria-label="Search dashboard"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Search..."
-                />
-              </div>
-              <div id="dash-locations"></div>
+            <!-- Totals and the per-Sorte breakdown, in one card. The old stage
+                 strip was a separate box above this one showing batch counts
+                 next to bag counts in the same row; it is the first tile here
+                 now, and the rest of the grid answers the question the page
+                 could not: which Sorte is running out. -->
+            <div class="card" style="padding: 12px 14px; margin-bottom: 10px">
+              <div id="batch-sorten"></div>
             </div>
             <div class="card">
               <div
@@ -2526,7 +2549,24 @@
                 "
               >
                 <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
-                <div style="display: flex; gap: 6px; align-items: center">
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+                  <!-- Grouping is a choice now, and "none" is the default.
+                       renderBatches() always sorted correctly and then handed
+                       the rows to _groupBatchRows(), which re-bucketed them by
+                       stage — so a click on Art or Menge only reordered rows
+                       inside each stage block and the list as a whole never
+                       moved. Ungrouped is the only state in which the column
+                       sort owns the order, and it was unreachable. -->
+                  <select class="fs-meta"
+                    id="batch-group-by"
+                    data-i18n-aria-label="batch.groupByAria"
+                    aria-label="Group the list"
+                    style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
+                  >
+                    <option value="none" data-i18n="batch.groupNone">Nicht gruppieren</option>
+                    <option value="sorte" data-i18n="batch.groupSorte">Nach Sorte</option>
+                    <option value="stage" data-i18n="batch.groupStage">Nach Phase</option>
+                  </select>
                   <select class="fs-meta"
                     id="batch-archive-filter"
                     data-i18n-aria-label="batch.filterArchiveAria"
@@ -2572,6 +2612,31 @@
                 </table>
               </div>
             </div>
+          </div>
+          <!-- Where everything currently sits, by room. Unchanged in every
+               respect except which tab it is on: same racks, same bag chips,
+               same multi-select and bulk move, same search. -->
+          <div class="sp" id="sp-batch-locations">
+            <div class="card" style="padding: 10px 14px">
+              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+              <div class="dash-locations-header">
+                <input
+                  type="text"
+                  id="status-q"
+                  class="dash-search-inline"
+                  data-i18n-aria-label="aria.searchDashboard"
+                  aria-label="Search dashboard"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Search..."
+                />
+              </div>
+              <div id="dash-locations"></div>
+            </div>
+            <!-- It has to live in the same page as the chips it acts on: .page
+                 is display:none for every page but the open one, so while it sat
+                 in p-dash the racks moved here and their bulk-move bar did not,
+                 and selecting bags offered nothing to do with them. -->
+            <div id="loc-action-bar" class="action-bar-sticky" style="display: none"></div>
           </div>
           <!-- Every mix ever made, open and spent. Not front and center: this is
                where you go to count them and to find the one that went wrong. -->
@@ -3074,6 +3139,18 @@
                         <span data-i18n="strains.minLc">Mindestbestand Flüssigkultur (Gläser)</span>
                         <input id="ms-min-lc" type="number" min="0" step="1" value="0" />
                       </label>
+                      <!-- A slant is the long-term backup, a plate is what you
+                           work from, a jar of LC is what goes into grain. Three
+                           reasons to keep something, stocked in three different
+                           numbers — so three figures, not one shared with LC. -->
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
+                        <span data-i18n="strains.minMc">Mindestbestand Slants (Stück)</span>
+                        <input id="ms-min-mc" type="number" min="0" step="1" value="0" />
+                      </label>
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
+                        <span data-i18n="strains.minPd">Mindestbestand Petrischalen (Stück)</span>
+                        <input id="ms-min-pd" type="number" min="0" step="1" value="0" />
+                      </label>
                     </div>
                   </div>
                   <div id="ms-rec-graingroup" style="display: none; margin-top: 8px">
@@ -3132,6 +3209,12 @@
                 <table>
                   <thead>
                     <tr>
+                      <!-- Which Sorten the farm is growing this season. It belongs
+                           here rather than on a tab of its own: it is a property
+                           of the Sorte, next to its Kürzel and its recipe, and
+                           this is the page somebody already opens to add or
+                           retire one. -->
+                      <th data-i18n="strains.imProgramm">Im Programm</th>
                       <th data-i18n="strains.name">Name</th>
                       <th data-i18n="strains.kuerzel">Kürzel</th>
                       <th data-i18n="strains.descriptor">Genetik</th>
@@ -5959,7 +6042,7 @@
                 ><input
                   id="zone-color"
                   type="color"
-                  value="#10b981"
+                  value="#438871"
                   style="width: 60px; height: 32px; padding: 2px; border-radius: 6px; border: 1px solid var(--c-border)"
                 />
               </div>

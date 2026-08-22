@@ -156,6 +156,19 @@ function loadLang(code) {
 
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'];
+// The colour a zone falls back to when its row carries none, the shade the role
+// picker suggests, and the default in the new-zone form — one table instead of
+// the three separate literals these used to be, which is how the KPI strip and
+// the zone editor came to disagree about what "fruiting" looks like.
+//
+// Must stay equal to ZONE_SEED_COLOR in db.js; test/zonenfarben.test.js holds
+// the two together, because nothing else would notice them drifting apart.
+const ZONE_ROLE_COLOR = {
+  spawn: '#926bb6',
+  incubation: '#4d829b',
+  fruiting: '#438871',
+  contaminated: '#ef4444'
+};
 let ZONES = [],
   ALL_RACKS = [],
   LOCS = [],
@@ -1122,7 +1135,14 @@ function openStab(page, sub) {
   document.querySelectorAll('.sb-admin-nav .sb-btn').forEach((b) => b.classList.remove('active'));
   const snEl = document.getElementById(`sn-${page}-${sub}`);
   if (snEl) snEl.classList.add('active');
-  if (page === 'batch' && sub === 'list') renderBatches();
+  if (page === 'batch' && sub === 'list') {
+    renderSorteTiles();
+    renderBatches();
+  }
+  // Painted on arrival rather than on every sync: renderStatus() walks the whole
+  // scan log once per rack and once per zone, and this panel is display:none
+  // until somebody asks for it.
+  if (page === 'batch' && sub === 'locations') renderStatus();
   if (page === 'batch' && sub === 'new') {
     _fillNbProducts();
     if (!_nbDefaultsApplied) {
@@ -2675,50 +2695,381 @@ function isBatchOverdue(b, now) {
   return due < today;
 }
 
-function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
-  const el = document.getElementById('metrics');
-  if (!el) return;
-  // Pick up zone colors if configured
-  const zSpawn = zones.find((z) => z.role === 'spawn');
-  const zInc = zones.find((z) => z.role === 'incubation');
-  const zTent = zones.find((z) => z.role === 'fruiting');
-  const zContam = zones.find((z) => z.role === 'contaminated');
-  const stages = [
-    {
-      label: t('stage.spawn'),
-      value: spawn,
-      color: zSpawn?.color || '#a855f7',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`
-    },
-    {
-      label: t('stage.incubation'),
-      value: inc,
-      color: zInc?.color || '#0ea5e9',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
-    },
-    {
-      label: t('stage.fruiting'),
-      value: tent,
-      color: zTent?.color || '#10b981',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`
-    },
-    {
-      label: t('stage.done'),
-      value: done,
-      color: '#64748b',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`
-    },
-    {
-      label: t('stage.contam'),
-      value: contam,
-      color: zContam?.color || '#ef4444',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+// ─── SORTEN OVERVIEW ─────────────────────────────────────────
+// Replaces the pipeline KPI strip. That strip answered "how many bags are in
+// each stage" and mixed its units doing it — "Chargen gesamt" and "Fertig"
+// counted batches while the three stages beside them counted bags, all in one
+// row. It also could not answer the question this page is actually opened
+// with: which Sorte is running out, so which one needs a batch started.
+//
+// Both live here now. The first tile is the old total; the rest are one tile
+// per Sorte, and every number on all of them is bags.
+
+// ─── SORTE IDENTITY ──────────────────────────────────────────
+// One key for a Sorte, used by the rollup, the tile filter, the grouping and
+// every programme lookup.
+//
+// `b.species` is NOT it, and keying on it was one bug wearing seven faces:
+// createBatch (and db.js insertBatch) write "Name (KÜRZEL)" while
+// createGrainBatch writes "Name", so the SAME Sorte reaches this code under two
+// spellings. Grain never joined its blocks, the programme flag never matched
+// anything, and buildSupplyTasks() returned an empty list on real data.
+//
+// Batches carry strain_id and db.js resolves strainName from it, so the id is
+// the key wherever it exists. _spKey is the fallback for rows that predate
+// strain_id: it is the normalisation spColor has always used, and stripping the
+// " (KZ)" suffix is exactly what it was written for.
+function sorteKey(rec) {
+  if (rec && rec.strainId) return 'id:' + rec.strainId;
+  return 'n:' + _spKey((rec && (rec.strainName || rec.species || rec.name)) || '');
+}
+// A Sorte row may be reached by either key — id for batches that carry one,
+// name for the older ones — so a lookup table has to answer to both.
+function _strainKeys(ms) {
+  return ['id:' + ms.id, 'n:' + _spKey(ms.name || '')];
+}
+// The Pilzsorten row behind a sorteKey(), for the buttons that have to open a
+// form for it. Answers to both key forms, exactly as the programme map does.
+function _strainByKey(key) {
+  if (!key) return null;
+  for (const ms of mushroomStrains || []) if (_strainKeys(ms).includes(key)) return ms;
+  return null;
+}
+// Choose a type in the Laborarbeit quick dialog.
+//
+// The picker spells grain spawn KB where MIN_TYPES spells it GS; without the
+// translation the membership check below silently fails and the dialog opens on
+// whatever was selected last — a "Körnerbrut anlegen" button that registers a
+// slant. Setting .value in script does not fire the select's onchange either,
+// and that handler is what refills the parent list, so it is called directly.
+function _msqPickType(type) {
+  const lt = document.getElementById('ms-q-labtype');
+  const want = type === 'GS' ? 'KB' : type;
+  if (!lt || !want || ![...lt.options].some((o) => o.value === want)) return;
+  lt.value = want;
+  msQuickLabTypeChanged();
+}
+
+// What to print. The resolved strain name when there is one; otherwise the
+// species with its " (KZ)" suffix stripped, so the card never shows one Sorte
+// under two labels.
+function sorteName(b) {
+  const n = (b.strainName || '').trim();
+  if (n) return n;
+  const s = String(b.species || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  return s || t('batch.noSorte');
+}
+
+// Bags of one batch, bucketed by production stage. Same source as the status
+// badge and the old strip — getStatus().c is the per-zone count derived from
+// the last scan per bag — so the tiles cannot disagree with the row beneath
+// them. stageOf() is what folds grain jars into 'spawn' regardless of the zone
+// they sit in.
+function _stageBagsOf(b) {
+  const { c } = getStatus(b.batchId);
+  const out = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
+  for (const z of zones) {
+    const n = c[z.id] || 0;
+    if (!n) continue;
+    const st = stageOf(z.role, b.batchType);
+    if (out[st] !== undefined) out[st] += n;
+  }
+  return out;
+}
+
+// How much of each Sorte is where, and whether anything is behind it.
+//
+// The chain on this farm runs grain -> block -> fruiting, and the verdict reads
+// the first two steps SEPARATELY, because they are different lead times.
+// Incubation is the next harvest; grain is what the harvest after that has to
+// be made from. A Sorte with a full incubation and no grain has no problem
+// today and a certain one in two cycles — a different thing from "running low",
+// wanting a different answer on a different day.
+//
+//   grain 0, incubating 0  -> 'now'      behind the fruiting blocks: nothing
+//   grain 0, incubating >0 -> 'nospawn'  next harvest yes, the one after no
+//   incubating < fruiting  -> 'low'      the chain runs, but it is thinning
+//   otherwise              -> 'ok'
+//
+// ── Why grain is counted apart rather than added in ──
+//
+// stageOf() puts a BLOCK into 'incubation' from any zone that is not fruiting
+// or contaminated — blocks have no spawn-run stage in this app, only grain
+// does. So "bags in spawn" is not a thing a block can be, and reading it that
+// way would have made the spawn count permanently zero and the distinction
+// above meaningless. Grain lives in its own batches (batchType 'grain', listed
+// under Labor), and that is where the number has to come from.
+//
+// It is therefore in a DIFFERENT UNIT: kilograms, not blocks, and a kilo of
+// grain makes several blocks. Adding it to a bag count would repeat exactly the
+// mistake this card was built to fix — the old strip put batch counts and bag
+// counts in one row. So grain stays out of `bags` and out of the bar's
+// arithmetic; it is named in its own right, in kilograms, beside them.
+//
+// Everything here comes out of data the app already has. A real days-of-cover
+// number would need a target per Sorte or consumption from the order side;
+// neither exists, so it is not guessed at.
+const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3, off: 4 };
+// How much grain of one batch is on the shelf, in KILOGRAMS.
+//
+// This used to read getStatus().c, i.e. jars that have a scan position — and
+// createGrainBatch writes no scan entries at all, so grain made this morning
+// counted as zero and the tile reported "Körner fehlen" over a full shelf.
+// Worse, it counted JARS while the Labor card and min_spawn_kg are kilograms,
+// so the two screens disagreed about the same Sorte in both value and unit.
+//
+// This is now the identical computation getLabStrainBreakdown() uses for GS,
+// which is what makes the tile, the Labor card and the minimum agree by
+// construction rather than by coincidence.
+function _grainKgOf(b) {
+  const { status } = getStatus(b.batchId);
+  // "EMPTY" means two different things and only one of them is empty. getStatus()
+  // has nothing to answer with for a batch that has no scan rows at all —
+  // and createGrainBatch writes none, so that is every grain batch made today.
+  // Reading that as archived returned 0 for precisely the grain the note above
+  // says this function was written to find: the tile went on saying "Körner
+  // fehlen" over a full shelf, and the fix only looked like one. _hasScanByBatch,
+  // filled by the getStatus() call on the line before, tells the two apart.
+  const gesehen = _hasScanByBatch && _hasScanByBatch.get(b.batchId);
+  if (gesehen && isArchivedStatus(status)) return 0;
+  if (b.bagWeights && Object.keys(b.bagWeights).length) {
+    return Object.values(b.bagWeights).reduce((s, w) => s + (w || 1), 0);
+  }
+  return (b.qty || 0) * (b.bagKg || 1);
+}
+function sorteRollup() {
+  const bySorte = new Map();
+  for (const b of batches) {
+    const key = sorteKey(b);
+    let r = bySorte.get(key);
+    if (!r) {
+      r = {
+        key,
+        name: sorteName(b),
+        kuerzel: '',
+        grain: 0, // kilograms of grain spawn — a different unit, kept apart
+        incubation: 0,
+        fruiting: 0,
+        nBatches: 0, // block batches with bags still on the floor
+        nAll: 0, // block batches, live and finished — what the table below lists
+        lastDays: null,
+        nextDue: null
+      };
+      bySorte.set(key, r);
     }
-  ];
-  const totalRow = `<div class="metrics-total-row"><span class="metrics-total-label">${t('dash.totalBatches')}</span><span class="metrics-total-value">${tot}</span></div>`;
-  el.innerHTML =
-    totalRow +
-    `<div class="g5 metrics-pipeline">${stages.map((s) => `<div class="met" style="border-left-color:${s.color}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${s.color}">${s.icon}</span>${s.label}</div><div class="met-v" style="color:${s.value > 0 ? s.color : 'var(--c-text-muted)'}">${s.value}</div></div>`).join('')}</div>`;
+    if (!r.kuerzel) r.kuerzel = (b.strainKuerzel || '').trim();
+    // Grain contributes one thing and one thing only: how much is ready to make
+    // the next blocks from. It is not a batch on this page and not a bag in
+    // these totals.
+    if (b.batchType === 'grain') {
+      r.grain += _grainKgOf(b);
+      continue;
+    }
+    const st = _stageBagsOf(b);
+    r.nAll++;
+    // Age, not recipe length. b.days is the planned incubation duration — the
+    // number the table prints as "14d" — so reading it here printed a constant
+    // that never moved, under a label saying "last one N days ago".
+    const age = Math.max(0, Math.round((Date.now() - new Date(b.created)) / 864e5));
+    if (Number.isFinite(age) && (r.lastDays == null || age < r.lastDays)) r.lastDays = age;
+    r.incubation += st.incubation;
+    r.fruiting += st.fruiting;
+    if (st.incubation + st.fruiting > 0) {
+      r.nBatches++;
+      // The next batch due to reach fruiting — only the ones not already there.
+      const due = new Date(b.due);
+      if (st.fruiting === 0 && (r.nextDue == null || due < r.nextDue)) r.nextDue = due;
+    }
+  }
+  // Is the farm growing this one at the moment? Keyed by BOTH of a strain's
+  // keys, because a batch reaches the rollup under its id and an older one
+  // under its name. A Sorte with no row in Pilzsorten at all is treated as in
+  // the programme — it is being grown, somebody just never wrote it down, and
+  // going quiet about it would hide real work — but `known` records which case
+  // it was, so a caller that needs the stricter reading can have it.
+  const programme = new Map();
+  for (const m of mushroomStrains) for (const k of _strainKeys(m)) programme.set(k, m.imProgramm !== false);
+  const out = [...bySorte.values()];
+  for (const r of out) {
+    if (!r.kuerzel) r.kuerzel = abbrev(r.name);
+    const p = programme.get(r.key);
+    r.known = p !== undefined;
+    r.imProgramm = p === undefined ? true : p;
+    // Blocks only — the same unit as every other number on the tile.
+    r.bags = r.incubation + r.fruiting;
+    r.supply =
+      r.grain === 0 && r.incubation === 0
+        ? 'now'
+        : r.grain === 0
+          ? 'nospawn'
+          : r.incubation < r.fruiting
+            ? 'low'
+            : 'ok';
+    // Out of the programme, the light goes off entirely rather than turning
+    // green. Green would claim the supply is fine; the truth is that nobody is
+    // asking. Shiitake in summer has no grain and nothing incubating BY
+    // DEFINITION, and a red card every day for a Sorte nobody is growing
+    // teaches people to stop reading the card.
+    if (!r.imProgramm) r.supply = 'off';
+  }
+  // A Sorte that exists only as grain has no block batches and nothing for the
+  // list below; it still belongs on the card, because "there is spawn ready and
+  // no blocks made from it" is precisely a thing worth seeing.
+  return out;
+}
+
+// Sort order for the tiles. Urgency first by default — the whole point of the
+// card is that the Sorte needing a batch is the one you see without looking.
+let batchTileSort = localStorage.getItem('mp-batch-tile-sort') || 'urgency';
+let batchLegendOpen = false;
+function _sortSorten(rows) {
+  const by = batchTileSort;
+  const byName = (a, b) => a.name.localeCompare(b.name, loc(), { sensitivity: 'base' });
+  return [...rows].sort((a, b) => {
+    if (by === 'bags') return b.bags - a.bags || byName(a, b);
+    if (by === 'name') return byName(a, b);
+    return SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.incubation - b.incubation || byName(a, b);
+  });
+}
+
+function _stageSeg(v, total, varName) {
+  return v ? `<i style="width:${(v / Math.max(total, 1)) * 100}%;background:var(${varName})"></i>` : '';
+}
+// `shown` is how the figure reads; `v` still decides whether there is one at
+// all. Grain is a weight, so three bags of 1.2 kg is 3.5999999999999996 in IEEE
+// 754 and was rendered at that length in 15px bold — but fmtKg(0) is "0,0",
+// which is truthy, so formatting first would print a zero where the dash goes.
+function _stageNum(v, varName, label, shown) {
+  return (
+    `<span class="tstage"><b style="color:${v ? 'var(' + varName + ')' : 'var(--c-text-muted)'}">${v ? esc(shown == null ? v : shown) : '–'}</b>` +
+    `<i>${esc(label)}</i></span>`
+  );
+}
+// The bar and the numbers under it are blocks, and only blocks, so the widths
+// mean something and the three figures can be compared with each other. Grain
+// is a weight, so it is labelled and formatted as one — see sorteRollup().
+function _sorteTileBody(r) {
+  return (
+    `<span class="stile-big"><b>${r.bags}</b><span>${esc(tp('batch.bagsNBatches', r.nBatches))}</span></span>` +
+    `<span class="sbar">${_stageSeg(r.incubation, r.bags, '--st-inc')}${_stageSeg(r.fruiting, r.bags, '--st-fruit')}</span>` +
+    `<span class="tstages">${_stageNum(r.grain, '--st-spawn', t('batch.grainStockKg'), fmtKg(r.grain, 1))}${_stageNum(r.incubation, '--st-inc', t('stage.incubation'))}${_stageNum(r.fruiting, '--st-fruit', t('stage.fruiting'))}</span>`
+  );
+}
+
+function renderSorteTiles() {
+  const el = document.getElementById('batch-sorten');
+  if (!el) return;
+  // nAll counts block batches only, so filtering on it alone dropped exactly
+  // the case the rollup comment promises to show: grain made, no blocks yet.
+  const rows = _sortSorten(sorteRollup().filter((r) => r.nAll > 0 || r.grain > 0));
+  // A Sorte whose last Charge was just deleted loses its tile, and with it the
+  // only control that clears this filter — leaving a table reading "keine
+  // Treffer" with nothing on screen to say why. If the selection is gone, the
+  // filter goes with it.
+  if (batchSorteFilter && !rows.some((r) => r.key === batchSorteFilter)) batchSorteFilter = '';
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
+    return;
+  }
+  const tot = rows.reduce(
+    (a, r) => {
+      a.grain += r.grain;
+      a.incubation += r.incubation;
+      a.fruiting += r.fruiting;
+      a.bags += r.bags;
+      a.nBatches += r.nBatches;
+      a.nAll += r.nAll;
+      return a;
+    },
+    { grain: 0, incubation: 0, fruiting: 0, bags: 0, nBatches: 0, nAll: 0 }
+  );
+  const nNow = rows.filter((r) => r.supply === 'now').length;
+  const nNoSpawn = rows.filter((r) => r.supply === 'nospawn').length;
+  const nOff = rows.filter((r) => r.supply === 'off').length;
+
+  const totalTile =
+    `<button type="button" class="stile stile-total${batchSorteFilter ? '' : ' on'}" data-action="sorte-all">` +
+    `<span class="stile-top"><span class="stile-name">${esc(t('batch.allSorten'))}</span>` +
+    `<span class="stile-kz">${rows.length}</span></span>` +
+    _sorteTileBody(tot) +
+    `<span class="stile-foot"><span class="stile-fs">${esc(t('batch.nTotalNArchived', { n: tot.nAll, a: tot.nAll - tot.nBatches }))}</span></span>` +
+    `</button>`;
+
+  const tiles = rows
+    .map((r) => {
+      const sel = batchSorteFilter === r.key;
+      const foot =
+        r.supply === 'ok' && r.nextDue
+          ? t('batch.nextDue', { d: fmtDt(r.nextDue) })
+          : r.lastDays != null
+            ? t('batch.lastAgo', { n: r.lastDays })
+            : '';
+      return (
+        `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}${r.imProgramm ? '' : ' stile-off'}"` +
+        ` data-action="sorte-tile" data-sorte="${esc(r.key)}"` +
+        ` title="${esc(r.name + ' — ' + t('batch.supply.' + r.supply + 'Why'))}">` +
+        `<span class="stile-top"><span class="stile-name">${spDot(r.name)}${esc(r.name)}</span>` +
+        `<span class="stile-kz">${esc(r.kuerzel)}</span></span>` +
+        _sorteTileBody(r) +
+        `<span class="stile-foot"><span class="sup sup-${r.supply}">${esc(t('batch.supply.' + r.supply))}</span>` +
+        `<span class="stile-fs">${esc(foot)}</span></span>` +
+        `</button>`
+      );
+    })
+    .join('');
+
+  // Folded away by default: the tiles are the screen, this is the footnote, and
+  // a footnote that is always open is clutter you learn to skip past.
+  let legend =
+    `<button type="button" class="tlegend-btn" data-action="sorte-legend" aria-expanded="${batchLegendOpen}">` +
+    `<span class="tlegend-caret">${batchLegendOpen ? '▾' : '▸'}</span>${esc(t('batch.legendToggle'))}</button>`;
+  if (batchLegendOpen) {
+    const named = (k) => {
+      const n = rows.filter((r) => r.supply === k).map((r) => r.name);
+      return n.length ? ': <b>' + esc(n.join(', ')) + '</b>' : '';
+    };
+    legend +=
+      '<div class="tlegend">' +
+      ['now', 'nospawn', 'low', 'ok', 'off']
+        .map(
+          (k) =>
+            `<div><span class="sup sup-${k}">${esc(t('batch.supply.' + k))}</span> ${esc(t('batch.supply.' + k + 'Why'))}${named(k)}</div>`
+        )
+        .join('') +
+      `<div class="tlegend-note">${esc(t('batch.legendNote'))}</div>` +
+      '</div>';
+  }
+
+  const warn =
+    (nNow ? `<span class="sup sup-now">${esc(t('batch.nNeedStart', { n: nNow }))}</span>` : '') +
+    (nNoSpawn ? `<span class="sup sup-nospawn">${esc(t('batch.nNoSpawn', { n: nNoSpawn }))}</span>` : '') +
+    (nOff ? `<span class="sup sup-off">${esc(t('batch.nOffProgramme', { n: nOff }))}</span>` : '');
+
+  // translatePage() only walks static markup, and this card is rebuilt on every
+  // sync — so a data-i18n-aria-label here was replaced by the English literal
+  // beside it before it could ever be read. Every other string on the card goes
+  // through t(); this one now does too.
+  const html =
+    `<div class="sorten-head"><div class="sec" style="margin:0">${esc(t('batch.bySorte'))}</div>` +
+    `<div class="sorten-head-right">${warn}` +
+    `<select class="fs-meta" id="batch-tile-sort" aria-label="${esc(t('batch.tileSortAria'))}">` +
+    `<option value="urgency"${batchTileSort === 'urgency' ? ' selected' : ''}>${esc(t('batch.tileSortUrgency'))}</option>` +
+    `<option value="bags"${batchTileSort === 'bags' ? ' selected' : ''}>${esc(t('batch.tileSortBags'))}</option>` +
+    `<option value="name"${batchTileSort === 'name' ? ' selected' : ''}>${esc(t('batch.tileSortName'))}</option>` +
+    `</select></div></div>` +
+    `<div class="sorten-grid">${totalTile}${tiles}</div>` +
+    legend;
+
+  // renderStatus() runs on every SSE event and every 30s poll, and writing
+  // identical markup still tears out the <select> the user has open and drops
+  // focus mid-choice. renderBatches() next door keeps _rbLastRenderFp for this;
+  // comparing the string about to be written is the one fingerprint that cannot
+  // go stale, because it IS the output.
+  if (el.__sortenFp === html) return;
+  el.__sortenFp = html;
+  el.innerHTML = html;
 }
 
 function renderOverviewKPIs() {
@@ -3772,33 +4123,39 @@ function renderStatus() {
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
   const el = document.getElementById('dash-locations');
   if (!el) return;
+  // The room view moved to its own sub-tab, and rebuilding it while that tab is
+  // closed is pure waste: getRackBags/getZoneBags walk the entire scan log, and
+  // this function calls them about thirty times. The Sorten tiles and the
+  // overview KPIs still have to run, so only the rack markup is skipped.
+  const panel = document.getElementById('sp-batch-locations');
+  if (panel && !panel.classList.contains('active')) {
+    renderSorteTiles();
+    renderOverviewKPIs();
+    return;
+  }
   if (!zones.length) {
     // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
-    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderSorteTiles();
     renderOverviewKPIs();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
-    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderSorteTiles();
     renderOverviewKPIs();
     return;
   }
 
-  // Compute per-batch status
-  let tspawn = 0,
-    ti = 0,
-    tt = 0,
-    tc = 0;
+  // Compute per-batch status.
+  //
+  // The four per-stage bag counters that used to be accumulated here fed
+  // renderPipelineKPIs() and nothing else. The Sorten tiles need the same
+  // numbers broken down per Sorte rather than as one total, so they are
+  // summed in sorteRollup() from the same getStatus().c — one place doing
+  // it once, instead of a total here and a breakdown there that could drift.
   const batchData = batches.map((b) => {
     const { c, total, status } = getStatus(b.batchId);
-    zones.forEach((z) => {
-      if (z.role === 'spawn') tspawn += c[z.id] || 0;
-      if (z.role === 'incubation') ti += c[z.id] || 0;
-      if (z.role === 'fruiting') tt += c[z.id] || 0;
-      if (z.role === 'contaminated') tc += c[z.id] || 0;
-    });
     const harv = getHarvested(b.batchId);
     const due = new Date(b.due);
     const ov =
@@ -3840,8 +4197,7 @@ function renderStatus() {
   });
 
   el.innerHTML = html;
-  const tdone = batchData.filter((d) => d.status === 'DONE').length;
-  renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
+  renderSorteTiles();
   renderOverviewKPIs();
   updateActionBar();
 }
@@ -3938,7 +4294,7 @@ function renderFruitingSection(fruitingZones, filtered) {
   let totalBags = 0;
   fruitingZones.forEach((z) => (totalBags += Object.keys(getZoneBags(z.id)).length));
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const color = fruitingZones[0]?.color || '#22c55e';
+  const color = fruitingZones[0]?.color || ZONE_ROLE_COLOR.fruiting;
 
   const tentCols = fruitingZones
     .map((z) => {
@@ -4968,6 +5324,115 @@ function suggestWeekRhythm() {
 // Overdue work folds onto today. It is not Tuesday's job any more; it is this
 // morning's, and leaving it on the day it was missed would show an empty today
 // beside a backlog nobody is looking at.
+
+// A Sorte with nothing coming is work, and it was only ever visible on the
+// Chargen tab. Somebody reading the day's list had no way to learn that the
+// shiitake ran out — the list only ever knew about batches that already exist,
+// so the one thing missing from the farm was the one thing it could not say.
+//
+// These rows are DERIVED, like the move and harvest rows beside them, and that
+// is what makes "until it is actually made" work without any bookkeeping: make
+// the grain and the Sorte stops being 'now'; make the blocks and it stops being
+// 'nospawn'. There is no done flag to set, and none to forget.
+//
+// Only Sorten in this season's programme (v78) qualify. Without that, a Sorte
+// nobody is growing this half of the year has no grain and nothing incubating
+// by definition, so it would report the same gap every day forever — and a
+// warning that is always on drags the real ones down with it.
+function buildSupplyTasks() {
+  const out = [];
+  for (const r of sorteRollup()) {
+    if (r.supply !== 'now' && r.supply !== 'nospawn') continue;
+    // The rollup already resolved this against the programme, by key. Rebuilding
+    // the same judgement from names here is what made this function return an
+    // empty list on real data: a block batch's name carries a " (KZ)" suffix the
+    // strain row does not.
+    //
+    // A Sorte with no Pilzsorten row is left out rather than assumed in. The
+    // tile may show it — an observation can err towards telling you something —
+    // but a task is an instruction, and "nothing said otherwise" is not enough
+    // to issue one.
+    if (!r.imProgramm || !r.known) continue;
+    out.push({
+      key: r.key,
+      name: r.name,
+      supply: r.supply,
+      // What to make, in the order the chain runs: no grain means grain first.
+      taskAction: r.grain === 0 ? 'make-grain' : 'make-blocks',
+      detail: t(r.supply === 'now' ? 'todo.supplyNow' : 'todo.supplyNoSpawn', { n: r.fruiting })
+    });
+  }
+  // Worst first, and stable, so the row does not jump about between renders.
+  return out.sort((a, b) => SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.name.localeCompare(b.name));
+}
+
+// Lab stock that has fallen under the floor somebody set for it.
+//
+// The floors already existed and were already drawn on the Labor card, which
+// meant they could only be seen by going and looking — and the whole point of a
+// floor is that it tells you without being asked. Same shape as the Sorten
+// supply rows: derived, so plating three more dishes makes the row go away, and
+// nothing has to be ticked off.
+//
+// Only types with a minimum, and only Sorten in this season's programme —
+// strainsInProduction() is what enforces the second half, and it is why a Sorte
+// parked for the summer stops asking for slants it will not need until autumn.
+function buildLabMinTasks() {
+  const breakdown = getLabStrainBreakdown();
+  // strainsInProduction() only ADDS missing zero rows; rows already built from
+  // the cultures loop survive it untouched. So a Sorte parked for the summer
+  // with one slant left kept raising a task every day forever — the exact
+  // always-on warning the programme flag exists to prevent. The exclusion has
+  // to be applied here, where every row is in hand.
+  const parked = new Set();
+  for (const m of mushroomStrains || []) {
+    if (m.imProgramm === false) for (const k of _strainKeys(m)) parked.add(k);
+  }
+  const out = [];
+  for (const type of MIN_TYPES) {
+    for (const entry of Object.values(breakdown[type] || {})) {
+      // One identity for the Sorte, worked out once: the parked check needs it
+      // and so does the button this row draws. Deriving it twice from a display
+      // name is how the two halves came apart in the first place.
+      const key = sorteKey({ strainName: entry.name, species: entry.name });
+      if (parked.has(key)) continue;
+      const min = entry.min || 0;
+      // No minimum set is not the same as a minimum of zero: it means nobody
+      // has said what this Sorte needs, and guessing would invent work.
+      if (min <= 0) continue;
+      const have = entry.count || 0;
+      if (have >= min) continue;
+      out.push({
+        type,
+        key,
+        name: entry.name,
+        kz: entry.kz,
+        have,
+        min,
+        short: min - have,
+        empty: have === 0,
+        // Grain is kept in kilograms; the three culture types are counted in
+        // pieces. Rounding a weight would report "make 0 more" for a gap that is
+        // real but under half a kilo.
+        detail: t('todo.labShort', {
+          type: getLabLabel(type),
+          have: type === 'GS' ? fmtKg(have, 1) : have,
+          min: type === 'GS' ? fmtKg(min, 1) : min
+        })
+      });
+    }
+  }
+  // Empty first — nothing at all of something is a different problem from a
+  // little short of it — then by how far under, then by name so it holds still.
+  return out.sort(
+    (a, b) =>
+      Number(b.empty) - Number(a.empty) ||
+      b.short / b.min - a.short / a.min ||
+      a.name.localeCompare(b.name) ||
+      MIN_TYPES.indexOf(a.type) - MIN_TYPES.indexOf(b.type)
+  );
+}
+
 function buildWeekPlan() {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
@@ -4984,6 +5449,38 @@ function buildWeekPlan() {
     return top;
   };
 
+  for (const l of buildLabMinTasks()) {
+    // Today, like the supply rows and for the same reason: a floor breached is
+    // not a dated job, it is a state, and it is only ever "still under".
+    put(0, {
+      kind: 'labmin',
+      species: l.name,
+      label: l.name + ' · ' + getLabLabel(l.type),
+      detail: l.detail,
+      bags: 0,
+      zone: '',
+      overdue: l.empty,
+      ready: true,
+      task: l
+    });
+  }
+  for (const s of buildSupplyTasks()) {
+    // Always today. This is not a dated job — it is a gap, and a gap is only
+    // ever "still open". It disappears the moment the batch exists, because it
+    // is derived from the same counts the Sorten card reads; there is nothing
+    // to tick off and nothing that can be forgotten in a done-list.
+    put(0, {
+      kind: 'supply',
+      species: s.name,
+      label: s.name,
+      detail: s.detail,
+      bags: 0,
+      zone: '',
+      overdue: s.supply === 'now',
+      ready: true,
+      task: s
+    });
+  }
   for (const tk of buildAutoTasks()) {
     const place = _dashTaskPlace(tk.batchId, lastByBag);
     put(Math.max(0, tk.dueIn), {
@@ -5083,7 +5580,12 @@ function todayProgress(todayItems) {
     if (!isNaN(dt) && dt >= midnight) done++;
   }
   for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
-  return { done, total: done + todayItems.length };
+  // Supply and lab-floor rows are derived from stock levels: they clear when
+  // the stock changes, never by being ticked, and counting them in the
+  // denominator made a finished day read 5/8. They are work, but they are not
+  // work this bar can measure.
+  const countable = todayItems.filter((it) => it.kind !== 'supply' && it.kind !== 'labmin');
+  return { done, total: done + countable.length };
 }
 // The editor works on a draft rather than straight off the DOM. Changing a
 // theme has to redraw the row — a free day carries no target — and redrawing
@@ -5383,6 +5885,10 @@ const PLAN_CAT_COLOR = {
   other: 'var(--c-text-muted)'
 };
 function planCategory(it) {
+  // A supply gap is answered by making something, so it counts with the other
+  // create work rather than falling into "other", where a row nobody
+  // categorised goes to be ignored.
+  if (it.kind === 'supply' || it.kind === 'labmin') return 'create';
   if (it.kind === 'grain') return 'create';
   if (it.kind === 'fruiting') return 'move';
   if (it.kind === 'harvest') return 'harvest';
@@ -5507,7 +6013,17 @@ function _weekDayBodyHtml(d, off, isToday) {
   // Ordered by the walk, so the flat list still reads as a route.
   const order = {};
   zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
-  const rank = (it) => (it.zone && order[it.zone] != null ? order[it.zone] : 999);
+  // A supply gap and a breached lab floor carry no zone, so the walking order
+  // had nothing to place them by and sorted them to the end — behind a fold
+  // that is collapsed by default, on exactly the busy days they matter most.
+  // They are not stops on the walk; they are what to start before setting off.
+  // So they go first, and the six-row cap below can no longer reach past them.
+  const rank = (it) =>
+    it.kind === 'supply' || it.kind === 'labmin'
+      ? -1
+      : it.zone && order[it.zone] != null
+        ? order[it.zone]
+        : 999;
   const items = [...d.items].sort((a, b) => rank(a) - rank(b));
   const openKey = 'day' + off;
   const full = !!_dashRoomOpen[openKey];
@@ -5775,6 +6291,35 @@ function _bulkPillHtml(movable) {
 // logged; a manual task toggles done.
 function _planBtn(it) {
   const id = esc(it.batchId || '');
+  // Both buttons carry the Sorte's KEY, never its name. The handler resolves it
+  // with _strainByKey(), which matches 'id:3' and 'n:shiitake' and nothing else,
+  // so a display name resolved to null and every tap answered "diese Sorte steht
+  // nicht in den Pilzsorten" — about a Sorte that must be in them, or the
+  // row would not have been built at all.
+  if (it.kind === 'labmin') {
+    return (
+      '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
+      esc((it.task && it.task.key) || '') +
+      '" data-labtype="' +
+      esc((it.task && it.task.type) || '') +
+      '" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t('todo.labMake', { type: getLabLabel((it.task && it.task.type) || '') })) +
+      '</button>'
+    );
+  }
+  if (it.kind === 'supply') {
+    // Grain first when there is none — blocks cannot be made without it.
+    const grain = it.task && it.task.taskAction === 'make-grain';
+    return (
+      '<button class="btn btn-sm btn-p fs-xs" data-action="' +
+      (grain ? 'supply-make-grain' : 'supply-make-batch') +
+      '" data-sorte="' +
+      esc((it.task && it.task.key) || '') +
+      '" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t(grain ? 'todo.makeGrain' : 'todo.makeBatch')) +
+      '</button>'
+    );
+  }
   if (it.kind === 'fruiting' || it.kind === 'grain') return it.task ? dashTaskBtn(it.task) : '';
   if (it.kind === 'harvest') {
     // Opens the harvest flow on this batch instead of navigating to the batch
@@ -5940,6 +6485,9 @@ function goToBatchesAttention(key) {
   const preset = BATCH_ATTENTION_PRESETS[key];
   if (!preset) return;
   batchAttentionFilter = { pred: preset.pred, label: t(preset.labelKey) };
+  // A Sorte tile left armed would narrow the list under a banner claiming to
+  // show every overdue batch.
+  batchSorteFilter = null;
   const input = document.getElementById('batch-q');
   if (input) input.value = '';
   go('batch', 'n-batch');
@@ -5975,6 +6523,11 @@ function renderBatchAttentionBanner() {
 // Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
 function goToBatch(batchId) {
   batchAttentionFilter = null;
+  // The archive filter is deliberately bypassed when a query is present, but
+  // the Sorte filter is not — so a tile left armed on one Sorte swallowed every
+  // deep link to a batch of another, and the caller landed on "Keine Treffer"
+  // with nothing on screen naming the filter that did it.
+  batchSorteFilter = null;
   const input = document.getElementById('batch-q');
   if (input) input.value = batchId;
   go('batch', 'n-batch');
@@ -6074,6 +6627,10 @@ function buildHarvestTasks() {
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
 const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
+// The types a Sorte can carry a minimum for. G2G and SY are made to order
+// from the others, so a standing floor for them would ask for stock nobody
+// keeps.
+const MIN_TYPES = ['GS', 'LC', 'MC', 'PD'];
 // MC has been the slant all along — the German interface has said "Slants" for as
 // long as it has existed while the English said "Mother cultures", so a screenshot
 // in one language named something you could not find in the other.
@@ -6096,39 +6653,92 @@ function getLabStockCounts() {
     .forEach((c) => {
       if (counts[c.type] !== undefined) counts[c.type]++;
     });
-  // Grain spawn = total bags across active grain batches
-  batches
-    .filter((b) => b.batchType === 'grain')
-    .forEach((b) => {
-      const { status } = getStatus(b.batchId);
-      if (!['DONE', 'EMPTY', 'CONTAM'].includes(status)) {
-        counts.GS += b.qty || 0;
-      }
-    });
+  // Grain spawn in KILOGRAMS, from the one function that weighs it.
+  //
+  // This counted bags, and the card then ran that count through fmtKg() under a
+  // "kg" label — so the headline read 20,0 kg above per-Sorte rows summing
+  // to 60, and renderThresholds measured bags against a kilogram floor. Bags are
+  // not a unit anybody stocks in: min_spawn_kg is kilograms, the Sorten tile is
+  // kilograms, and now so is this.
+  batches.filter((b) => b.batchType === 'grain').forEach((b) => (counts.GS += _grainKgOf(b)));
   return counts;
 }
-// A Sorte counts as in production while one of its Chargen is still running.
-// Building the lab list only out of what is in stock hid the one case worth
-// seeing: a Sorte being grown right now with no spawn left to grow it from.
+// Which Sorten the lab has to hold stock for.
+//
+// This used to read "every Sorte with a live batch", which is circular in the
+// one case that matters: a Sorte that has run out has no live batch, so it fell
+// off this list and its zero-stock row disappeared at exactly the moment the
+// row was worth having. The same shape of bug the supply light had.
+//
+// The programme (v78) is the farm's own statement about what it grows, so it is
+// the right basis. Sorten with live batches are unioned in rather than replaced
+// — one being grown but never written down is still being grown, and going
+// quiet about it would hide real work.
 function strainsInProduction() {
   const out = new Map();
+  for (const ms of mushroomStrains || []) {
+    if (ms.imProgramm === false) continue;
+    out.set(_labKey(ms.name, ms.kuerzel), {
+      name: ms.name || 'Unknown',
+      kz: ms.kuerzel || '',
+      desc: ms.description || ''
+    });
+  }
+  // Matched through _spKey, which is what strips the " (KZ)" a block batch
+  // carries in its species. A hand-rolled trim().toLowerCase() left the suffix
+  // on, so "shiitake (sh)" never matched a parked "shiitake": the Sorte came
+  // straight back as long as one live batch remained, and arrived under a second
+  // map key beside its own — one mushroom, two rows, on all four tiles, the
+  // spare one at zero and raising a task every day forever.
+  const parked = new Set((mushroomStrains || []).filter((m) => m.imProgramm === false).map((m) => _spKey(m.name)));
   for (const b of batches || []) {
-    const { status } = getStatus(b.batchId);
-    if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) continue;
+    if (isArchivedStatus(getStatus(b.batchId).status)) continue;
     const name = b.strainName || b.species || 'Unknown';
+    // A Sorte taken out of the programme keeps its remaining batches; that is
+    // not a reason to start asking for stock of it again.
+    if (parked.has(_spKey(name))) continue;
     const kz = b.strainKuerzel || b.strain || '';
-    out.set(name + '|' + kz, { name, kz, desc: b.strainDescriptor || '' });
+    out.set(_labKey(name, kz), { name: _labName(b), kz, desc: b.strainDescriptor || '' });
   }
   return out;
 }
 
-// The minimum a Sorte should never fall below, in the unit that type is
-// counted in: kilograms for grain spawn, jars for liquid culture.
+// The minimum a Sorte should never fall below, in the unit that type is counted
+// in: kilograms for grain spawn, and pieces for the three culture types.
+//
+// Slants, plates and liquid culture used to share min_lc — or, for slants and
+// plates, hit the `return 0` above it and have no minimum at all. They are
+// three different things kept for three different reasons and stocked in
+// different numbers (v79), so each reads its own figure now.
+const STRAIN_MIN_FIELD = { GS: 'minSpawnKg', LC: 'minLc', MC: 'minMc', PD: 'minPd' };
 function strainMinFor(type, entry) {
-  if (type !== 'GS' && type !== 'LC') return 0;
+  const field = STRAIN_MIN_FIELD[type];
+  if (!field) return 0;
   const ms = (mushroomStrains || []).find((m) => (entry.kz && m.kuerzel === entry.kz) || m.name === entry.name);
   if (!ms) return 0;
-  return (type === 'GS' ? ms.minSpawnKg : ms.minLc) || 0;
+  return ms[field] || 0;
+}
+
+// One key for one Sorte, everywhere the Labor card groups by it.
+//
+// It was `name + '|' + kz` built from whatever string each source happened to
+// carry — and a block batch carries "Shiitake (SH)" where the Pilzsorten row
+// carries "Shiitake", so one mushroom got two rows on every tile, the seeded one
+// at zero and in red. _spKey() is what strips that suffix; stripping it here is
+// the whole reason it exists.
+function _labKey(name, kz) {
+  return (
+    _spKey(name) +
+    '|' +
+    String(kz || '')
+      .trim()
+      .toLowerCase()
+  );
+}
+// The name to show on such a row, suffix removed, keeping the same 'Unknown' the
+// counters have always fallen back to.
+function _labName(rec) {
+  return rec.strainName || rec.species ? sorteName(rec) : 'Unknown';
 }
 
 function getLabStrainBreakdown() {
@@ -6140,109 +6750,141 @@ function getLabStrainBreakdown() {
       const name = c.strainName || c.species || 'Unknown';
       const kz = c.strainKuerzel || c.strain || '';
       const desc = c.strainDescriptor || '';
-      const key = name + '|' + kz;
-      if (!breakdown[c.type][key]) breakdown[c.type][key] = { name, kz, desc, count: 0, color: spColor(name) };
+      const key = _labKey(name, kz);
+      if (!breakdown[c.type][key])
+        breakdown[c.type][key] = { name: _labName(c), kz, desc, count: 0, color: spColor(name) };
       breakdown[c.type][key].count++;
     });
   batches
     .filter((b) => b.batchType === 'grain')
     .forEach((b) => {
-      const { status } = getStatus(b.batchId);
-      if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) return;
+      // _grainKgOf() is the one place the weight rule lives, so the Sorten tile,
+      // this card and min_spawn_kg agree by construction. Two identical copies
+      // agreed only by coincidence, and one edit to either default ended it —
+      // including the archived check, which this had spelled out a third time.
+      const kg = _grainKgOf(b);
+      if (!kg) return;
       const name = b.strainName || b.species || 'Unknown';
       const kz = b.strainKuerzel || b.strain || '';
       const desc = b.strainDescriptor || '';
-      const key = name + '|' + kz;
-      if (!breakdown.GS[key]) breakdown.GS[key] = { name, kz, desc, count: 0, color: spColor(name) };
-      if (b.bagWeights && Object.keys(b.bagWeights).length) {
-        breakdown.GS[key].count += Object.values(b.bagWeights).reduce((s, w) => s + (w || 1), 0);
-      } else {
-        breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
-      }
+      const key = _labKey(name, kz);
+      if (!breakdown.GS[key]) breakdown.GS[key] = { name: _labName(b), kz, desc, count: 0, color: spColor(name) };
+      breakdown.GS[key].count += kg;
     });
-  // Every Sorte being grown right now gets a row for the two things it cannot
-  // be grown without, even at zero — a missing row reads as "fine" and is the
-  // exact opposite.
+  // Every Sorte being grown right now gets a row for each thing it cannot be
+  // grown without, even at zero — a missing row reads as "fine" and is the exact
+  // opposite. Four types now rather than two: slants and plates carry minimums
+  // of their own since v79.
   for (const [key, sp] of strainsInProduction()) {
-    for (const type of ['GS', 'LC']) {
+    for (const type of MIN_TYPES) {
       if (!breakdown[type][key]) {
         breakdown[type][key] = { name: sp.name, kz: sp.kz, desc: sp.desc, count: 0, color: spColor(sp.name) };
       }
     }
   }
-  for (const type of ['GS', 'LC']) {
+  for (const type of MIN_TYPES) {
     for (const entry of Object.values(breakdown[type])) entry.min = strainMinFor(type, entry);
   }
   return breakdown;
 }
+// Culture types in Labor. Muted the same way the zone colours were, and for the
+// same two reasons: six full-saturation hues on one card is a lot of shouting,
+// and four of the six could not be read.
+//
+// `accent` is a 3px bar, a graphical object carrying meaning, so WCAG 1.4.11
+// asks 3:1 of it. #22c55e measured 2.28:1, #f59e0b 2.15 and #06b6d4 2.43 —
+// three of six invisible against the card. All six now land on 4.18–4.22:1,
+// matched deliberately: a set where one member measures twice its neighbours
+// reads as one type shouting. The `bg`/`fg` chips are the same hues as tints,
+// matched again at ~6:1.
+//
+// The hues themselves are unchanged, so a type stays recognisably violet, blue,
+// green, amber, pink, cyan. MC/LC deliberately share their hue with the spawn
+// and fruiting zone colours — a slant and an incubation rack are not the same
+// thing, but they are the same colour language.
 const LAB_TYPE_COLORS = {
-  MC: { bg: '#f3e8ff', fg: '#6b21a8', accent: '#a855f7' },
-  PD: { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' },
-  LC: { bg: '#dcfce7', fg: '#166534', accent: '#22c55e' },
-  G2G: { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' },
-  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' },
-  SY: { bg: '#cffafe', fg: '#155e75', accent: '#06b6d4' }
+  MC: { bg: '#f0ebf4', fg: '#7241a0', accent: '#926bb6' },
+  PD: { bg: '#ebeff4', fg: '#3a598d', accent: '#5e7daf' },
+  LC: { bg: '#ebf4ee', fg: '#2a6741', accent: '#43895d' },
+  G2G: { bg: '#f4f1eb', fg: '#6f572d', accent: '#937748' },
+  GS: { bg: '#f4ebee', fg: '#913b58', accent: '#b2647e' },
+  SY: { bg: '#ebf3f4', fg: '#2c626c', accent: '#478590' }
 };
+// The lab's stock, one tile per culture type.
+//
+// Same card as the Chargen tab now — .stile, the stacked bar, the supply light,
+// the labelled figures — because it answers the same shape of question about a
+// different shelf: how much is there, of which Sorte, and is anything short. It
+// used to be its own arrangement of inline styles, so the two pages taught the
+// reader two vocabularies for one idea.
+//
+// Four of the six types carry a per-SORTE minimum (MIN_TYPES); the other two
+// are judged against the farm-wide threshold, because G2G and syringes are made
+// to order and nobody stocks them per Sorte.
 function renderDashLabStock() {
   const el = document.getElementById('dash-lab-stock');
   if (!el) return;
   if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const counts = getLabStockCounts();
   const breakdown = getLabStrainBreakdown();
+  // Grain is weighed, everything else is counted. One decimal on a weight, none
+  // on a tally — "3,0 Platten" reads like a measurement error.
+  const num = (type, v) => (type === 'GS' ? fmtKg(v, 1) : String(Math.round(v)));
+
   el.innerHTML =
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">' +
+    '<div class="sorten-grid">' +
     LAB_TYPES.map((type) => {
       const count = counts[type] || 0;
-      const min = inventory.labThresholds[type] || 0;
-      const label = getLabLabel(type);
+      const farmMin = inventory.labThresholds[type] || 0;
       const tc = LAB_TYPE_COLORS[type];
+      const perStrain = MIN_TYPES.includes(type);
       const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
-      const strainTotal = strains.reduce((sum, s) => sum + s.count, 0);
-      // Grain spawn and liquid culture are judged per Sorte against that Sorte's
-      // own minimum: a farm holding 60 kg of oyster spawn and none of shiitake is
-      // not "fine on average", it is out of shiitake.
-      const perStrain = type === 'GS' || type === 'LC';
-      const low = perStrain
-        ? strains.some((x) => x.min > 0 && x.count < x.min)
-        : min > 0 && count < min;
-      const strainRows = strains
-        .map((s) => {
-          const pct =
-            (type === 'GS' ? strainTotal : count) > 0
-              ? Math.round((s.count / (type === 'GS' ? strainTotal : count)) * 100)
-              : 0;
-          const strainLow = perStrain && s.min > 0 && s.count < s.min;
-          const unit = type === 'GS' ? ' kg' : '';
-          const shown = Number.isInteger(s.count) ? s.count : s.count.toFixed(1);
-          const against = s.min > 0 ? '<span style="color:var(--c-text-muted);font-weight:400">/' + s.min + '</span>' : '';
-          return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-        <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
-        <span class="fs-xs" style="flex:1;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span class="fs-micro" style="color:var(--c-text-muted)">' + esc(s.desc) + '</span>' : ''}</span>
-        <span class="fs-xs" style="font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
-        <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${strainLow ? 'var(--c-red)' : s.color};border-radius:3px"></div></div>
-      </div>`;
+      const total = strains.reduce((s, x) => s + x.count, 0);
+      const short = perStrain ? strains.filter((x) => x.min > 0 && x.count < x.min) : [];
+      // Both floors, the same way getLabAlerts() reads them, so the tile and the
+      // dashboard cannot disagree about one shelf. The card used to answer to
+      // whichever floor its type had, which left labThresholds.MC set, shown on
+      // the button, warned about on the dashboard — and ignored here.
+      const low = short.length > 0 || (farmMin > 0 && count < farmMin);
+      // Nothing at all of something is a different problem from a little short
+      // of it, and the light says so — the same three words the Chargen tiles
+      // use, so a red dot means the same thing on both pages.
+      const state = !low ? 'ok' : short.some((x) => x.count === 0) || count === 0 ? 'now' : 'low';
+
+      const seg = strains
+        .filter((x) => x.count > 0)
+        .map(
+          (x) =>
+            `<i style="width:${(x.count / Math.max(total, 1)) * 100}%;background:${esc(safeColor(x.color))}" title="${esc(x.kz || x.name)}"></i>`
+        )
+        .join('');
+
+      const rows = strains
+        .map((x) => {
+          const under = perStrain && x.min > 0 && x.count < x.min;
+          const against = x.min > 0 ? `<span class="lab-row-min">/${num(type, x.min)}</span>` : '';
+          return (
+            `<span class="lab-row${under ? ' under' : ''}">` +
+            `<i class="lab-row-dot" style="background:${esc(safeColor(x.color))}"></i>` +
+            `<span class="lab-row-name" title="${esc(x.kz || x.name)}${x.desc ? ' ' + esc(x.desc) : ''}">${esc(x.kz || x.name)}</span>` +
+            `<b class="lab-row-n">${num(type, x.count)}${against}</b></span>`
+          );
         })
         .join('');
-      const emptyMsg =
-        count === 0
-          ? `<div class="fs-xs" style="color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`
-          : '';
-      return `<div style="background:var(--c-bg);border:1px solid ${low ? 'var(--c-red)' : 'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low ? 'var(--c-red)' : tc.accent}"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;margin-top:2px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="fs-meta" style="font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
-          <span class="fs-xs" style="color:var(--c-text-sec)">${esc(label)}</span>
-        </div>
-        ${low ? '<span class="fs-floor" style="--fs-own:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">' + t('lab.lowStock') + '</span>' : ''}
-      </div>
-      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length ? '8' : '2'}px">
-        <span style="font-size:28px;font-weight:800;color:${low ? 'var(--c-red-dark)' : 'var(--c-text)'};line-height:1">${count}</span>
-        <span class="fs-xs" style="color:var(--c-text-muted)">${min > 0 ? '/ min ' + min + (type === 'GS' ? ' kg per strain' : '') : ''}</span>
-      </div>
-      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + (type === 'GS' ? '<div class="fs-xs" style="border-top:1px solid var(--c-border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700;color:var(--c-text)"><span>Total</span><span>' + (Number.isInteger(strainTotal) ? strainTotal : strainTotal.toFixed(1)) + ' kg</span></div>' : '') + '</div>' : emptyMsg}
-      <button class="btn btn-sm fs-micro" onclick="setLabMin('${type}')" style="margin-top:8px;padding:2px 8px">${t('lab.setMinimum')}</button>
-    </div>`;
+
+      return (
+        `<div class="stile stile-static${state === 'now' ? ' urgent' : ''}">` +
+        `<span class="stile-top"><span class="stile-name">` +
+        `<span class="lab-chip" style="color:${tc.fg};background:${tc.bg}">${esc(type)}</span>${esc(getLabLabel(type))}` +
+        `</span></span>` +
+        `<span class="stile-big"><b>${num(type, count)}</b><span>${esc(type === 'GS' ? t('lab.kgUnit') : t('lab.piecesUnit'))}${farmMin > 0 ? ' · min ' + num(type, farmMin) : ''}</span></span>` +
+        (seg ? `<span class="sbar">${seg}</span>` : '') +
+        (rows ? `<span class="lab-rows">${rows}</span>` : `<span class="stile-fs lab-empty">—</span>`) +
+        `<span class="stile-foot">` +
+        `<span class="sup sup-${state}">${esc(low ? t(state === 'now' ? 'lab.noneLeft' : 'lab.lowStock') : t('lab.stockOk'))}</span>` +
+        `<button type="button" class="btn btn-sm fs-micro" data-action="lab-set-min" data-labtype="${esc(type)}">${esc(t('lab.setMinimum'))}</button>` +
+        `</span></div>`
+      );
     }).join('') +
     '</div>';
 }
@@ -8410,10 +9052,19 @@ let _rbLastRenderFp = null;
 const ARCHIVED_STATUSES = ['DONE', 'EMPTY', 'CONTAM'];
 const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
 
-// The batch list was one flat run of every row in due-date order, which is fine
-// for finding a known id and useless for "how much is in incubation". Grouped by
-// stage it reads like the pipeline strip above it, and a stage you are not
-// working on folds away.
+// Grouping the list by stage reads well and used to be unconditional, which
+// quietly broke the thing next to it: renderBatches() sorted the rows, then
+// handed them to _groupBatchRows(), which re-bucketed them by stage. So a click
+// on Art or Menge only reordered rows *inside* Spawn / Inkubation / Fruchtung
+// and the list as a whole never moved — the sort looked broken because its
+// result was being thrown away.
+//
+// Grouping is a setting now, defaulting to none. 'sorte' is the other useful
+// axis, and the one the tiles above are organised by.
+const BATCH_GROUP_MODES = ['none', 'sorte', 'stage'];
+let batchGroupBy = BATCH_GROUP_MODES.includes(localStorage.getItem('mp-batch-group')) ? localStorage.getItem('mp-batch-group') : 'none';
+// Set by tapping a Sorte tile; the tile and the list are one view of one thing.
+let batchSorteFilter = null;
 const BATCH_GROUP_ORDER = ['SPAWN RUN', 'INCUBATING', 'FRUITING', '__archived'];
 const BATCH_GROUP_LABEL = {
   'SPAWN RUN': 'stage.spawn',
@@ -8431,19 +9082,33 @@ function toggleBatchGroup(key) {
 function _batchGroupKey(status) {
   return isArchivedStatus(status) ? '__archived' : status;
 }
-function _groupBatchRows(rows) {
+// `mode` defaults to 'stage' because the grain list in Labor calls this with no
+// second argument and wants exactly what it always got.
+//
+// 'none' returns the rows untouched, in the order they arrived — which is the
+// order the column sort put them in, and the only mode in which that sort
+// decides anything.
+function _groupBatchRows(rows, mode) {
   if (!rows.length) return '';
+  if (mode === 'none') return rows.map((r) => r.html).join('');
+  const bySorte = mode === 'sorte';
   const groups = {};
-  for (const r of rows) (groups[_batchGroupKey(r.status)] = groups[_batchGroupKey(r.status)] || []).push(r);
-  // Known stages in pipeline order, then anything unexpected rather than
-  // dropping it — a row nobody planned for must still be reachable.
-  const keys = BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
-    Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
-  );
+  const keyOf = (r) => (bySorte ? 'sorte:' + (r.sorte || '—') : _batchGroupKey(r.status));
+  const labelOf = new Map(rows.map((r) => ['sorte:' + (r.sorte || '—'), r.sorteName || '—']));
+  for (const r of rows) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
+  // By stage: the pipeline order, then anything unexpected rather than dropping
+  // it — a row nobody planned for must still be reachable. By Sorte: the order
+  // the rows arrived in, so sorting by Menge really does put the Sorte with the
+  // biggest batch on top instead of re-alphabetising behind your back.
+  const keys = bySorte
+    ? [...new Set(rows.map(keyOf))]
+    : BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
+        Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
+      );
   let out = '';
   for (const k of keys) {
     const closed = !!_batchGroupClosed[k];
-    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : k;
+    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : bySorte ? labelOf.get(k) || k.slice(6) : k;
     out +=
       '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
       '<button type="button" class="fs-meta" data-action="batch-group" data-key="' +
@@ -8504,6 +9169,12 @@ function batchRowHtml(b) {
       // card layout (styles.css "Batches table — mobile card mode").
       return {
         status,
+        // Carried so _groupBatchRows() can bucket by Sorte without going back
+        // to `batches` for something the caller already had in hand. The key
+        // groups, the name labels — grouping on the raw species split one
+        // Sorte in two wherever a batch carried the " (KZ)" suffix.
+        sorte: sorteKey(b),
+        sorteName: sorteName(b),
         html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id fs-micro" style="font-family:monospace"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(b.created)}</td><td class="fs-micro" data-mlabel="${esc(t('th.due'))}" style="color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
       };
 }
@@ -8564,6 +9235,9 @@ function renderBatches() {
       (b.strain || '').toLowerCase().includes(q) ||
       (b.strainName || '').toLowerCase().includes(q);
     if (!matchesQ) return false;
+    // Set by a Sorte tile. Not bypassed by a search: the two narrow together,
+    // which is what "show me BO-... inside Blue Oyster" has to mean.
+    if (batchSorteFilter && sorteKey(b) !== batchSorteFilter) return false;
     if (batchAttentionFilter && !batchAttentionFilter.pred(b)) return false;
     // Skip archive filter when searching — explicit lookup wins over the toggle.
     if (!q && archiveFilter !== 'all') {
@@ -8591,6 +9265,10 @@ function renderBatches() {
     // Which stage groups are folded is part of what is on screen — leave it out
     // and the early return below swallows every expand and collapse.
     JSON.stringify(_batchGroupClosed) +
+    '|' +
+    batchGroupBy +
+    '|' +
+    (batchSorteFilter || '') +
     '|' +
     JSON.stringify(tableSort.batches || null) +
     '|' +
@@ -8632,8 +9310,9 @@ function renderBatches() {
   _rbLastRenderFp = renderFp;
   // Each row is returned with its status so _groupBatchRows can bucket it by
   // stage; the row markup itself is unchanged.
-  const _rowsByStage = sorted.map((b) => batchRowHtml(b));
-  body.innerHTML = _groupBatchRows(_rowsByStage) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
+  const _rows = sorted.map((b) => batchRowHtml(b));
+  body.innerHTML =
+    _groupBatchRows(_rows, batchGroupBy) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
 }
 let locColor = {};
 function toggleBatchBags(batchId) {
@@ -11906,35 +12585,34 @@ function getLabAlerts() {
   const counts = getLabStockCounts();
   const breakdown = getLabStrainBreakdown();
   const alerts = [];
+  // Two floors, and they measure different things. labThresholds is about the
+  // shelf as a whole, so it is compared against the total — for every type, as
+  // it always was. The per-Sorte minimums v79 added are about one mushroom, and
+  // were not read here at all: a Sorte sitting at zero slants with min_mc = 5
+  // turned its tile red, raised a task, and still said nothing on the dashboard.
+  // Applying the farm-wide number per Sorte instead would be the other error —
+  // ten slants in total is not ten slants each.
   LAB_TYPES.forEach((type) => {
-    const min = inventory.labThresholds[type] || 0;
-    if (min <= 0) return;
-    if (type === 'GS') {
-      // Per-strain kg check for grain spawn
-      const strains = Object.values(breakdown.GS || {});
-      const lowStrains = strains.filter((s) => s.count < min);
-      if (lowStrains.length) {
-        const label = getLabLabel(type);
-        const names = lowStrains.map((s) => s.kz || s.name).join(', ');
-        alerts.push({
-          text: t('lab.lowLabAlert', { type: label }) + ': ' + names,
-          detail: names + ' below ' + min + ' kg',
-          urgent: lowStrains.some((s) => s.count === 0),
-          warn: true
-        });
-      }
-    } else {
-      const count = counts[type] || 0;
-      if (count < min) {
-        const label = getLabLabel(type);
-        alerts.push({
-          text: t('lab.lowLabAlert', { type: label }),
-          detail: t('lab.belowMin', { n: count, min: min }),
-          urgent: count === 0,
-          warn: true
-        });
-      }
+    const farmMin = inventory.labThresholds[type] || 0;
+    const count = counts[type] || 0;
+    if (farmMin > 0 && count < farmMin) {
+      alerts.push({
+        text: t('lab.lowLabAlert', { type: getLabLabel(type) }),
+        detail: t('lab.belowMin', { n: count, min: farmMin }),
+        urgent: count === 0,
+        warn: true
+      });
     }
+    if (!MIN_TYPES.includes(type)) return;
+    const low = Object.values(breakdown[type] || {}).filter((s) => s.min > 0 && s.count < s.min);
+    if (!low.length) return;
+    const names = low.map((s) => s.kz || s.name).join(', ');
+    alerts.push({
+      text: t('lab.lowLabAlert', { type: getLabLabel(type) }) + ': ' + names,
+      detail: names,
+      urgent: low.some((s) => s.count === 0),
+      warn: true
+    });
   });
   return alerts;
 }
@@ -12569,7 +13247,7 @@ async function addZone() {
     renderStatus();
     document.getElementById('zone-name').value = '';
     document.getElementById('zone-racks').value = '';
-    document.getElementById('zone-color').value = '#10b981';
+    document.getElementById('zone-color').value = ZONE_ROLE_COLOR.fruiting;
     document.getElementById('zone-role').value = 'fruiting';
     document.getElementById('zone-capacity').value = '';
   } catch (e) {
@@ -12865,7 +13543,7 @@ function renderStrains() {
   if (!body) return;
   _msFillRecCopyOptions(parseInt((document.getElementById('ms-edit-id') || {}).value, 10) || null);
   if (!mushroomStrains.length) {
-    body.innerHTML = '<tr><td colspan="6" class="empty">' + t('strains.empty') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="empty">' + t('strains.empty') + '</td></tr>';
     return;
   }
   // Count usage
@@ -12885,7 +13563,12 @@ function renderStrains() {
       const chargeBtn = ms.recBatchType
         ? `<button class="btn btn-sm btn-p" onclick="msQuickCharge(${ms.id})" style="padding:2px 7px" title="${t('strains.addChargeHint')}">${t('strains.addCharge')}</button> `
         : '';
-      return `<tr data-find="strain:${ms.id}">
+      // One tap, no dialog, no save button. This gets flipped twice a year for
+      // a handful of Sorten; a confirm step would cost more than a mis-tap,
+      // which is undone by tapping again.
+      const prog = ms.imProgramm !== false;
+      return `<tr data-find="strain:${ms.id}"${prog ? '' : ' class="ms-off"'}>
+      <td><label class="ms-prog"><input type="checkbox" ${prog ? 'checked' : ''} data-action="toggle-programm" data-id="${ms.id}" aria-label="${esc(t('strains.imProgrammAria', { name: ms.name }))}" /><span>${prog ? esc(t('strains.progOn')) : esc(t('strains.progOff'))}</span></label></td>
       <td style="font-weight:500">${esc(ms.name)}</td>
       <td><span class="fs-meta" style="font-family:monospace;background:var(--c-bg);padding:2px 7px;border-radius:4px">${esc(ms.kuerzel)}</span></td>
       <td class="fs-meta" style="color:var(--c-text-sec)">${ms.description ? esc(ms.description) : '<span style="color:var(--c-text-muted)">—</span>'}</td>
@@ -12984,6 +13667,8 @@ function editMStrain(id) {
   sv('ms-rec-spawn', ms.recSpawnPct || 0);
   sv('ms-min-spawn', ms.minSpawnKg || 0);
   sv('ms-min-lc', ms.minLc || 0);
+  sv('ms-min-mc', ms.minMc || 0);
+  sv('ms-min-pd', ms.minPd || 0);
   msRecShowRef(ms);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!ms.recGypsum;
@@ -13025,6 +13710,8 @@ function cancelMStrain() {
   sv('ms-rec-spawn', 5);
   sv('ms-min-spawn', 0);
   sv('ms-min-lc', 0);
+  sv('ms-min-mc', 0);
+  sv('ms-min-pd', 0);
   msRecShowRef(null);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = false;
@@ -13079,6 +13766,8 @@ function _msReadRecipe() {
     recGypsum: chk('ms-rec-gyp') || v('ms-rec-gyppct') > 0,
     minSpawnKg: v('ms-min-spawn'),
     minLc: v('ms-min-lc'),
+    minMc: v('ms-min-mc'),
+    minPd: v('ms-min-pd'),
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
     recIncDays: v('ms-rec-days'),
@@ -13192,6 +13881,8 @@ function msRecCopyFrom() {
   sv('ms-rec-spawn', src.recSpawnPct || 0);
   sv('ms-min-spawn', src.minSpawnKg || 0);
   sv('ms-min-lc', src.minLc || 0);
+  sv('ms-min-mc', src.minMc || 0);
+  sv('ms-min-pd', src.minPd || 0);
   msRecShowRef(src);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!src.recGypsum;
@@ -16708,6 +17399,68 @@ function updateCamHud() {
   const countChip = document.getElementById('cam-chip-count');
   countChip.className = 'cam-chip' + (scan.count > 0 ? ' ch-set' : '');
 }
+// Put the scanner into an action mode.
+//
+// This was the body of the `if (ACTIONS.includes(val))` branch in the barcode
+// handler, which meant an action could be armed exactly one way: by scanning a
+// printed barcode with the word on it. That is fine at the bench where the
+// sheet is taped to the wall, and no use at all on a phone in a tent — and
+// reporting contamination is precisely the thing you do standing in front of a
+// bad bag, with the phone already in your hand.
+//
+// Nothing about the modes changed; they simply have a second door now. Toggling
+// the same action off returns to plain scanning, so the button that armed it is
+// also the way back out.
+function armScanAction(val) {
+  if (!ACTIONS.includes(val)) return;
+  const keepTo = val === scan.action && scan.to;
+  scan.action = val;
+  scan.from = null;
+  scan.to = keepTo ? scan.to : null;
+  scan.harvestBag = null;
+  const hp = document.getElementById('harvest-panel');
+  if (hp) hp.style.display = 'none';
+  _pendingDupe = null;
+  _pendingRemove = null;
+  clearTimeout(_pendingDupeTimer);
+  clearTimeout(_pendingRemoveTimer);
+  updateSD();
+  setFb(
+    'ok',
+    {
+      ADD: t('scanFb.actionAdd'),
+      MOVE: t('scanFb.actionMove'),
+      MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
+      REMOVE: t('scanFb.actionRemove'),
+      HARVEST: t('scanFb.actionHarvest'),
+      CONTAM: t('scanFb.actionContam')
+    }[val]
+  );
+  // Ten places assign scan.action and only two used to refresh this, so the
+  // button could sit lit while ADD was armed — and the next bag scanned got
+  // added to a location instead of reported contaminated.
+  updateCamContamBtn();
+}
+// Arm CONTAM, or stand down if it is already armed. The camera stays open
+// either way: a worker walking a rack reports several bags in a row.
+function toggleContamScan() {
+  if (scan.action === 'CONTAM') {
+    scan.action = null;
+    updateSD();
+    setFb('ok', t('scanFb.actionCleared'));
+  } else {
+    armScanAction('CONTAM');
+  }
+  updateCamContamBtn();
+}
+function updateCamContamBtn() {
+  const b = document.getElementById('btn-cam-contam');
+  if (!b) return;
+  const on = scan.action === 'CONTAM';
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
 function updateSD() {
   document.getElementById('s-action').textContent = scan.action || '—';
   document.getElementById('s-from').textContent = scan.from || '—';
@@ -16768,6 +17521,10 @@ function scanPickDestination() {
 }
 function resetScan() {
   scan = { action: null, from: null, to: null, count: scan.count, harvestBag: null };
+  // It clears scan.action, and it is bound to a button inside the open camera
+  // HUD — so without this the CONTAM toggle beside it stayed lit and pressed
+  // over a disarmed scanner, and the next bad bag got the neutral sheet.
+  updateCamContamBtn();
   document.getElementById('harvest-panel').style.display = 'none';
   _pendingDupe = null;
   _pendingRemove = null;
@@ -17091,28 +17848,7 @@ function processScan(raw) {
     }
   }
   if (ACTIONS.includes(val)) {
-    const keepTo = val === scan.action && scan.to;
-    scan.action = val;
-    scan.from = null;
-    scan.to = keepTo ? scan.to : null;
-    scan.harvestBag = null;
-    document.getElementById('harvest-panel').style.display = 'none';
-    _pendingDupe = null;
-    _pendingRemove = null;
-    clearTimeout(_pendingDupeTimer);
-    clearTimeout(_pendingRemoveTimer);
-    updateSD();
-    setFb(
-      'ok',
-      {
-        ADD: t('scanFb.actionAdd'),
-        MOVE: t('scanFb.actionMove'),
-        MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
-        REMOVE: t('scanFb.actionRemove'),
-        HARVEST: t('scanFb.actionHarvest'),
-        CONTAM: t('scanFb.actionContam')
-      }[val]
-    );
+    armScanAction(val);
     return;
   }
   if (LOCS.includes(val)) {
@@ -21175,6 +21911,9 @@ function openCamScan() {
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
   updateCamHud(); // Sync HUD with current scan state
+  // The mode survives the camera being closed and reopened, so the button has
+  // to say what is actually armed rather than what it looked like last time.
+  updateCamContamBtn();
   // Anything other than idle is an in-flight transition; the modal is already
   // open visually so this no-op is fine (e.g. user double-tapped the FAB).
   if (_camState !== CAM_IDLE) return;
@@ -21562,6 +22301,7 @@ function initEventListeners() {
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-torch').addEventListener('click', toggleTorch);
+  $('btn-cam-contam').addEventListener('click', toggleContamScan);
   $('btn-cam-undo').addEventListener('click', camUndoLastScan);
   $('btn-cam-reset').addEventListener('click', function () {
     resetScan();
@@ -21670,7 +22410,7 @@ function initEventListeners() {
   $('rhythm-save').addEventListener('click', saveRhythmEditor);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
-    const c = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981', contaminated: '#ef4444' }[this.value];
+    const c = ZONE_ROLE_COLOR[this.value];
     if (c) document.getElementById('zone-color').value = c;
   });
   // Zone list event delegation (CSP blocks inline onclick)
@@ -21798,6 +22538,38 @@ function initEventListeners() {
       bulkSectionToFruiting(el.dataset.bucket);
       return;
     }
+    // A lab floor breached. GS is grain — that is the Labor quick-create, same
+    // as a supply row asking for grain. The three culture types open the
+    // culture form with the type already chosen.
+    if (action === 'labmin-make') {
+      const ms = _strainByKey(el.dataset.sorte);
+      if (!ms) {
+        setFb('err', t('todo.supplyNoSorte'));
+        return;
+      }
+      msQuickLabor(ms.id);
+      // The row already knows which type is short, so answer the dialog's
+      // picker rather than making the worker pick it again.
+      _msqPickType(el.dataset.labtype);
+      return;
+    }
+    // A supply row carries a Sorte, not a batch — the batch is what it is
+    // asking for. Both buttons open the quick-create the Pilzsorten page
+    // already uses, with the Sorte filled in.
+    if (action === 'supply-make-grain' || action === 'supply-make-batch') {
+      const ms = _strainByKey(el.dataset.sorte);
+      if (!ms) {
+        setFb('err', t('todo.supplyNoSorte'));
+        return;
+      }
+      // msQuickCharge() already says so itself when the Sorte carries no
+      // recipe, so there is nothing to check here.
+      if (action === 'supply-make-grain') {
+        msQuickLabor(ms.id);
+        _msqPickType('KB');
+      } else msQuickCharge(ms.id);
+      return;
+    }
     const batch = el.dataset.batch;
     if (!batch) return;
     switch (action) {
@@ -21884,6 +22656,9 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
+  // Was added to the markup and never wired, so the room view — the only place
+  // bags can be selected and moved in bulk — was unreachable by tapping.
+  $('st-batch-locations').addEventListener('click', () => openStab('batch', 'locations'));
   $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
@@ -21891,6 +22666,82 @@ function initEventListeners() {
   });
   $('batch-q').addEventListener('input', renderBatches);
   $('batch-archive-filter').addEventListener('change', renderBatches);
+  // The stored choice belongs on the control too, or a reload shows "Nicht
+  // gruppieren" over a list that is grouped.
+  $('batch-group-by').value = batchGroupBy;
+  // The lab stock card is rebuilt wholesale on every sync, so its buttons are
+  // delegated like the Sorten tiles' rather than carrying inline handlers.
+  $('dash-lab-stock').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="lab-set-min"]');
+    if (btn) setLabMin(btn.dataset.labtype);
+  });
+  // Which Sorten are in this season's programme. Delegated: the table is
+  // rebuilt on every sync, so a listener on the row would not survive.
+  $('strains-body').addEventListener('change', (e) => {
+    const box = e.target.closest('[data-action="toggle-programm"]');
+    if (!box) return;
+    const id = parseInt(box.dataset.id, 10);
+    const ms = mushroomStrains.find((x) => x.id === id);
+    if (!ms) return;
+    const want = box.checked;
+    const prev = ms.imProgramm !== false;
+    ms.imProgramm = want; // optimistic — the row is already drawn that way
+    renderStrains();
+    renderSorteTiles();
+    renderDashBatchTasks();
+    apiPatch('/api/mushroom-strains/' + id, { imProgramm: want }).then((r) => {
+      if (r && r.error) {
+        ms.imProgramm = prev;
+        setFb('err', t('common.error') + ': ' + r.error);
+        renderStrains();
+        renderSorteTiles();
+        renderDashBatchTasks();
+      }
+    });
+  });
+  $('batch-group-by').addEventListener('change', function () {
+    batchGroupBy = BATCH_GROUP_MODES.includes(this.value) ? this.value : 'none';
+    try {
+      localStorage.setItem('mp-batch-group', batchGroupBy);
+    } catch (e) {
+      /* storage disabled — the choice still holds for this session */
+    }
+    renderBatches();
+  });
+  // The Sorten card: tiles filter the list, the first tile clears the filter,
+  // and the legend folds. Delegated because the card is re-rendered wholesale
+  // on every data refresh, so nothing inside it may hold a listener.
+  $('batch-sorten').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const a = btn.dataset.action;
+    if (a === 'sorte-legend') {
+      batchLegendOpen = !batchLegendOpen;
+      renderSorteTiles();
+      return;
+    }
+    if (a === 'sorte-all') {
+      if (!batchSorteFilter) return;
+      batchSorteFilter = null;
+    } else if (a === 'sorte-tile') {
+      // Tapping the selected tile again clears it — the same gesture both ways,
+      // so there is nothing to learn about how to get back out.
+      batchSorteFilter = batchSorteFilter === btn.dataset.sorte ? null : btn.dataset.sorte;
+    } else return;
+    renderSorteTiles();
+    renderBatches();
+  });
+  $('batch-sorten').addEventListener('change', (e) => {
+    const sel = e.target.closest('#batch-tile-sort');
+    if (!sel) return;
+    batchTileSort = sel.value;
+    try {
+      localStorage.setItem('mp-batch-tile-sort', batchTileSort);
+    } catch (e2) {
+      /* storage disabled — the choice still holds for this session */
+    }
+    renderSorteTiles();
+  });
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.
   const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests, grain: renderGrainBatches };

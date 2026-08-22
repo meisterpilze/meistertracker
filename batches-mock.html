@@ -1,0 +1,1994 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Drei Chargen-Ansichten</title>
+    <style>
+      /* ═══════════════════════════════════════════════════════════════════
+         Tokens lifted from styles.css so the mockup reads as the real app.
+         Nothing here is meant to ship — this file exists to be looked at.
+         ═══════════════════════════════════════════════════════════════════ */
+      :root {
+        --c-primary: #15803d;
+        --c-primary-light: #f0fdf4;
+        --c-primary-hover: #166534;
+        --c-bg: #f8fafc;
+        --c-surface: #ffffff;
+        --c-border: #e2e8f0;
+        --c-border-light: #f1f5f9;
+        --c-text: #1e293b;
+        --c-text-sec: #475569;
+        --c-text-muted: #64748b;
+        --c-red: #ef4444;
+        --c-red-light: #fee2e2;
+        --c-red-dark: #991b1b;
+        --c-red-border: #fecaca;
+        --c-red-strong: #dc2626;
+        --c-blue: #3b82f6;
+        --c-blue-light: #dbeafe;
+        --c-blue-dark: #1e40af;
+        --c-blue-border: #bfdbfe;
+        --c-green: #22c55e;
+        --c-green-light: #dcfce7;
+        --c-green-dark: #166534;
+        --c-green-border: #bbf7d0;
+        --c-amber: #f59e0b;
+        --c-amber-light: #fef3c7;
+        --c-amber-dark: #92400e;
+        --c-amber-border: #fde68a;
+        --c-amber-strong: #b45309;
+        --c-purple: #8b5cf6;
+        --c-purple-light: #f3e8ff;
+        --c-purple-dark: #6b21a8;
+        --c-purple-border: #e9d5ff;
+        --c-slate: #64748b;
+        --radius: 12px;
+        --radius-sm: 8px;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+        /* Exits, not stages — the same in both palettes below. */
+        --st-done: #64748b;
+        --st-contam: #ef4444;
+      }
+      /* ── Two stage palettes ──────────────────────────────────────────
+         "Kräftig" is what the app ships: the zone defaults from
+         renderPipelineKPIs() — three unrelated hues at full saturation. On a
+         tile that already carries a Sorte dot and a status colour, that makes
+         four colour systems arguing on one small card, which is the part that
+         reads as gaudy rather than informative.
+
+         "Ruhig" is the default here. The three stages are not categories, they
+         are a SEQUENCE — the same bags moving toward harvest — so they get one
+         ramp instead of three hues: raw slate at the start, the app's own green
+         at the end. One axis, and it encodes direction rather than just
+         identity. Fill and text are separate tokens, because a bar segment may
+         be pale where a number may not.
+         ────────────────────────────────────────────────────────────────── */
+      .pal-quiet {
+        --st-spawn: #c3ccd6;
+        --st-inc: #8aae97;
+        --st-fruit: #15803d;
+        --st-spawn-t: #5d6b7a;
+        --st-inc-t: #47755a;
+        --st-fruit-t: #15803d;
+      }
+      .pal-loud {
+        --st-spawn: #a855f7;
+        --st-inc: #0ea5e9;
+        --st-fruit: #10b981;
+        --st-spawn-t: #7e22ce;
+        --st-inc-t: #0369a1;
+        --st-fruit-t: #047857;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: #eef2f6;
+        color: var(--c-text);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      /* ── Mockup chrome (not part of the design) ─────────────────────── */
+      .mockbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      }
+      .mockbar-title {
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.01em;
+        margin-right: 4px;
+      }
+      .mockbar-title small {
+        display: block;
+        font-weight: 400;
+        font-size: 11px;
+        color: #94a3b8;
+        letter-spacing: 0;
+      }
+      .seg {
+        display: inline-flex;
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 3px;
+        gap: 2px;
+      }
+      .seg button {
+        border: 0;
+        background: none;
+        color: #94a3b8;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 13px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .seg button.on {
+        background: #16a34a;
+        color: #fff;
+      }
+      .seg button:hover:not(.on) {
+        color: #e2e8f0;
+      }
+      .mock-note {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-left: auto;
+      }
+
+      .stage-wrap {
+        padding: 18px;
+        display: flex;
+        justify-content: center;
+      }
+      /* The viewport frame. Phone mode is a real 390px box so the phone-first
+         layout can be judged without a device. */
+      .vp {
+        background: var(--c-bg);
+        width: 100%;
+        max-width: 1180px;
+        border-radius: 14px;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+        overflow: hidden;
+      }
+      .vp.vp-phone {
+        max-width: 390px;
+        border-radius: 26px;
+        border: 8px solid #0f172a;
+        box-shadow: 0 14px 40px rgba(15, 23, 42, 0.3);
+      }
+      .vp-inner {
+        padding: 14px;
+      }
+      .vp-phone .vp-inner {
+        padding: 10px;
+      }
+      .vp-topbar {
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 15px;
+      }
+      .vp-topbar .crumb {
+        color: var(--c-text-muted);
+        font-weight: 500;
+        font-size: 13px;
+      }
+
+      /* ── App primitives ────────────────────────────────────────────── */
+      .card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .vp-phone .card {
+        padding: 12px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+      }
+      .sec {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--c-text-sec);
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .btn {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 11px;
+        border-radius: 7px;
+        border: 1px solid var(--c-border);
+        background: var(--c-surface);
+        color: var(--c-text-sec);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--c-border-light);
+      }
+      .btn-p {
+        background: var(--c-primary);
+        border-color: var(--c-primary);
+        color: #fff;
+      }
+      .btn-p:hover {
+        background: var(--c-primary-hover);
+      }
+      .btn-sm {
+        font-size: 12px;
+        padding: 3px 8px;
+        border-radius: 6px;
+      }
+      select,
+      input[type='search'],
+      input[type='text'] {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 9px;
+        border: 1px solid var(--c-border);
+        border-radius: 7px;
+        background: var(--c-surface);
+        color: var(--c-text);
+      }
+      .badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 99px;
+        white-space: nowrap;
+        line-height: 1.35;
+      }
+      .b-spawn {
+        background: var(--c-purple-light);
+        color: var(--c-purple-dark);
+      }
+      .b-inc {
+        background: var(--c-blue-light);
+        color: var(--c-blue-dark);
+      }
+      .b-tent {
+        background: var(--c-green-light);
+        color: var(--c-green-dark);
+      }
+      .b-done {
+        background: #e2e8f0;
+        color: #475569;
+      }
+      .b-contam {
+        background: var(--c-red-light);
+        color: var(--c-red-dark);
+      }
+      /* The Status column carried the same three saturated hues as the old
+         stage colours — purple, blue, green — so calming the tiles and leaving
+         the table meant two colour languages for one fact. Same ramp here:
+         three steps of one green, from raw to ready.
+
+         DONE stays grey and CONTAM stays red on purpose. They are not steps
+         along the ramp, they are the two ways off it, and contamination is the
+         one row in this table that should catch an eye. */
+      .pal-quiet .b-spawn {
+        background: #eef1f5;
+        color: #5d6b7a;
+      }
+      .pal-quiet .b-inc {
+        background: #e3ece6;
+        color: #3f6b50;
+      }
+      .pal-quiet .b-tent {
+        background: #cdebd7;
+        color: #14682f;
+      }
+      .sp-dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: baseline;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+      .sub-tag {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        background: var(--c-border-light);
+        color: var(--c-text-sec);
+        padding: 1px 6px;
+        border-radius: 99px;
+        margin-right: 3px;
+        white-space: nowrap;
+      }
+      .mono {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      .muted {
+        color: var(--c-text-muted);
+      }
+
+      /* ── Table ─────────────────────────────────────────────────────── */
+      table.t {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      table.t th {
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--c-text-muted);
+        padding: 7px 8px;
+        border-bottom: 2px solid var(--c-border);
+        white-space: nowrap;
+        background: var(--c-surface);
+      }
+      table.t th.sortable {
+        cursor: pointer;
+        user-select: none;
+      }
+      table.t th.sortable:hover {
+        color: var(--c-text);
+        background: var(--c-border-light);
+      }
+      table.t th.active {
+        color: var(--c-primary);
+      }
+      table.t th .arrow {
+        font-size: 9px;
+        opacity: 0.5;
+        margin-left: 2px;
+      }
+      table.t th.active .arrow {
+        opacity: 1;
+      }
+      table.t td {
+        padding: 7px 8px;
+        border-bottom: 1px solid var(--c-border-light);
+        vertical-align: middle;
+      }
+      table.t tbody tr:hover td {
+        background: #fbfdff;
+      }
+      .tscroll {
+        overflow-x: auto;
+        margin: 0 -16px;
+        padding: 0 16px;
+      }
+      .vp-phone .tscroll {
+        margin: 0;
+        padding: 0;
+        overflow-x: visible;
+      }
+      .empty {
+        text-align: center;
+        color: var(--c-text-muted);
+        font-style: italic;
+        padding: 20px 0 !important;
+      }
+
+      /* Phone card mode for the batch table — the .t-cards mechanism from
+         styles.css, scoped to the frame instead of a media query. */
+      .vp-phone table.t {
+        border: 0;
+      }
+      .vp-phone table.t > thead {
+        display: none;
+      }
+      .vp-phone table.t > tbody > tr {
+        display: block;
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        background: var(--c-surface);
+        margin-bottom: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+      .vp-phone table.t > tbody > tr > td {
+        display: block;
+        padding: 3px 0;
+        border: 0;
+        font-size: 13px;
+        background: none;
+      }
+      .vp-phone table.t > tbody > tr > td[data-l]:not(:first-child) {
+        position: relative;
+        padding-left: 84px;
+        min-height: 20px;
+      }
+      .vp-phone table.t > tbody > tr > td[data-l]:not(:first-child)::before {
+        content: attr(data-l);
+        position: absolute;
+        left: 0;
+        top: 3px;
+        width: 78px;
+        color: var(--c-text-muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+      .vp-phone table.t > tbody > tr > td:first-child {
+        padding-bottom: 6px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--c-border-light);
+        font-weight: 600;
+      }
+      .vp-phone table.t > tbody > tr > td.acts {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--c-border-light);
+      }
+      .vp-phone table.t > tbody > tr > td.acts .btn {
+        flex: 1;
+        text-align: center;
+      }
+      .vp-phone table.t > tbody > tr.grp,
+      .vp-phone table.t > tbody > tr.tot {
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+        background: none;
+        margin-bottom: 6px;
+      }
+      .vp-phone table.t > tbody > tr.grp > td,
+      .vp-phone table.t > tbody > tr.tot > td {
+        padding: 0;
+        border: 0;
+        margin: 0;
+      }
+
+      /* ── Shared: the header strip everybody keeps ──────────────────── */
+      .hdr {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .hdr-total {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .hdr-total .n {
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      .hdr-total .l {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--c-text-sec);
+      }
+      .hdr-sub {
+        font-size: 12px;
+        color: var(--c-text-muted);
+      }
+      .stage-chips {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .schip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--c-border);
+        border-left: 3px solid var(--sc, var(--c-slate));
+        background: var(--c-surface);
+        border-radius: 8px;
+        padding: 5px 10px 5px 8px;
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+      }
+      .schip:hover {
+        background: var(--c-border-light);
+      }
+      .schip.on {
+        background: var(--c-primary-light);
+        border-color: var(--c-primary);
+        border-left-color: var(--sc, var(--c-slate));
+        box-shadow: inset 0 0 0 1px var(--c-primary);
+      }
+      .schip .sv {
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--sc);
+      }
+      .schip .sl {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--c-text-sec);
+        line-height: 1.2;
+      }
+      .schip .sn {
+        font-size: 10px;
+        color: var(--c-text-muted);
+        line-height: 1.2;
+      }
+      .vp-phone .stage-chips {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 5px;
+        width: 100%;
+      }
+      .vp-phone .schip {
+        padding: 5px 6px 5px 7px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+      }
+
+      /* ── Supply traffic light, shared by A and C ───────────────────── */
+      .sup {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px 2px 6px;
+        border-radius: 99px;
+        white-space: nowrap;
+      }
+      .sup::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .sup-now {
+        background: var(--c-red-light);
+        color: var(--c-red-dark);
+      }
+      .sup-nospawn {
+        background: #ffedd5;
+        color: #9a3412;
+      }
+      .sup-low {
+        background: var(--c-amber-light);
+        color: var(--c-amber-dark);
+      }
+      .sup-ok {
+        background: var(--c-green-light);
+        color: var(--c-green-dark);
+      }
+      /* Quiet: the status stops being a filled chip and becomes a dot plus a
+         word. Only the one state that needs acting on today keeps a tint, so
+         a card full of healthy Sorten is a card full of plain text. */
+      .pal-quiet .sup {
+        background: none;
+        padding: 2px 0 2px 1px;
+        font-weight: 600;
+        color: var(--c-text-sec);
+      }
+      .pal-quiet .sup::before {
+        width: 8px;
+        height: 8px;
+        background: var(--sup-c, var(--c-slate));
+      }
+      .pal-quiet .sup-now {
+        color: #7f1d1d;
+        font-weight: 700;
+        --sup-c: #b91c1c;
+      }
+      .pal-quiet .sup-nospawn {
+        --sup-c: #c2410c;
+      }
+      .pal-quiet .sup-low {
+        --sup-c: #a16207;
+      }
+      .pal-quiet .sup-ok {
+        color: var(--c-text-muted);
+        --sup-c: #4d9c6a;
+      }
+
+      /* Stacked stage bar — one bar per Sorte, same three colours everywhere */
+      .sbar {
+        display: flex;
+        height: 8px;
+        border-radius: 99px;
+        overflow: hidden;
+        background: var(--c-border-light);
+      }
+      .sbar i {
+        display: block;
+        height: 100%;
+      }
+      .sbar-lg {
+        height: 11px;
+      }
+
+      /* ═══ VARIANT A — Sorten-Kacheln ══════════════════════════════════ */
+      .sgrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+        gap: 10px;
+      }
+      .vp-phone .sgrid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      .stile {
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        padding: 11px 12px;
+        background: var(--c-surface);
+        cursor: pointer;
+        text-align: left;
+        font: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        transition: box-shadow 0.12s, border-color 0.12s;
+      }
+      .stile:hover {
+        border-color: var(--c-slate);
+        box-shadow: var(--shadow-md);
+      }
+      .stile.on {
+        border-color: var(--c-primary);
+        box-shadow: inset 0 0 0 1px var(--c-primary);
+        background: var(--c-primary-light);
+      }
+      /* Urgent: the whole card is outlined, not one edge. A Sorte with nothing
+         behind it is the one thing on this screen that cannot wait, and a card
+         ringed in red is found without reading — which is the point, since this
+         grid is scanned in a grow room at arm's length. The halo does the
+         carrying, so the fill stays white and the grid stays calm. */
+      .stile.urgent {
+        border: 2px solid var(--c-red-strong);
+        padding: 10px 11px;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+      }
+      .stile.urgent:hover {
+        border-color: var(--c-red-strong);
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18), var(--shadow-md);
+      }
+      .pal-loud .stile.urgent {
+        background: #fff7f7;
+      }
+      /* Selected AND urgent: keep the red ring, add the selection inset, so
+         one never hides the other. */
+      .stile.urgent.on {
+        border-color: var(--c-red-strong);
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18), inset 0 0 0 2px var(--c-primary);
+      }
+      .stile-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .stile-name {
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1.25;
+        display: flex;
+        align-items: center;
+      }
+      .stile-kz {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--c-text-muted);
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        padding: 1px 5px;
+        flex: none;
+      }
+      .stile-big {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+      }
+      .stile-big b {
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      .stile-big span {
+        font-size: 11px;
+        color: var(--c-text-muted);
+        font-weight: 600;
+      }
+      .stile-legend {
+        display: flex;
+        gap: 8px;
+        font-size: 10.5px;
+        color: var(--c-text-sec);
+        font-weight: 600;
+      }
+      .stile-legend i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 3px;
+        vertical-align: middle;
+      }
+      .stile-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        flex-wrap: wrap;
+        border-top: 1px solid var(--c-border-light);
+        padding-top: 7px;
+        margin-top: auto;
+      }
+      .stile-foot .fs {
+        font-size: 10.5px;
+        color: var(--c-text-muted);
+      }
+      /* The three stage counts, labelled on the tile. The colour is a
+         shortcut to them, never the only way to read them. */
+      .tstages {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        text-align: center;
+      }
+      .tstages .tst {
+        display: block;
+        min-width: 0;
+      }
+      .tstages b {
+        display: block;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+      }
+      .tstages i {
+        display: block;
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--c-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+      /* The traffic light, written out. Nothing here means anything by
+         colour alone. */
+      .tlegend-btn {
+        margin-top: 10px;
+        border: 0;
+        background: none;
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--c-text-muted);
+        cursor: pointer;
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .tlegend-btn:hover {
+        color: var(--c-text-sec);
+      }
+      .tlegend {
+        padding-top: 7px;
+        margin-top: 2px;
+        border-top: 1px solid var(--c-border-light);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 11.5px;
+        color: var(--c-text-sec);
+        line-height: 1.45;
+      }
+      .tlegend .sup {
+        margin-right: 6px;
+        vertical-align: baseline;
+      }
+      /* GESAMT tile — the "Chargen gesamt" box, folded into the same grid so
+         the tab is two windows instead of three. It was a dark green slab,
+         which is one more colour doing a job that weight already does: it is
+         the same card, set on the page ground with a firmer edge. */
+      .stile-total {
+        background: var(--c-bg);
+        border-color: var(--c-text-muted);
+        cursor: pointer;
+      }
+      .stile-total:hover {
+        border-color: var(--c-text-sec);
+      }
+      .stile-total .stile-name {
+        letter-spacing: 0.01em;
+      }
+      .stile-total .stile-big b {
+        color: var(--c-text);
+      }
+      .tlegend-note {
+        color: var(--c-text-muted);
+        font-style: italic;
+        padding-top: 2px;
+      }
+
+      /* ═══ VARIANT B — eine Tabelle ════════════════════════════════════ */
+      tr.tot td {
+        background: #f1f5f9 !important;
+        border-bottom: 2px solid var(--c-border);
+        font-weight: 700;
+        font-size: 13px;
+      }
+      tr.grp td {
+        background: #f6fafd;
+        border-bottom: 1px solid var(--c-border);
+        border-top: 1px solid var(--c-border);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      tr.grp:hover td {
+        background: #ecf4fb !important;
+      }
+      .caret {
+        display: inline-block;
+        width: 13px;
+        font-size: 10px;
+        color: var(--c-text-muted);
+        flex: none;
+      }
+      tr.child td:first-child {
+        padding-left: 26px;
+      }
+      tr.child td {
+        background: #fff;
+      }
+      /* Phone: the group header becomes a block, not an aligned row. */
+      .gblock {
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        background: #f6fafd;
+        padding: 9px 11px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+      .gblock .gp-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .gblock .gp-mini {
+        display: flex;
+        gap: 12px;
+        font-size: 11.5px;
+        color: var(--c-text-sec);
+        font-weight: 600;
+        margin-top: 6px;
+        align-items: center;
+      }
+      .vp-phone tr.child {
+        margin-left: 12px !important;
+        border-left: 3px solid var(--c-border) !important;
+      }
+
+      /* ═══ VARIANT C — Nachschub-Board ═════════════════════════════════ */
+      .funnel {
+        display: flex;
+        height: 26px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--c-border-light);
+        margin: 10px 0 8px;
+      }
+      .funnel i {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+        min-width: 0;
+        overflow: hidden;
+      }
+      .funnel-legend {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 11.5px;
+        color: var(--c-text-sec);
+        font-weight: 600;
+      }
+      .funnel-legend i {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        display: inline-block;
+        margin-right: 4px;
+      }
+      .alert-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--c-red-light);
+        border: 1px solid var(--c-red-border);
+        color: var(--c-red-dark);
+        border-radius: 8px;
+        padding: 8px 11px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      tr.sup-row td {
+        border-left: 0;
+      }
+      tr.sup-row td:first-child {
+        border-left: 3px solid transparent;
+      }
+      tr.sup-row.r-now td:first-child {
+        border-left-color: var(--c-red-strong);
+      }
+      tr.sup-row.r-nospawn td:first-child {
+        border-left-color: #c2410c;
+      }
+      tr.sup-row.r-low td:first-child {
+        border-left-color: var(--c-amber);
+      }
+      tr.sup-row.r-ok td:first-child {
+        border-left-color: var(--c-green);
+      }
+      .vp-phone tr.sup-row {
+        border-left: 4px solid var(--c-border) !important;
+      }
+      .vp-phone tr.sup-row.r-now {
+        border-left-color: var(--c-red-strong) !important;
+      }
+      .vp-phone tr.sup-row.r-nospawn {
+        border-left-color: #c2410c !important;
+      }
+      .vp-phone tr.sup-row.r-low {
+        border-left-color: var(--c-amber) !important;
+      }
+      .vp-phone tr.sup-row.r-ok {
+        border-left-color: var(--c-green) !important;
+      }
+      .rhythm {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        white-space: nowrap;
+      }
+      .rbar {
+        width: 46px;
+        height: 5px;
+        border-radius: 99px;
+        background: var(--c-border);
+        overflow: hidden;
+        flex: none;
+      }
+      .rbar i {
+        display: block;
+        height: 100%;
+      }
+
+      /* ── Explainer panel under each variant ───────────────────────── */
+      .why {
+        max-width: 1180px;
+        margin: 0 auto 22px;
+        background: #0f172a;
+        color: #cbd5e1;
+        border-radius: 12px;
+        padding: 16px 18px;
+        font-size: 13.5px;
+        line-height: 1.6;
+      }
+      .why h3 {
+        color: #fff;
+        font-size: 15px;
+        margin-bottom: 8px;
+      }
+      .why ul {
+        margin: 6px 0 0 18px;
+      }
+      .why li {
+        margin-bottom: 4px;
+      }
+      .why b {
+        color: #fff;
+      }
+      .why .tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        background: #1e293b;
+        color: #7dd3fc;
+        border-radius: 5px;
+        padding: 1px 7px;
+        margin-right: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mockbar">
+      <div class="mockbar-title">
+        Chargen-Reiter — Redesign
+        <small>D ist die Mischung aus A und B · Klick funktioniert: sortieren, filtern, aufklappen</small>
+      </div>
+      <div class="seg" id="seg-variant">
+        <button data-v="D" class="on">D · Kacheln + eine Tabelle</button>
+        <button data-v="A">A · Sorten-Kacheln</button>
+        <button data-v="B">B · Eine Tabelle</button>
+        <button data-v="C">C · Nachschub-Board</button>
+      </div>
+      <div class="seg" id="seg-device">
+        <button data-d="desktop" class="on">Desktop</button>
+        <button data-d="phone">Handy</button>
+      </div>
+      <div class="seg" id="seg-pal">
+        <button data-p="quiet" class="on">Farben ruhig</button>
+        <button data-p="loud">wie heute</button>
+      </div>
+      <div class="mock-note">Beispieldaten — 24 Chargen, 8 Sorten</div>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="vp" id="vp">
+        <div class="vp-topbar"><span>Chargen</span><span class="crumb" id="crumb">Alle Chargen</span></div>
+        <div class="vp-inner" id="app"></div>
+      </div>
+    </div>
+    <div class="why" id="why"></div>
+
+    <script>
+      /* ═══════════════════════════════════════════════════════════════════
+         MOCK DATA — shaped like the real `batches` array in app.js.
+         "Sorte" is the mushroomStrains entry (species + Kürzel); "Stamm" is
+         the free-text strain annotation the batch carries.
+         ═══════════════════════════════════════════════════════════════════ */
+      const TODAY = new Date(2026, 7, 22); // 22.08.2026, fixed so the mockup is stable
+      const SORTEN = [
+        { name: 'Blue Oyster', kz: 'BO', color: '#4A7FB5', rhythm: 10 },
+        { name: 'Pink Oyster', kz: 'PO', color: '#E8618C', rhythm: 14 },
+        { name: 'Yellow Oyster', kz: 'YO', color: '#E8B92E', rhythm: 12 },
+        { name: 'King Oyster', kz: 'KO', color: '#C8A275', rhythm: 14 },
+        { name: "Lion's Mane", kz: 'LM', color: '#C9BFA4', rhythm: 14 },
+        { name: 'Shiitake', kz: 'SH', color: '#4A2E18', rhythm: 21 },
+        { name: 'Pioppino', kz: 'PP', color: '#6E6046', rhythm: 18 },
+        { name: 'Reishi', kz: 'RE', color: '#8E2B20', rhythm: 30 }
+      ];
+      const sorte = (kz) => SORTEN.find((s) => s.kz === kz);
+      const dAgo = (n) => new Date(TODAY.getTime() - n * 864e5);
+      const dIn = (n) => new Date(TODAY.getTime() + n * 864e5);
+
+      // id, Sorte, Stamm, Beutel, Phase, Tage seit Anlage, fällig in N Tagen,
+      // Substrat, Quelle, Notiz
+      const RAW = [
+        ['BO-120826-01', 'BO', 'Wildstamm 3', 72, 'INCUBATING', 10, 4, [60, 20, 63, 1], 'KUL-BO-11', ''],
+        ['BO-060826-01', 'BO', 'Wildstamm 3', 48, 'INCUBATING', 16, -2, [60, 20, 63, 1], 'KUL-BO-11', 'langsam'],
+        ['BO-280726-01', 'BO', 'HK-9', 96, 'FRUITING', 25, -11, [60, 20, 62, 0], 'KUL-BO-09', ''],
+        ['BO-180726-02', 'BO', 'HK-9', 96, 'FRUITING', 35, -21, [60, 20, 62, 0], 'KUL-BO-09', '2. Flush'],
+        ['PO-150726-01', 'PO', 'Rosa A', 60, 'DONE', 38, -24, [65, 15, 65, 0], 'KUL-PO-04', ''],
+        ['SH-270726-01', 'SH', 'SH-Wide', 48, 'FRUITING', 26, -5, [70, 20, 60, 1], 'KUL-SH-02', ''],
+        ['SH-200726-01', 'SH', 'SH-Wide', 48, 'FRUITING', 33, -12, [70, 20, 60, 1], 'KUL-SH-02', ''],
+        ['KO-180826-01', 'KO', 'KO-2', 48, 'SPAWN RUN', 4, 17, [55, 25, 64, 1], 'KUL-KO-07', ''],
+        ['KO-080826-01', 'KO', 'KO-2', 96, 'INCUBATING', 14, 7, [55, 25, 64, 1], 'KUL-KO-07', ''],
+        ['KO-250726-01', 'KO', 'KO-2', 96, 'FRUITING', 28, -7, [55, 25, 64, 1], 'KUL-KO-05', ''],
+        ['LM-090826-01', 'LM', '', 36, 'INCUBATING', 13, 8, [58, 22, 63, 0], 'KUL-LM-03', ''],
+        ['LM-260726-01', 'LM', '', 48, 'FRUITING', 27, -6, [58, 22, 63, 0], 'KUL-LM-03', ''],
+        ['YO-200826-01', 'YO', 'Gelb-2', 60, 'SPAWN RUN', 2, 19, [62, 18, 63, 0], 'KUL-YO-06', ''],
+        ['YO-100826-01', 'YO', 'Gelb-2', 60, 'INCUBATING', 12, 6, [62, 18, 63, 0], 'KUL-YO-06', ''],
+        ['PP-210826-01', 'PP', '', 12, 'SPAWN RUN', 1, 20, [66, 20, 61, 1], 'KUL-PP-02', ''],
+        ['PP-300726-01', 'PP', '', 44, 'FRUITING', 23, -3, [66, 20, 61, 1], 'KUL-PP-01', 'gut'],
+        ['RE-190826-01', 'RE', 'Rot', 24, 'SPAWN RUN', 3, 32, [72, 15, 58, 1], 'KUL-RE-02', ''],
+        ['RE-050826-01', 'RE', 'Rot', 36, 'INCUBATING', 17, 18, [72, 15, 58, 1], 'KUL-RE-02', ''],
+        ['BO-100726-01', 'BO', 'HK-9', 96, 'DONE', 43, -29, [60, 20, 62, 0], 'KUL-BO-09', ''],
+        ['KO-050726-01', 'KO', 'KO-2', 72, 'DONE', 48, -34, [55, 25, 64, 1], 'KUL-KO-05', ''],
+        ['SH-280626-01', 'SH', 'SH-Wide', 48, 'CONTAM', 55, -41, [70, 20, 60, 1], 'KUL-SH-01', 'Trichoderma'],
+        ['LM-150626-01', 'LM', '', 36, 'DONE', 68, -54, [58, 22, 63, 0], 'KUL-LM-02', ''],
+        ['YO-200626-01', 'YO', 'Gelb-2', 60, 'DONE', 63, -49, [62, 18, 63, 0], 'KUL-YO-04', ''],
+        ['PP-100626-01', 'PP', '', 44, 'CONTAM', 73, -59, [66, 20, 61, 1], 'KUL-PP-01', 'nass'],
+        ['PO-020626-01', 'PO', 'Rosa A', 60, 'DONE', 81, -67, [65, 15, 65, 0], 'KUL-PO-03', '']
+      ];
+      const BATCHES = RAW.map(([id, kz, stamm, qty, stage, age, dueIn, sub, src, note]) => ({
+        id,
+        kz,
+        sorte: sorte(kz).name,
+        color: sorte(kz).color,
+        stamm,
+        qty,
+        stage,
+        days: age,
+        created: dAgo(age),
+        due: dIn(dueIn),
+        sub: { hw: sub[0], wb: sub[1], rh: sub[2], gyp: !!sub[3] },
+        src,
+        note
+      }));
+
+      const ARCHIVED = ['DONE', 'EMPTY', 'CONTAM'];
+      const isArch = (s) => ARCHIVED.includes(s);
+      const ACTIVE_STAGES = ['SPAWN RUN', 'INCUBATING', 'FRUITING'];
+      const STAGE_LABEL = {
+        'SPAWN RUN': 'Spawn',
+        INCUBATING: 'Inkubation',
+        FRUITING: 'Fruchtung',
+        DONE: 'Fertig',
+        CONTAM: 'Kontaminiert'
+      };
+      const STAGE_COLOR = {
+        'SPAWN RUN': 'var(--st-spawn)',
+        INCUBATING: 'var(--st-inc)',
+        FRUITING: 'var(--st-fruit)',
+        DONE: 'var(--st-done)',
+        CONTAM: 'var(--st-contam)'
+      };
+      const STAGE_BADGE = {
+        'SPAWN RUN': 'b-spawn',
+        INCUBATING: 'b-inc',
+        FRUITING: 'b-tent',
+        DONE: 'b-done',
+        CONTAM: 'b-contam'
+      };
+
+      const esc = (s) =>
+        String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      const nf = (n) => n.toLocaleString('de-DE');
+      const fmtD = (d) =>
+        String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getFullYear()).slice(2);
+      const dot = (c) => `<span class="sp-dot" style="background:${c}"></span>`;
+      // "1 Chargen" is the kind of thing that makes a screen look unfinished.
+      const chargen = (n) => (n === 0 ? 'keine aktive Charge' : n === 1 ? '1 Charge' : n + ' Chargen');
+      const overdue = (b) => b.due < TODAY && (b.stage === 'INCUBATING' || b.stage === 'SPAWN RUN');
+
+      /* ── Per-Sorte rollup. This is the number the tab does not have today:
+         how much of each Sorte is in the pipeline versus already fruiting. ── */
+      function rollup() {
+        return SORTEN.map((s) => {
+          const all = BATCHES.filter((b) => b.kz === s.kz);
+          const act = all.filter((b) => !isArch(b.stage));
+          const bagsIn = (st) => act.filter((b) => b.stage === st).reduce((a, b) => a + b.qty, 0);
+          const spawn = bagsIn('SPAWN RUN');
+          const inc = bagsIn('INCUBATING');
+          const fruit = bagsIn('FRUITING');
+          const bags = spawn + inc + fruit;
+          const pipeline = spawn + inc; // was kommt noch
+          // Die Ampel liest Spawn und Inkubation GETRENNT, weil sie zwei
+          // verschiedene Vorlaufzeiten sind. Inkubation ist die nächste Ernte,
+          // Spawn die übernächste. Eine Sorte, in der die Inkubation läuft, aber
+          // nichts mehr angesetzt wird, hat kein Problem heute und ein sicheres
+          // in zwei Zyklen — das ist ein eigener Zustand, kein "knapp".
+          //
+          //   spawn 0, ink 0   -> nach der Fruchtung ist Schluss   (jetzt)
+          //   spawn 0, ink >0  -> nächste Ernte ja, danach nichts  (spawn fehlt)
+          //   Nachlauf < Fruchtung -> Kette läuft, wird aber dünner (knapp)
+          //   sonst                                                (läuft)
+          const supply =
+            spawn === 0 && inc === 0 ? 'now' : spawn === 0 ? 'nospawn' : pipeline < fruit ? 'low' : 'ok';
+          const last = all.reduce((m, b) => (m == null || b.days < m ? b.days : m), null);
+          // Nächste Charge, die in die Fruchtung geht
+          const nextDue = act
+            .filter((b) => b.stage !== 'FRUITING')
+            .map((b) => b.due)
+            .sort((a, b) => a - b)[0];
+          return {
+            ...s,
+            all,
+            act,
+            spawn,
+            inc,
+            fruit,
+            bags,
+            pipeline,
+            supply,
+            lastDays: last,
+            nextDue,
+            nBatches: act.length,
+            nAll: all.length,
+            overdueRhythm: last != null && last > s.rhythm * 1.5
+          };
+        });
+      }
+      // Was "Kein Nachschub / Knapp / OK" — three words that name a state
+      // without saying what to do about it, and "Nachschub" read like a button.
+      // These say the action, and there are four because Spawn and Inkubation
+      // are read separately.
+      const SUP_LABEL = {
+        now: 'Jetzt ansetzen',
+        nospawn: 'Spawn fehlt',
+        low: 'Knapp',
+        ok: 'Läuft'
+      };
+      const SUP_RANK = { now: 0, nospawn: 1, low: 2, ok: 3 };
+      // The sentence behind the light, in the Sorte's own numbers.
+      const supWhy = (r) =>
+        r.supply === 'now'
+          ? `nichts in Spawn, nichts in Inkubation — wenn die ${r.fruit} Frucht-Beutel durch sind, ist die Sorte leer`
+          : r.supply === 'nospawn'
+            ? `${r.inc} Beutel in der Inkubation, aber nichts angesetzt — die übernächste Ernte fehlt`
+            : r.supply === 'low'
+              ? `${r.spawn} in Spawn und ${r.inc} in Inkubation kommen nach, ${r.fruit} sind schon in der Fruchtung`
+              : `${r.spawn} in Spawn und ${r.inc} in Inkubation kommen nach — mehr als die ${r.fruit} in der Fruchtung`;
+
+      function totals() {
+        const act = BATCHES.filter((b) => !isArch(b.stage));
+        const by = (st) => BATCHES.filter((b) => b.stage === st).reduce((a, b) => a + b.qty, 0);
+        return {
+          nAll: BATCHES.length,
+          nAct: act.length,
+          bags: act.reduce((a, b) => a + b.qty, 0),
+          spawn: by('SPAWN RUN'),
+          inc: by('INCUBATING'),
+          fruit: by('FRUITING'),
+          done: by('DONE'),
+          contam: by('CONTAM'),
+          nSpawn: BATCHES.filter((b) => b.stage === 'SPAWN RUN').length,
+          nInc: BATCHES.filter((b) => b.stage === 'INCUBATING').length,
+          nFruit: BATCHES.filter((b) => b.stage === 'FRUITING').length,
+          nDone: BATCHES.filter((b) => b.stage === 'DONE').length,
+          nContam: BATCHES.filter((b) => b.stage === 'CONTAM').length
+        };
+      }
+
+      /* ── UI state ───────────────────────────────────────────────────── */
+      const S = {
+        variant: 'D',
+        device: 'desktop',
+        pal: 'quiet',
+        legendOpen: false,
+        sortKey: null,
+        sortDir: 'asc',
+        supSortKey: 'supply',
+        supSortDir: 'asc',
+        filterSorte: null,
+        filterStage: null,
+        archive: 'active',
+        q: '',
+        // B groups by Sorte out of the box; D starts flat, because flat is the
+        // state the column sort needs and the one today's tab cannot reach.
+        groupBy: 'none',
+        openGroups: {},
+        tileSort: 'urgency'
+      };
+      const GROUP_DEFAULT = { A: 'none', B: 'sorte', C: 'none', D: 'none' };
+
+      /* ═══════════════════════════════════════════════════════════════════
+         SORTING — the part that is broken in the app today.
+
+         renderBatches() sorts correctly and then hands the sorted rows to
+         _groupBatchRows(), which re-buckets them by stage. So "sort by Art"
+         only reorders rows *inside* each stage block and the list as a whole
+         never moves. Here grouping is an explicit choice, and choosing
+         "Gruppieren: Keine" gives a flat list the sort actually owns.
+         ═══════════════════════════════════════════════════════════════════ */
+      const STAGE_ORDER = ['SPAWN RUN', 'INCUBATING', 'FRUITING', 'DONE', 'CONTAM'];
+      function cmp(a, b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        return String(a).localeCompare(String(b), 'de', { numeric: true, sensitivity: 'base' });
+      }
+      function sortBy(rows, key, dir, keyFn) {
+        if (!key) return rows;
+        const sign = dir === 'desc' ? -1 : 1;
+        return [...rows].sort((a, b) => sign * cmp(keyFn(a, key), keyFn(b, key)));
+      }
+      // Status sorts along the pipeline, not the alphabet — A-Z would give
+      // Fertig, Fruchtung, Inkubation, Kontaminiert, Spawn, which means nothing.
+      function bKey(b, k) {
+        if (k === 'qty' || k === 'days') return b[k];
+        if (k === 'created' || k === 'due') return b[k].getTime();
+        if (k === 'stage') return STAGE_ORDER.indexOf(b.stage);
+        if (k === 'sub') return b.sub.hw;
+        return b[k] || '';
+      }
+      function clickSort(key, which) {
+        const kk = which === 'sup' ? 'supSortKey' : 'sortKey';
+        const dk = which === 'sup' ? 'supSortDir' : 'sortDir';
+        if (S[kk] !== key) {
+          S[kk] = key;
+          S[dk] = 'asc';
+        } else if (S[dk] === 'asc') S[dk] = 'desc';
+        else {
+          S[kk] = null;
+          S[dk] = 'asc';
+        }
+        render();
+      }
+      function th(col, which) {
+        const kk = which === 'sup' ? S.supSortKey : S.sortKey;
+        const dk = which === 'sup' ? S.supSortDir : S.sortDir;
+        if (!col.k) return '<th></th>';
+        if (col.sortable === false) return `<th>${esc(col.l)}</th>`;
+        const on = kk === col.k;
+        const ar = on ? (dk === 'asc' ? '▲' : '▼') : '⇅';
+        const st = col.num ? ' style="text-align:right"' : '';
+        return `<th class="sortable${on ? ' active' : ''}"${st} data-sort="${col.k}" data-which="${which}">${esc(col.l)}<span class="arrow">${ar}</span></th>`;
+      }
+
+      /* ── Filters shared by every variant ──────────────────────────── */
+      function filtered() {
+        const q = S.q.toLowerCase();
+        return BATCHES.filter((b) => {
+          if (q && !(b.id + ' ' + b.sorte + ' ' + b.stamm).toLowerCase().includes(q)) return false;
+          if (S.filterSorte && b.kz !== S.filterSorte) return false;
+          if (S.filterStage && b.stage !== S.filterStage) return false;
+          if (!q && S.archive !== 'all') {
+            const a = isArch(b.stage);
+            if (S.archive === 'active' && a) return false;
+            if (S.archive === 'archived' && !a) return false;
+          }
+          return true;
+        });
+      }
+
+      /* ── The detail table every variant keeps at the bottom ────────── */
+      const BCOLS = [
+        { k: 'id', l: 'Charge' },
+        { k: 'sorte', l: 'Sorte' },
+        { k: 'stamm', l: 'Stamm' },
+        { k: 'qty', l: 'Beutel', num: true },
+        { k: 'days', l: 'Ink.', num: true },
+        { k: 'sub', l: 'Substrat', ph: false },
+        { k: 'src', l: 'Quelle', sortable: false, ph: false },
+        { k: 'created', l: 'Erstellt', ph: false },
+        { k: 'due', l: 'Fällig' },
+        { k: 'stage', l: 'Status' },
+        { k: 'note', l: 'Notiz', sortable: false, ph: false },
+        { k: '', l: '' }
+      ];
+      function batchTable(rows) {
+        const phone = S.device === 'phone';
+        const cols = BCOLS.filter((c) => !(phone && c.ph === false));
+        const head = '<tr>' + cols.map((c) => th(c, 'main')).join('') + '</tr>';
+        const body = rows.length
+          ? rows.map((b) => batchRow(b, cols)).join('')
+          : `<tr><td colspan="${cols.length}" class="empty">Keine Chargen für diese Auswahl</td></tr>`;
+        return `<div class="tscroll"><table class="t"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+      }
+      function batchRow(b, cols) {
+        const cell = {
+          id: `<span class="mono" style="font-size:12px">▸ ${esc(b.id)}</span>`,
+          sorte: `${dot(b.color)}${esc(b.sorte)}`,
+          stamm: b.stamm ? esc(b.stamm) : '<span class="muted">—</span>',
+          qty: `<b>${b.qty}</b>`,
+          days: b.days + ' T',
+          sub:
+            `<span class="sub-tag">HW ${b.sub.hw}%</span><span class="sub-tag">WB ${b.sub.wb}%</span>` +
+            (b.sub.gyp ? '<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gips</span>' : ''),
+          src: `<span class="mono muted" style="font-size:11px">${esc(b.src)}</span>`,
+          created: `<span class="muted" style="font-size:12px">${fmtD(b.created)}</span>`,
+          due:
+            `<span style="font-size:12px;${overdue(b) ? 'color:var(--c-red-dark);font-weight:700' : 'color:var(--c-text-muted)'}">` +
+            fmtD(b.due) +
+            (overdue(b) ? ' ⚠' : '') +
+            '</span>',
+          stage: `<span class="badge ${STAGE_BADGE[b.stage]}">${STAGE_LABEL[b.stage]}</span>`,
+          note: b.note ? esc(b.note) : '<span class="muted" style="font-style:italic">+ Notiz</span>',
+          '': `<button class="btn btn-sm">↦ Umlagern</button> <button class="btn btn-sm">+ Beutel</button>`
+        };
+        return (
+          '<tr>' +
+          cols
+            .map((c) =>
+              c.k
+                ? `<td data-l="${esc(c.l)}"${c.num ? ' style="text-align:right"' : ''}>${cell[c.k]}</td>`
+                : `<td class="acts">${cell['']}</td>`
+            )
+            .join('') +
+          '</tr>'
+        );
+      }
+
+      /* ── The header strip everybody keeps (total + clickable stages) ── */
+      function headerStrip(compact) {
+        const T = totals();
+        const chips = [
+          { k: 'SPAWN RUN', l: 'Spawn', v: T.spawn, n: T.nSpawn, c: 'var(--st-spawn)', t: 'var(--st-spawn-t)' },
+          { k: 'INCUBATING', l: 'Inkubation', v: T.inc, n: T.nInc, c: 'var(--st-inc)', t: 'var(--st-inc-t)' },
+          { k: 'FRUITING', l: 'Fruchtung', v: T.fruit, n: T.nFruit, c: 'var(--st-fruit)', t: 'var(--st-fruit-t)' },
+          { k: 'DONE', l: 'Fertig', v: T.done, n: T.nDone, c: 'var(--st-done)', t: 'var(--st-done)' },
+          { k: 'CONTAM', l: 'Kontam.', v: T.contam, n: T.nContam, c: 'var(--st-contam)', t: 'var(--st-contam)' }
+        ];
+        return `<div class="card"><div class="hdr">
+          <div>
+            <div class="hdr-total"><span class="n">${T.nAll}</span><span class="l">Chargen gesamt</span></div>
+            <div class="hdr-sub">${T.nAct} aktiv · <b>${nf(T.bags)}</b> Beutel im Umlauf · ${T.nAll - T.nAct} archiviert</div>
+          </div>
+          <div class="stage-chips" style="margin-left:auto">
+            ${chips
+              .map(
+                (c) => `<button class="schip${S.filterStage === c.k ? ' on' : ''}" style="--sc:${c.c}" data-stage="${c.k}">
+                  <span><span class="sl">${c.l}</span><br><span class="sn">${chargen(c.n)}</span></span>
+                  <span class="sv" style="margin-left:auto;color:${c.t}">${nf(c.v)}</span>
+                </button>`
+              )
+              .join('')}
+          </div>
+        </div>${
+          compact
+            ? ''
+            : '<div class="hdr-sub" style="margin-top:8px;border-top:1px solid var(--c-border-light);padding-top:7px">Zahlen sind <b>Beutel</b>, die Zeile darunter Chargen — heute mischt der Streifen beides in einer Zeile.</div>'
+        }</div>`;
+      }
+
+      /* ── The list controls (archive filter + search + active filter) ── */
+      function listControls(title, extra) {
+        const chips = [];
+        if (S.filterSorte)
+          chips.push(
+            `<button class="btn btn-sm" data-clear="sorte" style="background:var(--c-primary-light);border-color:var(--c-primary);color:var(--c-primary-hover)">${dot(sorte(S.filterSorte).color)}${esc(sorte(S.filterSorte).name)} ✕</button>`
+          );
+        if (S.filterStage)
+          chips.push(
+            `<button class="btn btn-sm" data-clear="stage" style="background:var(--c-primary-light);border-color:var(--c-primary);color:var(--c-primary-hover)">${STAGE_LABEL[S.filterStage]} ✕</button>`
+          );
+        return `<div class="card-head">
+          <div class="sec">${esc(title)}</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+            ${chips.join('')}
+            ${extra || ''}
+            <select data-set="archive">
+              <option value="active"${S.archive === 'active' ? ' selected' : ''}>Aktiv</option>
+              <option value="archived"${S.archive === 'archived' ? ' selected' : ''}>Archiviert</option>
+              <option value="all"${S.archive === 'all' ? ' selected' : ''}>Alle</option>
+            </select>
+            <input type="search" placeholder="Suchen…" value="${esc(S.q)}" data-set="q" style="width:130px" />
+          </div>
+        </div>`;
+      }
+
+      /* ═══ SORTEN-KACHELN — shared by A and D ═════════════════════════ */
+      function sortedRollup() {
+        const R = rollup().filter((r) => r.nAll > 0);
+        if (S.tileSort === 'urgency')
+          R.sort((a, b) => SUP_RANK[a.supply] - SUP_RANK[b.supply] || a.pipeline - b.pipeline || cmp(a.name, b.name));
+        else if (S.tileSort === 'bags') R.sort((a, b) => b.bags - a.bags);
+        else R.sort((a, b) => cmp(a.name, b.name));
+        return R;
+      }
+      // One Sorte, at a glance: how many bags, standing where, and whether
+      // anything is behind them. The three stage numbers are labelled on the
+      // tile itself — the colours are a shortcut, not the only key.
+      function sorteTile(r) {
+        const seg = (v, c) => (v ? `<i style="width:${(v / Math.max(r.bags, 1)) * 100}%;background:${c}"></i>` : '');
+        const st = (v, c, l) =>
+          `<span class="tst"><b style="color:${v ? c : 'var(--c-text-muted)'}">${v || '–'}</b><i>${l}</i></span>`;
+        const T_SPAWN = 'var(--st-spawn-t)', T_INC = 'var(--st-inc-t)', T_FRUIT = 'var(--st-fruit-t)';
+        return `<button class="stile${S.filterSorte === r.kz ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}" data-sorte="${r.kz}" title="${esc(r.name)}: ${esc(supWhy(r))}">
+          <div class="stile-top">
+            <span class="stile-name">${dot(r.color)}${esc(r.name)}</span>
+            <span class="stile-kz">${r.kz}</span>
+          </div>
+          <div class="stile-big"><b>${nf(r.bags)}</b><span>Beutel · ${chargen(r.nBatches)}</span></div>
+          <div class="sbar sbar-lg">
+            ${seg(r.spawn, 'var(--st-spawn)')}${seg(r.inc, 'var(--st-inc)')}${seg(r.fruit, 'var(--st-fruit)')}
+          </div>
+          <div class="tstages">
+            ${st(r.spawn, T_SPAWN, 'Spawn')}${st(r.inc, T_INC, 'Ink.')}${st(r.fruit, T_FRUIT, 'Frucht.')}
+          </div>
+          <div class="stile-foot">
+            <span class="sup sup-${r.supply}">${SUP_LABEL[r.supply]}</span>
+            <span class="fs">${r.supply === 'ok' ? 'nächste ' + fmtD(r.nextDue) : 'zuletzt vor ' + r.lastDays + ' T'}</span>
+          </div>
+        </button>`;
+      }
+      const tileSortSelect = () => `<select data-set="tileSort">
+          <option value="urgency"${S.tileSort === 'urgency' ? ' selected' : ''}>Sortieren: Dringlichkeit</option>
+          <option value="bags"${S.tileSort === 'bags' ? ' selected' : ''}>Sortieren: Beutel</option>
+          <option value="name"${S.tileSort === 'name' ? ' selected' : ''}>Sortieren: Name</option>
+        </select>`;
+      // The light, spelled out where the tiles are. No colour-only meaning.
+      // Folded away by default. The tiles are the screen; the legend is the
+      // footnote, and a footnote that is always open is just clutter you have
+      // learned to skip. It opens on a tap and stays open until you close it.
+      const tileLegend = (R) => {
+        const btn = `<button type="button" class="tlegend-btn" data-legend="1" aria-expanded="${!!S.legendOpen}">
+          <span class="caret">${S.legendOpen ? '▾' : '▸'}</span>Was bedeuten die Farben?
+        </button>`;
+        if (!S.legendOpen) return btn;
+        const names = (k) => {
+          const a = R.filter((r) => r.supply === k);
+          return a.length ? `: <b>${esc(a.map((r) => r.name).join(', '))}</b>` : '';
+        };
+        const row = (k, why) => `<div><span class="sup sup-${k}">${SUP_LABEL[k]}</span> ${why}${names(k)}</div>`;
+        return (
+          btn +
+          `<div class="tlegend">
+            ${row('now', 'nichts in Spawn, nichts in Inkubation — nach der Fruchtung ist die Sorte leer')}
+            ${row('nospawn', 'Inkubation läuft, aber nichts angesetzt — die <b>übernächste</b> Ernte fehlt')}
+            ${row('low', 'es kommt weniger nach, als gerade fruchtet')}
+            ${row('ok', 'mehr im Nachlauf als in der Fruchtung')}
+            <div class="tlegend-note">Spawn und Inkubation zählen getrennt: die Inkubation ist die nächste Ernte, der Spawn die übernächste.</div>
+          </div>`
+        );
+      };
+
+      /* ═══ VARIANT A — Kacheln + Kennzahlen + Tabelle ══════════════════ */
+      function variantA() {
+        const R = sortedRollup();
+        const tiles = R.map(sorteTile).join('');
+        const nUrgent = R.filter((r) => r.supply === 'now' || r.supply === 'nospawn').length;
+        const rows = sortBy(filtered(), S.sortKey, S.sortDir, bKey);
+        return (
+          headerStrip(false) +
+          `<div class="card">
+            <div class="card-head">
+              <div class="sec">Nach Sorte</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+                ${nUrgent ? `<span class="sup sup-nospawn">${nUrgent} Sorten ohne Spawn</span>` : ''}
+                ${tileSortSelect()}
+              </div>
+            </div>
+            <div class="sgrid">${tiles}</div>
+            ${tileLegend(R)}
+          </div>` +
+          `<div class="card">${listControls('Alle Chargen')}${batchTable(rows)}</div>`
+        );
+      }
+
+      /* ═══ VARIANT B — eine Tabelle, zwei Ebenen ══════════════════════ */
+      const GCOLS = [
+        { k: 'name', l: 'Sorte / Charge' },
+        { k: 'qty', l: 'Beutel', num: true },
+        { k: 'spawn', l: 'Spawn', num: true },
+        { k: 'inc', l: 'Ink.', num: true },
+        { k: 'fruit', l: 'Frucht.', num: true },
+        { k: 'age', l: 'Alter', num: true },
+        { k: 'due', l: 'Nächste fällig' },
+        { k: 'supply', l: 'Nachschub' }
+      ];
+      function variantB() {
+        const phone = S.device === 'phone';
+        const rows = filtered();
+        const T = totals();
+        const controls = `<select data-set="groupBy">
+            <option value="sorte"${S.groupBy === 'sorte' ? ' selected' : ''}>Gruppieren: Sorte</option>
+            <option value="stage"${S.groupBy === 'stage' ? ' selected' : ''}>Gruppieren: Phase</option>
+            <option value="none"${S.groupBy === 'none' ? ' selected' : ''}>Gruppieren: keine</option>
+          </select>`;
+
+        // Flat mode: the current table, but the sort finally owns the order.
+        if (S.groupBy === 'none') {
+          const sorted = sortBy(rows, S.sortKey, S.sortDir, bKey);
+          return `<div class="card">
+            ${listControls('Chargen', controls)}
+            <div class="hdr-sub" style="margin:-4px 0 8px">Flache Liste — die Spaltensortierung bestimmt die Reihenfolge, nichts gruppiert dagegen.</div>
+            ${batchTable(sorted)}</div>`;
+        }
+
+        // Grouped mode: group rows and batch rows share one column set, and the
+        // totals row on top is the KPI strip — same table, same numbers.
+        const groups =
+          S.groupBy === 'sorte'
+            ? rollup()
+                .filter((r) => rows.some((b) => b.kz === r.kz))
+                .map((r) => ({
+                  key: r.kz,
+                  label: r.name,
+                  color: r.color,
+                  kz: r.kz,
+                  supply: r.supply,
+                  items: rows.filter((b) => b.kz === r.kz)
+                }))
+            : STAGE_ORDER.filter((s) => rows.some((b) => b.stage === s)).map((s) => ({
+                key: s,
+                label: STAGE_LABEL[s],
+                color: STAGE_COLOR[s],
+                kz: '',
+                supply: null,
+                items: rows.filter((b) => b.stage === s)
+              }));
+        const stat = (items) => {
+          const bagsIn = (st) => items.filter((b) => b.stage === st).reduce((a, b) => a + b.qty, 0);
+          return {
+            qty: items.reduce((a, b) => a + b.qty, 0),
+            spawn: bagsIn('SPAWN RUN'),
+            inc: bagsIn('INCUBATING'),
+            fruit: bagsIn('FRUITING'),
+            age: Math.max(...items.map((b) => b.days)),
+            due: items
+              .filter((b) => b.stage !== 'FRUITING' && !isArch(b.stage))
+              .map((b) => b.due)
+              .sort((a, b) => a - b)[0],
+            n: items.length
+          };
+        };
+        let G = groups.map((g) => ({ ...g, ...stat(g.items) }));
+        // The same click sorts both levels — groups by their totals, batches
+        // inside them by the same column.
+        G = sortBy(G, S.sortKey, S.sortDir, (g, k) => {
+          if (k === 'name') return g.label;
+          if (k === 'due') return g.due ? g.due.getTime() : null;
+          if (k === 'supply') return g.supply ? SUP_RANK[g.supply] : 9;
+          return g[k];
+        });
+        const gKey = (b, k) => {
+          if (k === 'name') return b.id;
+          if (k === 'spawn') return b.stage === 'SPAWN RUN' ? b.qty : 0;
+          if (k === 'inc') return b.stage === 'INCUBATING' ? b.qty : 0;
+          if (k === 'fruit') return b.stage === 'FRUITING' ? b.qty : 0;
+          if (k === 'age') return b.days;
+          if (k === 'due') return b.due.getTime();
+          if (k === 'supply') return STAGE_ORDER.indexOf(b.stage);
+          return b[k];
+        };
+
+        const num = (v) => (v ? nf(v) : '<span class="muted">–</span>');
+        const head = '<tr>' + GCOLS.map((c) => th(c, 'main')).join('') + '</tr>';
+        // The totals row IS the KPI strip — same columns, top of the same table.
+        const totRow = phone
+          ? `<tr class="tot"><td colspan="${GCOLS.length}"><div class="gblock" style="background:#eef2f6;cursor:default">
+              <div class="gp-row"><span>GESAMT</span><span>${nf(T.bags)} Beutel</span></div>
+              <div class="gp-mini"><span style="color:var(--st-spawn)">Spawn ${nf(T.spawn)}</span><span style="color:var(--st-inc)">Ink. ${nf(T.inc)}</span><span style="color:var(--st-fruit)">Frucht. ${nf(T.fruit)}</span><span class="muted" style="margin-left:auto">${T.nAct} aktiv</span></div>
+            </div></td></tr>`
+          : `<tr class="tot">
+              <td>GESAMT · ${T.nAct} aktive Chargen</td>
+              <td style="text-align:right">${nf(T.bags)}</td>
+              <td style="text-align:right;color:var(--st-spawn-t)">${nf(T.spawn)}</td>
+              <td style="text-align:right;color:var(--st-inc-t)">${nf(T.inc)}</td>
+              <td style="text-align:right;color:var(--st-fruit-t)">${nf(T.fruit)}</td>
+              <td></td><td></td>
+              <td style="font-weight:400" class="muted">${T.nAll - T.nAct} archiviert</td>
+            </tr>`;
+
+        let body = totRow;
+        for (const g of G) {
+          const open = S.openGroups[g.key] !== false;
+          const mark = g.kz ? dot(g.color) : `<span class="sp-dot" style="background:${g.color};border-radius:2px"></span>`;
+          body += phone
+            ? `<tr class="grp"><td colspan="${GCOLS.length}"><div class="gblock" data-group="${esc(g.key)}">
+                <div class="gp-row"><span><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}</span><span>${nf(g.qty)}</span></div>
+                <div class="gp-mini"><span style="color:var(--st-spawn-t)">${g.spawn}</span><span style="color:var(--st-inc-t)">${g.inc}</span><span style="color:var(--st-fruit-t)">${g.fruit}</span><span class="muted">${chargen(g.n)}</span>${g.supply ? `<span class="sup sup-${g.supply}" style="margin-left:auto">${SUP_LABEL[g.supply]}</span>` : ''}</div>
+              </div></td></tr>`
+            : `<tr class="grp" data-group="${esc(g.key)}">
+                <td><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}<span class="muted" style="font-weight:500;font-size:11.5px"> · ${chargen(g.n)}</span></td>
+                <td style="text-align:right">${nf(g.qty)}</td>
+                <td style="text-align:right;color:var(--st-spawn-t)">${num(g.spawn)}</td>
+                <td style="text-align:right;color:var(--st-inc-t)">${num(g.inc)}</td>
+                <td style="text-align:right;color:var(--st-fruit-t)">${num(g.fruit)}</td>
+                <td style="text-align:right;font-weight:400" class="muted">${isFinite(g.age) ? g.age + ' T' : ''}</td>
+                <td style="font-weight:400" class="muted">${g.due ? fmtD(g.due) : '—'}</td>
+                <td>${g.supply ? `<span class="sup sup-${g.supply}">${SUP_LABEL[g.supply]}</span>` : ''}</td>
+              </tr>`;
+          if (!open) continue;
+          for (const b of sortBy(g.items, S.sortKey, S.sortDir, gKey)) {
+            body += `<tr class="child">
+              <td data-l="Charge"><span class="mono" style="font-size:12px">${esc(b.id)}</span>${b.stamm ? ` <span class="muted" style="font-size:11.5px">${esc(b.stamm)}</span>` : ''}${S.groupBy === 'stage' ? ' ' + dot(b.color) + `<span style="font-size:11.5px">${esc(b.sorte)}</span>` : ''}</td>
+              <td data-l="Beutel" style="text-align:right"><b>${b.qty}</b></td>
+              <td data-l="Spawn" style="text-align:right;color:var(--st-spawn-t)">${b.stage === 'SPAWN RUN' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Ink." style="text-align:right;color:var(--st-inc-t)">${b.stage === 'INCUBATING' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Frucht." style="text-align:right;color:var(--st-fruit-t)">${b.stage === 'FRUITING' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Alter" style="text-align:right" class="muted">${b.days} T</td>
+              <td data-l="Fällig" class="muted" style="${overdue(b) ? 'color:var(--c-red-dark);font-weight:700' : ''}">${fmtD(b.due)}${overdue(b) ? ' ⚠' : ''}</td>
+              <td data-l="Status"><span class="badge ${STAGE_BADGE[b.stage]}">${STAGE_LABEL[b.stage]}</span></td>
+            </tr>`;
+          }
+        }
+        if (!G.length) body = `<tr><td colspan="${GCOLS.length}" class="empty">Keine Chargen für diese Auswahl</td></tr>`;
+        return `<div class="card">
+          ${listControls('Chargen', controls)}
+          <div class="tscroll"><table class="t"${phone ? '' : ' style="min-width:860px"'}><thead>${head}</thead><tbody>${body}</tbody></table></div>
+          <div class="hdr-sub" style="margin-top:9px">Eine Tabelle, zwei Ebenen: die Summenzeile oben ist der Kennzahlen-Streifen, die Sorten-Zeilen sind die Aufschlüsselung, die Zeilen darunter die Chargen — alle in denselben Spalten. Eine Spaltenüberschrift sortiert beide Ebenen.</div>
+        </div>`;
+      }
+
+      /* ═══ VARIANT C — Nachschub-Board ════════════════════════════════ */
+      const CCOLS = [
+        { k: 'name', l: 'Sorte' },
+        { k: 'bags', l: 'Beutel', num: true },
+        { k: 'spawn', l: 'Spawn', num: true },
+        { k: 'inc', l: 'Ink.', num: true },
+        { k: 'fruit', l: 'Frucht.', num: true },
+        { k: 'lastDays', l: 'Letzte Charge', num: true },
+        { k: 'rhythm', l: 'Rhythmus' },
+        { k: 'supply', l: 'Nachschub' },
+        { k: '', l: '' }
+      ];
+      function variantC() {
+        const T = totals();
+        const seg = [
+          ['Spawn', T.spawn, 'var(--st-spawn)'],
+          ['Inkubation', T.inc, 'var(--st-inc)'],
+          ['Fruchtung', T.fruit, 'var(--st-fruit)']
+        ];
+        const funnel = `<div class="card">
+          <div class="hdr" style="align-items:baseline">
+            <div class="hdr-total"><span class="n">${T.nAll}</span><span class="l">Chargen gesamt</span></div>
+            <div class="hdr-sub" style="margin-left:auto"><b>${nf(T.bags)}</b> Beutel aktiv · ${T.nAct} Chargen · ${T.nAll - T.nAct} archiviert</div>
+          </div>
+          <div class="funnel">${seg.map(([l, v, c]) => `<i style="width:${(v / T.bags) * 100}%;background:${c}" title="${l} ${v}">${v}</i>`).join('')}</div>
+          <div class="funnel-legend">
+            ${seg.map(([l, v, c]) => `<span><i style="background:${c}"></i>${l} <b>${nf(v)}</b></span>`).join('')}
+            <span style="margin-left:auto" class="muted"><i style="background:var(--st-done)"></i>Fertig ${nf(T.done)} · <i style="background:var(--st-contam)"></i>Kontaminiert ${nf(T.contam)}</span>
+          </div>
+        </div>`;
+
+        let R = rollup().filter((r) => r.nAll > 0);
+        R = sortBy(R, S.supSortKey, S.supSortDir, (r, k) => {
+          if (k === 'name') return r.name;
+          if (k === 'supply') return SUP_RANK[r.supply] * 1000 + r.pipeline;
+          if (k === 'rhythm') return r.lastDays / r.rhythm;
+          return r[k];
+        });
+        const nUrgent = R.filter((r) => r.supply === 'now').length;
+        const nLow = R.filter((r) => r.supply === 'nospawn').length;
+        const rowsC = R.map((r) => {
+          const pct = Math.min(100, (r.lastDays / r.rhythm) * 100);
+          const rc = pct >= 100 ? 'var(--c-red-strong)' : pct > 70 ? 'var(--c-amber)' : 'var(--c-green)';
+          return `<tr class="sup-row r-${r.supply}">
+            <td data-l="Sorte" style="font-weight:600">${dot(r.color)}${esc(r.name)} <span class="stile-kz">${r.kz}</span></td>
+            <td data-l="Beutel" style="text-align:right"><b>${nf(r.bags)}</b><br><span class="muted" style="font-size:11px">${chargen(r.nBatches)}</span></td>
+            <td data-l="Spawn" style="text-align:right;color:var(--st-spawn-t);font-weight:600">${r.spawn || '<span class="muted">–</span>'}</td>
+            <td data-l="Ink." style="text-align:right;color:var(--st-inc-t);font-weight:600">${r.inc || '<span class="muted">–</span>'}</td>
+            <td data-l="Frucht." style="text-align:right;color:var(--st-fruit-t);font-weight:600">${r.fruit || '<span class="muted">–</span>'}</td>
+            <td data-l="Letzte" style="text-align:right">vor ${r.lastDays} T</td>
+            <td data-l="Rhythmus"><span class="rhythm"><span class="rbar"><i style="width:${pct}%;background:${rc}"></i></span><span class="muted">alle ~${r.rhythm} T</span></span></td>
+            <td data-l="Nachschub"><span class="sup sup-${r.supply}">${SUP_LABEL[r.supply]}</span></td>
+            <td class="acts">${r.supply === 'ok' ? `<button class="btn btn-sm" data-sorte="${r.kz}">Chargen zeigen</button>` : `<button class="btn btn-sm btn-p">+ Neue Charge</button><button class="btn btn-sm" data-sorte="${r.kz}">Zeigen</button>`}</td>
+          </tr>`;
+        }).join('');
+
+        const rows = sortBy(filtered(), S.sortKey, S.sortDir, bKey);
+        return (
+          funnel +
+          `<div class="card">
+            ${nUrgent || nLow ? `<div class="alert-head">⚠ <span>${nUrgent ? `<b>${nUrgent} Sorten jetzt ansetzen</b> — nichts in Spawn, nichts in Inkubation` : ''}${nUrgent && nLow ? ' · ' : ''}${nLow ? `<b>${nLow} ohne Spawn</b> — Inkubation läuft, aber nichts angesetzt` : ''}</span></div>` : ''}
+            <div class="card-head"><div class="sec">Nachschub je Sorte</div>
+              <div class="hdr-sub" style="margin-left:auto">Spawn und Inkubation zählen getrennt — Inkubation ist die nächste Ernte, Spawn die übernächste</div>
+            </div>
+            <div class="tscroll"><table class="t"${S.device === 'phone' ? '' : ' style="min-width:840px"'}><thead><tr>${CCOLS.map((c) => th(c, 'sup')).join('')}</tr></thead><tbody>${rowsC}</tbody></table></div>
+          </div>` +
+          `<div class="card">${listControls('Alle Chargen')}${batchTable(rows)}</div>`
+        );
+      }
+
+      /* ═══ VARIANT D — A's Kacheln, B's Einfachheit ════════════════════
+         Two windows, not three. The "Chargen gesamt" box becomes the first
+         tile in the same grid, so the totals and the per-Sorte breakdown are
+         one card; the table below is flat by default, which is the only
+         state in which the column sort actually owns the order.
+         ═════════════════════════════════════════════════════════════════ */
+      function variantD() {
+        const T = totals();
+        const R = sortedRollup();
+        const nUrgent = R.filter((r) => r.supply === 'now').length;
+        const nLow = R.filter((r) => r.supply === 'nospawn').length;
+        const seg = (v, c) => (v ? `<i style="width:${(v / T.bags) * 100}%;background:${c}"></i>` : '');
+        const st = (v, c, l) => `<span class="tst"><b style="color:${c}">${nf(v)}</b><i>${l}</i></span>`;
+        const totalTile = `<button class="stile stile-total${!S.filterSorte && !S.filterStage ? ' on' : ''}" data-clear="all">
+          <div class="stile-top"><span class="stile-name">Alle Sorten</span><span class="stile-kz">${R.length} Sorten</span></div>
+          <div class="stile-big"><b>${nf(T.bags)}</b><span>Beutel · ${chargen(T.nAct)}</span></div>
+          <div class="sbar sbar-lg">${seg(T.spawn, 'var(--st-spawn)')}${seg(T.inc, 'var(--st-inc)')}${seg(T.fruit, 'var(--st-fruit)')}</div>
+          <div class="tstages">${st(T.spawn, 'var(--st-spawn-t)', 'Spawn')}${st(T.inc, 'var(--st-inc-t)', 'Ink.')}${st(T.fruit, 'var(--st-fruit-t)', 'Frucht.')}</div>
+          <div class="stile-foot"><span class="fs">${T.nAll} Chargen gesamt · ${T.nAll - T.nAct} archiviert</span></div>
+        </button>`;
+
+        // Grouping stays available, but "keine" is the default — that is the
+        // state today's tab can never reach, and the one the sort needs.
+        const groupSel = `<select data-set="groupBy">
+            <option value="none"${S.groupBy === 'none' ? ' selected' : ''}>Gruppieren: keine</option>
+            <option value="sorte"${S.groupBy === 'sorte' ? ' selected' : ''}>Gruppieren: Sorte</option>
+            <option value="stage"${S.groupBy === 'stage' ? ' selected' : ''}>Gruppieren: Phase</option>
+          </select>`;
+        const rows = filtered();
+        let listCard;
+        if (S.groupBy === 'none') {
+          listCard = `<div class="card">${listControls('Alle Chargen', groupSel)}${batchTable(sortBy(rows, S.sortKey, S.sortDir, bKey))}</div>`;
+        } else {
+          const key = S.groupBy === 'sorte' ? (b) => b.kz : (b) => b.stage;
+          const label = S.groupBy === 'sorte' ? (k) => sorte(k).name : (k) => STAGE_LABEL[k];
+          const color = S.groupBy === 'sorte' ? (k) => sorte(k).color : (k) => STAGE_COLOR[k];
+          const keys =
+            S.groupBy === 'sorte'
+              ? R.map((r) => r.kz).filter((k) => rows.some((b) => key(b) === k))
+              : STAGE_ORDER.filter((k) => rows.some((b) => key(b) === k));
+          const cols = BCOLS.filter((c) => !(S.device === 'phone' && c.ph === false));
+          let body = '';
+          for (const k of keys) {
+            const items = sortBy(rows.filter((b) => key(b) === k), S.sortKey, S.sortDir, bKey);
+            const open = S.openGroups[k] !== false;
+            const qty = items.reduce((a, b) => a + b.qty, 0);
+            body +=
+              `<tr class="grp" data-group="${esc(k)}"><td colspan="${cols.length}">` +
+              `<span class="caret">${open ? '▾' : '▸'}</span>${dot(color(k))}${esc(label(k))}` +
+              `<span class="muted" style="font-weight:500;font-size:11.5px"> · ${chargen(items.length)} · ${nf(qty)} Beutel</span></td></tr>`;
+            if (open) body += items.map((b) => batchRow(b, cols)).join('');
+          }
+          if (!keys.length) body = `<tr><td colspan="${cols.length}" class="empty">Keine Chargen für diese Auswahl</td></tr>`;
+          listCard = `<div class="card">${listControls('Alle Chargen', groupSel)}<div class="tscroll"><table class="t"><thead><tr>${cols.map((c) => th(c, 'main')).join('')}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+        }
+
+        return (
+          `<div class="card">
+            <div class="card-head">
+              <div class="sec">Chargen nach Sorte</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+                ${nUrgent ? `<span class="sup sup-now">${nUrgent}× jetzt ansetzen</span>` : ''}
+                ${nLow ? `<span class="sup sup-nospawn">${nLow}× Spawn fehlt</span>` : ''}
+                ${tileSortSelect()}
+              </div>
+            </div>
+            <div class="sgrid">${totalTile}${R.map(sorteTile).join('')}</div>
+            ${tileLegend(R)}
+          </div>` + listCard
+        );
+      }
+
+      /* ── Explainers ─────────────────────────────────────────────────── */
+      const WHY = {
+        D: `<h3>Variante D — die Kacheln aus A, die Einfachheit aus B</h3>
+          <p>Zwei Fenster statt drei. Die Kachel <b>„Alle Sorten“</b> ist der alte „Chargen gesamt“-Kasten — sie steht jetzt als erste Kachel im selben Raster, also sind Gesamtzahl und Sorten-Aufschlüsselung <b>eine</b> Karte. Darunter nur noch die Tabelle.</p>
+          <ul>
+            <li><span class="tag">Kachel</span>Je Sorte: Beutel gesamt, darunter <b>beschriftet</b>, wie viele davon in Spawn, Inkubation und Fruchtung stehen. Der Balken ist die Abkürzung dazu, nicht die einzige Lesart.</li>
+            <li><span class="tag">Ampel</span>Sagt, <b>was zu tun ist</b>, und liest Spawn und Inkubation <b>getrennt</b> — es sind zwei Vorlaufzeiten: die Inkubation ist die nächste Ernte, der Spawn die übernächste. <i>Blue Oyster</i> hat 120 Beutel in der Inkubation und nichts angesetzt: heute kein Problem, in zwei Zyklen ein sicheres. Das ist „Spawn fehlt“, nicht „knapp“.</li>
+            <li><span class="tag">Farben</span>Oben umschaltbar. <b>Ruhig</b> ist der Vorschlag und gilt jetzt überall — auch für die Status-Spalte der Tabelle: die drei Phasen sind keine Kategorien, sondern eine Reihenfolge, also eine Rampe von Schiefer nach Grün statt drei Bunttöne. Der Status ist ein Punkt mit Wort statt einer gefüllten Pille. <b>Wie heute</b> zeigt zum Vergleich, was die App gerade benutzt.</li>
+            <li><span class="tag">dringend</span>Eine Sorte, hinter der nichts steht, bekommt einen <b>roten Rahmen um die ganze Kachel</b> plus einen weichen Ring. Ohne Lesen findbar — genau dafür ist er da. Der Rest der Kachel bleibt weiß, damit das Raster ruhig bleibt.</li>
+            <li><span class="tag">Legende</span>Standardmäßig <b>zugeklappt</b> — „Was bedeuten die Farben?“ öffnet sie. Die Kacheln sind der Bildschirm, die Legende die Fußnote.</li>
+            <li><span class="tag">Tabelle</span>Standard ist <b>ungruppiert</b> — nur so bestimmt die Spaltensortierung wirklich die Reihenfolge. Gruppieren nach Sorte oder Phase bleibt als Auswahl, ist aber nicht mehr aufgezwungen.</li>
+            <li><span class="tag">Handy</span>Zwei Kacheln nebeneinander, „Alle Sorten“ zuerst, dann die Liste als Karten.</li>
+          </ul>`,
+        A: `<h3>Variante A — Sorten-Kacheln</h3>
+          <p>Der Standort-Kasten („wo steht was“) fliegt raus — er zeigt dieselben Beutel nochmal, nur nach Raum gruppiert, und gehört zur Farm-Ansicht. An seiner Stelle steht die Aufschlüsselung nach Sorte.</p>
+          <ul>
+            <li><span class="tag">oben</span>„Chargen gesamt“ bleibt, die fünf Phasen werden zu <b>anklickbaren Filtern</b>.</li>
+            <li><span class="tag">mitte</span>Eine Kachel je Sorte: Beutel gesamt, ein Balken aus Spawn / Inkubation / Fruchtung, und eine Ampel. Standard-Sortierung: <b>dringlichste Sorte zuerst</b>.</li>
+            <li><span class="tag">unten</span>Die Tabelle, die du magst — unverändert, aber gefiltert durch die Kachel darüber.</li>
+            <li><span class="tag">Handy</span>Zwei Kacheln nebeneinander, dann die Liste als Karten. Substrat / Quelle / Erstellt sind am Handy ausgeblendet.</li>
+          </ul>`,
+        B: `<h3>Variante B — eine Tabelle, zwei Ebenen</h3>
+          <p>Die radikale Antwort auf „kann man oben und unten zusammenlegen“: es gibt nur noch <b>ein</b> Fenster. Die Summenzeile ganz oben ist der Kennzahlen-Streifen, die Sorten-Zeilen sind die Aufschlüsselung, die Chargen hängen darunter — alles in denselben Spalten.</p>
+          <ul>
+            <li><span class="tag">Sortierung</span>Ein Klick auf eine Spalte sortiert <b>beide Ebenen</b>. Auf „Gruppieren: keine“ wird daraus eine flache Liste, in der die Sortierung wirklich die Reihenfolge bestimmt — genau das, was heute fehlt.</li>
+            <li><span class="tag">Spalten</span>Spawn / Ink. / Frucht. sind jetzt Spalten. Damit ist der Phasen-Streifen buchstäblich dieselbe Tabelle.</li>
+            <li><span class="tag">Risiko</span>Am wenigsten vertraut, und die Detailspalten (Substrat, Quelle, Notiz) sind nur in der flachen Ansicht da.</li>
+          </ul>`,
+        C: `<h3>Variante C — Nachschub-Board</h3>
+          <p>Am direktesten auf deine Frage gebaut: <i>für welche Sorte muss ich eine neue Charge ansetzen?</i> Die Aufschlüsselung ist keine Deko, sondern eine Arbeitsliste mit Knopf.</p>
+          <ul>
+            <li><span class="tag">oben</span>Ein einziger Balken statt fünf Kacheln — die Gesamtzahl ist die Länge des Balkens.</li>
+            <li><span class="tag">mitte</span>Sortierbare Tabelle je Sorte, oben die mit dem größten Problem. „Rhythmus“ vergleicht, wie lange die letzte Charge her ist, mit deinem üblichen Abstand — beides aus den vorhandenen Daten.</li>
+            <li><span class="tag">Aktion</span><b>+ Neue Charge</b> direkt in der Zeile, mit vorbelegter Sorte.</li>
+            <li><span class="tag">unten</span>Die gewohnte Tabelle bleibt vollständig erhalten.</li>
+          </ul>`
+      };
+
+      /* ── Render + events ────────────────────────────────────────────── */
+      function render() {
+        document.getElementById('vp').className =
+          'vp pal-' + S.pal + (S.device === 'phone' ? ' vp-phone' : '');
+        const V = { A: variantA, B: variantB, C: variantC, D: variantD };
+        document.getElementById('app').innerHTML = (V[S.variant] || variantD)();
+        document.getElementById('why').innerHTML = WHY[S.variant];
+        const parts = ['Alle Chargen'];
+        if (S.filterSorte) parts.push(sorte(S.filterSorte).name);
+        if (S.filterStage) parts.push(STAGE_LABEL[S.filterStage]);
+        document.getElementById('crumb').textContent = parts.join(' › ');
+      }
+
+      document.getElementById('seg-variant').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-v]');
+        if (!b) return;
+        S.variant = b.dataset.v;
+        S.sortKey = null;
+        S.groupBy = GROUP_DEFAULT[S.variant];
+        [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
+        render();
+      });
+      document.getElementById('seg-device').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-d]');
+        if (!b) return;
+        S.device = b.dataset.d;
+        [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
+        render();
+      });
+      document.getElementById('seg-pal').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-p]');
+        if (!b) return;
+        S.pal = b.dataset.p;
+        [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
+        render();
+      });
+      document.getElementById('app').addEventListener('click', (e) => {
+        const sortTh = e.target.closest('th[data-sort]');
+        if (sortTh) return clickSort(sortTh.dataset.sort, sortTh.dataset.which);
+        const clear = e.target.closest('[data-clear]');
+        if (clear) {
+          const w = clear.dataset.clear;
+          if (w === 'sorte' || w === 'all') S.filterSorte = null;
+          if (w === 'stage' || w === 'all') S.filterStage = null;
+          return render();
+        }
+        const stage = e.target.closest('[data-stage]');
+        if (stage) {
+          S.filterStage = S.filterStage === stage.dataset.stage ? null : stage.dataset.stage;
+          if (S.filterStage && isArch(S.filterStage)) S.archive = 'all';
+          return render();
+        }
+        const sTile = e.target.closest('[data-sorte]');
+        if (sTile) {
+          S.filterSorte = S.filterSorte === sTile.dataset.sorte ? null : sTile.dataset.sorte;
+          return render();
+        }
+        if (e.target.closest('[data-legend]')) {
+          S.legendOpen = !S.legendOpen;
+          return render();
+        }
+        const grp = e.target.closest('[data-group]');
+        if (grp) {
+          const k = grp.dataset.group;
+          S.openGroups[k] = S.openGroups[k] === false;
+          return render();
+        }
+      });
+      document.getElementById('app').addEventListener('change', (e) => {
+        const el = e.target.closest('[data-set]');
+        if (!el) return;
+        S[el.dataset.set] = el.value;
+        render();
+      });
+      document.getElementById('app').addEventListener('input', (e) => {
+        const el = e.target.closest('input[data-set]');
+        if (!el) return;
+        S[el.dataset.set] = el.value;
+        const pos = el.selectionStart;
+        render();
+        const again = document.querySelector('input[data-set="q"]');
+        if (again) {
+          again.focus();
+          again.setSelectionRange(pos, pos);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
