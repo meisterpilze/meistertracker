@@ -35,6 +35,7 @@ function zeichne({ kulturen = [], sorten = [], schwellen = {} } = {}) {
     hebeFunktion('_labKey'),
     hebeFunktion('_labName'),
     hebeFunktion('strainsInProduction'),
+    hebeFunktion('_strainOfEntry'),
     hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
     hebeFunktion('renderDashLabStock'),
@@ -111,7 +112,7 @@ describe('Labor-Karte', () => {
     // Slants und Petrischalen ihr Ziel anzeigen und nie rot werden.
     const html = zeichne({ sorten: [{ ...SH, minMc: 4 }], kulturen: [kultur('MC')] });
     const mc = kachel(html, 'MC');
-    assert.match(mc, /lab-row under/, 'ein Slant von vier muss auffallen');
+    assert.match(mc, /class="lab-row[^"]*under/, 'ein Slant von vier muss auffallen');
     assert.match(mc, /\/4/, 'und die Zielzahl nennen');
   });
 
@@ -121,7 +122,7 @@ describe('Labor-Karte', () => {
       kulturen: [kultur('MC'), kultur('PD'), kultur('LC')]
     });
     for (const typ of ['MC', 'PD', 'LC']) {
-      assert.match(kachel(html, typ), /lab-row under/, typ + ' wird nicht gegen seine eigene Zahl geprüft');
+      assert.match(kachel(html, typ), /class="lab-row[^"]*under/, typ + ' wird nicht gegen seine eigene Zahl geprüft');
     }
   });
 
@@ -153,6 +154,24 @@ describe('Labor-Karte', () => {
     const html = zeichne({ sorten: [{ ...SH, minSpawnKg: 2 }] });
     assert.match(kachel(html, 'GS'), /lab\.kgUnit/, 'Körner in Kilogramm');
     assert.match(kachel(html, 'MC'), /lab\.piecesUnit/, 'Slants in Stück');
+  });
+
+  it('macht jede Sorten-Zeile zum Knopf für ihre eigene Untergrenze', () => {
+    // Die Zahl je Sorte lag nur im Pilzsorten-Formular, und der einzige Knopf
+    // auf dieser Karte setzte die betriebsweite — eine andere Zahl, aus der nie
+    // eine Tagesaufgabe entsteht. Vierzehn Sorten mal vier Typen war der Weg.
+    const html = zeichne({ sorten: [{ ...SH, minMc: 4 }], kulturen: [kultur('MC')] });
+    const mc = kachel(html, 'MC');
+    assert.match(mc, /data-action="lab-set-strain-min"/, 'die Zeile selbst setzt die Zahl');
+    assert.match(mc, /data-strain="1"/, 'und nennt dabei die Sorte, nicht nur den Typ');
+    assert.match(mc, /data-labtype="MC"/);
+  });
+
+  it('bietet keinen Knopf, wo es nichts zu setzen gibt', () => {
+    // G2G und Spritzen haben keine Spalte je Sorte, und eine Sorte ohne
+    // Pilzsorten-Zeile hat nichts, wohin die Zahl geschrieben würde.
+    const html = zeichne({ sorten: [SH], kulturen: [{ typ: 'G2G', sorte: 'Shiitake', kz: 'SH' }] });
+    assert.doesNotMatch(kachel(html, 'G2G'), /lab-set-strain-min/);
   });
 
   it('gibt jedem Knopf seinen Typ mit, statt inline zu rufen', () => {
