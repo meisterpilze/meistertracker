@@ -531,6 +531,16 @@ describe('server wiring', () => {
     assert.ok(server.includes('updaterRunning: health.running'));
   });
 
+  it('cannot be the reason the server fails to boot', () => {
+    // start() runs at module load. A throw there is not a stale DNS record, it
+    // is an application that will not come up at all — including on the LAN,
+    // where DuckDNS is irrelevant.
+    const i = server.indexOf('startDuckdnsUpdater();');
+    const around = server.slice(Math.max(0, i - 600), i + 200);
+    assert.match(around, /try \{/, 'the arming call has to be guarded');
+    assert.match(around, /continuing without it/);
+  });
+
   it('stops the loop before the shutdown drain window', () => {
     assert.ok(server.includes('duckdns.stop();'));
   });
