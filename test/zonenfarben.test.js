@@ -208,3 +208,56 @@ describe('zone colours – migration 77', () => {
     }
   });
 });
+
+describe('CSS-Variablen, die es auch gibt', () => {
+  // Die Sorten-Kacheln malten ihren Balken mit var(--st-inc) und var(--st-fruit),
+  // und diese Eigenschaften waren nirgends definiert. `background: var(--x)` ohne
+  // Ersatzwert ist "invalid at computed-value time", background-color erbt nicht
+  // — also wurde jedes Segment durchsichtig und der Balken, der der ganze Zweck
+  // der Kachel ist, war auf jeder Karte ein gleichmäßiger grauer Streifen.
+  //
+  // Kein Test konnte das sehen: die Render-Prüfung sucht nach "undefined" und
+  // "NaN" im HTML, und var(--fehlt) erzeugt weder das eine noch das andere. Die
+  // Farbe entsteht erst im Browser. Also wird hier die Quelle geprüft.
+  //
+  // Erfasst beide Schreibweisen, die app.js benutzt: var(--x) direkt im Template
+  // und über eine Variable hineingereichte Namen wie _stageSeg(v, t, '--st-inc').
+  function referenzierteTokens(src) {
+    const out = new Set();
+    for (const m of src.matchAll(/var\(\s*(--[\w-]+)/g)) out.add(m[1]);
+    for (const m of src.matchAll(/'(--[\w-]+)'/g)) out.add(m[1]);
+    return out;
+  }
+  function definierteTokens(css) {
+    const out = new Set();
+    for (const m of css.matchAll(/^\s*(--[\w-]+)\s*:/gm)) out.add(m[1]);
+    return out;
+  }
+
+  it('definiert jede Variable, die app.js benutzt', () => {
+    const benutzt = referenzierteTokens(APP);
+    const da = definierteTokens(CSS);
+    // Ein Ersatzwert — var(--x, red) — trägt sich selbst, also zählt nur, was
+    // ohne Komma dasteht.
+    const ohneErsatz = [...benutzt].filter((tk) => {
+      const mitErsatz = new RegExp('var\\(\\s*' + tk + '\\s*,').test(APP);
+      const ohne = new RegExp('var\\(\\s*' + tk + '\\s*\\)').test(APP);
+      // Über eine Variable hineingereicht (_stageSeg(v, t, '--st-inc')) taucht
+      // der Name nie in einem var(...) auf — dann zählt er in jedem Fall.
+      const alsString = new RegExp("'" + tk + "'").test(APP);
+      return ohne || alsString || !mitErsatz;
+    });
+    const fehlend = ohneErsatz.filter((tk) => !da.has(tk));
+    assert.deepEqual(fehlend, [], 'app.js malt mit CSS-Variablen, die styles.css nicht kennt: ' + fehlend.join(', '));
+  });
+
+  it('hält die Phasenfarben der Kacheln an dieselbe Lesbarkeitsgrenze', () => {
+    // Sie stehen als Zahl auf weiß, genau wie die alte Kennzahlenleiste.
+    for (const tk of ['--st-spawn', '--st-inc', '--st-fruit']) {
+      const m = CSS.match(new RegExp('^\\s*' + tk + '\\s*:\\s*(#[0-9a-fA-F]{6})', 'm'));
+      assert.ok(m, tk + ' ist nicht als Hex-Wert definiert');
+      const r = contrast(m[1], '#ffffff');
+      assert.ok(r >= 3, `${tk} ${m[1]} misst ${r.toFixed(2)}:1 auf weiß, unter der 3:1-Grenze`);
+    }
+  });
+});

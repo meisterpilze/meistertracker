@@ -63,6 +63,21 @@
      one thing — the tone that carries white text at 4.5:1. */
   --c-red-strong: #dc2626;
   --c-amber-strong: #b45309;
+  /* ── Production stage colours ─────────────────────────────────────────
+     The Chargen tiles paint their bar and their three stage figures with
+     these. They were referenced from app.js before they existed anywhere:
+     `background: var(--st-inc)` with no fallback is invalid at computed-value
+     time and background-color does not inherit, so every segment of the
+     proportion bar rendered transparent and the bar — the point of the tile —
+     was a flat grey pill on every Sorte.
+
+     Values are the muted zone palette (ZONE_SEED_COLOR in db.js), so a phase
+     looks the same whether it is a bar segment here, a badge in the Status
+     column or a dot on a rack. Grain is the slate end: it is the raw material,
+     not yet a mushroom, and it reads as the "not started" step. */
+  --st-spawn: #6b7a8c;
+  --st-inc: #4d829b;
+  --st-fruit: #438871;
   /* Semantic color palette */
   --c-red: #ef4444;
   --c-red-light: #fee2e2;

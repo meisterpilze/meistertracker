@@ -77,7 +77,12 @@ describe('leere Zonenliste', () => {
   // beschriftet — und denselben Fehler machte.
   // renderPipelineKPIs hieß die Attrappe früher; die Kennzahlenleiste ist den
   // Sorten-Kacheln gewichen, die renderStatus an genau denselben Stellen ruft.
-  const DASH_ATTRAPPEN = 'const renderSorteTiles = () => {}; const renderOverviewKPIs = () => {};';
+  // Die Standorte liegen inzwischen auf einem eigenen Reiter, und renderStatus
+  // baut sie nur noch, wenn der offen ist — die Attrappe muss also einen
+  // aktiven Reiter vortäuschen, sonst prüft der Test den Auslassungspfad.
+  const DASH_ATTRAPPEN =
+    'const renderSorteTiles = () => {}; const renderOverviewKPIs = () => {};' +
+    " document.getElementById = (id) => (id === 'sp-batch-locations' ? { classList: { contains: () => true } } : ausgabe);";
 
   it('hält die Arbeitsgang-Seite an dieselbe Regel', () => {
     const ohne = umgebung({ zones: [], datenGeladen: false });

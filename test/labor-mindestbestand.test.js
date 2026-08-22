@@ -45,6 +45,12 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     hebeKonstante('LAB_TYPES'),
     hebeKonstante('MIN_TYPES'),
     hebeKonstante('STRAIN_MIN_FIELD'),
+    // buildLabMinTasks schließt geparkte Sorten jetzt über den Schlüssel aus,
+    // nicht über den Namen — strainsInProduction() allein reichte nicht: es
+    // ergänzt nur fehlende Nullzeilen, bestehende Kulturzeilen überlebten es.
+    hebeFunktion('_spKey'),
+    hebeFunktion('sorteKey'),
+    hebeFunktion('_strainKeys'),
     hebeFunktion('strainsInProduction'),
     hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
@@ -133,6 +139,20 @@ describe('Untergrenzen je Kulturtyp', () => {
       kulturen: []
     });
     assert.deepEqual(tasks, [], 'sonst verlangt der Sommer Slants für den Herbst');
+  });
+
+  it('schweigt auch dann, wenn von der geparkten Sorte noch Kulturen dastehen', () => {
+    // Der Fall, den die Zeile darüber NICHT prüft, und deshalb der eigentliche.
+    // getLabStrainBreakdown() baut seine Zeilen aus `cultures`;
+    // strainsInProduction() ergänzt nur FEHLENDE Nullzeilen und entfernt nie
+    // etwas. Eine geparkte Sorte mit einem Restbestand behielt ihre Zeile,
+    // bekam ihre Untergrenze und meldete sich jeden Tag aufs Neue — genau die
+    // Dauerwarnung, gegen die das Programm-Kennzeichen eingeführt wurde.
+    const tasks = lauf('buildLabMinTasks()', {
+      sorten: [{ ...SH, imProgramm: false, minMc: 5 }],
+      kulturen: [slant()]
+    });
+    assert.deepEqual(tasks, [], 'ein Restbestand ist kein Grund, wieder Vorrat zu verlangen');
   });
 });
 
