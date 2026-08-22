@@ -579,7 +579,7 @@ window.LANG['pt'] = {
   // Lab
   'lab.grain': 'Inóculo de grão',
   'lab.cultures': 'Culturas',
-  'lab.logWork': 'Trabalho de laborat\u00f3rio',
+  'lab.logWork': 'Novo trabalho de laborat\u00f3rio',
   'lab.lineage': 'Linhagem',
   'lab.cultureLibrary': 'Biblioteca de culturas',
   'lab.allTypes': 'Todos os tipos',

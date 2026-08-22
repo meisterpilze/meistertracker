@@ -747,7 +747,7 @@ window.LANG['en'] = {
   // Lab
   'lab.grain': 'Grain spawn',
   'lab.cultures': 'Cultures',
-  'lab.logWork': 'Lab work',
+  'lab.logWork': 'New lab work',
   'lab.lineage': 'Lineage',
   'lab.cultureLibrary': 'Culture library',
   'lab.allTypes': 'All types',
