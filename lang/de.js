@@ -803,6 +803,10 @@ window.LANG['de'] = {
   'lab.lowStock': 'NIEDRIG',
   'lab.belowMin': '{n} aktiv \u2014 unter Minimum von {min}',
   'lab.setMinimum': 'Minimum festlegen',
+  'lab.kgUnit': 'kg',
+  'lab.piecesUnit': 'St\u00fcck',
+  'lab.noneLeft': 'Nichts mehr da',
+  'lab.stockOk': 'Bestand reicht',
   'lab.lowLabAlert': 'Niedriger Labbestand: {type}',
   'lab.gsLabel': 'K\u00f6rnerbrut',
   // Table headers - lab

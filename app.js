@@ -6716,76 +6716,100 @@ function getLabStrainBreakdown() {
   }
   return breakdown;
 }
+// Culture types in Labor. Muted the same way the zone colours were, and for the
+// same two reasons: six full-saturation hues on one card is a lot of shouting,
+// and four of the six could not be read.
+//
+// `accent` is a 3px bar, a graphical object carrying meaning, so WCAG 1.4.11
+// asks 3:1 of it. #22c55e measured 2.28:1, #f59e0b 2.15 and #06b6d4 2.43 —
+// three of six invisible against the card. All six now land on 4.18–4.22:1,
+// matched deliberately: a set where one member measures twice its neighbours
+// reads as one type shouting. The `bg`/`fg` chips are the same hues as tints,
+// matched again at ~6:1.
+//
+// The hues themselves are unchanged, so a type stays recognisably violet, blue,
+// green, amber, pink, cyan. MC/LC deliberately share their hue with the spawn
+// and fruiting zone colours — a slant and an incubation rack are not the same
+// thing, but they are the same colour language.
 const LAB_TYPE_COLORS = {
-  MC: { bg: '#f3e8ff', fg: '#6b21a8', accent: '#a855f7' },
-  PD: { bg: '#dbeafe', fg: '#1e40af', accent: '#3b82f6' },
-  LC: { bg: '#dcfce7', fg: '#166534', accent: '#22c55e' },
-  G2G: { bg: '#fef3c7', fg: '#92400e', accent: '#f59e0b' },
-  GS: { bg: '#fce4ec', fg: '#880e4f', accent: '#e91e63' },
-  SY: { bg: '#cffafe', fg: '#155e75', accent: '#06b6d4' }
+  MC: { bg: '#f0ebf4', fg: '#7241a0', accent: '#926bb6' },
+  PD: { bg: '#ebeff4', fg: '#3a598d', accent: '#5e7daf' },
+  LC: { bg: '#ebf4ee', fg: '#2a6741', accent: '#43895d' },
+  G2G: { bg: '#f4f1eb', fg: '#6f572d', accent: '#937748' },
+  GS: { bg: '#f4ebee', fg: '#913b58', accent: '#b2647e' },
+  SY: { bg: '#ebf3f4', fg: '#2c626c', accent: '#478590' }
 };
+// The lab's stock, one tile per culture type.
+//
+// Same card as the Chargen tab now — .stile, the stacked bar, the supply light,
+// the labelled figures — because it answers the same shape of question about a
+// different shelf: how much is there, of which Sorte, and is anything short. It
+// used to be its own arrangement of inline styles, so the two pages taught the
+// reader two vocabularies for one idea.
+//
+// Four of the six types carry a per-SORTE minimum (MIN_TYPES); the other two
+// are judged against the farm-wide threshold, because G2G and syringes are made
+// to order and nobody stocks them per Sorte.
 function renderDashLabStock() {
   const el = document.getElementById('dash-lab-stock');
   if (!el) return;
   if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
   const counts = getLabStockCounts();
   const breakdown = getLabStrainBreakdown();
+  // Grain is weighed, everything else is counted. One decimal on a weight, none
+  // on a tally — "3,0 Platten" reads like a measurement error.
+  const num = (type, v) => (type === 'GS' ? fmtKg(v, 1) : String(Math.round(v)));
+
   el.innerHTML =
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:10px">' +
+    '<div class="sorten-grid">' +
     LAB_TYPES.map((type) => {
       const count = counts[type] || 0;
-      const min = inventory.labThresholds[type] || 0;
-      const label = getLabLabel(type);
+      const farmMin = inventory.labThresholds[type] || 0;
       const tc = LAB_TYPE_COLORS[type];
-      const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
-      const strainTotal = strains.reduce((sum, s) => sum + s.count, 0);
-      // Grain spawn and liquid culture are judged per Sorte against that Sorte's
-      // own minimum: a farm holding 60 kg of oyster spawn and none of shiitake is
-      // not "fine on average", it is out of shiitake.
-      // Was GS||LC, so slants and petri dishes printed their target and could
-      // never go red once v79 gave them minimums of their own.
       const perStrain = MIN_TYPES.includes(type);
-      const low = perStrain
-        ? strains.some((x) => x.min > 0 && x.count < x.min)
-        : min > 0 && count < min;
-      const strainRows = strains
-        .map((s) => {
-          const pct =
-            (type === 'GS' ? strainTotal : count) > 0
-              ? Math.round((s.count / (type === 'GS' ? strainTotal : count)) * 100)
-              : 0;
-          const strainLow = perStrain && s.min > 0 && s.count < s.min;
-          const unit = type === 'GS' ? ' kg' : '';
-          const shown = Number.isInteger(s.count) ? s.count : s.count.toFixed(1);
-          const against = s.min > 0 ? '<span style="color:var(--c-text-muted);font-weight:400">/' + s.min + '</span>' : '';
-          return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-        <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
-        <span class="fs-xs" style="flex:1;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.kz || s.name)}${s.desc ? ' ' + esc(s.desc) : ''}">${esc(s.kz || s.name)}${s.desc ? ' <span class="fs-micro" style="color:var(--c-text-muted)">' + esc(s.desc) + '</span>' : ''}</span>
-        <span class="fs-xs" style="font-weight:600;color:${strainLow ? 'var(--c-red-dark)' : 'var(--c-text)'};min-width:18px;text-align:right">${shown}${against}${unit}</span>
-        <div style="width:40px;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden;flex-shrink:0"><div style="height:100%;width:${pct}%;background:${strainLow ? 'var(--c-red)' : s.color};border-radius:3px"></div></div>
-      </div>`;
+      const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
+      const total = strains.reduce((s, x) => s + x.count, 0);
+      const short = perStrain ? strains.filter((x) => x.min > 0 && x.count < x.min) : [];
+      const low = perStrain ? short.length > 0 : farmMin > 0 && count < farmMin;
+      // Nothing at all of something is a different problem from a little short
+      // of it, and the light says so — the same three words the Chargen tiles
+      // use, so a red dot means the same thing on both pages.
+      const state = !low ? 'ok' : short.some((x) => x.count === 0) || count === 0 ? 'now' : 'low';
+
+      const seg = strains
+        .filter((x) => x.count > 0)
+        .map(
+          (x) =>
+            `<i style="width:${(x.count / Math.max(total, 1)) * 100}%;background:${esc(safeColor(x.color))}" title="${esc(x.kz || x.name)}"></i>`
+        )
+        .join('');
+
+      const rows = strains
+        .map((x) => {
+          const under = perStrain && x.min > 0 && x.count < x.min;
+          const against = x.min > 0 ? `<span class="lab-row-min">/${num(type, x.min)}</span>` : '';
+          return (
+            `<span class="lab-row${under ? ' under' : ''}">` +
+            `<i class="lab-row-dot" style="background:${esc(safeColor(x.color))}"></i>` +
+            `<span class="lab-row-name" title="${esc(x.kz || x.name)}${x.desc ? ' ' + esc(x.desc) : ''}">${esc(x.kz || x.name)}</span>` +
+            `<b class="lab-row-n">${num(type, x.count)}${against}</b></span>`
+          );
         })
         .join('');
-      const emptyMsg =
-        count === 0
-          ? `<div class="fs-xs" style="color:var(--c-text-muted);font-style:italic;padding:4px 0">\u2014</div>`
-          : '';
-      return `<div style="background:var(--c-bg);border:1px solid ${low ? 'var(--c-red)' : 'var(--c-border)'};border-radius:12px;padding:14px 16px;transition:box-shadow .15s;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${low ? 'var(--c-red)' : tc.accent}"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;margin-top:2px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="fs-meta" style="font-weight:700;color:${tc.fg};background:${tc.bg};padding:2px 8px;border-radius:6px">${esc(type)}</span>
-          <span class="fs-xs" style="color:var(--c-text-sec)">${esc(label)}</span>
-        </div>
-        ${low ? '<span class="fs-floor" style="--fs-own:9px;background:var(--c-red-light);color:var(--c-red-dark);padding:1px 6px;border-radius:99px;font-weight:700">' + t('lab.lowStock') + '</span>' : ''}
-      </div>
-      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:${strains.length ? '8' : '2'}px">
-        <span style="font-size:28px;font-weight:800;color:${low ? 'var(--c-red-dark)' : 'var(--c-text)'};line-height:1">${count}</span>
-        <span class="fs-xs" style="color:var(--c-text-muted)">${min > 0 ? '/ min ' + min + (type === 'GS' ? ' kg per strain' : '') : ''}</span>
-      </div>
-      ${strains.length ? '<div style="border-top:1px solid var(--c-border);padding-top:6px">' + strainRows + (type === 'GS' ? '<div class="fs-xs" style="border-top:1px solid var(--c-border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:700;color:var(--c-text)"><span>Total</span><span>' + (Number.isInteger(strainTotal) ? strainTotal : strainTotal.toFixed(1)) + ' kg</span></div>' : '') + '</div>' : emptyMsg}
-      <button class="btn btn-sm fs-micro" onclick="setLabMin('${type}')" style="margin-top:8px;padding:2px 8px">${t('lab.setMinimum')}</button>
-    </div>`;
+
+      return (
+        `<div class="stile stile-static${state === 'now' ? ' urgent' : ''}">` +
+        `<span class="stile-top"><span class="stile-name">` +
+        `<span class="lab-chip" style="color:${tc.fg};background:${tc.bg}">${esc(type)}</span>${esc(getLabLabel(type))}` +
+        `</span></span>` +
+        `<span class="stile-big"><b>${num(type, count)}</b><span>${esc(type === 'GS' ? t('lab.kgUnit') : t('lab.piecesUnit'))}${farmMin > 0 && !perStrain ? ' · min ' + num(type, farmMin) : ''}</span></span>` +
+        (seg ? `<span class="sbar">${seg}</span>` : '') +
+        (rows ? `<span class="lab-rows">${rows}</span>` : `<span class="stile-fs lab-empty">—</span>`) +
+        `<span class="stile-foot">` +
+        `<span class="sup sup-${state}">${esc(low ? t(state === 'now' ? 'lab.noneLeft' : 'lab.lowStock') : t('lab.stockOk'))}</span>` +
+        `<button type="button" class="btn btn-sm fs-micro" data-action="lab-set-min" data-labtype="${esc(type)}">${esc(t('lab.setMinimum'))}</button>` +
+        `</span></div>`
+      );
     }).join('') +
     '</div>';
 }
@@ -22567,6 +22591,12 @@ function initEventListeners() {
   // The stored choice belongs on the control too, or a reload shows "Nicht
   // gruppieren" over a list that is grouped.
   $('batch-group-by').value = batchGroupBy;
+  // The lab stock card is rebuilt wholesale on every sync, so its buttons are
+  // delegated like the Sorten tiles' rather than carrying inline handlers.
+  $('dash-lab-stock').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="lab-set-min"]');
+    if (btn) setLabMin(btn.dataset.labtype);
+  });
   // Which Sorten are in this season's programme. Delegated: the table is
   // rebuilt on every sync, so a listener on the row would not survive.
   $('strains-body').addEventListener('change', (e) => {

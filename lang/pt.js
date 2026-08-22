@@ -634,6 +634,10 @@ window.LANG['pt'] = {
   'lab.lowStock': 'BAIXO',
   'lab.belowMin': '{n} ativo(s) \u2014 abaixo do m\u00ednimo de {min}',
   'lab.setMinimum': 'Definir m\u00ednimo',
+  'lab.kgUnit': 'kg',
+  'lab.piecesUnit': 'unidades',
+  'lab.noneLeft': 'N\u00e3o h\u00e1 mais',
+  'lab.stockOk': 'Estoque suficiente',
   'lab.lowLabAlert': 'Estoque baixo no lab: {type}',
   'lab.gsLabel': 'Gr\u00e3os de spawn',
   // Table headers - lab

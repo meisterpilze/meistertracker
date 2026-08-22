@@ -38,4 +38,38 @@ function hebe(teile, src) {
     .join('\n');
 }
 
-module.exports = { ROOT, quelle, hebe };
+// Eine benannte Funktion aus der Quelle, samt Rumpf.
+//
+// Beide Helfer standen zuletzt in drei Testdateien, wortgleich gemeint und in
+// drei Fassungen: eine passte nur auf Funktionen ohne Parameter, zwei auf
+// beliebige, und die zwei Konstanten-Fassungen unterschieden sich in der
+// Klammerklasse. Sie stehen jetzt einmal hier.
+function hebeFunktion(name, src) {
+  const s = src === undefined ? quelle() : src;
+  const m = s.match(new RegExp('^function ' + name + '\\([\\s\\S]*?\\r?\\n\\}', 'm'));
+  assert.ok(m, name + '() nicht in der Quelle gefunden — der Test muss mitgeführt werden');
+  return m[0];
+}
+
+// Eine Konstante mit Objekt- oder Array-Literal.
+//
+// Die schließende Klammer muss am Zeilenanfang stehen. Das ist nicht Kosmetik:
+// die frühere Fassung endete bei der ERSTEN Zeile, die auf `}` oder `]` endet,
+// und traf damit bei einem verschachtelten Literal ohne nachgestelltes Komma —
+//
+//     SY: { bg: '#ebf3f4', fg: '#2c626c', accent: '#478590' }
+//
+// — die innere Klammer der letzten Zeile. Herausgeschnitten wurde dann ein
+// Literal ohne Abschluss, und der Fehler fiel erst als "Unexpected token" beim
+// Zusammenbau auf, weit weg von seiner Ursache. Prettier setzt die schließende
+// Klammer eines mehrzeiligen Literals immer auf Spalte 0.
+function hebeKonstante(name, src) {
+  const s = src === undefined ? quelle() : src;
+  const einzeilig = s.match(new RegExp('^const ' + name + ' = [[{].*[\\]}];?$', 'm'));
+  if (einzeilig) return einzeilig[0];
+  const m = s.match(new RegExp('^const ' + name + ' = [[{][\\s\\S]*?\\r?\\n[\\]}];?$', 'm'));
+  assert.ok(m, name + ' nicht in der Quelle gefunden — der Test muss mitgeführt werden');
+  return m[0];
+}
+
+module.exports = { ROOT, quelle, hebe, hebeFunktion, hebeKonstante };
