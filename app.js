@@ -9647,10 +9647,16 @@ function paintDuckdnsBanner(banner, s) {
     : '';
   const why = h.lastError ? note(esc(t('duckdns.lastError', { error: h.lastError }))) : '';
   const minutes = h.ageMs == null ? null : Math.round(h.ageMs / 60000);
+  // The out-of-process fallback keeps the record alive while this server's own
+  // updater is down, and that is worth saying next to the red rather than
+  // instead of it: the record being fine does not make a dead updater fine.
+  const fbMin = s.fallbackLast ? Math.round((Date.now() - Date.parse(s.fallbackLast)) / 60000) : null;
+  const covering =
+    fbMin != null && fbMin < 30 ? note(esc(t('duckdns.fallbackCovering', { min: fbMin }))) : '';
 
   if (!h.running) {
     red();
-    banner.innerHTML = head + since + note(esc(t('duckdns.updaterStopped'))) + why;
+    banner.innerHTML = head + since + note(esc(t('duckdns.updaterStopped'))) + why + covering;
     return;
   }
   if (h.conflict) {
@@ -9661,7 +9667,7 @@ function paintDuckdnsBanner(banner, s) {
   if (h.stale) {
     red();
     const msg = minutes == null ? t('duckdns.noUpdateYet') : t('duckdns.stale', { min: minutes });
-    banner.innerHTML = head + since + note(esc(msg)) + why;
+    banner.innerHTML = head + since + note(esc(msg)) + why + covering;
     return;
   }
   if (!s.lastIp) {

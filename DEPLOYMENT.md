@@ -229,6 +229,100 @@ The app has built-in DuckDNS dynamic DNS and Let's Encrypt certificate managemen
 
 That's it — no Nginx, no Certbot, no system-level services beyond what you've already set up.
 
+### The gap the server cannot cover itself (recommended)
+
+The server keeps the DuckDNS record current while it runs, retries when an
+update fails, and checks against the authoritative nameservers that the record
+it wrote is the record being served.
+
+None of that happens while the server is **down**. A failed deploy, a reboot
+where PM2 never came back, a crash nobody saw — the address changes anyway, and
+the name goes on pointing at wherever the line used to be. By the time somebody
+starts the server again, the address it advertises belongs to somebody else. The
+symptom is a server that is unreachable for a reason unrelated to whether it is
+running.
+
+`scripts/duckdns-fallback.js` closes that. It runs from the system scheduler
+rather than from the server, so it is still there when the server is not.
+
+**It does not double the updates.** The server records the time of each of
+*its own* successful updates in one column; the fallback reads that column,
+never writes it, and records itself in another. It stands down while the
+server's column is fresh, without opening a socket, and acts only once that
+column is older than fifteen minutes — long enough that a server merely working
+through its retry backoff is left alone rather than raced.
+
+Keeping the two columns apart is what makes the admin banner still trustworthy:
+a server whose own updater has died goes red even while the fallback is holding
+the record up, and the banner says both.
+
+**Linux (systemd):** start the server once first — the unit runs as whoever
+owns `meistertracker.db`, and the installer refuses rather than guessing.
+
+```bash
+sudo bash scripts/install-duckdns-fallback.sh
+```
+
+That installs and starts `meistertracker-duckdns.timer` — every five minutes,
+and two minutes after boot. Check it took:
+
+```bash
+systemctl list-timers meistertracker-duckdns.timer
+```
+
+Prove it works without waiting for a real outage (`--force` skips the
+stand-down check):
+
+```bash
+sudo -u <the-user-that-owns-the-db> node scripts/duckdns-fallback.js --force
+```
+
+Read what it has been doing:
+
+```bash
+journalctl -u meistertracker-duckdns.service --since today
+```
+
+Remove it again with `sudo bash scripts/install-duckdns-fallback.sh --uninstall`.
+
+`update_server.sh` checks after each deploy whether the timer is there, and
+prints the command if it is not — but only on a machine where DuckDNS is
+actually configured and systemd is present. It never installs anything itself:
+it runs as the application user, and writing to `/etc/systemd/system` needs
+root. This is the same shape as `pm2 startup` above, for the same reason.
+
+**Windows (Task Scheduler):** double-click `install-duckdns-fallback.bat` and
+answer the UAC prompt. That is the whole installation — the script asks Windows
+for administrator rights itself, so it does not matter which shell you start it
+from.
+
+Administrator is needed to *register* the task and for nothing else: a task
+registered by an ordinary user only runs while that user is signed in, which
+misses the case this exists for — the machine rebooted and nobody logged in.
+Running without a session needs S4U, and registering S4U needs elevation. The
+task is registered `-RunLevel Limited`, so the recurring job itself runs
+unprivileged; it reads a database file and makes one HTTPS request.
+
+This is separate from `install-autostart.ps1` and does not replace it: that one
+starts the server, this one covers the times it is not started. Check with
+`Get-ScheduledTaskInfo -TaskName MeisterTrackerDuckDNS` — last result `0` is
+good. Remove it with `install-duckdns-fallback.bat -Uninstall`.
+
+> **Both installers refuse to run from a git worktree,** and so does the script
+> itself. A worktree usually carries a copy of the same token, and a timer
+> inside one would quietly fight the real instance over the same record.
+
+**How you tell it is working:** Settings → DuckDNS. The banner goes red when
+this server's own updater has stopped succeeding, when it is not running, or
+when something else keeps overwriting the record — and it says which. When the
+fallback is carrying the record it says that too, *underneath* the red: the name
+still resolves, and the in-process updater still needs looking at.
+
+Green means nothing is currently wrong that this server can see. It is not a
+positive confirmation from the nameservers on its own — that check runs after a
+change and on a slow rota, and the banner adds a line saying so when it has
+actually run.
+
 ## 7. Path B — Nginx Reverse Proxy + Certbot (alternative)
 
 Use this path **only if** you need:
