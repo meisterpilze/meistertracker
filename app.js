@@ -2940,7 +2940,7 @@ function _stageNum(v, varName, label) {
 // is jars and sits on the footer line instead — see the note on sorteRollup().
 function _sorteTileBody(r) {
   return (
-    `<span class="stile-big"><b>${r.bags}</b><span>${esc(t('batch.bagsNBatches', { n: r.nBatches }))}</span></span>` +
+    `<span class="stile-big"><b>${r.bags}</b><span>${esc(tp('batch.bagsNBatches', r.nBatches))}</span></span>` +
     `<span class="sbar">${_stageSeg(r.incubation, r.bags, '--st-inc')}${_stageSeg(r.fruiting, r.bags, '--st-fruit')}</span>` +
     `<span class="tstages">${_stageNum(r.grain, '--st-spawn', t('batch.grainJars'))}${_stageNum(r.incubation, '--st-inc', t('stage.incubation'))}${_stageNum(r.fruiting, '--st-fruit', t('stage.fruiting'))}</span>`
   );

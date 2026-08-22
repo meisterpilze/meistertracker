@@ -21,6 +21,7 @@
 // floor fails here instead of on somebody's screen.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const { contrast } = require('./helpers/kontrast');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -29,20 +30,6 @@ const db = require('../db.js');
 const ROOT = path.join(__dirname, '..');
 const APP = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
-
-function relLum(hex) {
-  const c = hex.replace('#', '');
-  const ch = [0, 2, 4].map((i) => {
-    const x = parseInt(c.substr(i, 2), 16) / 255;
-    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-function contrast(a, b) {
-  const l1 = relLum(a);
-  const l2 = relLum(b);
-  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-}
 
 /** ZONE_ROLE_COLOR out of app.js, which has no module boundary to import from. */
 function appRoleColors() {
