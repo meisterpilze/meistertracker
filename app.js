@@ -1139,6 +1139,10 @@ function openStab(page, sub) {
     renderSorteTiles();
     renderBatches();
   }
+  // Painted on arrival rather than on every sync: renderStatus() walks the whole
+  // scan log once per rack and once per zone, and this panel is display:none
+  // until somebody asks for it.
+  if (page === 'batch' && sub === 'locations') renderStatus();
   if (page === 'batch' && sub === 'new') {
     _fillNbProducts();
     if (!_nbDefaultsApplied) {
@@ -2701,6 +2705,63 @@ function isBatchOverdue(b, now) {
 // Both live here now. The first tile is the old total; the rest are one tile
 // per Sorte, and every number on all of them is bags.
 
+// ─── SORTE IDENTITY ──────────────────────────────────────────
+// One key for a Sorte, used by the rollup, the tile filter, the grouping and
+// every programme lookup.
+//
+// `b.species` is NOT it, and keying on it was one bug wearing seven faces:
+// createBatch (and db.js insertBatch) write "Name (KÜRZEL)" while
+// createGrainBatch writes "Name", so the SAME Sorte reaches this code under two
+// spellings. Grain never joined its blocks, the programme flag never matched
+// anything, and buildSupplyTasks() returned an empty list on real data.
+//
+// Batches carry strain_id and db.js resolves strainName from it, so the id is
+// the key wherever it exists. _spKey is the fallback for rows that predate
+// strain_id: it is the normalisation spColor has always used, and stripping the
+// " (KZ)" suffix is exactly what it was written for.
+function sorteKey(rec) {
+  if (rec && rec.strainId) return 'id:' + rec.strainId;
+  return 'n:' + _spKey((rec && (rec.strainName || rec.species || rec.name)) || '');
+}
+// A Sorte row may be reached by either key — id for batches that carry one,
+// name for the older ones — so a lookup table has to answer to both.
+function _strainKeys(ms) {
+  return ['id:' + ms.id, 'n:' + _spKey(ms.name || '')];
+}
+// The Pilzsorten row behind a sorteKey(), for the buttons that have to open a
+// form for it. Answers to both key forms, exactly as the programme map does.
+function _strainByKey(key) {
+  if (!key) return null;
+  for (const ms of mushroomStrains || []) if (_strainKeys(ms).includes(key)) return ms;
+  return null;
+}
+// Choose a type in the Laborarbeit quick dialog.
+//
+// The picker spells grain spawn KB where MIN_TYPES spells it GS; without the
+// translation the membership check below silently fails and the dialog opens on
+// whatever was selected last — a "Körnerbrut anlegen" button that registers a
+// slant. Setting .value in script does not fire the select's onchange either,
+// and that handler is what refills the parent list, so it is called directly.
+function _msqPickType(type) {
+  const lt = document.getElementById('ms-q-labtype');
+  const want = type === 'GS' ? 'KB' : type;
+  if (!lt || !want || ![...lt.options].some((o) => o.value === want)) return;
+  lt.value = want;
+  msQuickLabTypeChanged();
+}
+
+// What to print. The resolved strain name when there is one; otherwise the
+// species with its " (KZ)" suffix stripped, so the card never shows one Sorte
+// under two labels.
+function sorteName(b) {
+  const n = (b.strainName || '').trim();
+  if (n) return n;
+  const s = String(b.species || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  return s || t('batch.noSorte');
+}
+
 // Bags of one batch, bucketed by production stage. Same source as the status
 // badge and the old strip — getStatus().c is the per-zone count derived from
 // the last scan per bag — so the tiles cannot disagree with the row beneath
@@ -2751,43 +2812,62 @@ function _stageBagsOf(b) {
 // number would need a target per Sorte or consumption from the order side;
 // neither exists, so it is not guessed at.
 const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3, off: 4 };
+// How much grain of one batch is on the shelf, in KILOGRAMS.
+//
+// This used to read getStatus().c, i.e. jars that have a scan position — and
+// createGrainBatch writes no scan entries at all, so grain made this morning
+// counted as zero and the tile reported "Körner fehlen" over a full shelf.
+// Worse, it counted JARS while the Labor card and min_spawn_kg are kilograms,
+// so the two screens disagreed about the same Sorte in both value and unit.
+//
+// This is now the identical computation getLabStrainBreakdown() uses for GS,
+// which is what makes the tile, the Labor card and the minimum agree by
+// construction rather than by coincidence.
+function _grainKgOf(b) {
+  const { status } = getStatus(b.batchId);
+  if (isArchivedStatus(status)) return 0;
+  if (b.bagWeights && Object.keys(b.bagWeights).length) {
+    return Object.values(b.bagWeights).reduce((s, w) => s + (w || 1), 0);
+  }
+  return (b.qty || 0) * (b.bagKg || 1);
+}
 function sorteRollup() {
   const bySorte = new Map();
   for (const b of batches) {
-    const name = (b.species || '').trim() || t('batch.noSorte');
-    let r = bySorte.get(name);
+    const key = sorteKey(b);
+    let r = bySorte.get(key);
     if (!r) {
       r = {
-        name,
+        key,
+        name: sorteName(b),
         kuerzel: '',
-        grain: 0, // jars, from grain batches — a different unit, kept apart
+        grain: 0, // kilograms of grain spawn — a different unit, kept apart
         incubation: 0,
         fruiting: 0,
-        contaminated: 0,
         nBatches: 0, // block batches with bags still on the floor
         nAll: 0, // block batches, live and finished — what the table below lists
         lastDays: null,
         nextDue: null
       };
-      bySorte.set(name, r);
+      bySorte.set(key, r);
     }
-    if (!r.kuerzel && b.strainId) {
-      const ms = mushroomStrains.find((m) => m.id === b.strainId);
-      if (ms) r.kuerzel = ms.kuerzel;
-    }
-    const st = _stageBagsOf(b);
-    // Grain contributes one thing and one thing only: how many jars are ready
-    // to make the next blocks from. It is not a batch on this page and not a
-    // bag in these totals.
+    if (!r.kuerzel) r.kuerzel = (b.strainKuerzel || '').trim();
+    // Grain contributes one thing and one thing only: how much is ready to make
+    // the next blocks from. It is not a batch on this page and not a bag in
+    // these totals.
     if (b.batchType === 'grain') {
-      r.grain += st.spawn;
+      r.grain += _grainKgOf(b);
       continue;
     }
+    const st = _stageBagsOf(b);
     r.nAll++;
-    if (r.lastDays == null || b.days < r.lastDays) r.lastDays = b.days;
+    // Age, not recipe length. b.days is the planned incubation duration — the
+    // number the table prints as "14d" — so reading it here printed a constant
+    // that never moved, under a label saying "last one N days ago".
+    const age = Math.max(0, Math.round((Date.now() - new Date(b.created)) / 864e5));
+    if (Number.isFinite(age) && (r.lastDays == null || age < r.lastDays)) r.lastDays = age;
     r.incubation += st.incubation;
     r.fruiting += st.fruiting;
-    r.contaminated += st.contaminated;
     if (st.incubation + st.fruiting > 0) {
       r.nBatches++;
       // The next batch due to reach fruiting — only the ones not already there.
@@ -2795,16 +2875,19 @@ function sorteRollup() {
       if (st.fruiting === 0 && (r.nextDue == null || due < r.nextDue)) r.nextDue = due;
     }
   }
-  // Is the farm growing this one at the moment? A Sorte with no row in
-  // Pilzsorten is treated as in the programme: it is being grown, somebody just
-  // never wrote it down, and going quiet about it would hide real work.
-  const programme = new Map(
-    mushroomStrains.map((m) => [(m.name || '').trim().toLowerCase(), m.imProgramm !== false])
-  );
+  // Is the farm growing this one at the moment? Keyed by BOTH of a strain's
+  // keys, because a batch reaches the rollup under its id and an older one
+  // under its name. A Sorte with no row in Pilzsorten at all is treated as in
+  // the programme — it is being grown, somebody just never wrote it down, and
+  // going quiet about it would hide real work — but `known` records which case
+  // it was, so a caller that needs the stricter reading can have it.
+  const programme = new Map();
+  for (const m of mushroomStrains) for (const k of _strainKeys(m)) programme.set(k, m.imProgramm !== false);
   const out = [...bySorte.values()];
   for (const r of out) {
     if (!r.kuerzel) r.kuerzel = abbrev(r.name);
-    const p = programme.get(r.name.trim().toLowerCase());
+    const p = programme.get(r.key);
+    r.known = p !== undefined;
     r.imProgramm = p === undefined ? true : p;
     // Blocks only — the same unit as every other number on the tile.
     r.bags = r.incubation + r.fruiting;
@@ -2866,7 +2949,9 @@ function _sorteTileBody(r) {
 function renderSorteTiles() {
   const el = document.getElementById('batch-sorten');
   if (!el) return;
-  const rows = _sortSorten(sorteRollup().filter((r) => r.nAll > 0));
+  // nAll counts block batches only, so filtering on it alone dropped exactly
+  // the case the rollup comment promises to show: grain made, no blocks yet.
+  const rows = _sortSorten(sorteRollup().filter((r) => r.nAll > 0 || r.grain > 0));
   if (!rows.length) {
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
     return;
@@ -2906,7 +2991,7 @@ function renderSorteTiles() {
             : '';
       return (
         `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}${r.imProgramm ? '' : ' stile-off'}"` +
-        ` data-action="sorte-tile" data-sorte="${esc(r.name)}"` +
+        ` data-action="sorte-tile" data-sorte="${esc(r.key)}"` +
         ` title="${esc(r.name + ' — ' + t('batch.supply.' + r.supply + 'Why'))}">` +
         `<span class="stile-top"><span class="stile-name">${spDot(r.name)}${esc(r.name)}</span>` +
         `<span class="stile-kz">${esc(r.kuerzel)}</span></span>` +
@@ -4008,6 +4093,16 @@ function renderStatus() {
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
   const el = document.getElementById('dash-locations');
   if (!el) return;
+  // The room view moved to its own sub-tab, and rebuilding it while that tab is
+  // closed is pure waste: getRackBags/getZoneBags walk the entire scan log, and
+  // this function calls them about thirty times. The Sorten tiles and the
+  // overview KPIs still have to run, so only the rack markup is skipped.
+  const panel = document.getElementById('sp-batch-locations');
+  if (panel && !panel.classList.contains('active')) {
+    renderSorteTiles();
+    renderOverviewKPIs();
+    return;
+  }
   if (!zones.length) {
     // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
@@ -5213,22 +5308,23 @@ function suggestWeekRhythm() {
 // by definition, so it would report the same gap every day forever — and a
 // warning that is always on drags the real ones down with it.
 function buildSupplyTasks() {
-  const inProgramme = new Set(
-    mushroomStrains.filter((m) => m.imProgramm !== false).map((m) => (m.name || '').trim().toLowerCase())
-  );
   const out = [];
   for (const r of sorteRollup()) {
     if (r.supply !== 'now' && r.supply !== 'nospawn') continue;
-    // A Sorte with no row in Pilzsorten at all is left out rather than assumed
-    // in: the programme is the farm's own statement about what it grows, and
-    // guessing on its behalf is what this flag exists to stop.
-    if (!inProgramme.has(r.name.trim().toLowerCase())) continue;
+    // The rollup already resolved this against the programme, by key. Rebuilding
+    // the same judgement from names here is what made this function return an
+    // empty list on real data: a block batch's name carries a " (KZ)" suffix the
+    // strain row does not.
+    //
+    // A Sorte with no Pilzsorten row is left out rather than assumed in. The
+    // tile may show it — an observation can err towards telling you something —
+    // but a task is an instruction, and "nothing said otherwise" is not enough
+    // to issue one.
+    if (!r.imProgramm || !r.known) continue;
     out.push({
+      key: r.key,
       name: r.name,
       supply: r.supply,
-      grain: r.grain,
-      incubation: r.incubation,
-      fruiting: r.fruiting,
       // What to make, in the order the chain runs: no grain means grain first.
       taskAction: r.grain === 0 ? 'make-grain' : 'make-blocks',
       detail: t(r.supply === 'now' ? 'todo.supplyNow' : 'todo.supplyNoSpawn', { n: r.fruiting })
@@ -5251,9 +5347,19 @@ function buildSupplyTasks() {
 // parked for the summer stops asking for slants it will not need until autumn.
 function buildLabMinTasks() {
   const breakdown = getLabStrainBreakdown();
+  // strainsInProduction() only ADDS missing zero rows; rows already built from
+  // the cultures loop survive it untouched. So a Sorte parked for the summer
+  // with one slant left kept raising a task every day forever — the exact
+  // always-on warning the programme flag exists to prevent. The exclusion has
+  // to be applied here, where every row is in hand.
+  const parked = new Set();
+  for (const m of mushroomStrains || []) {
+    if (m.imProgramm === false) for (const k of _strainKeys(m)) parked.add(k);
+  }
   const out = [];
   for (const type of MIN_TYPES) {
     for (const entry of Object.values(breakdown[type] || {})) {
+      if (parked.has(sorteKey({ strainName: entry.name, species: entry.name }))) continue;
       const min = entry.min || 0;
       // No minimum set is not the same as a minimum of zero: it means nobody
       // has said what this Sorte needs, and guessing would invent work.
@@ -5438,7 +5544,12 @@ function todayProgress(todayItems) {
     if (!isNaN(dt) && dt >= midnight) done++;
   }
   for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
-  return { done, total: done + todayItems.length };
+  // Supply and lab-floor rows are derived from stock levels: they clear when
+  // the stock changes, never by being ticked, and counting them in the
+  // denominator made a finished day read 5/8. They are work, but they are not
+  // work this bar can measure.
+  const countable = todayItems.filter((it) => it.kind !== 'supply' && it.kind !== 'labmin');
+  return { done, total: done + countable.length };
 }
 // The editor works on a draft rather than straight off the DOM. Changing a
 // theme has to redraw the row — a free day carries no target — and redrawing
@@ -6325,6 +6436,9 @@ function goToBatchesAttention(key) {
   const preset = BATCH_ATTENTION_PRESETS[key];
   if (!preset) return;
   batchAttentionFilter = { pred: preset.pred, label: t(preset.labelKey) };
+  // A Sorte tile left armed would narrow the list under a banner claiming to
+  // show every overdue batch.
+  batchSorteFilter = null;
   const input = document.getElementById('batch-q');
   if (input) input.value = '';
   go('batch', 'n-batch');
@@ -6360,6 +6474,11 @@ function renderBatchAttentionBanner() {
 // Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
 function goToBatch(batchId) {
   batchAttentionFilter = null;
+  // The archive filter is deliberately bypassed when a query is present, but
+  // the Sorte filter is not — so a tile left armed on one Sorte swallowed every
+  // deep link to a batch of another, and the caller landed on "Keine Treffer"
+  // with nothing on screen naming the filter that did it.
+  batchSorteFilter = null;
   const input = document.getElementById('batch-q');
   if (input) input.value = batchId;
   go('batch', 'n-batch');
@@ -6623,7 +6742,9 @@ function renderDashLabStock() {
       // Grain spawn and liquid culture are judged per Sorte against that Sorte's
       // own minimum: a farm holding 60 kg of oyster spawn and none of shiitake is
       // not "fine on average", it is out of shiitake.
-      const perStrain = type === 'GS' || type === 'LC';
+      // Was GS||LC, so slants and petri dishes printed their target and could
+      // never go red once v79 gave them minimums of their own.
+      const perStrain = MIN_TYPES.includes(type);
       const low = perStrain
         ? strains.some((x) => x.min > 0 && x.count < x.min)
         : min > 0 && count < min;
@@ -8874,6 +8995,7 @@ function _groupBatchRows(rows, mode) {
   const bySorte = mode === 'sorte';
   const groups = {};
   const keyOf = (r) => (bySorte ? 'sorte:' + (r.sorte || '—') : _batchGroupKey(r.status));
+  const labelOf = new Map(rows.map((r) => ['sorte:' + (r.sorte || '—'), r.sorteName || '—']));
   for (const r of rows) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
   // By stage: the pipeline order, then anything unexpected rather than dropping
   // it — a row nobody planned for must still be reachable. By Sorte: the order
@@ -8887,7 +9009,7 @@ function _groupBatchRows(rows, mode) {
   let out = '';
   for (const k of keys) {
     const closed = !!_batchGroupClosed[k];
-    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : bySorte ? k.slice(6) : k;
+    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : bySorte ? labelOf.get(k) || k.slice(6) : k;
     out +=
       '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
       '<button type="button" class="fs-meta" data-action="batch-group" data-key="' +
@@ -8949,8 +9071,11 @@ function batchRowHtml(b) {
       return {
         status,
         // Carried so _groupBatchRows() can bucket by Sorte without going back
-        // to `batches` for something the caller already had in hand.
-        sorte: b.species,
+        // to `batches` for something the caller already had in hand. The key
+        // groups, the name labels — grouping on the raw species split one
+        // Sorte in two wherever a batch carried the " (KZ)" suffix.
+        sorte: sorteKey(b),
+        sorteName: sorteName(b),
         html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id fs-micro" style="font-family:monospace"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(b.created)}</td><td class="fs-micro" data-mlabel="${esc(t('th.due'))}" style="color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
       };
 }
@@ -9013,7 +9138,7 @@ function renderBatches() {
     if (!matchesQ) return false;
     // Set by a Sorte tile. Not bypassed by a search: the two narrow together,
     // which is what "show me BO-... inside Blue Oyster" has to mean.
-    if (batchSorteFilter && (b.species || '') !== batchSorteFilter) return false;
+    if (batchSorteFilter && sorteKey(b) !== batchSorteFilter) return false;
     if (batchAttentionFilter && !batchAttentionFilter.pred(b)) return false;
     // Skip archive filter when searching — explicit lookup wins over the toggle.
     if (!q && archiveFilter !== 'all') {
@@ -17213,6 +17338,10 @@ function armScanAction(val) {
       CONTAM: t('scanFb.actionContam')
     }[val]
   );
+  // Ten places assign scan.action and only two used to refresh this, so the
+  // button could sit lit while ADD was armed — and the next bag scanned got
+  // added to a location instead of reported contaminated.
+  updateCamContamBtn();
 }
 // Arm CONTAM, or stand down if it is already armed. The camera stays open
 // either way: a worker walking a rack reports several bags in a row.
@@ -22314,36 +22443,29 @@ function initEventListeners() {
     // as a supply row asking for grain. The three culture types open the
     // culture form with the type already chosen.
     if (action === 'labmin-make') {
-      const name = (el.dataset.sorte || '').trim().toLowerCase();
-      const ms = mushroomStrains.find((m) => (m.name || '').trim().toLowerCase() === name);
+      const ms = _strainByKey(el.dataset.sorte);
       if (!ms) {
         setFb('err', t('todo.supplyNoSorte'));
         return;
       }
       msQuickLabor(ms.id);
-      // The dialog carries a type picker; the row already knows which one is
-      // short, so answer it rather than making the worker pick it again.
-      const lt = document.getElementById('ms-q-labtype');
-      if (lt && el.dataset.labtype && [...lt.options].some((o) => o.value === el.dataset.labtype)) {
-        lt.value = el.dataset.labtype;
-        // The select's own onchange, called directly. Setting .value in script
-        // does not fire it, and the handler is what refills the parent list —
-        // without it the dialog would offer parents for the previous type.
-        msQuickLabTypeChanged();
-      }
+      // The row already knows which type is short, so answer the dialog's
+      // picker rather than making the worker pick it again.
+      _msqPickType(el.dataset.labtype);
       return;
     }
     if (action === 'supply-make-grain' || action === 'supply-make-batch') {
-      const name = (el.dataset.sorte || '').trim().toLowerCase();
-      const ms = mushroomStrains.find((m) => (m.name || '').trim().toLowerCase() === name);
+      const ms = _strainByKey(el.dataset.sorte);
       if (!ms) {
         setFb('err', t('todo.supplyNoSorte'));
         return;
       }
       // msQuickCharge() already says so itself when the Sorte carries no
       // recipe, so there is nothing to check here.
-      if (action === 'supply-make-grain') msQuickLabor(ms.id);
-      else msQuickCharge(ms.id);
+      if (action === 'supply-make-grain') {
+        msQuickLabor(ms.id);
+        _msqPickType('KB');
+      } else msQuickCharge(ms.id);
       return;
     }
     const batch = el.dataset.batch;
@@ -22432,6 +22554,9 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
+  // Was added to the markup and never wired, so the room view — the only place
+  // bags can be selected and moved in bulk — was unreachable by tapping.
+  $('st-batch-locations').addEventListener('click', () => openStab('batch', 'locations'));
   $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
