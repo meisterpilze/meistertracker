@@ -1,0 +1,90 @@
+{
+  "_": "Findings that are open today, each with a reason and the package that closes it. The run is green on today's state and every package takes lines out; a line that stops matching is reported as removable, so this file shrinks instead of growing. Anything no line covers is new and counts. This is the tracker's half of a pair -- the shop has neubau/theme-pruefung/mobil/schwellen.json in the private repo.",
+  "_bands": "`from` and `to` mean WHOLLY inside that band. A line written for 769 and up does not cover a finding that starts at 320: that would make the ratchet a blanket rather than a line.",
+  "_broad_on_purpose": "Some lines below cover a whole band on a whole axis rather than naming elements one by one, and that is a decision, not laziness. 'Every fine-pointer overflow between 320 and 440px' is 94 findings across all twelve pages, and they are not 94 decisions: the app has no narrow-window layout at all down there. Ninety-four lines would pretend otherwise, would need editing every time a label changed, and would still all disappear on the same day. The cost is real and stated here: while such a line stands, a NEW overflow inside its band is not flagged. Each one names the package that removes it.",
+  "_2026_08_21_static": "First run of the automatic stand over index.html's own markup. Two of its three findings were artifacts of measuring without app.js and were fixed in the stand rather than ratcheted: the fourteen settings pills (hidden by body.admin-mode, which app.js:1026 always sets on that page) and #mcp-save-btn (12px because its label comes from the dictionary at runtime).",
+  "_2026_08_21_app": "First run of --app, and the first time anything measured this app with its own data in it. The stand's own first attempt got the biggest number WRONG and it is worth writing down why. It swept the widths inside a page, so every page was opened at 1920px and measured at 320, and it reported eleven pages rendering at 53 to 90 percent on a phone. Opened at 320 the dashboard renders at 89 percent, not 53. The 53 was real but it belonged to a different situation, and the file now keeps the two apart: ZOOMED OUT is what a phone sees when it opens the page, AFTER A JUMP is what happens when the window changes size in one step and nothing re-renders. The second one is Julian's split screen, and it is the larger of the two.",
+  "ratchet": [
+    {
+      "kind": "widened",
+      "pointer": "coarse",
+      "at": "n-dash",
+      "from": 320,
+      "to": 340,
+      "mode": "app",
+      "package": "P3",
+      "reason": "Opened on a 320px phone the dashboard is genuinely 360px wide, so the phone renders it at 89 percent. The widest thing on it is the period toggle (Diese Woche / Diesen Monat / Dieses Jahr) at 344px, which is also the OVERFLOW line below: one cause, two symptoms, depending on whether the meta viewport applies."
+    },
+    {
+      "kind": "widened",
+      "pointer": "coarse",
+      "at": "n-lab",
+      "from": 769,
+      "to": 860,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The lab page is 864px wide between 769 and 860px, so a tablet in that band renders it at 89 percent. 769 is where the sidebar comes back and takes its width off the content, which is exactly the band nobody measured."
+    },
+    {
+      "kind": "over",
+      "at": "bn-cal",
+      "to": 320,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The bottom navigation's Kalender entry hangs 14px past the right edge at exactly 320px, the narrowest phone still sold, on both pointer axes. Five buttons and one of them does not fit."
+    },
+    {
+      "kind": "over",
+      "pointer": "fine",
+      "at": "p-dash",
+      "from": 320,
+      "to": 340,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The dashboard's period toggle and its 'Dieses Jahr' button hang 17 to 40px past the edge below 360px with a mouse. Three pills in a row that do not wrap. Same cause as the ZOOMED OUT line for n-dash above; with a mouse the meta viewport does not apply, so it overflows instead of shrinking."
+    },
+    {
+      "kind": "over",
+      "pointer": "fine",
+      "at": "st-lab-contam",
+      "from": 769,
+      "to": 800,
+      "mode": "app",
+      "package": "P3",
+      "reason": "The lab's Kontamination tab hangs up to 33px past the edge between 769 and 800px. Same band and same cause as the lab's ZOOMED OUT line: at 769 the sidebar returns and the content column loses its width without the tab strip noticing."
+    }
+  ],
+  "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both.",
+  "_assumptions": "Not findings: decisions taken WITHOUT the answer that should have decided them. They sit here so the work can go on without the answer being quietly forgotten, and each says who was asked and when it goes.",
+  "assumptions": [
+    {
+      "id": "chargentabelle-spalten",
+      "asked": "Jonas, point 61 in neubau/FUER-JONAS.md (private repo), 2026-08-21",
+      "package": "P5",
+      "assumed": [
+        "batchId",
+        "species",
+        "qty",
+        "due",
+        "status",
+        "actions"
+      ],
+      "folded": [
+        "strain",
+        "inc",
+        "substrate",
+        "source",
+        "created",
+        "notes"
+      ],
+      "why": "The twelve columns of the Chargen table need 728px in the header row alone, and at a 769px window there are 439px of content width. Which six somebody actually needs in passing is known only by the person who works with it, and no stylesheet can decide it. Until the answer arrives P5 keeps the six above visible and folds the other six into the expandable part of the card. Written down here rather than left in a commit message, because an assumption nobody can find is indistinguishable from a decision nobody made.",
+      "goes_when": "Jonas answers point 61, and the line is then either confirmed or replaced by his list."
+    },
+    {
+      "topic": "AFTER A JUMP",
+      "status": "zurueckgezogen 2026-08-22",
+      "note": "Der Sprungbefund war ein Messfehler des Messstands, nicht ein Fehler der Anwendung. Gemessen wurde unmittelbar nach setViewport, und der Layout-Viewport laeuft danach erst ueber rund 100 bis 200 ms ein: Uebersicht 600, 583, 547, 502, 390, 360; Kalender und Labor entsprechend auf 320. Mit einer Ruhebedingung von drei gleichen Frames ist die Klasse in vier aufeinanderfolgenden Laeufen 0 offen, ohne sie schwankte sie zwischen 11 und 20. Was bleibt, ist ZOOMED OUT: zwei Seiten sind schon beim Oeffnen breiter als das Telefon."
+    }
+  ],
+  "_2026_08_22_p1": "Package P1 closed every touch line. The desktop half of the token layer said `--tap: auto` and `--tap-min: 0px`, which meant no floor at all on a fine pointer: 24px is WCAG 2.5.8 Target Size (Minimum), level AA, and level AA knows nothing about input devices. The coarse half was already right, because it hangs on `hover: hover` rather than on a width. Three controls needed a floor of their own on top of the tokens: the collapsible location header (21px on both axes), the day circle in the month grid (28px under a finger at every width from 769px up) and the <summary> of #nb-sub-section (18px on a desk, and only the static run can see it). `.btn` gained a min-WIDTH as well: a tap target has two measurements, and the lab's close button was 23 x 24."
+}
