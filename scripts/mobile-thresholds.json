@@ -6,13 +6,6 @@
   "_2026_08_21_app": "First run of --app, and the first time anything measured this app with its own data in it. The stand's own first attempt got the biggest number WRONG and it is worth writing down why. It swept the widths inside a page, so every page was opened at 1920px and measured at 320, and it reported eleven pages rendering at 53 to 90 percent on a phone. Opened at 320 the dashboard renders at 89 percent, not 53. The 53 was real but it belonged to a different situation, and the file now keeps the two apart: ZOOMED OUT is what a phone sees when it opens the page, AFTER A JUMP is what happens when the window changes size in one step and nothing re-renders. The second one is Julian's split screen, and it is the larger of the two.",
   "ratchet": [
     {
-      "kind": "jumped",
-      "pointer": "coarse",
-      "mode": "app",
-      "package": "P3",
-      "reason": "Nine of twelve pages do not follow when the window changes size in one step. Jumped from 1920 to 320 the dashboard's layout viewport stays 600px wide, so the page renders at 53 percent; calendar 477, lab 472, Chargen 456, Lager 445, Zonen 422, Drucken 413, Einstellungen 400, Abholungen 397. Opened at 320 those same pages are 320 to 360, so this is not the layout being too wide, it is something sized once for the column it was born in and never re-measured. It happens on a rotation, on a split view snapping, and on a window being maximised: exactly the screenshot this plan started from. P3 replaces window-derived widths with container queries, which have no such moment."
-    },
-    {
       "kind": "widened",
       "pointer": "coarse",
       "at": "n-dash",
@@ -39,14 +32,6 @@
       "mode": "app",
       "package": "P3",
       "reason": "The bottom navigation's Kalender entry hangs 14px past the right edge at exactly 320px, the narrowest phone still sold, on both pointer axes. Five buttons and one of them does not fit."
-    },
-    {
-      "kind": "over",
-      "at": "span",
-      "to": 320,
-      "mode": "app",
-      "package": "P3",
-      "reason": "The label inside that same bottom-nav button, 10px past the edge. Same fix, and it is listed separately because the outermost-offender filter cannot pair them: the span's reported path is not a prefix-match of the button's."
     },
     {
       "kind": "over",
@@ -116,6 +101,11 @@
       "folded": ["strain", "inc", "substrate", "source", "created", "notes"],
       "why": "The twelve columns of the Chargen table need 728px in the header row alone, and at a 769px window there are 439px of content width. Which six somebody actually needs in passing is known only by the person who works with it, and no stylesheet can decide it. Until the answer arrives P5 keeps the six above visible and folds the other six into the expandable part of the card. Written down here rather than left in a commit message, because an assumption nobody can find is indistinguishable from a decision nobody made.",
       "goes_when": "Jonas answers point 61, and the line is then either confirmed or replaced by his list."
+    },
+    {
+      "topic": "AFTER A JUMP",
+      "status": "zurueckgezogen 2026-08-22",
+      "note": "Der Sprungbefund war ein Messfehler des Messstands, nicht ein Fehler der Anwendung. Gemessen wurde unmittelbar nach setViewport, und der Layout-Viewport laeuft danach erst ueber rund 100 bis 200 ms ein: Uebersicht 600, 583, 547, 502, 390, 360; Kalender und Labor entsprechend auf 320. Mit einer Ruhebedingung von drei gleichen Frames ist die Klasse in vier aufeinanderfolgenden Laeufen 0 offen, ohne sie schwankte sie zwischen 11 und 20. Was bleibt, ist ZOOMED OUT: zwei Seiten sind schon beim Oeffnen breiter als das Telefon."
     }
   ]
 }
