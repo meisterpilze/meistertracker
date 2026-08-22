@@ -1529,7 +1529,18 @@ function startDuckdnsUpdater() {
   return duckdns.start({ database, dbApi: db, log, skip: WORKTREE_MODE });
 }
 
-startDuckdnsUpdater();
+// Never let the DNS updater be the reason this process does not come up.
+//
+// start() is called at module load, so anything it throws is a server that
+// will not boot — and a lab that cannot be reached from the LAN either,
+// over a feature whose entire job is remote access. Keeping a stale DNS
+// record is bad; refusing to run the application because of it is worse.
+// The scheduler's own ticks are already guarded; this covers the arming.
+try {
+  startDuckdnsUpdater();
+} catch (e) {
+  log('error', 'DuckDNS updater failed to start — continuing without it', { error: e.message });
+}
 
 // ── OUTBOUND HARVEST FEED ────────────────────────────────────
 // Off unless HARVEST_WEBHOOK_URL is set. Pushes a signed summary of recorded

@@ -147,6 +147,40 @@ bash update_server.sh gen-cert
 
 This starts the server as a PM2 process named `meisterpilze`.
 
+### What an update does before it touches anything
+
+`bash update_server.sh` does not simply swap the code and hope. Between
+installing dependencies and restarting, it runs `scripts/preflight.js`, which
+tries the new version against **a copy of your real database**:
+
+- it snapshots the live file with `VACUUM INTO`, which does not write to the
+  source, so this is safe while the server is up and serving;
+- it runs any pending migrations **on the copy**, so a migration that throws
+  against your six months of rows fails there instead of on the real file;
+- it compares row counts table by table and refuses if anything shrank;
+- it parses and loads every module the server loads, which is where a bad
+  deploy usually dies;
+- it arms and disarms the DuckDNS updater against the copy, without a network.
+
+If any of that fails, **nothing is changed**: the old server is still running,
+still serving, and the script tells you what broke and how to get the working
+tree back. You can also run it yourself at any time:
+
+```bash
+node scripts/preflight.js
+```
+
+### And if the new version still will not start
+
+The script waits for the restarted process and checks it stayed up. If it did
+not, it now rolls back to the `stable` tag — the last commit that was known to
+start — reinstalls dependencies and brings that version up again, rather than
+leaving the server down until somebody reads the log. A rollback across a
+migration is safe: an older build ignores columns it does not know about.
+
+The `stable` tag is written by this script after every successful start, so it
+only exists once one update has succeeded.
+
 ### Enable PM2 Startup on Boot
 
 `pm2 startup` only **prints** the command — you have to run it as root yourself:
