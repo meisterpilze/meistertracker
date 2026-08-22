@@ -3499,28 +3499,280 @@ tr:hover td {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
-/* ═══ PIPELINE KPI TOTAL ROW ═════════════════════════════════════ */
-.metrics-total-row {
+/* ═══ SORTEN TILES ═══════════════════════════════════════════════
+   Replaces the pipeline KPI strip on the Chargen tab. One tile per Sorte,
+   plus a first tile carrying the totals the strip used to carry alone.
+
+   Two tiles per row on a phone. The tile is deliberately tall enough to hold
+   its three stage counts as *labelled numbers* rather than only as a bar: the
+   bar says the proportion at a glance, the numbers say how many, and neither
+   is the only way to read the card. Nothing here means anything by colour
+   alone.
+   ════════════════════════════════════════════════════════════════ */
+.sorten-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.sorten-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.sorten-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .sorten-grid {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    gap: 10px;
+  }
+}
+.stile {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--c-surface);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+@media (hover: hover) {
+  .stile:hover {
+    border-color: var(--c-slate);
+    box-shadow: var(--shadow-md);
+  }
+}
+.stile.on {
+  border-color: var(--c-primary);
+  box-shadow: inset 0 0 0 1px var(--c-primary);
+  background: var(--c-primary-light);
+}
+/* Urgent: the whole card is outlined, not one edge. A Sorte with nothing
+   behind it is the single thing on this screen that cannot wait, and a card
+   ringed in red is found without reading — which is the point, since this grid
+   is scanned in a grow room at arm's length. The fill stays white so the grid
+   around it stays calm; the halo does the carrying. */
+.stile.urgent {
+  border: 2px solid var(--c-red-strong);
+  padding: 10px 11px;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+@media (hover: hover) {
+  .stile.urgent:hover {
+    border-color: var(--c-red-strong);
+    box-shadow:
+      0 0 0 3px rgba(220, 38, 38, 0.18),
+      var(--shadow-md);
+  }
+}
+/* Selected AND urgent keeps both marks, so neither hides the other. */
+.stile.urgent.on {
+  border-color: var(--c-red-strong);
+  box-shadow:
+    0 0 0 3px rgba(220, 38, 38, 0.18),
+    inset 0 0 0 2px var(--c-primary);
+}
+/* The totals tile. It was going to be a dark slab, which is one more colour
+   doing a job that weight already does: same card, set on the page ground with
+   a firmer edge. */
+.stile-total {
+  background: var(--c-bg);
+  border-color: var(--c-text-muted);
+}
+@media (hover: hover) {
+  .stile-total:hover {
+    border-color: var(--c-text-sec);
+  }
+}
+.stile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.stile-name {
+  font-weight: 700;
+  font-size: max(14px, var(--fs-min));
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stile-kz {
+  font-size: max(10px, var(--fs-min));
+  font-weight: 700;
+  color: var(--c-text-muted);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex: none;
+}
+.stile-total .stile-kz {
+  background: var(--c-surface);
+}
+.stile-big {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 5px;
+  flex-wrap: wrap;
 }
-.metrics-total-label {
+.stile-big b {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stile-big span {
   font-size: max(11px, var(--fs-min));
-  font-weight: 700;
+  color: var(--c-text-muted);
+  font-weight: 600;
+}
+.sbar {
+  display: flex;
+  height: 11px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--c-border-light);
+}
+.sbar i {
+  display: block;
+  height: 100%;
+}
+.tstages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.tstage {
+  display: block;
+  min-width: 0;
+}
+.tstage b {
+  display: block;
+  font-size: max(15px, var(--fs-min));
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.tstage i {
+  display: block;
+  font-style: normal;
+  font-size: max(10px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--c-border-light);
+  padding-top: 7px;
+  margin-top: auto;
+}
+.stile-fs {
+  font-size: max(10px, var(--fs-min));
+  color: var(--c-text-muted);
+}
+
+/* The supply light. A dot and a word, not a filled pill — only the state that
+   needs acting on today carries weight, so a card of healthy Sorten reads as
+   plain text. */
+.sup {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: max(11px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-sec);
+  white-space: nowrap;
+}
+.sup::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sup-c, var(--c-slate));
+  flex: none;
+}
+.sup-now {
+  color: #7f1d1d;
+  font-weight: 700;
+  --sup-c: #b91c1c;
+}
+.sup-nospawn {
+  --sup-c: #c2410c;
+}
+.sup-low {
+  --sup-c: #a16207;
+}
+.sup-ok {
+  color: var(--c-text-muted);
+  --sup-c: #4d9c6a;
+}
+
+/* Legend — folded away by default. The tiles are the screen; this is the
+   footnote, and a footnote that is always open is clutter you learn to skip. */
+.tlegend-btn {
+  margin-top: 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: max(11px, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.tlegend-btn:hover {
   color: var(--c-text-sec);
 }
-.metrics-total-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--c-text);
-  line-height: 1;
+.tlegend-caret {
+  font-size: max(10px, var(--fs-min));
 }
-.metrics-pipeline {
-  margin: 0;
+.tlegend {
+  padding-top: 7px;
+  border-top: 1px solid var(--c-border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: max(11px, var(--fs-min));
+  color: var(--c-text-sec);
+  line-height: 1.45;
+}
+.tlegend .sup {
+  margin-right: 6px;
+}
+.tlegend-note {
+  color: var(--c-text-muted);
+  font-style: italic;
 }
 
 /* ═══ BATCH ROW FLASH ═══════════════════════════════════════════ */

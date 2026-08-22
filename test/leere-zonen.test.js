@@ -75,7 +75,9 @@ describe('leere Zonenliste', () => {
 
   // Dasselbe auf der Arbeitsgang-Seite, die dieselbe leere Liste anders
   // beschriftet — und denselben Fehler machte.
-  const DASH_ATTRAPPEN = 'const renderPipelineKPIs = () => {}; const renderOverviewKPIs = () => {};';
+  // renderPipelineKPIs hieß die Attrappe früher; die Kennzahlenleiste ist den
+  // Sorten-Kacheln gewichen, die renderStatus an genau denselben Stellen ruft.
+  const DASH_ATTRAPPEN = 'const renderSorteTiles = () => {}; const renderOverviewKPIs = () => {};';
 
   it('hält die Arbeitsgang-Seite an dieselbe Regel', () => {
     const ohne = umgebung({ zones: [], datenGeladen: false });

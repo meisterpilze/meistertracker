@@ -2482,14 +2482,16 @@
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
-          <!-- Pipeline per stage — the header the batch list was missing -->
-          <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-            <!-- Moved off the Farm view: these answer "how is it going", not "what do I do now". -->
-            <!-- Pipeline KPI strip (total + 5 stage cards) — collapsible -->
-            <div id="metrics" style="margin-bottom: 10px"></div>
-          </div>
           <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
+            <!-- "Where does everything stand" used to sit on top of the batch
+                 list, which meant this page answered the same question three
+                 times: a stage strip counting bags, a room view counting the
+                 same bags by rack, and a table grouping them by stage again.
+                 The room view is a real tool — it is the only place bags can be
+                 selected and moved in bulk — so it keeps everything it had and
+                 gets its own tab instead of competing for the first screen. -->
+            <button class="stab" id="st-batch-locations" data-i18n="batch.locationsTab">Standorte</button>
             <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
                  sp-batch-new panel stays in the DOM as that dialog's backing form. -->
             <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
@@ -2498,21 +2500,13 @@
           </div>
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
-            <!-- Where everything currently sits, by room -->
-            <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
-              <div class="dash-locations-header">
-                <input
-                  type="text"
-                  id="status-q"
-                  class="dash-search-inline"
-                  data-i18n-aria-label="aria.searchDashboard"
-                  aria-label="Search dashboard"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Search..."
-                />
-              </div>
-              <div id="dash-locations"></div>
+            <!-- Totals and the per-Sorte breakdown, in one card. The old stage
+                 strip was a separate box above this one showing batch counts
+                 next to bag counts in the same row; it is the first tile here
+                 now, and the rest of the grid answers the question the page
+                 could not: which Sorte is running out. -->
+            <div class="card" style="padding: 12px 14px; margin-bottom: 10px">
+              <div id="batch-sorten"></div>
             </div>
             <div class="card">
               <div
@@ -2526,7 +2520,24 @@
                 "
               >
                 <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
-                <div style="display: flex; gap: 6px; align-items: center">
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+                  <!-- Grouping is a choice now, and "none" is the default.
+                       renderBatches() always sorted correctly and then handed
+                       the rows to _groupBatchRows(), which re-bucketed them by
+                       stage — so a click on Art or Menge only reordered rows
+                       inside each stage block and the list as a whole never
+                       moved. Ungrouped is the only state in which the column
+                       sort owns the order, and it was unreachable. -->
+                  <select class="fs-meta"
+                    id="batch-group-by"
+                    data-i18n-aria-label="batch.groupByAria"
+                    aria-label="Group the list"
+                    style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
+                  >
+                    <option value="none" data-i18n="batch.groupNone">Nicht gruppieren</option>
+                    <option value="sorte" data-i18n="batch.groupSorte">Nach Sorte</option>
+                    <option value="stage" data-i18n="batch.groupStage">Nach Phase</option>
+                  </select>
                   <select class="fs-meta"
                     id="batch-archive-filter"
                     data-i18n-aria-label="batch.filterArchiveAria"
@@ -2571,6 +2582,26 @@
                   <tbody id="batches-body"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+          <!-- Where everything currently sits, by room. Unchanged in every
+               respect except which tab it is on: same racks, same bag chips,
+               same multi-select and bulk move, same search. -->
+          <div class="sp" id="sp-batch-locations">
+            <div class="card" style="padding: 10px 14px">
+              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
+              <div class="dash-locations-header">
+                <input
+                  type="text"
+                  id="status-q"
+                  class="dash-search-inline"
+                  data-i18n-aria-label="aria.searchDashboard"
+                  aria-label="Search dashboard"
+                  data-i18n-placeholder="dash.search"
+                  placeholder="Search..."
+                />
+              </div>
+              <div id="dash-locations"></div>
             </div>
           </div>
           <!-- Every mix ever made, open and spent. Not front and center: this is
