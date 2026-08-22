@@ -118,18 +118,18 @@
      Rule for adding to this block: a token's :root value is what a phone should
      get. If that is also what the desktop should get, it does not need a line
      in the override. */
-  --fs-xs: 13px;
-  --fs-sm: 15px;
-  --fs-base: 17px;
+  --fs-xs: 0.8125rem;
+  --fs-sm: 0.9375rem;
+  --fs-base: 1.0625rem;
   /* 12px is the single most common inline size in this app — filter selects,
      status lines, card blurbs, preview boxes. --fs-xs cannot absorb them: it is
      11px on a desktop and would drop every one of them by a pixel. So it gets
      its own pair, phone at the floor and desktop where it already was. */
-  --fs-meta: 13px;
+  --fs-meta: 0.8125rem;
   /* And the same for 10px, the size id chips and timestamps were written at.
      Three pairs cover 497 of the 497 inline sizes in this app; the six
      fractional ones in between are named where they are used. */
-  --fs-micro: 13px;
+  --fs-micro: 0.8125rem;
   /* The floor, as a sentinel rather than a size. 104 rules in this stylesheet
      set a font-size below --fs-xs and serve both devices from that one number:
      `.sec` at 12px, `.sb-group-label` at 10px, `.chip-l` at 9px. Every one of
@@ -149,7 +149,7 @@
 
      Same trick as --tap: auto below, and for the same reason — the desktop's
      honest answer is "no constraint", not "a different constraint". */
-  --fs-min: 13px;
+  --fs-min: 0.8125rem;
   /* 44px is WCAG 2.5.5 AAA. 56 is the deliberate step past it for gloves — and
      it is not a new number here: .bottom-nav-btn already chose 56px the one
      time this codebase sat down and thought about a touch target. */
@@ -199,7 +199,7 @@
      there", and keeping the two apart is what stops either from becoming the
      answer to everything. The padding grows with the type — the title gains
      2.5px inside a box that would otherwise stay the same size. */
-  --fs-tile: 17px;
+  --fs-tile: 1.0625rem;
   --pad-tile: 18px 18px 20px;
 }
 
@@ -226,11 +226,11 @@
    broken — until the inline sizes moved onto classes that do. */
 @media (min-width: 769px) and (hover: hover), print {
   :root {
-    --fs-xs: 11px;
-    --fs-sm: 13px;
-    --fs-base: 15px;
-    --fs-meta: 12px;
-    --fs-micro: 10px;
+    --fs-xs: 0.6875rem;
+    --fs-sm: 0.8125rem;
+    --fs-base: 0.9375rem;
+    --fs-meta: 0.75rem;
+    --fs-micro: 0.625rem;
     /* 0, so every max() in the sheet returns the literal beside it unchanged. */
     --fs-min: 0px;
     /* ⚠️ **24 und nicht `auto`** (Paket P1, Regel R1). `auto` hieß „keine
@@ -256,7 +256,7 @@
     /* No bottom nav here, so the chrome sits where it always did. Both FABs are
        display:none on a desktop anyway; only .undo-bar reads this off-phone,
        and its own rule keeps it out of the way. */
-    --fs-tile: 14.5px;
+    --fs-tile: 0.90625rem;
     --pad-tile: 15px 15px 16px;
     --fab-bottom: 24px;
   }
