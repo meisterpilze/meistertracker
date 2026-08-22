@@ -2090,17 +2090,36 @@ textarea.is-invalid {
   padding: 3px 9px;
   border-radius: 99px;
 }
+/* Phase badges — the Status column of every table that lists a batch.
+
+   These are the second half of a colour decision whose first half lives in the
+   database. A zone's colour says which room a bag is in; this badge says which
+   phase a batch is in; on this farm those are the same fact seen twice, so the
+   two agreeing is not decoration, it is the point. They were both the
+   full-saturation Tailwind 500 family, and both are now the muted version of
+   the same three hues — see ZONE_SEED_COLOR in db.js.
+
+   Backgrounds are the hue at 30% saturation and 94% lightness; the text is
+   picked per hue to land on 6.0:1 against its own background, which is matched
+   across the three so none of them reads as louder than its neighbours. Small
+   text, so the floor is 4.5, not 3.
+
+   The one thing this does NOT follow is the slate-to-green ramp used inside the
+   Chargen tiles. That ramp encodes a sequence and works because the three
+   phases sit side by side in one bar. A badge stands alone in its row, with no
+   neighbour to compare against, which is the case the ramp is worst at — the
+   same reason the zone colours kept their hues. */
 .b-inc {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #ebf1f4;
+  color: #306077;
 }
 .b-tent {
-  background: #dcfce7;
-  color: #166534;
+  background: #ebf4f1;
+  color: #2a6652;
 }
 .b-spawn {
-  background: #f3e8ff;
-  color: #6b21a8;
+  background: #f0ebf4;
+  color: #7241a0;
 }
 .b-contam {
   background: #fee2e2;

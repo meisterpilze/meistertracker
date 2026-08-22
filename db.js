@@ -7,6 +7,38 @@ const path = require('path');
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
 const MAX_SESSIONS_PER_USER = 10;
 
+// ── Zone colours ─────────────────────────────────────────────
+// The colour a zone gets when nobody has picked one. It is *data* — the seed
+// writes it into the row, the operator may change it in Settings → Zones, and
+// from then on the app shows theirs. So this constant is only ever the starting
+// point, and changing it moves nothing on an installation that already exists.
+// Migration 77 is what carries the change across, and only where the operator
+// never expressed an opinion.
+//
+// The values are muted on purpose. The originals were the full-saturation
+// Tailwind 500s, and two of the three could not be read: as the KPI strip's
+// large bold number on white, #0ea5e9 measures 2.77:1 and #10b981 2.54:1,
+// under the 3:1 that this repository holds large text to elsewhere
+// (test/kpi-kontrast.test.js). These keep the same three hues — a zone stays
+// recognisably violet, blue, green — at a third of the saturation, and land on
+// 4.20 / 4.22 / 4.20:1. Matched deliberately: a set where one member measures
+// twice its neighbours reads as one zone shouting.
+const ZONE_SEED_COLOR = {
+  spawn: '#926bb6',
+  incubation: '#4d829b',
+  fruiting: '#438871',
+  contaminated: '#ef4444'
+};
+// What the seed used to write. Migration 77 treats a row still carrying one of
+// these as "never touched" and upgrades it; anything else is a choice and is
+// left alone.
+const ZONE_LEGACY_COLOR = {
+  spawn: '#a855f7',
+  incubation: '#0ea5e9',
+  fruiting: '#10b981',
+  contaminated: '#ef4444'
+};
+
 // ── Date helpers ─────────────────────────────────────────────
 // Lab day boundary = the server's local timezone midnight (a single physical lab,
 // one timezone). KPI snapshots and "due today" comparisons should bucket events
@@ -448,11 +480,11 @@ const MIGRATIONS = [
       // the localised key no longer matches).
       const now = new Date().toISOString();
       const insZ = db.prepare('INSERT OR IGNORE INTO zones(id,name,role,color,sort_order,created) VALUES(?,?,?,?,?,?)');
-      insZ.run('SPAWN', 'Spawn Run', 'spawn', '#a855f7', 1, now);
-      insZ.run('INC', 'Incubation', 'incubation', '#0ea5e9', 2, now);
-      insZ.run('TENT1', 'Tent 1', 'fruiting', '#10b981', 3, now);
-      insZ.run('TENT2', 'Tent 2', 'fruiting', '#10b981', 4, now);
-      insZ.run('TENT3', 'Tent 3', 'fruiting', '#10b981', 5, now);
+      insZ.run('SPAWN', 'Spawn Run', 'spawn', ZONE_SEED_COLOR.spawn, 1, now);
+      insZ.run('INC', 'Incubation', 'incubation', ZONE_SEED_COLOR.incubation, 2, now);
+      insZ.run('TENT1', 'Tent 1', 'fruiting', ZONE_SEED_COLOR.fruiting, 3, now);
+      insZ.run('TENT2', 'Tent 2', 'fruiting', ZONE_SEED_COLOR.fruiting, 4, now);
+      insZ.run('TENT3', 'Tent 3', 'fruiting', ZONE_SEED_COLOR.fruiting, 5, now);
       insZ.run('CONTAM', 'Contamination', 'contaminated', '#ef4444', 99, now);
       // Seed default racks
       const insR = db.prepare('INSERT OR IGNORE INTO racks(id,zone_id,sort_order,created) VALUES(?,?,?,?)');
@@ -2219,6 +2251,33 @@ const MIGRATIONS = [
       // `last_ip_update` goes back to meaning only the server, and the fallback
       // records itself here. Neither can now mask or throttle the other.
       db.exec('ALTER TABLE duckdns_config ADD COLUMN fallback_last TEXT');
+    }
+  },
+  {
+    version: 77,
+    description: 'Mute the seeded zone colours, leaving any the operator chose alone',
+    fn(db) {
+      // Zone colours are data, so changing ZONE_SEED_COLOR only reaches
+      // installations that do not exist yet. This carries it to the ones that
+      // do — and must not tread on anybody's choice while doing so.
+      //
+      // The rule is the narrowest one that works: a row is upgraded only if its
+      // colour is still *exactly* the value the seed wrote for that role. Any
+      // other value — a hand-picked colour, a shade from an older seed, a zone
+      // added later — is an opinion, and opinions are left alone. Matching on
+      // the role rather than the id is what lets a fourth tent, created by the
+      // operator but never recoloured, come along too.
+      //
+      // Case-insensitive because the colour input yields lowercase while older
+      // rows were seeded from these literals; comparing raw would skip exactly
+      // the rows this is for. CONTAM is in the table and unchanged, so its
+      // branch is a no-op — it is listed so that a future change to the red
+      // needs no new migration shape, only a new value.
+      const upd = db.prepare('UPDATE zones SET color = ? WHERE role = ? AND lower(color) = lower(?)');
+      for (const role of Object.keys(ZONE_SEED_COLOR)) {
+        if (ZONE_SEED_COLOR[role] === ZONE_LEGACY_COLOR[role]) continue;
+        upd.run(ZONE_SEED_COLOR[role], role, ZONE_LEGACY_COLOR[role]);
+      }
     }
   }
 ];
@@ -9609,6 +9668,8 @@ function computeProductionDemand(db) {
 }
 
 module.exports = {
+  ZONE_SEED_COLOR,
+  ZONE_LEGACY_COLOR,
   // ── Order hub (Phase 0) ──
   listProducts,
   getProduct,
