@@ -20,14 +20,28 @@ const CSS_PATH = path.join(ROOT, 'styles.css');
 
 const readCss = () => fs.readFileSync(CSS_PATH, 'utf8');
 
-// Any px-valued token on the phone :root, read from the stylesheet rather than
+// Any length token on the phone :root, read from the stylesheet rather than
 // restated. A copy in each consumer would let the token move while both kept
 // checking the old number, and nothing would fail.
+//
+// ⚠️ **px OR rem.** Package P1.5 moves the type marks to `rem` so that a
+// browser's own font size finally reaches this app, and the tools measure in
+// px. 16 is the CSS initial value of the root font size, so a rem token
+// converts back to exactly the px it replaced — which is the point of the
+// conversion and the reason the desktop baseline did not move. It is a
+// CONVERSION and not a measurement: if the user has set 20px, the real floor
+// on their screen is higher than what these tools compare against, and that is
+// the right direction to be wrong in. Measuring it properly needs a browser,
+// and mobile-size-scan.js deliberately has none.
+const WURZEL_PX = 16;
+
 function rootPx(name, css = readCss()) {
   const m = css.match(/^:root \{[\s\S]*?\n\}/m);
-  const decl = m && m[0].match(new RegExp('\\n\\s*' + name + ':\\s*([\\d.]+)px;'));
-  if (!decl) throw new Error(name + ' not found as a px value in the :root block of styles.css');
-  return parseFloat(decl[1]);
+  const decl = m && m[0].match(new RegExp('\\n\\s*' + name + ':\\s*([\\d.]+)(px|rem);'));
+  if (!decl) {
+    throw new Error(name + ' not found as a px or rem value in the :root block of styles.css');
+  }
+  return parseFloat(decl[1]) * (decl[2] === 'rem' ? WURZEL_PX : 1);
 }
 
 // The two floors the whole redesign is measured against. Named rather than
