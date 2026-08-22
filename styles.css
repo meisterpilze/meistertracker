@@ -3816,6 +3816,29 @@ tr:hover td {
   color: var(--c-text-sec);
   min-width: 0;
 }
+/* Eine Bestandszeile, die ihre eigene Untergrenze setzt. Sie muss ein Knopf
+   sein, damit sie mit der Tastatur erreichbar ist — und dann muss ihr alles
+   genommen werden, was ein Knopf mitbringt, sonst sitzt sie anders im Raster
+   als die Zeilen ohne Pilzsorten-Eintrag daneben. */
+.lab-row-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.lab-row-btn:hover {
+  background: var(--c-border-light);
+}
+.lab-row-btn:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
 .lab-row-dot {
   width: 7px;
   height: 7px;

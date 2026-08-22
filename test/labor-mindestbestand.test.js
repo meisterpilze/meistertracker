@@ -46,6 +46,7 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     hebeFunktion('_labKey'),
     hebeFunktion('_labName'),
     hebeFunktion('strainsInProduction'),
+    hebeFunktion('_strainOfEntry'),
     hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
     hebeFunktion('buildLabMinTasks'),
