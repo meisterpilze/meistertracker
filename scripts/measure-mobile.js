@@ -867,6 +867,36 @@ async function main() {
             isMobile: coarse,
             hasTouch: coarse
           });
+          // ⚠️ SETTLE FIRST, then ask. Measured with a probe that sampled
+          // window.innerWidth after a 1920→320 jump: the dashboard went
+          // 600, 583, 547, 502, 390, 360 over about 100ms and stayed at 360;
+          // the calendar and the lab converged on 320 the same way. Measuring
+          // the instant setViewport returns therefore caught a transient, not a
+          // page that failed to follow, and the count wandered between 11 and 20
+          // across three identical runs because it was racing that convergence.
+          // A device gets this beat; the measurement has to give it too.
+          // THREE consecutive frames at the same width, not two: during the
+          // convergence above, two neighbouring frames land on the same value
+          // often enough that a two-frame test returned mid-flight, at 430 or
+          // 452px, where the settled answer is 360 and 320.
+          await page.evaluate(() => {
+            window.__ruhe = { breite: -1, gleich: 0 };
+          });
+          await page
+            .waitForFunction(
+              () => {
+                const w = window.innerWidth;
+                const r = window.__ruhe;
+                r.gleich = w === r.breite ? r.gleich + 1 : 0;
+                r.breite = w;
+                return r.gleich >= 3;
+              },
+              { polling: 'raf', timeout: 3000 }
+            )
+            .catch(() => {});
+          await page.evaluate(() => {
+            delete window.__ruhe;
+          });
           const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor);
           const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`);
           if (opened === undefined) {
