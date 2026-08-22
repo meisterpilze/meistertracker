@@ -2507,7 +2507,6 @@
           </div>
 
           <!-- Floating action bar for bag selection -->
-          <div id="loc-action-bar" class="action-bar-sticky" style="display: none"></div>
         </div>
 
         <!-- ══ BATCHES ══ -->
@@ -2633,6 +2632,11 @@
               </div>
               <div id="dash-locations"></div>
             </div>
+            <!-- It has to live in the same page as the chips it acts on: .page
+                 is display:none for every page but the open one, so while it sat
+                 in p-dash the racks moved here and their bulk-move bar did not,
+                 and selecting bags offered nothing to do with them. -->
+            <div id="loc-action-bar" class="action-bar-sticky" style="display: none"></div>
           </div>
           <!-- Every mix ever made, open and spent. Not front and center: this is
                where you go to count them and to find the one that went wrong. -->

@@ -37,9 +37,14 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     // buildLabMinTasks schließt geparkte Sorten jetzt über den Schlüssel aus,
     // nicht über den Namen — strainsInProduction() allein reichte nicht: es
     // ergänzt nur fehlende Nullzeilen, bestehende Kulturzeilen überlebten es.
+    hebeKonstante('ARCHIVED_STATUSES'),
     hebeFunktion('_spKey'),
     hebeFunktion('sorteKey'),
     hebeFunktion('_strainKeys'),
+    hebeFunktion('sorteName'),
+    hebeFunktion('_grainKgOf'),
+    hebeFunktion('_labKey'),
+    hebeFunktion('_labName'),
     hebeFunktion('strainsInProduction'),
     hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
@@ -55,6 +60,8 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     const fmtKg = (v) => String(v);
     const spColor = () => '#888';
     const getStatus = () => ({ status: 'INCUBATING' });
+    const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
+    const _hasScanByBatch = new Map(batches.map((b) => [b.batchId, true]));
     const getLabLabel = (x) => x;
     ${code}
   `

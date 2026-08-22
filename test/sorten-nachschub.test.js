@@ -81,7 +81,14 @@ function koerner(name, { kg = 0, glaeser = 1, strainId = 1, kz = 'SH', status } 
     days: 14,
     created: new Date().toISOString(),
     due: '2026-09-01T00:00:00.000Z',
-    _status: status || 'SPAWN RUN',
+    // Ohne Scan-Einträge gibt getStatus() 'EMPTY' zurück — nicht
+    // 'SPAWN RUN'. Genau daran ging der erste Anlauf vorbei: die Attrappe reichte
+    // einen Status heraus, den die Anwendung für frische Brut nie erzeugt, und
+    // der Test blieb grün — über einer Funktion, die in echt 0 zurückgab.
+    // Wer einen Status mitgibt, meint eine Charge mit Scan-Geschichte; eine
+    // verbrauchte hat eine.
+    _status: status || 'EMPTY',
+    _gescannt: !!status,
     _c: {}
   };
 }
@@ -96,6 +103,7 @@ function lauf(ausdruck, chargen, sorten) {
     hebeFunktion('_strainKeys'),
     hebeFunktion('sorteName'),
     hebeFunktion('_stageBagsOf'),
+    hebeKonstante('ARCHIVED_STATUSES'),
     hebeFunktion('_grainKgOf'),
     hebeFunktion('sorteRollup'),
     hebeFunktion('buildSupplyTasks')
@@ -105,11 +113,13 @@ function lauf(ausdruck, chargen, sorten) {
     'zones',
     'statusByBatch',
     'statusByBatchName',
+    'hatScan',
     'mushroomStrains',
     `
     const t = (k, p) => (p ? k + ':' + Object.values(p).join(',') : k);
     const abbrev = (s) => String(s || '').slice(0, 2).toUpperCase();
-    const isArchivedStatus = (s) => ['DONE', 'EMPTY', 'CONTAM'].includes(s);
+    const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
+    const _hasScanByBatch = new Map(Object.entries(hatScan));
     const stageOf = (role, batchType) =>
       role === 'fruiting' || role === 'contaminated' ? role : batchType === 'grain' ? 'spawn' : 'incubation';
     const getStatus = (id) => ({ c: statusByBatch[id] || {}, status: statusByBatchName[id] || 'INCUBATING' });
@@ -120,6 +130,12 @@ function lauf(ausdruck, chargen, sorten) {
     ZONEN,
     Object.fromEntries(chargen.map((b) => [b.batchId, b._c])),
     Object.fromEntries(chargen.map((b) => [b.batchId, b._status || 'INCUBATING'])),
+    // Welche Chargen überhaupt im Scan-Log stehen. Blöcke immer, Körner nur,
+    // wenn der Test es sagt — das ist der Unterschied zwischen "noch nirgends
+    // hingestellt" und "leer, weil aufgebraucht", und beide heißen EMPTY.
+    Object.fromEntries(
+      chargen.map((b) => [b.batchId, b._gescannt != null ? b._gescannt : Object.keys(b._c || {}).length > 0])
+    ),
     sorten
   );
 }

@@ -26,9 +26,14 @@ function zeichne({ kulturen = [], sorten = [], schwellen = {} } = {}) {
     hebeKonstante('MIN_TYPES'),
     hebeKonstante('STRAIN_MIN_FIELD'),
     hebeKonstante('LAB_TYPE_COLORS'),
+    hebeKonstante('ARCHIVED_STATUSES'),
     hebeFunktion('_spKey'),
     hebeFunktion('sorteKey'),
     hebeFunktion('_strainKeys'),
+    hebeFunktion('sorteName'),
+    hebeFunktion('_grainKgOf'),
+    hebeFunktion('_labKey'),
+    hebeFunktion('_labName'),
     hebeFunktion('strainsInProduction'),
     hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
@@ -49,6 +54,8 @@ function zeichne({ kulturen = [], sorten = [], schwellen = {} } = {}) {
     const spColor = () => '#888888';
     const safeColor = (c) => c || '#888888';
     const getStatus = () => ({ status: 'INCUBATING' });
+    const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
+    const _hasScanByBatch = new Map(batches.map((b) => [b.batchId, true]));
     const getLabLabel = (x) => 'label:' + x;
     const getLabStockCounts = () => {
       const c = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
