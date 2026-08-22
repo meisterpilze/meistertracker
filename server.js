@@ -11810,23 +11810,45 @@ listenServer.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('  Meistertracker is running!');
   console.log('');
-  console.log('  Open on this PC:      ' + protocol + '://localhost:' + PORT);
-  console.log('  Open on phone/tablet: ' + protocol + '://' + ip + ':' + PORT);
-  // Say so when those two lines are addresses this server's own certificate
-  // rejects. A self-signed cert from gen-cert.* carries DNS:localhost,
-  // IP:127.0.0.1 and the LAN IP on purpose; a Let's Encrypt one carries the
-  // public hostname and cannot carry either, because no public CA will issue
-  // for a name it cannot verify. So the first restart after switching to ACME
-  // silently invalidates both addresses printed above — and the app that then
-  // fails to load reports itself "offline", which sends you looking at the
-  // network instead of at the certificate.
+  // Recommend an address the certificate actually vouches for, rather than
+  // printing two and warning afterwards that both are wrong.
+  //
+  // gen-cert.* writes DNS:localhost, IP:127.0.0.1 and the LAN IP on purpose —
+  // those are the addresses people open. A public CA will issue for none of
+  // them, so an ACME certificate covers the public hostname and nothing else,
+  // and the first restart after switching silently invalidates both of the
+  // lines this banner used to print. What follows from that is not a warning
+  // sign in the browser: it is a service worker, which has no click-through, so
+  // the app loads from cache and then reports itself disconnected while the
+  // server is healthy and serving.
   const uncovered = certUncoveredHosts(['localhost', ip]);
-  if (uncovered.length) {
+  // A name the certificate carries that is not one of the two we would
+  // otherwise recommend — on an ACME install, the public hostname.
+  const vouched = certCoveredHosts().filter(
+    (c) => !c.startsWith('*.') && c !== 'localhost' && c !== '127.0.0.1' && c !== ip
+  );
+  if (!uncovered.length) {
+    // Self-signed: the certificate carries both, and there is nothing to explain.
+    console.log('  Open on this PC:      ' + protocol + '://localhost:' + PORT);
+    console.log('  Open on phone/tablet: ' + protocol + '://' + ip + ':' + PORT);
+  } else if (vouched.length) {
+    console.log('  Open on any device:   ' + protocol + '://' + vouched[0] + ':' + PORT);
     console.log('');
-    console.log('  ⚠ The certificate does not cover: ' + uncovered.join(', '));
-    console.log('     Those addresses will fail in the browser. This certificate is valid for:');
-    console.log('     ' + (certCoveredHosts().join(', ') || '(no subject alternative names)'));
-    console.log('     Use one of those names, or re-issue a certificate that covers the address you open.');
+    console.log('  ⚠ Not ' + uncovered.join(' or ') + ' — the certificate does not cover them.');
+    console.log('     A browser may let you click past that; a service worker will not, so the');
+    console.log('     app loads and then reports itself offline while this server is fine.');
+    console.log('');
+    console.log('     This machine reaches the name above once it is in the hosts file.');
+    console.log('     A phone has no hosts file, so the router has to answer that name');
+    console.log('     with ' + ip + ' — otherwise it resolves to the public address, which');
+    console.log('     most routers will not route back inside from your own wifi.');
+  } else {
+    // Covered by nothing usable: say what it does carry rather than guess.
+    console.log('  Open on this PC:      ' + protocol + '://localhost:' + PORT);
+    console.log('  Open on phone/tablet: ' + protocol + '://' + ip + ':' + PORT);
+    console.log('');
+    console.log('  ⚠ The certificate covers neither: ' + uncovered.join(', '));
+    console.log('     It is valid for: ' + (certCoveredHosts().join(', ') || '(no subject alternative names)'));
   }
   if (protocol === 'http') {
     console.log('');

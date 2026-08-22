@@ -169,4 +169,48 @@ describe('the server does not advertise addresses its certificate rejects', () =
     );
     assert.match(banner.slice(0, 2000), /certCoveredHosts\(\)/, 'the banner does not say which names would work');
   });
+
+  describe('and recommends an address that works instead of two that do not', () => {
+    // Warning after the fact was still the wrong shape: the two lines people
+    // copy were printed first and contradicted three lines later. What the
+    // banner offers has to be the thing that actually loads.
+    const banner = SRV.slice(SRV.indexOf('Meistertracker is running!'), SRV.indexOf('CalDAV server:'));
+
+    it('branches on whether anything is uncovered at all', () => {
+      assert.match(
+        banner,
+        /if \(!uncovered\.length\)/,
+        'the banner prints the same lines regardless of the certificate'
+      );
+    });
+
+    it('leads with the covered name when the recommended addresses are not covered', () => {
+      assert.match(banner, /vouched/, 'nothing works out which name the certificate would accept');
+      assert.match(banner, /Open on any device:\s*'\s*\+\s*protocol\s*\+\s*':\/\/'\s*\+\s*vouched\[0\]/);
+    });
+
+    it('excludes wildcards and the two addresses it is replacing', () => {
+      // *.example.com is not something you can type into a phone, and offering
+      // back localhost or the LAN IP would defeat the point.
+      const pick = banner.slice(banner.indexOf('const vouched'), banner.indexOf('if (!uncovered.length)'));
+      assert.match(pick, /startsWith\('\*\.'\)/, 'a wildcard could be offered as an address');
+      assert.match(pick, /!== 'localhost'/);
+      assert.match(pick, /!== ip/);
+    });
+
+    it('says why clicking past the warning will not save you', () => {
+      assert.match(banner, /service worker will not/i, 'the banner does not explain the failure mode');
+    });
+
+    it('and what a phone needs, since it has no hosts file', () => {
+      assert.match(banner, /hosts file/, 'no mention of how this machine reaches the name');
+      assert.match(banner, /router has to answer/, 'no mention of what a phone needs');
+    });
+
+    it('keeps the plain two lines when the certificate does cover them', () => {
+      const selfSigned = banner.slice(0, banner.indexOf('} else if'));
+      assert.match(selfSigned, /Open on this PC/, 'the self-signed case lost its normal output');
+      assert.match(selfSigned, /Open on phone\/tablet/);
+    });
+  });
 });
