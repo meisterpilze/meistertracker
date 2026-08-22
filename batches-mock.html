@@ -662,6 +662,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 6px;
+        flex-wrap: wrap;
         border-top: 1px solid var(--c-border-light);
         padding-top: 7px;
         margin-top: auto;
@@ -669,6 +670,83 @@
       .stile-foot .fs {
         font-size: 10.5px;
         color: var(--c-text-muted);
+      }
+      /* The three stage counts, labelled on the tile. The colour is a
+         shortcut to them, never the only way to read them. */
+      .tstages {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        text-align: center;
+      }
+      .tstages .tst {
+        display: block;
+        min-width: 0;
+      }
+      .tstages b {
+        display: block;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+      }
+      .tstages i {
+        display: block;
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--c-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+      /* The traffic light, written out. Nothing here means anything by
+         colour alone. */
+      .tlegend {
+        margin-top: 10px;
+        padding-top: 9px;
+        border-top: 1px solid var(--c-border-light);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 11.5px;
+        color: var(--c-text-sec);
+        line-height: 1.45;
+      }
+      .tlegend .sup {
+        margin-right: 6px;
+        vertical-align: baseline;
+      }
+      /* GESAMT tile — the "Chargen gesamt" box, folded into the same grid so
+         the tab is two windows instead of three. */
+      .stile-total {
+        background: #0f2a1c;
+        border-color: #0f2a1c;
+        color: #dcfce7;
+        cursor: pointer;
+      }
+      .stile-total:hover {
+        border-color: #0f2a1c;
+        box-shadow: var(--shadow-md);
+      }
+      .stile-total .stile-name,
+      .stile-total .stile-big b {
+        color: #fff;
+      }
+      .stile-total .stile-big span,
+      .stile-total .tstages i,
+      .stile-total .stile-foot .fs {
+        color: #86efac;
+      }
+      .stile-total .stile-kz {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
+        color: #dcfce7;
+      }
+      .stile-total .stile-foot {
+        border-top-color: rgba(255, 255, 255, 0.16);
+      }
+      .stile-total .sbar {
+        background: rgba(255, 255, 255, 0.14);
       }
 
       /* ═══ VARIANT B — eine Tabelle ════════════════════════════════════ */
@@ -868,10 +946,11 @@
     <div class="mockbar">
       <div class="mockbar-title">
         Chargen-Reiter — Redesign
-        <small>3 Varianten · Klick funktioniert: sortieren, filtern, aufklappen</small>
+        <small>D ist die Mischung aus A und B · Klick funktioniert: sortieren, filtern, aufklappen</small>
       </div>
       <div class="seg" id="seg-variant">
-        <button data-v="A" class="on">A · Sorten-Kacheln</button>
+        <button data-v="D" class="on">D · Kacheln + eine Tabelle</button>
+        <button data-v="A">A · Sorten-Kacheln</button>
         <button data-v="B">B · Eine Tabelle</button>
         <button data-v="C">C · Nachschub-Board</button>
       </div>
@@ -990,6 +1069,8 @@
       const fmtD = (d) =>
         String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getFullYear()).slice(2);
       const dot = (c) => `<span class="sp-dot" style="background:${c}"></span>`;
+      // "1 Chargen" is the kind of thing that makes a screen look unfinished.
+      const chargen = (n) => (n === 0 ? 'keine aktive Charge' : n === 1 ? '1 Charge' : n + ' Chargen');
       const overdue = (b) => b.due < TODAY && (b.stage === 'INCUBATING' || b.stage === 'SPAWN RUN');
 
       /* ── Per-Sorte rollup. This is the number the tab does not have today:
@@ -1031,7 +1112,18 @@
           };
         });
       }
-      const SUP_LABEL = { none: 'Kein Nachschub', low: 'Knapp', ok: 'OK' };
+      // Was "Kein Nachschub / Knapp / OK" — three words that name a state
+      // without saying what to do about it, and "Nachschub" read like a button.
+      // These say the action, so the light needs no legend.
+      const SUP_LABEL = { none: 'Neue Charge nötig', low: 'Bald neue Charge', ok: 'Nachschub läuft' };
+      const SUP_SHORT = { none: 'Neue Charge nötig', low: 'Bald neue Charge', ok: 'läuft' };
+      // The sentence behind the light, in the Sorte's own numbers.
+      const supWhy = (r) =>
+        r.supply === 'none'
+          ? `nichts in Spawn oder Inkubation — wenn die ${r.fruit} Frucht-Beutel durch sind, ist die Sorte leer`
+          : r.supply === 'low'
+            ? `${r.pipeline} Beutel kommen nach, ${r.fruit} sind schon in der Fruchtung`
+            : `${r.pipeline} Beutel kommen nach — mehr als die ${r.fruit} in der Fruchtung`;
       const SUP_RANK = { none: 0, low: 1, ok: 2 };
 
       function totals() {
@@ -1056,7 +1148,7 @@
 
       /* ── UI state ───────────────────────────────────────────────────── */
       const S = {
-        variant: 'A',
+        variant: 'D',
         device: 'desktop',
         sortKey: null,
         sortDir: 'asc',
@@ -1066,10 +1158,13 @@
         filterStage: null,
         archive: 'active',
         q: '',
-        groupBy: 'sorte', // Variant B
+        // B groups by Sorte out of the box; D starts flat, because flat is the
+        // state the column sort needs and the one today's tab cannot reach.
+        groupBy: 'none',
         openGroups: {},
         tileSort: 'urgency'
       };
+      const GROUP_DEFAULT = { A: 'none', B: 'sorte', C: 'none', D: 'none' };
 
       /* ═══════════════════════════════════════════════════════════════════
          SORTING — the part that is broken in the app today.
@@ -1219,7 +1314,7 @@
             ${chips
               .map(
                 (c) => `<button class="schip${S.filterStage === c.k ? ' on' : ''}" style="--sc:${c.c}" data-stage="${c.k}">
-                  <span><span class="sl">${c.l}</span><br><span class="sn">${c.n} Chargen</span></span>
+                  <span><span class="sl">${c.l}</span><br><span class="sn">${chargen(c.n)}</span></span>
                   <span class="sv" style="margin-left:auto">${nf(c.v)}</span>
                 </button>`
               )
@@ -1258,57 +1353,75 @@
         </div>`;
       }
 
-      /* ═══ VARIANT A — Sorten-Kacheln ═════════════════════════════════ */
-      function variantA() {
-        let R = rollup();
-        R = R.filter((r) => r.nAll > 0);
+      /* ═══ SORTEN-KACHELN — shared by A and D ═════════════════════════ */
+      function sortedRollup() {
+        const R = rollup().filter((r) => r.nAll > 0);
         if (S.tileSort === 'urgency')
           R.sort((a, b) => SUP_RANK[a.supply] - SUP_RANK[b.supply] || a.pipeline - b.pipeline || cmp(a.name, b.name));
         else if (S.tileSort === 'bags') R.sort((a, b) => b.bags - a.bags);
         else R.sort((a, b) => cmp(a.name, b.name));
-        const maxBags = Math.max(...R.map((r) => r.bags), 1);
+        return R;
+      }
+      // One Sorte, at a glance: how many bags, standing where, and whether
+      // anything is behind them. The three stage numbers are labelled on the
+      // tile itself — the colours are a shortcut, not the only key.
+      function sorteTile(r) {
+        const seg = (v, c) => (v ? `<i style="width:${(v / Math.max(r.bags, 1)) * 100}%;background:${c}"></i>` : '');
+        const st = (v, c, l) =>
+          `<span class="tst"><b style="color:${v ? c : 'var(--c-text-muted)'}">${v || '–'}</b><i>${l}</i></span>`;
+        return `<button class="stile${S.filterSorte === r.kz ? ' on' : ''}${r.supply === 'none' ? ' urgent' : ''}" data-sorte="${r.kz}" title="${esc(r.name)}: ${esc(supWhy(r))}">
+          <div class="stile-top">
+            <span class="stile-name">${dot(r.color)}${esc(r.name)}</span>
+            <span class="stile-kz">${r.kz}</span>
+          </div>
+          <div class="stile-big"><b>${nf(r.bags)}</b><span>Beutel · ${chargen(r.nBatches)}</span></div>
+          <div class="sbar sbar-lg">
+            ${seg(r.spawn, 'var(--st-spawn)')}${seg(r.inc, 'var(--st-inc)')}${seg(r.fruit, 'var(--st-fruit)')}
+          </div>
+          <div class="tstages">
+            ${st(r.spawn, 'var(--st-spawn)', 'Spawn')}${st(r.inc, 'var(--st-inc)', 'Ink.')}${st(r.fruit, 'var(--st-fruit)', 'Frucht.')}
+          </div>
+          <div class="stile-foot">
+            <span class="sup sup-${r.supply}">${SUP_SHORT[r.supply]}</span>
+            <span class="fs">${r.supply === 'ok' ? 'nächste ' + fmtD(r.nextDue) : 'zuletzt vor ' + r.lastDays + ' T'}</span>
+          </div>
+        </button>`;
+      }
+      const tileSortSelect = () => `<select data-set="tileSort">
+          <option value="urgency"${S.tileSort === 'urgency' ? ' selected' : ''}>Sortieren: Dringlichkeit</option>
+          <option value="bags"${S.tileSort === 'bags' ? ' selected' : ''}>Sortieren: Beutel</option>
+          <option value="name"${S.tileSort === 'name' ? ' selected' : ''}>Sortieren: Name</option>
+        </select>`;
+      // The light, spelled out where the tiles are. No colour-only meaning.
+      const tileLegend = (R) => {
+        const bad = R.filter((r) => r.supply === 'none');
+        const low = R.filter((r) => r.supply === 'low');
+        const names = (a) => a.map((r) => r.name).join(', ');
+        return `<div class="tlegend">
+          <div><span class="sup sup-none">Neue Charge nötig</span> nichts in Spawn oder Inkubation — wenn die Fruchtung durch ist, ist die Sorte leer${bad.length ? `: <b>${esc(names(bad))}</b>` : ''}</div>
+          <div><span class="sup sup-low">Bald neue Charge</span> es kommt weniger nach, als gerade fruchtet${low.length ? `: <b>${esc(names(low))}</b>` : ''}</div>
+          <div><span class="sup sup-ok">Nachschub läuft</span> mehr im Nachlauf als in der Fruchtung</div>
+        </div>`;
+      };
 
-        const tiles = R.map((r) => {
-          const seg = (v, c) => (v ? `<i style="width:${(v / Math.max(r.bags, 1)) * 100}%;background:${c}"></i>` : '');
-          return `<button class="stile${S.filterSorte === r.kz ? ' on' : ''}${r.supply === 'none' ? ' urgent' : ''}" data-sorte="${r.kz}">
-            <div class="stile-top">
-              <span class="stile-name">${dot(r.color)}${esc(r.name)}</span>
-              <span class="stile-kz">${r.kz}</span>
-            </div>
-            <div class="stile-big"><b>${nf(r.bags)}</b><span>Beutel · ${r.nBatches} Chargen</span></div>
-            <div class="sbar sbar-lg" title="Spawn ${r.spawn} · Inkubation ${r.inc} · Fruchtung ${r.fruit}">
-              ${seg(r.spawn, 'var(--st-spawn)')}${seg(r.inc, 'var(--st-inc)')}${seg(r.fruit, 'var(--st-fruit)')}
-            </div>
-            <div class="stile-legend">
-              <span><i style="background:var(--st-spawn)"></i>${r.spawn}</span>
-              <span><i style="background:var(--st-inc)"></i>${r.inc}</span>
-              <span><i style="background:var(--st-fruit)"></i>${r.fruit}</span>
-            </div>
-            <div class="stile-foot">
-              <span class="sup sup-${r.supply}">${SUP_LABEL[r.supply]}</span>
-              <span class="fs">${r.supply === 'ok' ? 'nächste ' + fmtD(r.nextDue) : 'zuletzt vor ' + r.lastDays + ' T'}</span>
-            </div>
-          </button>`;
-        }).join('');
-
+      /* ═══ VARIANT A — Kacheln + Kennzahlen + Tabelle ══════════════════ */
+      function variantA() {
+        const R = sortedRollup();
+        const tiles = R.map(sorteTile).join('');
         const nUrgent = R.filter((r) => r.supply !== 'ok').length;
         const rows = sortBy(filtered(), S.sortKey, S.sortDir, bKey);
         return (
           headerStrip(false) +
           `<div class="card">
             <div class="card-head">
-              <div class="sec">Nach Sorte — Nachschub</div>
+              <div class="sec">Nach Sorte</div>
               <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
-                ${nUrgent ? `<span class="sup sup-low">${nUrgent} Sorten brauchen Nachschub</span>` : ''}
-                <select data-set="tileSort">
-                  <option value="urgency"${S.tileSort === 'urgency' ? ' selected' : ''}>Sortieren: Dringlichkeit</option>
-                  <option value="bags"${S.tileSort === 'bags' ? ' selected' : ''}>Sortieren: Beutel</option>
-                  <option value="name"${S.tileSort === 'name' ? ' selected' : ''}>Sortieren: Name</option>
-                </select>
+                ${nUrgent ? `<span class="sup sup-low">${nUrgent} Sorten brauchen bald eine neue Charge</span>` : ''}
+                ${tileSortSelect()}
               </div>
             </div>
             <div class="sgrid">${tiles}</div>
-            <div class="hdr-sub" style="margin-top:9px">Kachel antippen filtert die Liste unten. Balken: ${'<i style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--st-spawn)"></i>'} Spawn · ${'<i style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--st-inc)"></i>'} Inkubation · ${'<i style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--st-fruit)"></i>'} Fruchtung</div>
+            ${tileLegend(R)}
           </div>` +
           `<div class="card">${listControls('Alle Chargen')}${batchTable(rows)}</div>`
         );
@@ -1426,10 +1539,10 @@
           body += phone
             ? `<tr class="grp"><td colspan="${GCOLS.length}"><div class="gblock" data-group="${esc(g.key)}">
                 <div class="gp-row"><span><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}</span><span>${nf(g.qty)}</span></div>
-                <div class="gp-mini"><span style="color:var(--st-spawn)">${g.spawn}</span><span style="color:var(--st-inc)">${g.inc}</span><span style="color:var(--st-fruit)">${g.fruit}</span><span class="muted">${g.n} Chargen</span>${g.supply ? `<span class="sup sup-${g.supply}" style="margin-left:auto">${SUP_LABEL[g.supply]}</span>` : ''}</div>
+                <div class="gp-mini"><span style="color:var(--st-spawn)">${g.spawn}</span><span style="color:var(--st-inc)">${g.inc}</span><span style="color:var(--st-fruit)">${g.fruit}</span><span class="muted">${chargen(g.n)}</span>${g.supply ? `<span class="sup sup-${g.supply}" style="margin-left:auto">${SUP_LABEL[g.supply]}</span>` : ''}</div>
               </div></td></tr>`
             : `<tr class="grp" data-group="${esc(g.key)}">
-                <td><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}<span class="muted" style="font-weight:500;font-size:11.5px"> · ${g.n} Chargen</span></td>
+                <td><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}<span class="muted" style="font-weight:500;font-size:11.5px"> · ${chargen(g.n)}</span></td>
                 <td style="text-align:right">${nf(g.qty)}</td>
                 <td style="text-align:right;color:var(--st-spawn)">${num(g.spawn)}</td>
                 <td style="text-align:right;color:var(--st-inc)">${num(g.inc)}</td>
@@ -1505,7 +1618,7 @@
           const rc = pct >= 100 ? 'var(--c-red-strong)' : pct > 70 ? 'var(--c-amber)' : 'var(--c-green)';
           return `<tr class="sup-row r-${r.supply}">
             <td data-l="Sorte" style="font-weight:600">${dot(r.color)}${esc(r.name)} <span class="stile-kz">${r.kz}</span></td>
-            <td data-l="Beutel" style="text-align:right"><b>${nf(r.bags)}</b><br><span class="muted" style="font-size:11px">${r.nBatches} Chargen</span></td>
+            <td data-l="Beutel" style="text-align:right"><b>${nf(r.bags)}</b><br><span class="muted" style="font-size:11px">${chargen(r.nBatches)}</span></td>
             <td data-l="Spawn" style="text-align:right;color:var(--st-spawn);font-weight:600">${r.spawn || '<span class="muted">–</span>'}</td>
             <td data-l="Ink." style="text-align:right;color:var(--st-inc);font-weight:600">${r.inc || '<span class="muted">–</span>'}</td>
             <td data-l="Frucht." style="text-align:right;color:var(--st-fruit);font-weight:600">${r.fruit || '<span class="muted">–</span>'}</td>
@@ -1530,8 +1643,88 @@
         );
       }
 
+      /* ═══ VARIANT D — A's Kacheln, B's Einfachheit ════════════════════
+         Two windows, not three. The "Chargen gesamt" box becomes the first
+         tile in the same grid, so the totals and the per-Sorte breakdown are
+         one card; the table below is flat by default, which is the only
+         state in which the column sort actually owns the order.
+         ═════════════════════════════════════════════════════════════════ */
+      function variantD() {
+        const T = totals();
+        const R = sortedRollup();
+        const nUrgent = R.filter((r) => r.supply === 'none').length;
+        const nLow = R.filter((r) => r.supply === 'low').length;
+        const seg = (v, c) => (v ? `<i style="width:${(v / T.bags) * 100}%;background:${c}"></i>` : '');
+        const st = (v, c, l) => `<span class="tst"><b style="color:${c}">${nf(v)}</b><i>${l}</i></span>`;
+        const totalTile = `<button class="stile stile-total${!S.filterSorte && !S.filterStage ? ' on' : ''}" data-clear="all">
+          <div class="stile-top"><span class="stile-name">Alle Sorten</span><span class="stile-kz">${R.length} Sorten</span></div>
+          <div class="stile-big"><b>${nf(T.bags)}</b><span>Beutel · ${chargen(T.nAct)}</span></div>
+          <div class="sbar sbar-lg">${seg(T.spawn, 'var(--st-spawn)')}${seg(T.inc, 'var(--st-inc)')}${seg(T.fruit, 'var(--st-fruit)')}</div>
+          <div class="tstages">${st(T.spawn, '#c4b5fd', 'Spawn')}${st(T.inc, '#7dd3fc', 'Ink.')}${st(T.fruit, '#86efac', 'Frucht.')}</div>
+          <div class="stile-foot"><span class="fs">${T.nAll} Chargen gesamt · ${T.nAll - T.nAct} archiviert</span></div>
+        </button>`;
+
+        // Grouping stays available, but "keine" is the default — that is the
+        // state today's tab can never reach, and the one the sort needs.
+        const groupSel = `<select data-set="groupBy">
+            <option value="none"${S.groupBy === 'none' ? ' selected' : ''}>Gruppieren: keine</option>
+            <option value="sorte"${S.groupBy === 'sorte' ? ' selected' : ''}>Gruppieren: Sorte</option>
+            <option value="stage"${S.groupBy === 'stage' ? ' selected' : ''}>Gruppieren: Phase</option>
+          </select>`;
+        const rows = filtered();
+        let listCard;
+        if (S.groupBy === 'none') {
+          listCard = `<div class="card">${listControls('Alle Chargen', groupSel)}${batchTable(sortBy(rows, S.sortKey, S.sortDir, bKey))}</div>`;
+        } else {
+          const key = S.groupBy === 'sorte' ? (b) => b.kz : (b) => b.stage;
+          const label = S.groupBy === 'sorte' ? (k) => sorte(k).name : (k) => STAGE_LABEL[k];
+          const color = S.groupBy === 'sorte' ? (k) => sorte(k).color : (k) => STAGE_COLOR[k];
+          const keys =
+            S.groupBy === 'sorte'
+              ? R.map((r) => r.kz).filter((k) => rows.some((b) => key(b) === k))
+              : STAGE_ORDER.filter((k) => rows.some((b) => key(b) === k));
+          const cols = BCOLS.filter((c) => !(S.device === 'phone' && c.ph === false));
+          let body = '';
+          for (const k of keys) {
+            const items = sortBy(rows.filter((b) => key(b) === k), S.sortKey, S.sortDir, bKey);
+            const open = S.openGroups[k] !== false;
+            const qty = items.reduce((a, b) => a + b.qty, 0);
+            body +=
+              `<tr class="grp" data-group="${esc(k)}"><td colspan="${cols.length}">` +
+              `<span class="caret">${open ? '▾' : '▸'}</span>${dot(color(k))}${esc(label(k))}` +
+              `<span class="muted" style="font-weight:500;font-size:11.5px"> · ${chargen(items.length)} · ${nf(qty)} Beutel</span></td></tr>`;
+            if (open) body += items.map((b) => batchRow(b, cols)).join('');
+          }
+          if (!keys.length) body = `<tr><td colspan="${cols.length}" class="empty">Keine Chargen für diese Auswahl</td></tr>`;
+          listCard = `<div class="card">${listControls('Alle Chargen', groupSel)}<div class="tscroll"><table class="t"><thead><tr>${cols.map((c) => th(c, 'main')).join('')}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+        }
+
+        return (
+          `<div class="card">
+            <div class="card-head">
+              <div class="sec">Chargen nach Sorte</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+                ${nUrgent ? `<span class="sup sup-none">${nUrgent}× neue Charge nötig</span>` : ''}
+                ${nLow ? `<span class="sup sup-low">${nLow}× bald</span>` : ''}
+                ${tileSortSelect()}
+              </div>
+            </div>
+            <div class="sgrid">${totalTile}${R.map(sorteTile).join('')}</div>
+            ${tileLegend(R)}
+          </div>` + listCard
+        );
+      }
+
       /* ── Explainers ─────────────────────────────────────────────────── */
       const WHY = {
+        D: `<h3>Variante D — die Kacheln aus A, die Einfachheit aus B</h3>
+          <p>Zwei Fenster statt drei. Die Kachel <b>„Alle Sorten“</b> ist der alte „Chargen gesamt“-Kasten — sie steht jetzt als erste Kachel im selben Raster, also sind Gesamtzahl und Sorten-Aufschlüsselung <b>eine</b> Karte. Darunter nur noch die Tabelle.</p>
+          <ul>
+            <li><span class="tag">Kachel</span>Je Sorte: Beutel gesamt, darunter <b>beschriftet</b>, wie viele davon in Spawn, Inkubation und Fruchtung stehen. Der Balken ist die Abkürzung dazu, nicht die einzige Lesart.</li>
+            <li><span class="tag">Ampel</span>Sagt jetzt, <b>was zu tun ist</b>, nicht wie der Zustand heißt: „Neue Charge nötig“ statt „Kein Nachschub“. Darunter steht ausgeschrieben, was die drei Stufen bedeuten und welche Sorten gerade dran sind.</li>
+            <li><span class="tag">Tabelle</span>Standard ist <b>ungruppiert</b> — nur so bestimmt die Spaltensortierung wirklich die Reihenfolge. Gruppieren nach Sorte oder Phase bleibt als Auswahl, ist aber nicht mehr aufgezwungen.</li>
+            <li><span class="tag">Handy</span>Zwei Kacheln nebeneinander, „Alle Sorten“ zuerst, dann die Liste als Karten.</li>
+          </ul>`,
         A: `<h3>Variante A — Sorten-Kacheln</h3>
           <p>Der Standort-Kasten („wo steht was“) fliegt raus — er zeigt dieselben Beutel nochmal, nur nach Raum gruppiert, und gehört zur Farm-Ansicht. An seiner Stelle steht die Aufschlüsselung nach Sorte.</p>
           <ul>
@@ -1560,8 +1753,8 @@
       /* ── Render + events ────────────────────────────────────────────── */
       function render() {
         document.getElementById('vp').className = 'vp' + (S.device === 'phone' ? ' vp-phone' : '');
-        document.getElementById('app').innerHTML =
-          S.variant === 'A' ? variantA() : S.variant === 'B' ? variantB() : variantC();
+        const V = { A: variantA, B: variantB, C: variantC, D: variantD };
+        document.getElementById('app').innerHTML = (V[S.variant] || variantD)();
         document.getElementById('why').innerHTML = WHY[S.variant];
         const parts = ['Alle Chargen'];
         if (S.filterSorte) parts.push(sorte(S.filterSorte).name);
@@ -1574,6 +1767,7 @@
         if (!b) return;
         S.variant = b.dataset.v;
         S.sortKey = null;
+        S.groupBy = GROUP_DEFAULT[S.variant];
         [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
         render();
       });
@@ -1589,8 +1783,9 @@
         if (sortTh) return clickSort(sortTh.dataset.sort, sortTh.dataset.which);
         const clear = e.target.closest('[data-clear]');
         if (clear) {
-          if (clear.dataset.clear === 'sorte') S.filterSorte = null;
-          else S.filterStage = null;
+          const w = clear.dataset.clear;
+          if (w === 'sorte' || w === 'all') S.filterSorte = null;
+          if (w === 'stage' || w === 'all') S.filterStage = null;
           return render();
         }
         const stage = e.target.closest('[data-stage]');
