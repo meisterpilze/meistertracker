@@ -167,15 +167,68 @@ check_duckdns_fallback() {
     echo ""
 }
 
+# Try the new code against a copy of the real database before anything is
+# swapped. See scripts/preflight.js: it snapshots the live file with VACUUM INTO
+# (which does not write to the source), runs the pending migrations there, checks
+# no table lost rows, and loads every module the server loads. A failure here
+# costs nothing — the old server is still running and still serving.
+run_preflight() {
+    if [ ! -f scripts/preflight.js ]; then
+        echo "  -> No preflight script in this version; skipping."
+        return 0
+    fi
+    if node scripts/preflight.js; then
+        return 0
+    fi
+    echo ""
+    echo "  ABORTED: the new version did not pass the preflight."
+    echo "  Nothing was changed. The server is still running the previous code."
+    echo "  The working tree is now at the new commit — to go back:"
+    echo "      git reset --hard stable && npm install --production"
+    exit 1
+}
+
+# Put production back on the last commit that was known to start, and start it.
+#
+# The crash was already being detected; what was missing is that anything
+# happened next. Printing a log and exiting left the server down until somebody
+# read it, which for an unattended update at night means until morning.
+rollback_to_stable() {
+    if [ "$IS_WORKTREE" = true ]; then return 0; fi
+    if ! git rev-parse --verify stable >/dev/null 2>&1; then
+        echo "  No 'stable' tag to fall back to — leaving the tree as it is."
+        echo "  Recover by hand with: git reset --hard <a working commit>"
+        return 1
+    fi
+    echo ""
+    echo "  Rolling back to the last version that started ('stable')..."
+    if ! git reset --hard stable; then
+        echo "  Rollback failed. The tree is still on the new commit."
+        return 1
+    fi
+    npm install --production || true
+    pm2 delete "$PM2_PROCESS_NAME" >/dev/null 2>&1 || true
+    pm2 start server.js --name "$PM2_PROCESS_NAME" --update-env
+    pm2 save
+    sleep 3
+    if pm2 show "$PM2_PROCESS_NAME" 2>/dev/null | grep -qi 'online'; then
+        echo "  -> Rolled back. The previous version is running again."
+        echo "     The failing commit is still on origin/main; fix it there."
+        return 0
+    fi
+    echo "  -> The previous version did not start either. This needs a person."
+    return 1
+}
+
 do_update() {
     echo "==== Meisterpilze Server — Update & Restart ===="
     check_node
     ensure_pm2
 
     if [ "$IS_WORKTREE" = true ]; then
-        echo "[1/5] Skipping git pull (worktree mode)."
+        echo "[1/6] Skipping git pull (worktree mode)."
     else
-        echo "[1/5] Updating code from git (reset to origin/main)..."
+        echo "[1/6] Updating code from git (reset to origin/main)..."
         if ! git fetch origin; then
             echo "Error: git fetch failed."
             exit 1
@@ -186,16 +239,19 @@ do_update() {
         fi
     fi
 
-    echo "[2/5] Installing dependencies..."
+    echo "[2/6] Installing dependencies..."
     npm install --production
 
-    echo "[3/5] Backing up data..."
+    echo "[3/6] Backing up data..."
     backup_data
 
-    echo "[4/5] Ensuring TLS certificates..."
+    echo "[4/6] Ensuring TLS certificates..."
     ensure_certs
 
-    echo "[5/5] Restarting server..."
+    echo "[5/6] Checking the new version against your data..."
+    run_preflight
+
+    echo "[6/6] Restarting server..."
     if pm2 describe "$PM2_PROCESS_NAME" > /dev/null 2>&1; then
         echo "  -> Process found, deleting for clean restart..."
         pm2 delete "$PM2_PROCESS_NAME"
@@ -213,6 +269,7 @@ do_update() {
         echo "  ERROR: Server process crashed on startup."
         echo "  Recent error log:"
         pm2 logs "$PM2_PROCESS_NAME" --lines 15 --nostream --err 2>/dev/null || true
+        rollback_to_stable
         exit 1
     fi
     if [ "$IS_WORKTREE" != true ] && command -v git &>/dev/null; then
