@@ -9591,6 +9591,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         domain: cfg.domain ? cfg.domain + '.duckdns.org' : null,
         lastIpUpdate: cfg.lastIpUpdate,
         lastIp: cfg.lastIp,
+        // Written only by scripts/duckdns-fallback.js, and kept separate from
+        // lastIpUpdate on purpose: when this server's own updater dies, the
+        // banner has to be able to say both "your updater is broken" and "the
+        // record is being kept alive anyway". One shared column could only say
+        // one of those, and it said the wrong one.
+        fallbackLast: cfg.fallbackLast,
         leEnabled: cfg.leEnabled,
         leExpiry: cfg.leExpiry,
         cert: certInfo,

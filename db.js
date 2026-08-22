@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS duckdns_config (
   token           TEXT DEFAULT '',
   last_ip_update  TEXT,
   last_ip         TEXT,
+  fallback_last   TEXT,
   le_enabled      INTEGER DEFAULT 0,
   le_last_renewal TEXT,
   le_expiry       TEXT
@@ -2195,6 +2196,29 @@ const MIGRATIONS = [
                   SELECT MAX(id) FROM product_channel_map
                    GROUP BY channel, IFNULL(channel_sku, char(31)), IFNULL(listing_id, char(31))
                 )`);
+    }
+  },
+  {
+    version: 76,
+    description: 'Give the out-of-process DuckDNS fallback its own column',
+    fn(db) {
+      // `last_ip_update` answered one question — "when did the in-process
+      // updater last succeed?" — and the whole admin banner is built on it:
+      // older than STALE_AFTER_MS means that updater is dead, and the banner
+      // goes red.
+      //
+      // The systemd/Task Scheduler fallback then started writing the same
+      // column, and that broke two things at once. It hid a permanently broken
+      // in-process updater, because a fallback refreshing the column every few
+      // minutes means the staleness alarm can never fire. And it made the
+      // fallback measure itself: it stood down whenever the column was fresh,
+      // including when *it* was what made it fresh, so during a real outage it
+      // updated every fifteen minutes instead of every five.
+      //
+      // One column, two writers, three questions. Splitting them is the fix:
+      // `last_ip_update` goes back to meaning only the server, and the fallback
+      // records itself here. Neither can now mask or throttle the other.
+      db.exec('ALTER TABLE duckdns_config ADD COLUMN fallback_last TEXT');
     }
   }
 ];
@@ -5228,6 +5252,7 @@ function getDuckdnsCfg(db) {
     token: row.token || '',
     lastIpUpdate: row.last_ip_update || null,
     lastIp: row.last_ip || null,
+    fallbackLast: row.fallback_last || null,
     leEnabled: row.le_enabled === 1,
     leLastRenewal: row.le_last_renewal || null,
     leExpiry: row.le_expiry || null
@@ -5254,6 +5279,12 @@ function updateDuckdnsStatus(db, fields) {
   if (fields.lastIp !== undefined) {
     sets.push('last_ip=?');
     vals.push(fields.lastIp);
+  }
+  // Written only by scripts/duckdns-fallback.js. Kept apart from
+  // last_ip_update so that neither writer can silence the other's alarm.
+  if (fields.fallbackLast !== undefined) {
+    sets.push('fallback_last=?');
+    vals.push(fields.fallbackLast);
   }
   if (fields.leLastRenewal !== undefined) {
     sets.push('le_last_renewal=?');

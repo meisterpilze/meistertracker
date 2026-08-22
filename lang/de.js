@@ -1651,6 +1651,7 @@ window.LANG['de'] = {
   'duckdns.recordMissing': 'Die Nameserver liefern derzeit gar keine Adresse f\u00fcr diesen Namen.',
   'duckdns.verified': 'Von den DuckDNS-Nameservern best\u00e4tigt.',
   'duckdns.lastError': 'Letzter Fehler: {error}',
+  'duckdns.fallbackCovering': 'Der Fallback-Dienst h\u00e4lt den Eintrag aktuell (zuletzt vor {min} Min).',
   'le.certActive': 'Aktiv',
   'le.requesting': 'Anfordern\u2026',
   'le.certIssued': 'Zertifikat ausgestellt f\u00fcr {domain}! Ablauf: {date}',

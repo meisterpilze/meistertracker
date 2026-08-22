@@ -1632,6 +1632,7 @@ window.LANG['en'] = {
   'duckdns.recordMissing': 'The nameservers currently serve no address for this name.',
   'duckdns.verified': 'Confirmed by the DuckDNS nameservers.',
   'duckdns.lastError': 'Last error: {error}',
+  'duckdns.fallbackCovering': 'The fallback service is keeping the record current (last run {min} min ago).',
   'le.certActive': 'Active',
   'le.requesting': 'Requesting\u2026',
   'le.certIssued': 'Certificate issued for {domain}! Expires: {date}',

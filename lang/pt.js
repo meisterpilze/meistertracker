@@ -1648,6 +1648,7 @@ window.LANG['pt'] = {
   'duckdns.recordMissing': 'Os servidores de nomes n\u00e3o devolvem qualquer endere\u00e7o para este nome.',
   'duckdns.verified': 'Confirmado pelos servidores de nomes DuckDNS.',
   'duckdns.lastError': '\u00daltimo erro: {error}',
+  'duckdns.fallbackCovering': 'O servi\u00e7o de reserva mant\u00e9m o registo atualizado (\u00faltima execu\u00e7\u00e3o h\u00e1 {min} min).',
   'le.certActive': 'Ativo',
   'le.requesting': 'A solicitar\u2026',
   'le.certIssued': 'Certificado emitido para {domain}! Expira: {date}',
