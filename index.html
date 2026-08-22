@@ -1144,6 +1144,36 @@
             <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
           </div>
           <div class="cam-hud-btns">
+            <!-- Reporting contamination is done standing in front of a bad bag
+                 with the phone already in hand. The scanner could only be put
+                 into CONTAM mode by scanning the printed CONTAM barcode, which
+                 is on a sheet at the bench, not in the tent. Everything behind
+                 this button already existed; it just had no door on a phone. -->
+            <button
+              id="btn-cam-contam"
+              class="cam-hud-btn cam-hud-btn-contam"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="scan.contamAria"
+              aria-label="Kontamination melden"
+              data-i18n-title="scan.contamAria"
+              title="Kontamination melden"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              </svg>
+            </button>
             <button
               id="btn-cam-torch"
               class="cam-hud-btn"

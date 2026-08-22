@@ -1185,6 +1185,8 @@ window.LANG['en'] = {
   'scanFb.actionRemove': 'Action: REMOVE \u2192 scan bags',
   'scanFb.actionHarvest': 'Action: HARVEST \u2192 scan a bag to log its weight',
   'scanFb.actionContam': 'Action: CONTAM \u2192 scan a bag to report contamination',
+  'scanFb.actionCleared': 'Action cleared \u2014 back to plain scanning',
+  'scan.contamAria': 'Toggle contamination mode',
   'scanFb.location': 'Location: {loc} \u2192 now scan bags (location stays until you change it)',
   'scanFb.to': 'To: {loc} \u2192 now scan bags',
   'scanFb.setAction': 'Set an action first \u2014 scan ADD, MOVE, REMOVE or HARVEST.',
