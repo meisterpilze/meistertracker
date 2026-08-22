@@ -215,9 +215,14 @@ jobs:
           if ($r | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
 
       # The finding this exists for: -RepetitionInterval without an explicit
-      # -RepetitionDuration registers, on some builds, as a single run that
-      # never repeats — while Get-ScheduledTaskInfo still reports success from
-      # that one run. Reading the registered XML back is the only way to know.
+      # -RepetitionDuration was reported to register, on some builds, as a
+      # single run that never repeats — while Get-ScheduledTaskInfo still
+      # reports success from that one run. Reading the registered XML back is
+      # the only way to know, and on windows-latest the answer is that the
+      # repetition survives with an empty Duration, which is what the schema
+      # means by "indefinitely". Spelling it out was measured to be worse:
+      # [TimeSpan]::MaxValue becomes P99999999DT23H59M59S and is rejected.
+      # This step is what keeps that answer true.
       - name: Registering the task really produces a repeating trigger
         shell: pwsh
         run: |
@@ -239,9 +244,12 @@ jobs:
           if ($rep.Interval -ne 'PT5M') { throw "interval is '$($rep.Interval)', expected PT5M" }
           Write-Host "repetition duration as registered: '$($rep.Duration)' (empty means indefinite)"
 
-          # The privilege posture the documentation promises.
-          if ($xml.Task.Principals.Principal.RunLevel -ne 'LeastPrivilege') {
-            throw "task runs as $($xml.Task.Principals.Principal.RunLevel), expected LeastPrivilege"
+          # The privilege posture the documentation promises. Task Scheduler
+          # omits <RunLevel> entirely when it is LeastPrivilege, so absence is
+          # the confirmation; only HighestAvailable would appear.
+          $runLevel = $xml.Task.Principals.Principal.RunLevel
+          if ($runLevel -and $runLevel -ne 'LeastPrivilege') {
+            throw "task runs as '$runLevel', expected LeastPrivilege (or no RunLevel element at all)"
           }
           if ($xml.Task.Principals.Principal.LogonType -ne 'S4U') {
             throw "logon type is $($xml.Task.Principals.Principal.LogonType), expected S4U"
