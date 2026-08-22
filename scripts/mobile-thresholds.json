@@ -52,42 +52,6 @@
       "mode": "app",
       "package": "P3",
       "reason": "The lab's Kontamination tab hangs up to 33px past the edge between 769 and 800px. Same band and same cause as the lab's ZOOMED OUT line: at 769 the sidebar returns and the content column loses its width without the tab strip noticing."
-    },
-    {
-      "kind": "touch",
-      "pointer": "fine",
-      "from": 769,
-      "maxPx": 23,
-      "mode": "app",
-      "package": "P1",
-      "reason": "Controls on a desktop between 13 and 22px tall, under the 24px of WCAG 2.5.8 Target Size (Minimum), level AA: the sort buttons in the Chargen table header, 'Bearb.' and 'Drucken' in Sorten and Labor, 'Wochenrhythmus bearbeiten' at 13px. They are correct under a coarse pointer at every width, because the token layer keys the desktop override on `hover: hover` and coarse devices keep the phone numbers -- half of R1 is already right here. The missing half is that the fine axis has no floor of its own: `--tap` resolves to `auto` there, and 24px is a floor for every pointer, not only for a finger."
-    },
-    {
-      "kind": "touch",
-      "pointer": "coarse",
-      "at": "cal-day",
-      "from": 769,
-      "mode": "app",
-      "package": "P1",
-      "reason": "Every cell of the month grid is 28px tall under a finger, at every width from 769px up -- a tablet, and a tablet is where a month view gets used standing up. Seven columns of 44px need 308px, so there is room for it at any of these widths; the cells are 28px because the grid sizes its rows by content and nothing floors them. Same package as the line above: the floor follows the pointer."
-    },
-    {
-      "kind": "touch",
-      "at": "location-section-header",
-      "from": 769,
-      "mode": "app",
-      "package": "P1",
-      "reason": "The collapsible location header in the Chargen list is 21px tall on both axes above 769px. On the coarse axis that is under 44 and on the fine one under 24, so it is the same control failing both floors at once."
-    },
-    {
-      "kind": "touch",
-      "pointer": "fine",
-      "at": "summary.fs-meta",
-      "from": 769,
-      "maxPx": 23,
-      "mode": "markup",
-      "package": "P1",
-      "reason": "The <summary> of #nb-sub-section is 18px tall on a desktop, under WCAG 2.5.8's 24px. Found by the static run before --app existed, and kept as its own line because it is in index.html's markup rather than in anything app.js renders: the live app never measures it, because the form it sits in is collapsed."
     }
   ],
   "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both.",
@@ -97,8 +61,22 @@
       "id": "chargentabelle-spalten",
       "asked": "Jonas, point 61 in neubau/FUER-JONAS.md (private repo), 2026-08-21",
       "package": "P5",
-      "assumed": ["batchId", "species", "qty", "due", "status", "actions"],
-      "folded": ["strain", "inc", "substrate", "source", "created", "notes"],
+      "assumed": [
+        "batchId",
+        "species",
+        "qty",
+        "due",
+        "status",
+        "actions"
+      ],
+      "folded": [
+        "strain",
+        "inc",
+        "substrate",
+        "source",
+        "created",
+        "notes"
+      ],
       "why": "The twelve columns of the Chargen table need 728px in the header row alone, and at a 769px window there are 439px of content width. Which six somebody actually needs in passing is known only by the person who works with it, and no stylesheet can decide it. Until the answer arrives P5 keeps the six above visible and folds the other six into the expandable part of the card. Written down here rather than left in a commit message, because an assumption nobody can find is indistinguishable from a decision nobody made.",
       "goes_when": "Jonas answers point 61, and the line is then either confirmed or replaced by his list."
     },
@@ -107,5 +85,6 @@
       "status": "zurueckgezogen 2026-08-22",
       "note": "Der Sprungbefund war ein Messfehler des Messstands, nicht ein Fehler der Anwendung. Gemessen wurde unmittelbar nach setViewport, und der Layout-Viewport laeuft danach erst ueber rund 100 bis 200 ms ein: Uebersicht 600, 583, 547, 502, 390, 360; Kalender und Labor entsprechend auf 320. Mit einer Ruhebedingung von drei gleichen Frames ist die Klasse in vier aufeinanderfolgenden Laeufen 0 offen, ohne sie schwankte sie zwischen 11 und 20. Was bleibt, ist ZOOMED OUT: zwei Seiten sind schon beim Oeffnen breiter als das Telefon."
     }
-  ]
+  ],
+  "_2026_08_22_p1": "Package P1 closed every touch line. The desktop half of the token layer said `--tap: auto` and `--tap-min: 0px`, which meant no floor at all on a fine pointer: 24px is WCAG 2.5.8 Target Size (Minimum), level AA, and level AA knows nothing about input devices. The coarse half was already right, because it hangs on `hover: hover` rather than on a width. Three controls needed a floor of their own on top of the tokens: the collapsible location header (21px on both axes), the day circle in the month grid (28px under a finger at every width from 769px up) and the <summary> of #nb-sub-section (18px on a desk, and only the static run can see it). `.btn` gained a min-WIDTH as well: a tap target has two measurements, and the lab's close button was 23 x 24."
 }
