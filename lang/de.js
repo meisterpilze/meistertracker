@@ -655,7 +655,7 @@ window.LANG['de'] = {
   'batch.tileSortUrgency': 'Sortieren: Dringlichkeit',
   'batch.tileSortBags': 'Sortieren: Beutel',
   'batch.tileSortName': 'Sortieren: Name',
-  'batch.newBatch': 'Neue Charge',
+  'batch.newBatch': 'Neue Charge anlegen',
   'batch.harvests': 'Ernten',
   'batch.createNew': 'Growbags Batch',
   'batch.bagWeight': 'Beutelgewicht',

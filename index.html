@@ -2511,6 +2511,34 @@
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
+          <!-- Making a Charge is not a fifth place to look. The four tabs below
+               show what exists — every Charge, where the bags are, the substrate
+               mixes, the harvests — and this is where something new starts, so it
+               reads as a different kind of control and sits above them, the same
+               way Laborarbeit does one section over.
+               It still opens sp-batch-new rather than a dialog: that panel is a
+               two-step workflow, mix the substrate and then draw bags from it,
+               and the substrate step is the only place raw material leaves the
+               shelf. The comment that used to sit here claimed it opened the
+               quick-create dialog; it never did — msQuickChargeNew() is that
+               dialog, and it is reached from a Sorte tile or a supply task. -->
+          <button class="btn btn-p btn-wide" id="btn-batch-new">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span data-i18n="batch.newBatch">New batch</span>
+          </button>
           <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
             <!-- "Where does everything stand" used to sit on top of the batch
@@ -2521,9 +2549,6 @@
                  selected and moved in bulk — so it keeps everything it had and
                  gets its own tab instead of competing for the first screen. -->
             <button class="stab" id="st-batch-locations" data-i18n="batch.locationsTab">Standorte</button>
-            <!-- Opens the recipe-driven quick-create dialog (with a Sorte picker). The
-                 sp-batch-new panel stays in the DOM as that dialog's backing form. -->
-            <button class="stab" id="st-batch-new" data-i18n="batch.newBatch">Neue Charge</button>
             <button class="stab" id="st-batch-substrate" data-i18n="sub.tab">Substrat-Ansätze</button>
             <button class="stab" id="st-batch-harvest" data-i18n="batch.harvests">Harvests</button>
           </div>
