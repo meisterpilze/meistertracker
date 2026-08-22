@@ -799,6 +799,10 @@ window.LANG['en'] = {
   'lab.lowStock': 'LOW',
   'lab.belowMin': '{n} active — below minimum of {min}',
   'lab.setMinimum': 'Set minimum',
+  'lab.kgUnit': 'kg',
+  'lab.piecesUnit': 'pieces',
+  'lab.noneLeft': 'None left',
+  'lab.stockOk': 'Stock is fine',
   'lab.lowLabAlert': 'Low lab stock: {type}',
   'lab.gsLabel': 'Grain Spawn',
   // Table headers - lab

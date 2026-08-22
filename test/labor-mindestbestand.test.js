@@ -21,22 +21,11 @@
 //   genau dann, wenn sie zählt.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle } = require('./helpers/quelle');
+const { quelle, hebeFunktion: _hf, hebeKonstante: _hk } = require('./helpers/quelle');
 
 const SRC = quelle();
-
-function hebeFunktion(name) {
-  const re = new RegExp('^function ' + name + '\\([\\s\\S]*?\\r?\\n\\}', 'm');
-  const m = SRC.match(re);
-  assert.ok(m, name + '() nicht in app.js gefunden — der Test muss mitgeführt werden');
-  return m[0];
-}
-function hebeKonstante(name) {
-  const re = new RegExp('^const ' + name + ' = [[{][\\s\\S]*?\\r?\\n?[\\]}];?$', 'm');
-  const m = SRC.match(re);
-  assert.ok(m, name + ' nicht in app.js gefunden');
-  return m[0];
-}
+const hebeFunktion = (n) => _hf(n, SRC);
+const hebeKonstante = (n) => _hk(n, SRC);
 
 // kulturen: [{typ, sorte, kz}] — je Eintrag eine aktive Kultur.
 // sorten:   [{name, kuerzel, imProgramm, minMc, minPd, minLc, minSpawnKg}]
