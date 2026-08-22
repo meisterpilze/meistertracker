@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phasenfarben app-weit</title>
+    <style>
+      :root {
+        --c-primary: #15803d;
+        --c-primary-light: #f0fdf4;
+        --c-bg: #f8fafc;
+        --c-surface: #ffffff;
+        --c-border: #e2e8f0;
+        --c-border-light: #f1f5f9;
+        --c-text: #1e293b;
+        --c-text-sec: #475569;
+        --c-text-muted: #64748b;
+        --c-red: #ef4444;
+        --c-red-light: #fee2e2;
+        --c-red-dark: #991b1b;
+        --c-red-strong: #dc2626;
+        --radius: 12px;
+        --radius-sm: 8px;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        /* The two exits. Identical in all three candidates below: they are not
+           steps along any ramp, and a contaminated row is the one thing in
+           these tables that should still catch an eye. */
+        --st-done: #64748b;
+        --st-contam: #ef4444;
+        --st-done-t: #64748b;
+        --st-contam-t: #b91c1c;
+      }
+      /* ── The three candidates ────────────────────────────────────────
+         Fill = large areas (bar segments, capacity bars). Text = anything
+         small or on white (numbers, dots, left borders). They are separate
+         tokens because a pale fill that works in a stacked bar is unreadable
+         as a 13px number. ─────────────────────────────────────────────── */
+      .p-heute {
+        --st-spawn: #a855f7;
+        --st-inc: #0ea5e9;
+        --st-fruit: #10b981;
+        --st-spawn-t: #a855f7;
+        --st-inc-t: #0ea5e9;
+        --st-fruit-t: #10b981;
+      }
+      .p-rampe {
+        --st-spawn: #c3ccd6;
+        --st-inc: #8aae97;
+        --st-fruit: #15803d;
+        --st-spawn-t: #5d6b7a;
+        --st-inc-t: #47755a;
+        --st-fruit-t: #15803d;
+      }
+      .p-gedaempft {
+        --st-spawn: #b3a7cf;
+        --st-inc: #86aec4;
+        --st-fruit: #6faa8a;
+        --st-spawn-t: #6d5f92;
+        --st-inc-t: #3f6d88;
+        --st-fruit-t: #3d7355;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background: #eef2f6;
+        color: var(--c-text);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-text-size-adjust: 100%;
+      }
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 11px 18px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      }
+      .bar h1 {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .bar p {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 2px;
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 20px 18px 50px;
+      }
+      .lede {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        margin-bottom: 22px;
+        box-shadow: var(--shadow);
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--c-text-sec);
+      }
+      .lede h2 {
+        font-size: 15px;
+        color: var(--c-text);
+        margin-bottom: 7px;
+      }
+      .lede b {
+        color: var(--c-text);
+      }
+      .lede + .lede {
+        margin-top: -10px;
+      }
+      .lede ul {
+        margin: 8px 0 0 18px;
+      }
+      .lede li {
+        margin-bottom: 5px;
+      }
+      .surface {
+        margin-bottom: 26px;
+      }
+      .surface > h3 {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--c-text-sec);
+        margin-bottom: 3px;
+      }
+      .surface > p {
+        font-size: 12.5px;
+        color: var(--c-text-muted);
+        margin-bottom: 10px;
+      }
+      .surface > p code {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11.5px;
+        background: #e6ebf1;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+      @media (max-width: 900px) {
+        .cols {
+          grid-template-columns: 1fr;
+        }
+      }
+      .col > .col-h {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--c-text-muted);
+        padding: 0 0 6px 2px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .col-h .sw {
+        display: inline-flex;
+        gap: 2px;
+      }
+      .col-h .sw i {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+      }
+      .pane {
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        padding: 12px;
+      }
+
+      /* ── App primitives, copied from styles.css ──────────────────── */
+      .card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 12px;
+      }
+      .met {
+        background: var(--c-surface);
+        border-radius: var(--radius);
+        padding: 9px 11px;
+        border: 1px solid var(--c-border);
+        box-shadow: var(--shadow);
+        border-left: 4px solid var(--c-primary);
+      }
+      .met-l {
+        font-size: 11px;
+        color: var(--c-text-sec);
+        margin-bottom: 2px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .met-v {
+        font-size: 21px;
+        font-weight: 700;
+        line-height: 1.15;
+      }
+      .g5 {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .metrics-total-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .metrics-total-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--c-text-sec);
+      }
+      .metrics-total-value {
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 99px;
+        white-space: nowrap;
+      }
+      .b-done {
+        background: var(--c-bg);
+        color: var(--c-text-muted);
+      }
+      .b-contam {
+        background: var(--c-red-light);
+        color: var(--c-red-dark);
+      }
+      /* Heute: three fixed hues, hardcoded in styles.css and unrelated to the
+         zone colours they happen to agree with. */
+      .p-heute .b-spawn {
+        background: #f3e8ff;
+        color: #6b21a8;
+      }
+      .p-heute .b-inc {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .p-heute .b-tent {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .p-rampe .b-spawn {
+        background: #eef1f5;
+        color: #5d6b7a;
+      }
+      .p-rampe .b-inc {
+        background: #e3ece6;
+        color: #3f6b50;
+      }
+      .p-rampe .b-tent {
+        background: #cdebd7;
+        color: #14682f;
+      }
+      .p-gedaempft .b-spawn {
+        background: #efebf7;
+        color: #6d5f92;
+      }
+      .p-gedaempft .b-inc {
+        background: #e6eef4;
+        color: #3f6d88;
+      }
+      .p-gedaempft .b-tent {
+        background: #e2efe7;
+        color: #3d7355;
+      }
+      .sp-dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        margin-right: 5px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+      .mono {
+        font-family: ui-monospace, Consolas, monospace;
+      }
+
+      /* Standorte */
+      .location-section {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius);
+        padding: 12px;
+        box-shadow: var(--shadow);
+        margin-bottom: 8px;
+      }
+      .location-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .location-section-title {
+        font-size: 13.5px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .zone-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .location-section-count {
+        font-size: 12px;
+        color: var(--c-text-muted);
+        font-weight: 500;
+      }
+      .rack-card-new {
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius);
+        padding: 10px;
+        background: var(--c-surface);
+        margin-bottom: 8px;
+      }
+      .rack-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 12.5px;
+      }
+      .rack-card-name {
+        font-weight: 600;
+      }
+      .rack-card-count {
+        color: var(--c-text-muted);
+      }
+      .rack-card-bar {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--c-border-light);
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+      .rack-card-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+      }
+      .batch-card {
+        padding: 7px 9px;
+        border-radius: var(--radius-sm);
+        background: var(--c-bg);
+        border: 1px solid var(--c-border-light);
+        border-left: 3px solid var(--c-border-light);
+        margin-bottom: 5px;
+      }
+      .batch-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+      .batch-card-species {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+      }
+      .batch-card-count {
+        font-size: 11px;
+        color: var(--c-text-muted);
+        font-weight: 500;
+      }
+      .batch-card-meta {
+        font-size: 11px;
+        color: var(--c-text-muted);
+        margin-top: 2px;
+        display: flex;
+        gap: 8px;
+      }
+
+      /* Beutel-Chips */
+      .bag-chip {
+        font-size: 11px;
+        font-family: ui-monospace, Consolas, monospace;
+        padding: 3px 7px;
+        border-radius: 6px;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .bag-chip b {
+        font-size: 9.5px;
+        font-weight: 700;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      /* Zonen-Einstellungen */
+      .zone-row {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        font-size: 12.5px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .zone-role {
+        font-size: 11px;
+        color: var(--c-text-muted);
+      }
+
+      /* Table */
+      table.t {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      table.t th {
+        text-align: left;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--c-text-muted);
+        padding: 5px 6px;
+        border-bottom: 2px solid var(--c-border);
+      }
+      table.t td {
+        padding: 6px;
+        border-bottom: 1px solid var(--c-border-light);
+      }
+      .sbar {
+        display: flex;
+        height: 10px;
+        border-radius: 99px;
+        overflow: hidden;
+        background: var(--c-border-light);
+        margin: 7px 0 6px;
+      }
+      .sbar i {
+        display: block;
+        height: 100%;
+      }
+      .tstages {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        text-align: center;
+      }
+      .tstages b {
+        display: block;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.15;
+      }
+      .tstages i {
+        display: block;
+        font-style: normal;
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--c-text-muted);
+        text-transform: uppercase;
+      }
+      .stile {
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        padding: 10px 11px;
+        background: var(--c-surface);
+      }
+      .stile-name {
+        font-weight: 700;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+      }
+      .stile-big {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+        margin-top: 4px;
+      }
+      .stile-big b {
+        font-size: 21px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .stile-big span {
+        font-size: 10.5px;
+        color: var(--c-text-muted);
+        font-weight: 600;
+      }
+      .verdict {
+        margin-top: 22px;
+        border-radius: 12px;
+        padding: 16px 18px;
+        background: #0f172a;
+        color: #cbd5e1;
+        font-size: 13.5px;
+        line-height: 1.6;
+      }
+      .verdict h2 {
+        color: #fff;
+        font-size: 15px;
+        margin-bottom: 8px;
+      }
+      .verdict b {
+        color: #fff;
+      }
+      .verdict ul {
+        margin: 8px 0 0 18px;
+      }
+      .verdict li {
+        margin-bottom: 6px;
+      }
+      .verdict .tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        background: #1e293b;
+        color: #7dd3fc;
+        border-radius: 5px;
+        padding: 1px 7px;
+        margin-right: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <h1>Phasenfarben app-weit</h1>
+      <p>Jede Fläche, die die Phasenfarben benutzt — heute, und in zwei ruhigeren Varianten. Beispieldaten.</p>
+    </div>
+
+    <div class="wrap">
+      <div class="lede">
+        <h2>Zuerst: es sind zwei getrennte Farbsysteme, nicht eins</h2>
+        Sie sehen heute gleich aus, aber das ist Zufall, nicht Konstruktion — und sie ändern sich unterschiedlich:
+        <ul>
+          <li>
+            <b>Zonenfarben</b> sind <b>Daten</b>. Sie stehen in der Zonen-Tabelle, sind pro Installation
+            einstellbar (Einstellungen → Zonen), und die Startwerte kommen aus <code>db.js</code>. Sie färben den
+            Kennzahlen-Streifen, die Standorte-Ansicht, die Beutel-Chips und die Zonen-Liste.
+          </li>
+          <li>
+            <b>Status-Badges</b> sind <b>CSS</b>, fest verdrahtet in <code>styles.css</code>. Sie färben die
+            Status-Spalte in jeder Tabelle — Chargen, Körnerbrut, Kulturen — und hängen mit den Zonen gar nicht
+            zusammen.
+          </li>
+        </ul>
+      </div>
+
+      <div id="surfaces"></div>
+
+      <div class="verdict" id="verdict"></div>
+    </div>
+
+    <script>
+      const PALS = [
+        { k: 'heute', l: 'Heute', sw: ['#a855f7', '#0ea5e9', '#10b981'] },
+        { k: 'rampe', l: 'Rampe', sw: ['#c3ccd6', '#8aae97', '#15803d'] },
+        { k: 'gedaempft', l: 'Gedämpft', sw: ['#b3a7cf', '#86aec4', '#6faa8a'] }
+      ];
+      const esc = (s) =>
+        String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+      /* Every surface in the app that reads a phase colour. Each returns the
+         same markup the app produces; only the tokens differ per column. */
+      const SURFACES = [
+        {
+          h: 'Chargen — Kennzahlen-Streifen',
+          p: 'Zonenfarbe als linke Kante und als Zahl. <code>renderPipelineKPIs()</code>, app.js:2678',
+          r: () => {
+            const st = [
+              ['Spawn', 132, 'spawn'],
+              ['Ink.', 348, 'inc'],
+              ['Frucht.', 476, 'fruit'],
+              ['Fertig', 384, 'done'],
+              ['Kont.', 92, 'contam']
+            ];
+            return `<div class="card"><div class="metrics-total-row"><span class="metrics-total-label">Chargen gesamt</span><span class="metrics-total-value">25</span></div>
+              <div class="g5">${st
+                .map(
+                  ([l, v, k]) =>
+                    `<div class="met" style="border-left-color:var(--st-${k})"><div class="met-l">${l}</div><div class="met-v" style="color:var(--st-${k}-t,var(--st-${k}))">${v}</div></div>`
+                )
+                .join('')}</div></div>`;
+          }
+        },
+        {
+          h: 'Chargen — Sorten-Kachel',
+          p: 'Der gestapelte Balken ist die Fläche, auf der die Rampe am besten funktioniert: die drei Phasen liegen nebeneinander und sind eine Reihenfolge.',
+          r: () => `<div class="stile">
+              <div class="stile-name"><span class="sp-dot" style="background:#C8A275"></span>King Oyster</div>
+              <div class="stile-big"><b>240</b><span>Beutel · 3 Chargen</span></div>
+              <div class="sbar"><i style="width:20%;background:var(--st-spawn)"></i><i style="width:40%;background:var(--st-inc)"></i><i style="width:40%;background:var(--st-fruit)"></i></div>
+              <div class="tstages">
+                <span><b style="color:var(--st-spawn-t)">48</b><i>Spawn</i></span>
+                <span><b style="color:var(--st-inc-t)">96</b><i>Ink.</i></span>
+                <span><b style="color:var(--st-fruit-t)">96</b><i>Frucht.</i></span>
+              </div>
+            </div>`
+        },
+        {
+          h: 'Farm — Standorte',
+          p: 'Hier steht eine Zonenfarbe <b>allein</b>: ein 12-px-Punkt und ein Auslastungsbalken, ohne Nachbarfarbe zum Vergleichen. app.js:3850 / 4131',
+          r: () => `<div class="location-section">
+              <div class="location-section-header">
+                <div class="location-section-title"><span class="zone-dot" style="background:var(--st-inc-t)"></span>Inkubation</div>
+                <div class="location-section-count">348 Beutel · 4 Regale</div>
+              </div>
+              <div class="rack-card-new">
+                <div class="rack-card-header"><span class="rack-card-name">Regal 2</span><span class="rack-card-count">96 / 120</span></div>
+                <div class="rack-card-bar"><div class="rack-card-bar-fill" style="width:80%;background:var(--st-inc)"></div></div>
+                <div class="batch-card" style="border-left-color:var(--st-inc)">
+                  <div class="batch-card-header"><span class="batch-card-species"><span class="sp-dot" style="background:#C8A275"></span>King Oyster</span><span class="batch-card-count">96</span></div>
+                  <div class="batch-card-meta"><span class="mono">KO-080826-01</span><span>KO-2</span></div>
+                </div>
+              </div>
+              <div class="rack-card-new" style="margin-bottom:0">
+                <div class="rack-card-header"><span class="rack-card-name">Regal 3</span><span class="rack-card-count">120 / 120</span></div>
+                <div class="rack-card-bar"><div class="rack-card-bar-fill" style="width:100%;background:var(--st-inc)"></div></div>
+                <div class="batch-card" style="border-left-color:var(--st-inc);margin-bottom:0">
+                  <div class="batch-card-header"><span class="batch-card-species"><span class="sp-dot" style="background:#4A7FB5"></span>Blue Oyster</span><span class="batch-card-count">120</span></div>
+                  <div class="batch-card-meta"><span class="mono">BO-120826-01</span><span>Wildstamm 3</span></div>
+                </div>
+              </div>
+            </div>`
+        },
+        {
+          h: 'Beutel-Chips — aufgeklappte Charge',
+          p: 'Der Standort jedes Beutels, als 9-px-Text. Die hellste Rampenstufe ist hier zu blass — deshalb nimmt der Text die dunklere Stufe. app.js:8670',
+          r: () => {
+            const bags = [
+              ['01', 'Regal 2', 'inc'],
+              ['02', 'Regal 2', 'inc'],
+              ['03', 'Zelt 1', 'fruit'],
+              ['04', 'Zelt 1', 'fruit'],
+              ['05', 'Spawn', 'spawn'],
+              ['06', 'Spawn', 'spawn'],
+              ['07', 'Kontam.', 'contam']
+            ];
+            return `<div class="card"><div class="chips">${bags
+              .map(
+                ([n, loc, k]) =>
+                  `<span class="bag-chip">${n} <b style="color:var(--st-${k}-t,var(--st-${k}))">${loc}</b></span>`
+              )
+              .join('')}</div></div>`;
+          }
+        },
+        {
+          h: 'Tabellen — Status-Spalte',
+          p: 'Das <b>zweite</b> System: fest in <code>styles.css</code>, unabhängig von den Zonen, aber überall dort, wo eine Charge aufgelistet wird.',
+          r: () => {
+            const rows = [
+              ['KO-180826-01', 'King Oyster', 48, 'Spawn', 'b-spawn'],
+              ['BO-120826-01', 'Blue Oyster', 72, 'Inkubation', 'b-inc'],
+              ['SH-270726-01', 'Shiitake', 48, 'Fruchtung', 'b-tent'],
+              ['LM-150626-01', "Lion's Mane", 36, 'Fertig', 'b-done'],
+              ['SH-280626-01', 'Shiitake', 48, 'Kontaminiert', 'b-contam']
+            ];
+            return `<div class="card"><table class="t"><thead><tr><th>Charge</th><th>Beutel</th><th>Status</th></tr></thead><tbody>
+              ${rows
+                .map(
+                  ([id, sp, q, l, c]) =>
+                    `<tr><td class="mono" style="font-size:11px">${id}</td><td>${q}</td><td><span class="badge ${c}">${l}</span></td></tr>`
+                )
+                .join('')}
+            </tbody></table></div>`;
+          }
+        },
+        {
+          h: 'Einstellungen — Zonen',
+          p: 'Wo die Farben tatsächlich gesetzt werden. Eine App-weite Umstellung heißt: diese fünf Werte ändern. app.js:12331',
+          r: () => {
+            const zs = [
+              ['SPAWN', 'Spawn Run', 'spawn'],
+              ['INC', 'Incubation', 'inc'],
+              ['TENT1', 'Tent 1', 'fruit'],
+              ['TENT2', 'Tent 2', 'fruit'],
+              ['CONTAM', 'Kontaminiert', 'contam']
+            ];
+            return `<div>${zs
+              .map(
+                ([id, n, k]) =>
+                  `<div class="zone-row" style="border-left:4px solid var(--st-${k})"><span><b>${n}</b> <span class="mono" style="font-size:11px;color:var(--c-text-muted)">${id}</span></span><span class="zone-role">${k === 'contam' ? 'contaminated' : k}</span></div>`
+              )
+              .join('')}</div>`;
+          }
+        }
+      ];
+
+      document.getElementById('surfaces').innerHTML = SURFACES.map(
+        (s) => `<div class="surface">
+          <h3>${s.h}</h3><p>${s.p}</p>
+          <div class="cols">${PALS.map(
+            (p) => `<div class="col">
+              <div class="col-h"><span class="sw">${p.sw.map((c) => `<i style="background:${c}"></i>`).join('')}</span>${p.l}</div>
+              <div class="pane p-${p.k}">${s.r()}</div>
+            </div>`
+          ).join('')}</div>
+        </div>`
+      ).join('');
+
+      document.getElementById('verdict').innerHTML = `
+        <h2>Was mir beim Durchgehen auffällt</h2>
+        <ul>
+          <li><span class="tag">Rampe</span>Gewinnt überall dort, wo die drei Phasen <b>nebeneinander</b> stehen — Kachelbalken, Kennzahlen-Streifen, Status-Spalte. Da ist sie nicht nur ruhiger, sie sagt auch mehr: die Farbe wird zur Richtung.</li>
+          <li><span class="tag">Rampe</span>Verliert dort, wo eine Zonenfarbe <b>allein</b> steht — der Zonenpunkt in Standorte, der Auslastungsbalken, der Beutel-Chip. Ohne Nachbarfarbe zum Vergleichen sind „mittleres Grün“ und „volles Grün“ schwer auseinanderzuhalten, und die Spawn-Stufe ist fast nur Grau.</li>
+          <li><span class="tag">Gedämpft</span>Behält die drei Bunttöne und nimmt ihnen nur die Sättigung. Überall gleich gut lesbar, aber die Farbe bleibt reine Kennzeichnung — sie erzählt nichts über die Reihenfolge.</li>
+          <li><span class="tag">Empfehlung</span><b>Gedämpft für die Zonenfarben, Rampe für die Chargen-Kacheln.</b> Das ist kein Kompromiss aus Bequemlichkeit: die beiden Systeme beantworten verschiedene Fragen. Eine Zonenfarbe muss <i>allein</i> identifizierbar sein — sie steht an einem Regal. Die Kachel zeigt alle drei Phasen zusammen und darf deshalb die Reihenfolge zeigen.</li>
+          <li><span class="tag">Aufwand</span>Die Status-Badges sind reines CSS und wirken sofort überall. Die Zonenfarben sind <b>Daten</b>: neue Startwerte in <code>db.js</code> gelten nur für neue Installationen. Für die laufende Instanz entweder von Hand in Einstellungen → Zonen ändern (fünf Zonen), oder per Migration — und die darf nur überschreiben, was noch exakt auf dem Startwert steht, damit selbst gewählte Farben nicht verlorengehen.</li>
+        </ul>`;
+    </script>
+  </body>
+</html>
