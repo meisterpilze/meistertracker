@@ -354,6 +354,51 @@ async function dropQueuedScan(clientUuid) {
   }
 }
 
+// A request that failed while the browser believed it was online, said once.
+//
+// Once, because a dead API means every poll, every SSE retry and every save
+// takes this path — a line per request buries the one line that explains it.
+// And said at all, because the alternative is what happened: the only trace of
+// a TLS failure was a 503 the worker invented, indistinguishable in the network
+// panel from a server that was genuinely down.
+// What a failed API request should say it was. Pure, so it can be tested
+// without a network, a certificate or a browser.
+//
+// `online` is navigator.onLine, which is only trustworthy in the negative:
+// false means there is genuinely no connection; true means the browser has an
+// interface up and nothing more. So false is the only thing that earns the word
+// "offline", and everything else is "unreachable" — carrying the real reason,
+// because that is the sentence that was missing.
+function _apiFailureBody(err, online, url) {
+  const reason = (err && (err.message || err.name)) || 'fetch failed';
+  return {
+    error: online ? 'unreachable' : 'offline',
+    reason: online ? reason : 'no network connection',
+    url: url
+  };
+}
+
+const _unreachableSeen = new Set();
+function _warnUnreachable(url, reason) {
+  let origin;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    origin = url;
+  }
+  if (_unreachableSeen.has(origin)) return;
+  _unreachableSeen.add(origin);
+  console.error(
+    '[meistertracker sw] cannot reach ' +
+      origin +
+      ' — ' +
+      reason +
+      '. The browser reports it is online, so this is not an offline device: a certificate that does not ' +
+      'cover this hostname, a stopped server, or a blocked port. A page can carry a click-through ' +
+      'certificate exception; this worker cannot, so the app will look disconnected until it is fixed.'
+  );
+}
+
 // ── Fetch handler ───────────────────────────────────────────
 self.addEventListener('fetch', (e) => {
   // API calls
@@ -401,11 +446,32 @@ self.addEventListener('fetch', (e) => {
       );
       return;
     }
-    // All other API calls: network only, offline error fallback
+    // All other API calls: network only. A failure here is reported as what it
+    // actually was, which used to be a single word: "offline".
+    //
+    // fetch() rejects for reasons that have nothing to do with the network. The
+    // one that cost a day: a Let's Encrypt certificate covers the public
+    // hostname and cannot cover localhost, so the moment the server restarted
+    // onto a renewed cert, every request to https://localhost:PORT failed the
+    // hostname check. A page can carry a click-through exception; a service
+    // worker cannot. So the worker's fetch died on TLS, this line called it
+    // "offline", and an app whose server was healthy the whole time reported
+    // itself disconnected — with the real reason visible nowhere.
+    //
+    // navigator.onLine is the only thing that actually knows about the network,
+    // and it is only trustworthy in the negative: false means there is no
+    // connection, true means little. That asymmetry is the whole distinction —
+    // say "offline" when the browser says so, and "unreachable" plus the
+    // underlying message when it does not.
     e.respondWith(
-      fetch(e.request).catch(
-        () => new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
-      )
+      fetch(e.request).catch((err) => {
+        const body = _apiFailureBody(err, self.navigator.onLine, e.request.url);
+        if (body.error === 'unreachable') _warnUnreachable(e.request.url, body.reason);
+        return new Response(JSON.stringify(body), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
     );
     return;
   }

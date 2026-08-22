@@ -550,6 +550,44 @@ function pickEncoding(acceptEncoding, filePath) {
   return null;
 }
 
+// The names and addresses the certificate on disk actually vouches for.
+//
+// Read per call rather than cached at boot: the ACME renewal rewrites the file
+// under a running process, and a stale answer here would be worse than none —
+// it would state confidently that an address is covered when it stopped being
+// covered an hour ago.
+function certCoveredHosts() {
+  try {
+    if (!fs.existsSync(CERT_CRT)) return [];
+    const x = new crypto.X509Certificate(fs.readFileSync(CERT_CRT));
+    // subjectAltName reads "DNS:a, IP Address:1.2.3.4"; the CN is the fallback
+    // for certificates old enough to predate SAN being mandatory.
+    const san = x.subjectAltName || '';
+    const names = [...san.matchAll(/(?:DNS|IP Address):([^,]+)/g)].map((m) => m[1].trim());
+    if (names.length) return names;
+    const cn = (x.subject || '').match(/CN=([^\n,]+)/);
+    return cn ? [cn[1].trim()] : [];
+  } catch {
+    // An unreadable or malformed certificate is not something this function
+    // should turn into a boot failure — it exists to print a hint.
+    return [];
+  }
+}
+
+/** Which of `hosts` the certificate does NOT cover. Empty when it covers them all. */
+function certUncoveredHosts(hosts) {
+  const covered = certCoveredHosts();
+  if (!covered.length) return []; // nothing to compare against; stay quiet
+  const matches = (host) =>
+    covered.some((c) => {
+      if (c === host) return true;
+      // A wildcard covers exactly one label: *.example.com matches a.example.com
+      if (c.startsWith('*.')) return host.endsWith(c.slice(1)) && host.split('.').length === c.split('.').length;
+      return false;
+    });
+  return hosts.filter((h) => h && !matches(h));
+}
+
 function getLocalIP() {
   for (const ifaces of Object.values(os.networkInterfaces()))
     for (const i of ifaces) if (i.family === 'IPv4' && !i.internal) return i.address;
@@ -11774,6 +11812,22 @@ listenServer.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('  Open on this PC:      ' + protocol + '://localhost:' + PORT);
   console.log('  Open on phone/tablet: ' + protocol + '://' + ip + ':' + PORT);
+  // Say so when those two lines are addresses this server's own certificate
+  // rejects. A self-signed cert from gen-cert.* carries DNS:localhost,
+  // IP:127.0.0.1 and the LAN IP on purpose; a Let's Encrypt one carries the
+  // public hostname and cannot carry either, because no public CA will issue
+  // for a name it cannot verify. So the first restart after switching to ACME
+  // silently invalidates both addresses printed above — and the app that then
+  // fails to load reports itself "offline", which sends you looking at the
+  // network instead of at the certificate.
+  const uncovered = certUncoveredHosts(['localhost', ip]);
+  if (uncovered.length) {
+    console.log('');
+    console.log('  ⚠ The certificate does not cover: ' + uncovered.join(', '));
+    console.log('     Those addresses will fail in the browser. This certificate is valid for:');
+    console.log('     ' + (certCoveredHosts().join(', ') || '(no subject alternative names)'));
+    console.log('     Use one of those names, or re-issue a certificate that covers the address you open.');
+  }
   if (protocol === 'http') {
     console.log('');
     console.log('  ⚠ WARNING: Running without HTTPS — iOS camera will not work.');
