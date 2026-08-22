@@ -523,9 +523,15 @@ describe('the Windows task', () => {
     assert.ok(!/-RunLevel Highest/.test(psCode));
   });
 
-  it('states a repetition duration rather than trusting the default', () => {
+  it('verifies the repetition survived registration instead of asserting a duration', () => {
+    // [TimeSpan]::MaxValue serialises to P99999999DT23H59M59S, which
+    // Register-ScheduledTask rejects — measured on windows-latest. An absent
+    // Duration is what the XML means by "indefinitely", and whether that
+    // survives is a per-build fact the script checks on the actual machine.
     assert.match(psCode, /-RepetitionInterval \(New-TimeSpan -Minutes 5\)/);
-    assert.match(psCode, /-RepetitionDuration/);
+    assert.ok(!/-RepetitionDuration/.test(psCode), 'no explicit duration');
+    assert.match(psCode, /Export-ScheduledTask -TaskName \$TaskName/);
+    assert.match(psCode, /registered without a five-minute repetition/);
   });
 
   it('leaves the next run a slot when one stalls', () => {

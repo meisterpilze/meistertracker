@@ -156,22 +156,24 @@ try {
 
     # And every five minutes thereafter, matching the server's own cadence.
     #
-    # -RepetitionDuration is not optional despite "omit it for indefinite" being
-    # the folklore: the default is version-dependent, and on the builds where the
-    # missing element is not normalised the task registers as a single run that
-    # never repeats — while Get-ScheduledTaskInfo still reports LastTaskResult 0
-    # from that one run, so the documented health check calls a dead timer
-    # healthy. TimeSpan.MaxValue is the unambiguous spelling; older builds reject
-    # it, hence the fallback.
-    try {
-        $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-            -RepetitionInterval (New-TimeSpan -Minutes 5) `
-            -RepetitionDuration ([TimeSpan]::MaxValue)
-    } catch {
-        $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-            -RepetitionInterval (New-TimeSpan -Minutes 5) `
-            -RepetitionDuration (New-TimeSpan -Days 3650)
-    }
+    # No -RepetitionDuration. An absent Duration is what the task XML means by
+    # "indefinitely", and every way of spelling it explicitly is worse:
+    # [TimeSpan]::MaxValue serialises to P99999999DT23H59M59S, which
+    # Register-ScheduledTask rejects outright with "incorrectly formatted or out
+    # of range" — and it rejects it at *registration*, not at trigger
+    # construction, so wrapping the New-ScheduledTaskTrigger call in a try/catch
+    # catches nothing and the task simply fails to install. (Measured on
+    # windows-latest; see the scheduler-windows job in CI.)
+    #
+    # What the folklore is right about is that omitting it has been reported to
+    # register as a single non-repeating run on some builds. That is not
+    # something this script can settle by choosing a better constant, so it does
+    # not guess: it registers, reads the task back, and says so if the
+    # repetition did not survive. A wrong answer here is otherwise invisible —
+    # Get-ScheduledTaskInfo reports LastTaskResult 0 from the one run that did
+    # happen, so the documented health check calls a dead timer healthy.
+    $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+        -RepetitionInterval (New-TimeSpan -Minutes 5)
 
     # S4U runs as this user with the profile loaded but needs no stored
     # password. It has to be the user that owns meistertracker.db, because
@@ -200,6 +202,19 @@ try {
         -Action $action -Trigger @($boot, $repeat) -Principal $principal -Settings $settings `
         -Description 'Updates the DuckDNS record while the MeisterTracker server is not running.' `
         -Force | Out-Null
+
+    # Read it back rather than trusting that it took. This is the one thing
+    # about Windows task registration that varies by build, so it is checked on
+    # the machine it has to work on instead of assumed here.
+    [xml]$registered = Export-ScheduledTask -TaskName $TaskName
+    $rep = $registered.Task.Triggers.TimeTrigger.Repetition
+    if (-not $rep -or $rep.Interval -ne 'PT5M') {
+        throw ("the task registered without a five-minute repetition (got '" +
+               $(if ($rep) { $rep.Interval } else { 'none' }) +
+               "'). It would run once and stop, so it has been left in place " +
+               "for inspection but must not be relied on. Please report this " +
+               "with your Windows version.")
+    }
 
     Write-Host ""
     Write-Host "  Registered scheduled task '$TaskName'." -ForegroundColor Green

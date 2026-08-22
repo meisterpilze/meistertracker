@@ -232,9 +232,12 @@ jobs:
           $xml.OuterXml | Write-Host
 
           $rep = $xml.Task.Triggers.TimeTrigger.Repetition
+          # The installer checks this too, on the machine it runs on. Asserting
+          # it here as well is what turns "it worked on that build" into a
+          # standing claim about windows-latest.
           if (-not $rep)                { throw 'the time trigger has no repetition — it would run once and stop' }
           if ($rep.Interval -ne 'PT5M') { throw "interval is '$($rep.Interval)', expected PT5M" }
-          Write-Host "repetition duration as registered: '$($rep.Duration)'"
+          Write-Host "repetition duration as registered: '$($rep.Duration)' (empty means indefinite)"
 
           # The privilege posture the documentation promises.
           if ($xml.Task.Principals.Principal.RunLevel -ne 'LeastPrivilege') {
