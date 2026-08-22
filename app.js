@@ -5149,6 +5149,14 @@ function fruitingFill(zoneId, incoming) {
 // How many rows the open day shows. Six leaves the whole week on one screen
 // with a day open; the rest is one tap away rather than pushed off the bottom.
 const DASH_DAY_CAP = 6;
+// Ab wie vielen gerissenen Labor-Untergrenzen sie zu einer Zeile werden.
+//
+// Vierzehn Sorten mal vier Typen sind bis zu 56 Zeilen an einem Tag, und sie
+// sortieren vor den Rundgang — einzeln aufgeführt füllten sie die sechs, die
+// der Tag zeigt, und schoben den Weg hinter die Klappe. Eine Zeile, die sagt
+// wie viele, und sich auf Tippen öffnet, lässt beides stehen.
+const LABMIN_GROUP_AT = 3;
+let dashLabGroupOpen = false;
 const _dashRoomOpen = {};
 function toggleDashRoom(key) {
   _dashRoomOpen[key] = !_dashRoomOpen[key];
@@ -5449,7 +5457,25 @@ function buildWeekPlan() {
     return top;
   };
 
-  for (const l of buildLabMinTasks()) {
+  const laborMin = buildLabMinTasks();
+  const gebuendelt = laborMin.length > LABMIN_GROUP_AT;
+  if (gebuendelt) {
+    put(0, {
+      kind: 'labgroup',
+      species: '',
+      label: t('todo.labGroup', { n: laborMin.length }),
+      // Welche Typen fehlen, nicht welche Sorten: die Sorten stehen in den
+      // Zeilen darunter, sobald man sie aufklappt, und die Frage vorher ist,
+      // ob heute Laborarbeit ansteht und welcher Art.
+      detail: [...new Set(laborMin.map((l) => getLabLabel(l.type)))].join(', '),
+      bags: 0,
+      zone: '',
+      overdue: laborMin.some((l) => l.empty),
+      ready: true,
+      task: { rows: laborMin }
+    });
+  }
+  for (const l of gebuendelt && !dashLabGroupOpen ? [] : laborMin) {
     // Today, like the supply rows and for the same reason: a floor breached is
     // not a dated job, it is a state, and it is only ever "still under".
     put(0, {
@@ -5584,7 +5610,9 @@ function todayProgress(todayItems) {
   // the stock changes, never by being ticked, and counting them in the
   // denominator made a finished day read 5/8. They are work, but they are not
   // work this bar can measure.
-  const countable = todayItems.filter((it) => it.kind !== 'supply' && it.kind !== 'labmin');
+  const countable = todayItems.filter(
+    (it) => it.kind !== 'supply' && it.kind !== 'labmin' && it.kind !== 'labgroup'
+  );
   return { done, total: done + countable.length };
 }
 // The editor works on a draft rather than straight off the DOM. Changing a
@@ -5888,7 +5916,7 @@ function planCategory(it) {
   // A supply gap is answered by making something, so it counts with the other
   // create work rather than falling into "other", where a row nobody
   // categorised goes to be ignored.
-  if (it.kind === 'supply' || it.kind === 'labmin') return 'create';
+  if (it.kind === 'supply' || it.kind === 'labmin' || it.kind === 'labgroup') return 'create';
   if (it.kind === 'grain') return 'create';
   if (it.kind === 'fruiting') return 'move';
   if (it.kind === 'harvest') return 'harvest';
@@ -6296,6 +6324,13 @@ function _planBtn(it) {
   // so a display name resolved to null and every tap answered "diese Sorte steht
   // nicht in den Pilzsorten" — about a Sorte that must be in them, or the
   // row would not have been built at all.
+  if (it.kind === 'labgroup') {
+    return (
+      '<button class="btn btn-sm fs-xs" data-action="labgroup-toggle" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t(dashLabGroupOpen ? 'todo.labGroupClose' : 'todo.labGroupOpen')) +
+      '</button>'
+    );
+  }
   if (it.kind === 'labmin') {
     return (
       '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
@@ -6714,9 +6749,21 @@ const STRAIN_MIN_FIELD = { GS: 'minSpawnKg', LC: 'minLc', MC: 'minMc', PD: 'minP
 function strainMinFor(type, entry) {
   const field = STRAIN_MIN_FIELD[type];
   if (!field) return 0;
-  const ms = (mushroomStrains || []).find((m) => (entry.kz && m.kuerzel === entry.kz) || m.name === entry.name);
-  if (!ms) return 0;
-  return ms[field] || 0;
+  const ms = _strainOfEntry(entry);
+  return ms ? ms[field] || 0 : 0;
+}
+// Die Pilzsorten-Zeile hinter einem Eintrag der Aufschlüsselung.
+//
+// Über das Kürzel zuerst, dann über den bereinigten Namen — `m.name === entry.name`
+// verglich zwei Rohnamen, und einer der beiden kann das " (KZ)" einer Block-
+// Charge tragen. Die Karte braucht außerdem die Id, nicht nur die Zahl, um die
+// Untergrenze von hier aus setzen zu können.
+function _strainOfEntry(entry) {
+  return (
+    (mushroomStrains || []).find(
+      (m) => (entry.kz && m.kuerzel === entry.kz) || _spKey(m.name) === _spKey(entry.name)
+    ) || null
+  );
 }
 
 // One key for one Sorte, everywhere the Labor card groups by it.
@@ -6783,7 +6830,11 @@ function getLabStrainBreakdown() {
     }
   }
   for (const type of MIN_TYPES) {
-    for (const entry of Object.values(breakdown[type])) entry.min = strainMinFor(type, entry);
+    for (const entry of Object.values(breakdown[type])) {
+      const ms = _strainOfEntry(entry);
+      entry.msId = ms ? ms.id : null;
+      entry.min = ms ? ms[STRAIN_MIN_FIELD[type]] || 0 : 0;
+    }
   }
   return breakdown;
 }
@@ -6859,15 +6910,23 @@ function renderDashLabStock() {
         )
         .join('');
 
+      // Jede Zeile ist der Knopf für ihre eigene Untergrenze. Das ist die Stelle,
+      // an der man ohnehin hinsieht, wenn man sich fragt, ob genug da ist — und
+      // eine Sorte, zu der keine Pilzsorten-Zeile gehört, hat nichts zu setzen und
+      // bleibt darum stumm statt einen Knopf anzubieten, der nichts tut.
       const rows = strains
         .map((x) => {
           const under = perStrain && x.min > 0 && x.count < x.min;
           const against = x.min > 0 ? `<span class="lab-row-min">/${num(type, x.min)}</span>` : '';
-          return (
-            `<span class="lab-row${under ? ' under' : ''}">` +
+          const inner =
             `<i class="lab-row-dot" style="background:${esc(safeColor(x.color))}"></i>` +
             `<span class="lab-row-name" title="${esc(x.kz || x.name)}${x.desc ? ' ' + esc(x.desc) : ''}">${esc(x.kz || x.name)}</span>` +
-            `<b class="lab-row-n">${num(type, x.count)}${against}</b></span>`
+            `<b class="lab-row-n">${num(type, x.count)}${against}</b>`;
+          if (!perStrain || !x.msId) return `<span class="lab-row${under ? ' under' : ''}">${inner}</span>`;
+          return (
+            `<button type="button" class="lab-row lab-row-btn${under ? ' under' : ''}"` +
+            ` data-action="lab-set-strain-min" data-labtype="${esc(type)}" data-strain="${esc(String(x.msId))}"` +
+            ` title="${esc(t('lab.setMinOneHint', { sorte: x.name }))}">${inner}</button>`
           );
         })
         .join('');
@@ -6888,16 +6947,80 @@ function renderDashLabStock() {
     }).join('') +
     '</div>';
 }
+// Die Untergrenze eines ganzen Typs auf einmal setzen.
+//
+// Vorher schrieb dieser Knopf inventory.labThresholds[type] — eine betriebs-
+// weite Zahl, die den Dashboard-Hinweis speist und sonst nichts. Die Tages-
+// aufgaben lesen die Spalten je Sorte, also setzte der einzige sichtbare Knopf
+// eine Zahl, aus der nie eine Aufgabe entstehen konnte, während die Zahlen, aus
+// denen eine entsteht, vierzehn Sorten mal vier Typen weit im Pilzsorten-
+// Formular lagen: sechsundfünfzig Wege für eine Angabe, die meist für alle
+// dieselbe ist.
+//
+// G2G und Spritzen behalten die betriebsweite Zahl: sie werden auf Bestellung
+// gemacht, eine Untergrenze je Sorte verlangte Vorrat, den niemand hält.
 function setLabMin(type) {
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
-  const cur = inventory.labThresholds[type] || 0;
-  const hint = type === 'GS' ? ' (kg per strain)' : '';
-  const val = prompt(t('lab.setMinimum') + ' \u2014 ' + getLabLabel(type) + hint, cur);
+  const field = STRAIN_MIN_FIELD[type];
+  if (!field) {
+    if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
+    const val = prompt(t('lab.setMinFarm', { type: getLabLabel(type) }), inventory.labThresholds[type] || 0);
+    if (val === null) return;
+    inventory.labThresholds[type] = parseDecimal(val) || 0;
+    saveLabThresholds();
+    renderDashLabStock();
+    renderDashAlerts();
+    return;
+  }
+  const ziel = (mushroomStrains || []).filter((m) => m.imProgramm !== false);
+  if (!ziel.length) {
+    setFb('err', t('lab.setMinNoStrains'));
+    return;
+  }
+  const val = prompt(t('lab.setMinAll', { type: getLabLabel(type), n: ziel.length }), 0);
   if (val === null) return;
-  inventory.labThresholds[type] = parseDecimal(val) || 0;
-  saveLabThresholds();
+  _saveStrainMins(ziel, field, Math.max(0, parseDecimal(val) || 0));
+}
+// Dieselbe Angabe für eine einzelne Sorte, von ihrer Zeile auf der Kachel aus.
+function setStrainLabMin(id, type) {
+  const field = STRAIN_MIN_FIELD[type];
+  const ms = (mushroomStrains || []).find((m) => m.id === id);
+  if (!field || !ms) return;
+  const val = prompt(t('lab.setMinOne', { sorte: ms.name, type: getLabLabel(type) }), ms[field] || 0);
+  if (val === null) return;
+  _saveStrainMins([ms], field, Math.max(0, parseDecimal(val) || 0));
+}
+// Optimistisch schreiben, neu zeichnen, bei Fehler zurückrollen.
+//
+// Der Rückrollwert wird je Sorte gemerkt, nicht global: ein Teil der Aufrufe kann
+// durchgehen und ein anderer scheitern, und die Sorten wieder auf eine gemein-
+// same Zahl zu setzen wäre dann selbst der Datenverlust. Nachgeschlagen wird in
+// der Liste, wie sie beim Antworten dasteht, weil applyData() sie zwischen-
+// durch komplett ersetzt haben kann.
+function _saveStrainMins(sorten, field, wert) {
+  const vorher = sorten.map((m) => [m.id, m[field] || 0]);
+  for (const m of sorten) m[field] = wert;
+  renderStrains();
   renderDashLabStock();
+  renderDashBatchTasks();
   renderDashAlerts();
+  let offen = sorten.length;
+  let schlecht = 0;
+  for (const [id, alt] of vorher) {
+    apiPatch('/api/mushroom-strains/' + id, { [field]: wert }).then((r) => {
+      if (r && r.error) {
+        schlecht++;
+        const jetzt = (mushroomStrains || []).find((m) => m.id === id);
+        if (jetzt) jetzt[field] = alt;
+      }
+      if (--offen) return;
+      if (schlecht) setFb('err', t('common.error'));
+      else setFb('ok', t('lab.setMinDone', { n: sorten.length }));
+      renderStrains();
+      renderDashLabStock();
+      renderDashBatchTasks();
+      renderDashAlerts();
+    });
+  }
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -22538,6 +22661,11 @@ function initEventListeners() {
       bulkSectionToFruiting(el.dataset.bucket);
       return;
     }
+    if (action === 'labgroup-toggle') {
+      dashLabGroupOpen = !dashLabGroupOpen;
+      renderDashBatchTasks();
+      return;
+    }
     // A lab floor breached. GS is grain — that is the Labor quick-create, same
     // as a supply row asking for grain. The three culture types open the
     // culture form with the type already chosen.
@@ -22672,6 +22800,11 @@ function initEventListeners() {
   // The lab stock card is rebuilt wholesale on every sync, so its buttons are
   // delegated like the Sorten tiles' rather than carrying inline handlers.
   $('dash-lab-stock').addEventListener('click', (e) => {
+    const eine = e.target.closest('[data-action="lab-set-strain-min"]');
+    if (eine) {
+      setStrainLabMin(parseInt(eine.dataset.strain, 10), eine.dataset.labtype);
+      return;
+    }
     const btn = e.target.closest('[data-action="lab-set-min"]');
     if (btn) setLabMin(btn.dataset.labtype);
   });
