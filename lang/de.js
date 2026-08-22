@@ -751,7 +751,7 @@ window.LANG['de'] = {
   // Lab
   'lab.grain': 'Körnerbrut',
   'lab.cultures': 'Kulturen',
-  'lab.logWork': 'Laborarbeit',
+  'lab.logWork': 'Laborarbeit anlegen',
   'lab.lineage': 'Abstammung',
   'lab.cultureLibrary': 'Kulturbibliothek',
   'lab.allTypes': 'Alle Typen',

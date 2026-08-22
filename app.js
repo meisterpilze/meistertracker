@@ -22951,7 +22951,7 @@ function initEventListeners() {
     renderGrainBatches();
   });
   $('grain-q').addEventListener('input', renderGrainBatches);
-  $('st-lab-work').addEventListener('click', () => msQuickLaborNew());
+  $('btn-lab-work').addEventListener('click', () => msQuickLaborNew());
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
   });

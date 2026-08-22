@@ -1995,6 +1995,30 @@ button {
 .btn-green:hover {
   background: var(--c-primary-hover);
 }
+/* Die eine Handlung eines Abschnitts, über seinen Reitern.
+   Breit, höher und mit Symbol — nicht damit sie hübscher ist, sondern damit
+   sie nicht wie die Reiter darunter aussieht: die wechseln die Ansicht, dieser
+   Knopf öffnet einen Dialog, und als gleich große Pille in derselben Zeile war
+   das erst nach dem Tippen zu erkennen. Auf dem Telefon liegt sie so auch am
+   Daumen statt am Rand. */
+.btn-wide {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  font-size: max(14px, var(--fs-min));
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+@media (min-width: 769px) {
+  /* Am Schreibtisch wäre volle Breite ein sehr langer grüner Balken — groß
+     genug, um sich von den Reitern zu unterscheiden, reicht hier vollauf. */
+  .btn-wide {
+    width: auto;
+    min-width: 260px;
+  }
+}
 .btn-r {
   background: #fff5f5;
   color: #b91c1c;
