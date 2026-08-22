@@ -47,12 +47,39 @@
         --radius-sm: 8px;
         --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
         --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-        /* Stage colours — the zone defaults from renderPipelineKPIs() */
+        /* Exits, not stages — the same in both palettes below. */
+        --st-done: #64748b;
+        --st-contam: #ef4444;
+      }
+      /* ── Two stage palettes ──────────────────────────────────────────
+         "Kräftig" is what the app ships: the zone defaults from
+         renderPipelineKPIs() — three unrelated hues at full saturation. On a
+         tile that already carries a Sorte dot and a status colour, that makes
+         four colour systems arguing on one small card, which is the part that
+         reads as gaudy rather than informative.
+
+         "Ruhig" is the default here. The three stages are not categories, they
+         are a SEQUENCE — the same bags moving toward harvest — so they get one
+         ramp instead of three hues: raw slate at the start, the app's own green
+         at the end. One axis, and it encodes direction rather than just
+         identity. Fill and text are separate tokens, because a bar segment may
+         be pale where a number may not.
+         ────────────────────────────────────────────────────────────────── */
+      .pal-quiet {
+        --st-spawn: #c3ccd6;
+        --st-inc: #8aae97;
+        --st-fruit: #15803d;
+        --st-spawn-t: #5d6b7a;
+        --st-inc-t: #47755a;
+        --st-fruit-t: #15803d;
+      }
+      .pal-loud {
         --st-spawn: #a855f7;
         --st-inc: #0ea5e9;
         --st-fruit: #10b981;
-        --st-done: #64748b;
-        --st-contam: #ef4444;
+        --st-spawn-t: #7e22ce;
+        --st-inc-t: #0369a1;
+        --st-fruit-t: #047857;
       }
       * {
         box-sizing: border-box;
@@ -535,9 +562,13 @@
         background: currentColor;
         flex: none;
       }
-      .sup-none {
+      .sup-now {
         background: var(--c-red-light);
         color: var(--c-red-dark);
+      }
+      .sup-nospawn {
+        background: #ffedd5;
+        color: #9a3412;
       }
       .sup-low {
         background: var(--c-amber-light);
@@ -546,6 +577,35 @@
       .sup-ok {
         background: var(--c-green-light);
         color: var(--c-green-dark);
+      }
+      /* Quiet: the status stops being a filled chip and becomes a dot plus a
+         word. Only the one state that needs acting on today keeps a tint, so
+         a card full of healthy Sorten is a card full of plain text. */
+      .pal-quiet .sup {
+        background: none;
+        padding: 2px 0 2px 1px;
+        font-weight: 600;
+        color: var(--c-text-sec);
+      }
+      .pal-quiet .sup::before {
+        width: 8px;
+        height: 8px;
+        background: var(--sup-c, var(--c-slate));
+      }
+      .pal-quiet .sup-now {
+        color: #7f1d1d;
+        font-weight: 700;
+        --sup-c: #b91c1c;
+      }
+      .pal-quiet .sup-nospawn {
+        --sup-c: #c2410c;
+      }
+      .pal-quiet .sup-low {
+        --sup-c: #a16207;
+      }
+      .pal-quiet .sup-ok {
+        color: var(--c-text-muted);
+        --sup-c: #4d9c6a;
       }
 
       /* Stacked stage bar — one bar per Sorte, same three colours everywhere */
@@ -602,6 +662,14 @@
       }
       .stile.urgent.on {
         border-color: var(--c-primary);
+      }
+      /* Quiet: a tinted card for every urgent Sorte turns the grid pink. A
+         left edge says the same thing and leaves the card a card. */
+      .pal-quiet .stile.urgent {
+        background: var(--c-surface);
+        border-color: var(--c-border);
+        border-left: 3px solid #b91c1c;
+        padding-left: 10px;
       }
       .stile-top {
         display: flex;
@@ -717,36 +785,27 @@
         vertical-align: baseline;
       }
       /* GESAMT tile — the "Chargen gesamt" box, folded into the same grid so
-         the tab is two windows instead of three. */
+         the tab is two windows instead of three. It was a dark green slab,
+         which is one more colour doing a job that weight already does: it is
+         the same card, set on the page ground with a firmer edge. */
       .stile-total {
-        background: #0f2a1c;
-        border-color: #0f2a1c;
-        color: #dcfce7;
+        background: var(--c-bg);
+        border-color: var(--c-text-muted);
         cursor: pointer;
       }
       .stile-total:hover {
-        border-color: #0f2a1c;
-        box-shadow: var(--shadow-md);
+        border-color: var(--c-text-sec);
       }
-      .stile-total .stile-name,
+      .stile-total .stile-name {
+        letter-spacing: 0.01em;
+      }
       .stile-total .stile-big b {
-        color: #fff;
+        color: var(--c-text);
       }
-      .stile-total .stile-big span,
-      .stile-total .tstages i,
-      .stile-total .stile-foot .fs {
-        color: #86efac;
-      }
-      .stile-total .stile-kz {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.22);
-        color: #dcfce7;
-      }
-      .stile-total .stile-foot {
-        border-top-color: rgba(255, 255, 255, 0.16);
-      }
-      .stile-total .sbar {
-        background: rgba(255, 255, 255, 0.14);
+      .tlegend-note {
+        color: var(--c-text-muted);
+        font-style: italic;
+        padding-top: 2px;
       }
 
       /* ═══ VARIANT B — eine Tabelle ════════════════════════════════════ */
@@ -864,8 +923,11 @@
       tr.sup-row td:first-child {
         border-left: 3px solid transparent;
       }
-      tr.sup-row.r-none td:first-child {
+      tr.sup-row.r-now td:first-child {
         border-left-color: var(--c-red-strong);
+      }
+      tr.sup-row.r-nospawn td:first-child {
+        border-left-color: #c2410c;
       }
       tr.sup-row.r-low td:first-child {
         border-left-color: var(--c-amber);
@@ -876,8 +938,11 @@
       .vp-phone tr.sup-row {
         border-left: 4px solid var(--c-border) !important;
       }
-      .vp-phone tr.sup-row.r-none {
+      .vp-phone tr.sup-row.r-now {
         border-left-color: var(--c-red-strong) !important;
+      }
+      .vp-phone tr.sup-row.r-nospawn {
+        border-left-color: #c2410c !important;
       }
       .vp-phone tr.sup-row.r-low {
         border-left-color: var(--c-amber) !important;
@@ -958,6 +1023,10 @@
         <button data-d="desktop" class="on">Desktop</button>
         <button data-d="phone">Handy</button>
       </div>
+      <div class="seg" id="seg-pal">
+        <button data-p="quiet" class="on">Farben ruhig</button>
+        <button data-p="loud">kräftig</button>
+      </div>
       <div class="mock-note">Beispieldaten — 24 Chargen, 8 Sorten</div>
     </div>
 
@@ -1007,6 +1076,7 @@
         ['LM-260726-01', 'LM', '', 48, 'FRUITING', 27, -6, [58, 22, 63, 0], 'KUL-LM-03', ''],
         ['YO-200826-01', 'YO', 'Gelb-2', 60, 'SPAWN RUN', 2, 19, [62, 18, 63, 0], 'KUL-YO-06', ''],
         ['YO-100826-01', 'YO', 'Gelb-2', 60, 'INCUBATING', 12, 6, [62, 18, 63, 0], 'KUL-YO-06', ''],
+        ['PP-210826-01', 'PP', '', 12, 'SPAWN RUN', 1, 20, [66, 20, 61, 1], 'KUL-PP-02', ''],
         ['PP-300726-01', 'PP', '', 44, 'FRUITING', 23, -3, [66, 20, 61, 1], 'KUL-PP-01', 'gut'],
         ['RE-190826-01', 'RE', 'Rot', 24, 'SPAWN RUN', 3, 32, [72, 15, 58, 1], 'KUL-RE-02', ''],
         ['RE-050826-01', 'RE', 'Rot', 36, 'INCUBATING', 17, 18, [72, 15, 58, 1], 'KUL-RE-02', ''],
@@ -1085,9 +1155,18 @@
           const fruit = bagsIn('FRUITING');
           const bags = spawn + inc + fruit;
           const pipeline = spawn + inc; // was kommt noch
-          // Ampel: nichts im Nachlauf = rot, weniger im Nachlauf als in der
-          // Fruchtung = gelb, sonst grün. Rein aus vorhandenen Daten ableitbar.
-          const supply = pipeline === 0 ? 'none' : pipeline < fruit ? 'low' : 'ok';
+          // Die Ampel liest Spawn und Inkubation GETRENNT, weil sie zwei
+          // verschiedene Vorlaufzeiten sind. Inkubation ist die nächste Ernte,
+          // Spawn die übernächste. Eine Sorte, in der die Inkubation läuft, aber
+          // nichts mehr angesetzt wird, hat kein Problem heute und ein sicheres
+          // in zwei Zyklen — das ist ein eigener Zustand, kein "knapp".
+          //
+          //   spawn 0, ink 0   -> nach der Fruchtung ist Schluss   (jetzt)
+          //   spawn 0, ink >0  -> nächste Ernte ja, danach nichts  (spawn fehlt)
+          //   Nachlauf < Fruchtung -> Kette läuft, wird aber dünner (knapp)
+          //   sonst                                                (läuft)
+          const supply =
+            spawn === 0 && inc === 0 ? 'now' : spawn === 0 ? 'nospawn' : pipeline < fruit ? 'low' : 'ok';
           const last = all.reduce((m, b) => (m == null || b.days < m ? b.days : m), null);
           // Nächste Charge, die in die Fruchtung geht
           const nextDue = act
@@ -1114,17 +1193,24 @@
       }
       // Was "Kein Nachschub / Knapp / OK" — three words that name a state
       // without saying what to do about it, and "Nachschub" read like a button.
-      // These say the action, so the light needs no legend.
-      const SUP_LABEL = { none: 'Neue Charge nötig', low: 'Bald neue Charge', ok: 'Nachschub läuft' };
-      const SUP_SHORT = { none: 'Neue Charge nötig', low: 'Bald neue Charge', ok: 'läuft' };
+      // These say the action, and there are four because Spawn and Inkubation
+      // are read separately.
+      const SUP_LABEL = {
+        now: 'Jetzt ansetzen',
+        nospawn: 'Spawn fehlt',
+        low: 'Knapp',
+        ok: 'Läuft'
+      };
+      const SUP_RANK = { now: 0, nospawn: 1, low: 2, ok: 3 };
       // The sentence behind the light, in the Sorte's own numbers.
       const supWhy = (r) =>
-        r.supply === 'none'
-          ? `nichts in Spawn oder Inkubation — wenn die ${r.fruit} Frucht-Beutel durch sind, ist die Sorte leer`
-          : r.supply === 'low'
-            ? `${r.pipeline} Beutel kommen nach, ${r.fruit} sind schon in der Fruchtung`
-            : `${r.pipeline} Beutel kommen nach — mehr als die ${r.fruit} in der Fruchtung`;
-      const SUP_RANK = { none: 0, low: 1, ok: 2 };
+        r.supply === 'now'
+          ? `nichts in Spawn, nichts in Inkubation — wenn die ${r.fruit} Frucht-Beutel durch sind, ist die Sorte leer`
+          : r.supply === 'nospawn'
+            ? `${r.inc} Beutel in der Inkubation, aber nichts angesetzt — die übernächste Ernte fehlt`
+            : r.supply === 'low'
+              ? `${r.spawn} in Spawn und ${r.inc} in Inkubation kommen nach, ${r.fruit} sind schon in der Fruchtung`
+              : `${r.spawn} in Spawn und ${r.inc} in Inkubation kommen nach — mehr als die ${r.fruit} in der Fruchtung`;
 
       function totals() {
         const act = BATCHES.filter((b) => !isArch(b.stage));
@@ -1150,6 +1236,7 @@
       const S = {
         variant: 'D',
         device: 'desktop',
+        pal: 'quiet',
         sortKey: null,
         sortDir: 'asc',
         supSortKey: 'supply',
@@ -1369,7 +1456,8 @@
         const seg = (v, c) => (v ? `<i style="width:${(v / Math.max(r.bags, 1)) * 100}%;background:${c}"></i>` : '');
         const st = (v, c, l) =>
           `<span class="tst"><b style="color:${v ? c : 'var(--c-text-muted)'}">${v || '–'}</b><i>${l}</i></span>`;
-        return `<button class="stile${S.filterSorte === r.kz ? ' on' : ''}${r.supply === 'none' ? ' urgent' : ''}" data-sorte="${r.kz}" title="${esc(r.name)}: ${esc(supWhy(r))}">
+        const T_SPAWN = 'var(--st-spawn-t)', T_INC = 'var(--st-inc-t)', T_FRUIT = 'var(--st-fruit-t)';
+        return `<button class="stile${S.filterSorte === r.kz ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}" data-sorte="${r.kz}" title="${esc(r.name)}: ${esc(supWhy(r))}">
           <div class="stile-top">
             <span class="stile-name">${dot(r.color)}${esc(r.name)}</span>
             <span class="stile-kz">${r.kz}</span>
@@ -1379,10 +1467,10 @@
             ${seg(r.spawn, 'var(--st-spawn)')}${seg(r.inc, 'var(--st-inc)')}${seg(r.fruit, 'var(--st-fruit)')}
           </div>
           <div class="tstages">
-            ${st(r.spawn, 'var(--st-spawn)', 'Spawn')}${st(r.inc, 'var(--st-inc)', 'Ink.')}${st(r.fruit, 'var(--st-fruit)', 'Frucht.')}
+            ${st(r.spawn, T_SPAWN, 'Spawn')}${st(r.inc, T_INC, 'Ink.')}${st(r.fruit, T_FRUIT, 'Frucht.')}
           </div>
           <div class="stile-foot">
-            <span class="sup sup-${r.supply}">${SUP_SHORT[r.supply]}</span>
+            <span class="sup sup-${r.supply}">${SUP_LABEL[r.supply]}</span>
             <span class="fs">${r.supply === 'ok' ? 'nächste ' + fmtD(r.nextDue) : 'zuletzt vor ' + r.lastDays + ' T'}</span>
           </div>
         </button>`;
@@ -1394,13 +1482,17 @@
         </select>`;
       // The light, spelled out where the tiles are. No colour-only meaning.
       const tileLegend = (R) => {
-        const bad = R.filter((r) => r.supply === 'none');
-        const low = R.filter((r) => r.supply === 'low');
-        const names = (a) => a.map((r) => r.name).join(', ');
+        const names = (k) => {
+          const a = R.filter((r) => r.supply === k);
+          return a.length ? `: <b>${esc(a.map((r) => r.name).join(', '))}</b>` : '';
+        };
+        const row = (k, why) => `<div><span class="sup sup-${k}">${SUP_LABEL[k]}</span> ${why}${names(k)}</div>`;
         return `<div class="tlegend">
-          <div><span class="sup sup-none">Neue Charge nötig</span> nichts in Spawn oder Inkubation — wenn die Fruchtung durch ist, ist die Sorte leer${bad.length ? `: <b>${esc(names(bad))}</b>` : ''}</div>
-          <div><span class="sup sup-low">Bald neue Charge</span> es kommt weniger nach, als gerade fruchtet${low.length ? `: <b>${esc(names(low))}</b>` : ''}</div>
-          <div><span class="sup sup-ok">Nachschub läuft</span> mehr im Nachlauf als in der Fruchtung</div>
+          ${row('now', 'nichts in Spawn, nichts in Inkubation — nach der Fruchtung ist die Sorte leer')}
+          ${row('nospawn', 'Inkubation läuft, aber nichts angesetzt — die <b>übernächste</b> Ernte fehlt')}
+          ${row('low', 'es kommt weniger nach, als gerade fruchtet')}
+          ${row('ok', 'mehr im Nachlauf als in der Fruchtung')}
+          <div class="tlegend-note">Spawn und Inkubation zählen getrennt: die Inkubation ist die nächste Ernte, der Spawn die übernächste.</div>
         </div>`;
       };
 
@@ -1408,7 +1500,7 @@
       function variantA() {
         const R = sortedRollup();
         const tiles = R.map(sorteTile).join('');
-        const nUrgent = R.filter((r) => r.supply !== 'ok').length;
+        const nUrgent = R.filter((r) => r.supply === 'now' || r.supply === 'nospawn').length;
         const rows = sortBy(filtered(), S.sortKey, S.sortDir, bKey);
         return (
           headerStrip(false) +
@@ -1416,7 +1508,7 @@
             <div class="card-head">
               <div class="sec">Nach Sorte</div>
               <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
-                ${nUrgent ? `<span class="sup sup-low">${nUrgent} Sorten brauchen bald eine neue Charge</span>` : ''}
+                ${nUrgent ? `<span class="sup sup-nospawn">${nUrgent} Sorten ohne Spawn</span>` : ''}
                 ${tileSortSelect()}
               </div>
             </div>
@@ -1525,9 +1617,9 @@
           : `<tr class="tot">
               <td>GESAMT · ${T.nAct} aktive Chargen</td>
               <td style="text-align:right">${nf(T.bags)}</td>
-              <td style="text-align:right;color:var(--st-spawn)">${nf(T.spawn)}</td>
-              <td style="text-align:right;color:var(--st-inc)">${nf(T.inc)}</td>
-              <td style="text-align:right;color:var(--st-fruit)">${nf(T.fruit)}</td>
+              <td style="text-align:right;color:var(--st-spawn-t)">${nf(T.spawn)}</td>
+              <td style="text-align:right;color:var(--st-inc-t)">${nf(T.inc)}</td>
+              <td style="text-align:right;color:var(--st-fruit-t)">${nf(T.fruit)}</td>
               <td></td><td></td>
               <td style="font-weight:400" class="muted">${T.nAll - T.nAct} archiviert</td>
             </tr>`;
@@ -1539,14 +1631,14 @@
           body += phone
             ? `<tr class="grp"><td colspan="${GCOLS.length}"><div class="gblock" data-group="${esc(g.key)}">
                 <div class="gp-row"><span><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}</span><span>${nf(g.qty)}</span></div>
-                <div class="gp-mini"><span style="color:var(--st-spawn)">${g.spawn}</span><span style="color:var(--st-inc)">${g.inc}</span><span style="color:var(--st-fruit)">${g.fruit}</span><span class="muted">${chargen(g.n)}</span>${g.supply ? `<span class="sup sup-${g.supply}" style="margin-left:auto">${SUP_LABEL[g.supply]}</span>` : ''}</div>
+                <div class="gp-mini"><span style="color:var(--st-spawn-t)">${g.spawn}</span><span style="color:var(--st-inc-t)">${g.inc}</span><span style="color:var(--st-fruit-t)">${g.fruit}</span><span class="muted">${chargen(g.n)}</span>${g.supply ? `<span class="sup sup-${g.supply}" style="margin-left:auto">${SUP_LABEL[g.supply]}</span>` : ''}</div>
               </div></td></tr>`
             : `<tr class="grp" data-group="${esc(g.key)}">
                 <td><span class="caret">${open ? '▾' : '▸'}</span>${mark}${esc(g.label)}<span class="muted" style="font-weight:500;font-size:11.5px"> · ${chargen(g.n)}</span></td>
                 <td style="text-align:right">${nf(g.qty)}</td>
-                <td style="text-align:right;color:var(--st-spawn)">${num(g.spawn)}</td>
-                <td style="text-align:right;color:var(--st-inc)">${num(g.inc)}</td>
-                <td style="text-align:right;color:var(--st-fruit)">${num(g.fruit)}</td>
+                <td style="text-align:right;color:var(--st-spawn-t)">${num(g.spawn)}</td>
+                <td style="text-align:right;color:var(--st-inc-t)">${num(g.inc)}</td>
+                <td style="text-align:right;color:var(--st-fruit-t)">${num(g.fruit)}</td>
                 <td style="text-align:right;font-weight:400" class="muted">${isFinite(g.age) ? g.age + ' T' : ''}</td>
                 <td style="font-weight:400" class="muted">${g.due ? fmtD(g.due) : '—'}</td>
                 <td>${g.supply ? `<span class="sup sup-${g.supply}">${SUP_LABEL[g.supply]}</span>` : ''}</td>
@@ -1556,9 +1648,9 @@
             body += `<tr class="child">
               <td data-l="Charge"><span class="mono" style="font-size:12px">${esc(b.id)}</span>${b.stamm ? ` <span class="muted" style="font-size:11.5px">${esc(b.stamm)}</span>` : ''}${S.groupBy === 'stage' ? ' ' + dot(b.color) + `<span style="font-size:11.5px">${esc(b.sorte)}</span>` : ''}</td>
               <td data-l="Beutel" style="text-align:right"><b>${b.qty}</b></td>
-              <td data-l="Spawn" style="text-align:right;color:var(--st-spawn)">${b.stage === 'SPAWN RUN' ? b.qty : '<span class="muted">–</span>'}</td>
-              <td data-l="Ink." style="text-align:right;color:var(--st-inc)">${b.stage === 'INCUBATING' ? b.qty : '<span class="muted">–</span>'}</td>
-              <td data-l="Frucht." style="text-align:right;color:var(--st-fruit)">${b.stage === 'FRUITING' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Spawn" style="text-align:right;color:var(--st-spawn-t)">${b.stage === 'SPAWN RUN' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Ink." style="text-align:right;color:var(--st-inc-t)">${b.stage === 'INCUBATING' ? b.qty : '<span class="muted">–</span>'}</td>
+              <td data-l="Frucht." style="text-align:right;color:var(--st-fruit-t)">${b.stage === 'FRUITING' ? b.qty : '<span class="muted">–</span>'}</td>
               <td data-l="Alter" style="text-align:right" class="muted">${b.days} T</td>
               <td data-l="Fällig" class="muted" style="${overdue(b) ? 'color:var(--c-red-dark);font-weight:700' : ''}">${fmtD(b.due)}${overdue(b) ? ' ⚠' : ''}</td>
               <td data-l="Status"><span class="badge ${STAGE_BADGE[b.stage]}">${STAGE_LABEL[b.stage]}</span></td>
@@ -1611,17 +1703,17 @@
           if (k === 'rhythm') return r.lastDays / r.rhythm;
           return r[k];
         });
-        const nUrgent = R.filter((r) => r.supply === 'none').length;
-        const nLow = R.filter((r) => r.supply === 'low').length;
+        const nUrgent = R.filter((r) => r.supply === 'now').length;
+        const nLow = R.filter((r) => r.supply === 'nospawn').length;
         const rowsC = R.map((r) => {
           const pct = Math.min(100, (r.lastDays / r.rhythm) * 100);
           const rc = pct >= 100 ? 'var(--c-red-strong)' : pct > 70 ? 'var(--c-amber)' : 'var(--c-green)';
           return `<tr class="sup-row r-${r.supply}">
             <td data-l="Sorte" style="font-weight:600">${dot(r.color)}${esc(r.name)} <span class="stile-kz">${r.kz}</span></td>
             <td data-l="Beutel" style="text-align:right"><b>${nf(r.bags)}</b><br><span class="muted" style="font-size:11px">${chargen(r.nBatches)}</span></td>
-            <td data-l="Spawn" style="text-align:right;color:var(--st-spawn);font-weight:600">${r.spawn || '<span class="muted">–</span>'}</td>
-            <td data-l="Ink." style="text-align:right;color:var(--st-inc);font-weight:600">${r.inc || '<span class="muted">–</span>'}</td>
-            <td data-l="Frucht." style="text-align:right;color:var(--st-fruit);font-weight:600">${r.fruit || '<span class="muted">–</span>'}</td>
+            <td data-l="Spawn" style="text-align:right;color:var(--st-spawn-t);font-weight:600">${r.spawn || '<span class="muted">–</span>'}</td>
+            <td data-l="Ink." style="text-align:right;color:var(--st-inc-t);font-weight:600">${r.inc || '<span class="muted">–</span>'}</td>
+            <td data-l="Frucht." style="text-align:right;color:var(--st-fruit-t);font-weight:600">${r.fruit || '<span class="muted">–</span>'}</td>
             <td data-l="Letzte" style="text-align:right">vor ${r.lastDays} T</td>
             <td data-l="Rhythmus"><span class="rhythm"><span class="rbar"><i style="width:${pct}%;background:${rc}"></i></span><span class="muted">alle ~${r.rhythm} T</span></span></td>
             <td data-l="Nachschub"><span class="sup sup-${r.supply}">${SUP_LABEL[r.supply]}</span></td>
@@ -1633,9 +1725,9 @@
         return (
           funnel +
           `<div class="card">
-            ${nUrgent || nLow ? `<div class="alert-head">⚠ <span><b>${nUrgent} Sorten ohne Nachschub</b>${nLow ? `, ${nLow} knapp` : ''} — nichts in Spawn oder Inkubation, wenn die Fruchtung durch ist.</span></div>` : ''}
+            ${nUrgent || nLow ? `<div class="alert-head">⚠ <span>${nUrgent ? `<b>${nUrgent} Sorten jetzt ansetzen</b> — nichts in Spawn, nichts in Inkubation` : ''}${nUrgent && nLow ? ' · ' : ''}${nLow ? `<b>${nLow} ohne Spawn</b> — Inkubation läuft, aber nichts angesetzt` : ''}</span></div>` : ''}
             <div class="card-head"><div class="sec">Nachschub je Sorte</div>
-              <div class="hdr-sub" style="margin-left:auto">Ampel: kein Nachlauf = rot · weniger Nachlauf als Fruchtung = gelb</div>
+              <div class="hdr-sub" style="margin-left:auto">Spawn und Inkubation zählen getrennt — Inkubation ist die nächste Ernte, Spawn die übernächste</div>
             </div>
             <div class="tscroll"><table class="t"${S.device === 'phone' ? '' : ' style="min-width:840px"'}><thead><tr>${CCOLS.map((c) => th(c, 'sup')).join('')}</tr></thead><tbody>${rowsC}</tbody></table></div>
           </div>` +
@@ -1652,15 +1744,15 @@
       function variantD() {
         const T = totals();
         const R = sortedRollup();
-        const nUrgent = R.filter((r) => r.supply === 'none').length;
-        const nLow = R.filter((r) => r.supply === 'low').length;
+        const nUrgent = R.filter((r) => r.supply === 'now').length;
+        const nLow = R.filter((r) => r.supply === 'nospawn').length;
         const seg = (v, c) => (v ? `<i style="width:${(v / T.bags) * 100}%;background:${c}"></i>` : '');
         const st = (v, c, l) => `<span class="tst"><b style="color:${c}">${nf(v)}</b><i>${l}</i></span>`;
         const totalTile = `<button class="stile stile-total${!S.filterSorte && !S.filterStage ? ' on' : ''}" data-clear="all">
           <div class="stile-top"><span class="stile-name">Alle Sorten</span><span class="stile-kz">${R.length} Sorten</span></div>
           <div class="stile-big"><b>${nf(T.bags)}</b><span>Beutel · ${chargen(T.nAct)}</span></div>
           <div class="sbar sbar-lg">${seg(T.spawn, 'var(--st-spawn)')}${seg(T.inc, 'var(--st-inc)')}${seg(T.fruit, 'var(--st-fruit)')}</div>
-          <div class="tstages">${st(T.spawn, '#c4b5fd', 'Spawn')}${st(T.inc, '#7dd3fc', 'Ink.')}${st(T.fruit, '#86efac', 'Frucht.')}</div>
+          <div class="tstages">${st(T.spawn, 'var(--st-spawn-t)', 'Spawn')}${st(T.inc, 'var(--st-inc-t)', 'Ink.')}${st(T.fruit, 'var(--st-fruit-t)', 'Frucht.')}</div>
           <div class="stile-foot"><span class="fs">${T.nAll} Chargen gesamt · ${T.nAll - T.nAct} archiviert</span></div>
         </button>`;
 
@@ -1704,8 +1796,8 @@
             <div class="card-head">
               <div class="sec">Chargen nach Sorte</div>
               <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
-                ${nUrgent ? `<span class="sup sup-none">${nUrgent}× neue Charge nötig</span>` : ''}
-                ${nLow ? `<span class="sup sup-low">${nLow}× bald</span>` : ''}
+                ${nUrgent ? `<span class="sup sup-now">${nUrgent}× jetzt ansetzen</span>` : ''}
+                ${nLow ? `<span class="sup sup-nospawn">${nLow}× Spawn fehlt</span>` : ''}
                 ${tileSortSelect()}
               </div>
             </div>
@@ -1721,7 +1813,8 @@
           <p>Zwei Fenster statt drei. Die Kachel <b>„Alle Sorten“</b> ist der alte „Chargen gesamt“-Kasten — sie steht jetzt als erste Kachel im selben Raster, also sind Gesamtzahl und Sorten-Aufschlüsselung <b>eine</b> Karte. Darunter nur noch die Tabelle.</p>
           <ul>
             <li><span class="tag">Kachel</span>Je Sorte: Beutel gesamt, darunter <b>beschriftet</b>, wie viele davon in Spawn, Inkubation und Fruchtung stehen. Der Balken ist die Abkürzung dazu, nicht die einzige Lesart.</li>
-            <li><span class="tag">Ampel</span>Sagt jetzt, <b>was zu tun ist</b>, nicht wie der Zustand heißt: „Neue Charge nötig“ statt „Kein Nachschub“. Darunter steht ausgeschrieben, was die drei Stufen bedeuten und welche Sorten gerade dran sind.</li>
+            <li><span class="tag">Ampel</span>Sagt, <b>was zu tun ist</b>, und liest Spawn und Inkubation <b>getrennt</b> — es sind zwei Vorlaufzeiten: die Inkubation ist die nächste Ernte, der Spawn die übernächste. <i>Blue Oyster</i> hat 120 Beutel in der Inkubation und nichts angesetzt: heute kein Problem, in zwei Zyklen ein sicheres. Das ist „Spawn fehlt“, nicht „knapp“.</li>
+            <li><span class="tag">Farben</span>Oben umschaltbar. <b>Ruhig</b> ist hier Standard: die drei Phasen sind keine Kategorien, sondern eine Reihenfolge — dieselben Beutel auf dem Weg zur Ernte —, also eine Rampe von Schiefer nach Grün statt drei Bunttöne. Der Status ist ein Punkt mit Wort statt einer gefüllten Pille. <b>Kräftig</b> zeigt die Farben, die die App heute benutzt.</li>
             <li><span class="tag">Tabelle</span>Standard ist <b>ungruppiert</b> — nur so bestimmt die Spaltensortierung wirklich die Reihenfolge. Gruppieren nach Sorte oder Phase bleibt als Auswahl, ist aber nicht mehr aufgezwungen.</li>
             <li><span class="tag">Handy</span>Zwei Kacheln nebeneinander, „Alle Sorten“ zuerst, dann die Liste als Karten.</li>
           </ul>`,
@@ -1752,7 +1845,8 @@
 
       /* ── Render + events ────────────────────────────────────────────── */
       function render() {
-        document.getElementById('vp').className = 'vp' + (S.device === 'phone' ? ' vp-phone' : '');
+        document.getElementById('vp').className =
+          'vp pal-' + S.pal + (S.device === 'phone' ? ' vp-phone' : '');
         const V = { A: variantA, B: variantB, C: variantC, D: variantD };
         document.getElementById('app').innerHTML = (V[S.variant] || variantD)();
         document.getElementById('why').innerHTML = WHY[S.variant];
@@ -1775,6 +1869,13 @@
         const b = e.target.closest('button[data-d]');
         if (!b) return;
         S.device = b.dataset.d;
+        [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
+        render();
+      });
+      document.getElementById('seg-pal').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-p]');
+        if (!b) return;
+        S.pal = b.dataset.p;
         [...e.currentTarget.children].forEach((x) => x.classList.toggle('on', x === b));
         render();
       });
