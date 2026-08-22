@@ -126,8 +126,14 @@ try {
     # A worktree carries the same token and would fight the real instance over
     # the external record. The script refuses to run from one; refuse to install
     # it there too. A worktree's .git is a file pointing at the parent repo.
+    #
+    # -Force is load-bearing: git marks .git hidden on Windows, and Get-Item
+    # does not return hidden items without it. Test-Path finds the entry, the
+    # Get-Item beside it throws "Could not find item", and under
+    # $ErrorActionPreference = 'Stop' that ends the install — on every ordinary
+    # checkout, not just on a worktree.
     $GitPath = Join-Path $PSScriptRoot '.git'
-    if ((Test-Path $GitPath) -and -not (Get-Item $GitPath).PSIsContainer) {
+    if ((Test-Path $GitPath) -and -not (Get-Item $GitPath -Force).PSIsContainer) {
         throw "$PSScriptRoot is a git worktree. Install this from the deployment checkout."
     }
 

@@ -387,8 +387,12 @@ describe('the systemd units', () => {
     assert.ok(fs.existsSync(path.join(ROOT, 'scripts', 'duckdns-fallback.js')));
   });
 
-  it('quotes every substituted path, so a space cannot split a directive', () => {
-    for (const key of ['ExecStart', 'WorkingDirectory', 'ReadWritePaths']) {
+  it('quotes the directives systemd splits, and only those', () => {
+    // WorkingDirectory takes the rest of the line verbatim; quoting it makes
+    // the quotes part of the path and systemd rejects it as not absolute.
+    const wd = service.split(/\r?\n/).find((l) => l.startsWith('WorkingDirectory='));
+    assert.equal(wd, 'WorkingDirectory=__MT_DIR__', 'WorkingDirectory must not be quoted');
+    for (const key of ['ExecStart', 'ReadWritePaths']) {
       const line = (service.split(/\r?\n/).find((l) => l.startsWith(key + '=')) || '').trim();
       assert.ok(line, key + ' missing');
       assert.ok(!/__MT_[A-Z]+__/.test(line.replace(/"[^"]*"/g, '')), key + ' has an unquoted placeholder: ' + line);
@@ -504,6 +508,14 @@ describe('the Windows task', () => {
     const elevate = psCode.indexOf('-Verb RunAs');
     const resolve = psCode.indexOf('Get-Command node');
     assert.ok(resolve < elevate, 'node must be resolved before elevation, not after');
+  });
+
+  it('reads .git with -Force, since git marks it hidden on Windows', () => {
+    // Without it, Test-Path finds the entry and Get-Item throws "Could not find
+    // item" — which under $ErrorActionPreference='Stop' failed the install on
+    // every ordinary checkout, not only on a worktree. Found by the Windows CI
+    // job, because nothing on a Mac can see a hidden-file attribute.
+    assert.match(psCode, /Get-Item \$GitPath -Force/);
   });
 
   it('registers the recurring job unelevated', () => {

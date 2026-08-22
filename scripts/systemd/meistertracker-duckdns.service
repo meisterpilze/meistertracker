@@ -26,11 +26,14 @@ Wants=time-sync.target
 Type=oneshot
 User=__MT_USER__
 Group=__MT_GROUP__
-# Quoted, all of them. systemd splits ExecStart on whitespace, so an unquoted
-# deployment path containing a space becomes two arguments and node is asked to
-# execute the first half of it — while `systemctl enable --now` still reports
-# success and the job fails silently every five minutes.
-WorkingDirectory="__MT_DIR__"
+# Quoted where quoting is what systemd does, and not where it is not.
+# ExecStart is a command line and is split on whitespace, so a deployment path
+# containing a space has to be quoted or node is asked to execute the first half
+# of it. WorkingDirectory is a single path and takes the rest of the line
+# verbatim — quote it and the quotes become part of the value, which systemd
+# then rejects as "path is not absolute". Both failure modes look identical from
+# the outside, and only one of them is even loud.
+WorkingDirectory=__MT_DIR__
 ExecStart="__MT_NODE__" "__MT_DIR__/scripts/duckdns-fallback.js" --quiet
 # A stalled request is already bounded at 30 s inside the script; this is the
 # backstop for a process that never gets that far.
