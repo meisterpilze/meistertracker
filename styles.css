@@ -3747,6 +3747,49 @@ tr:hover td {
   color: var(--c-text-muted);
   --sup-c: #4d9c6a;
 }
+/* Out of the season's programme. Deliberately NOT green: green would claim the
+   supply is fine, when the truth is that nobody is asking. A hollow dot says
+   "no opinion", which is the honest one. */
+.sup-off {
+  color: var(--c-text-muted);
+  --sup-c: transparent;
+}
+.sup-off::before {
+  box-shadow: inset 0 0 0 1.5px var(--c-text-muted);
+}
+/* The tile stays readable — the bags are real and somebody may want to see
+   them — but steps back so the Sorten actually being grown hold the eye. */
+.stile-off {
+  background: var(--c-bg);
+  opacity: 0.72;
+}
+.stile-off .stile-name {
+  font-weight: 600;
+}
+
+/* ═══ SORTE IN THE PROGRAMME ═════════════════════════════════════ */
+.ms-prog {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: max(12px, var(--fs-min));
+  color: var(--c-text-sec);
+  user-select: none;
+}
+.ms-prog input {
+  width: auto;
+  margin: 0;
+  /* Coarse pointers get a real target; the row is tapped in a grow room. */
+  min-width: 20px;
+  min-height: 20px;
+}
+tr.ms-off td {
+  opacity: 0.6;
+}
+tr.ms-off .ms-prog {
+  opacity: 1;
+}
 
 /* Legend — folded away by default. The tiles are the screen; this is the
    footnote, and a footnote that is always open is clutter you learn to skip. */

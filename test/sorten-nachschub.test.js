@@ -336,3 +336,203 @@ describe('Sorten-Kacheln — was tatsächlich gezeichnet wird', () => {
     assert.equal(ausgewaehlt(html), 1, 'und dann ist sonst keine markiert');
   });
 });
+
+describe('Sorten im Programm', () => {
+  // Was die Farm gerade anbaut, wechselt mit der Jahreszeit. Ohne diese Angabe
+  // muss jede abgeleitete Aussage annehmen, dass immer alles gewollt ist — und
+  // dann meldet Shiitake im Sommer jeden Tag "jetzt ansetzen", per Definition:
+  // keine Körner, nichts in der Inkubation, weil niemand welche macht. Eine
+  // Warnung, die immer an ist, zieht die echten mit runter.
+  function rollupMitProgramm(chargen, sorten) {
+    const code = [
+      hebeKonstante('SUPPLY_RANK'),
+      hebeFunktion('_stageBagsOf'),
+      hebeFunktion('sorteRollup'),
+      'return sorteRollup();'
+    ].join('\n');
+    return new Function(
+      'batches',
+      'zones',
+      'statusByBatch',
+      'mushroomStrains',
+      `
+      const t = (k) => k;
+      const abbrev = (s) => String(s || '').slice(0, 2).toUpperCase();
+      const stageOf = (role, batchType) =>
+        role === 'fruiting' || role === 'contaminated' ? role : batchType === 'grain' ? 'spawn' : 'incubation';
+      const getStatus = (id) => ({ c: statusByBatch[id] || {} });
+      ${code}
+    `
+    )(
+      chargen.map((c) => ({
+        batchId: c.id,
+        species: c.sorte,
+        batchType: c.typ || 'block',
+        days: 5,
+        due: '2026-09-01T00:00:00.000Z',
+        strainId: null
+      })),
+      ZONEN,
+      Object.fromEntries(chargen.map((c) => [c.id, c.verteilung])),
+      sorten
+    );
+  }
+
+  const SH_LEER = [{ id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }];
+
+  it('meldet nichts für eine Sorte, die gerade nicht angebaut wird', () => {
+    const r = nach(rollupMitProgramm(SH_LEER, [{ id: 1, name: 'Shiitake', imProgramm: false }]), 'Shiitake');
+    assert.equal(r.supply, 'off');
+  });
+
+  it('meldet sie wieder, sobald sie im Programm steht', () => {
+    const r = nach(rollupMitProgramm(SH_LEER, [{ id: 1, name: 'Shiitake', imProgramm: true }]), 'Shiitake');
+    assert.equal(r.supply, 'now');
+  });
+
+  it('nimmt eine Sorte ohne Eintrag in den Pilzsorten als "im Programm" an', () => {
+    // Sie wird angebaut, es hat nur niemand aufgeschrieben. Stillschweigend
+    // abschalten würde echte Arbeit verstecken.
+    const r = nach(rollupMitProgramm(SH_LEER, []), 'Shiitake');
+    assert.equal(r.imProgramm, true);
+    assert.equal(r.supply, 'now');
+  });
+
+  it('schaltet die Ampel aus, statt sie auf grün zu stellen', () => {
+    // Grün behauptet "Nachschub ist in Ordnung". Wahr ist: es fragt niemand.
+    const r = nach(rollupMitProgramm(SH_LEER, [{ id: 1, name: 'Shiitake', imProgramm: false }]), 'Shiitake');
+    assert.notEqual(r.supply, 'ok');
+    assert.equal(r.supply, 'off');
+  });
+
+  it('sortiert Sorten außerhalb des Programms ans Ende', () => {
+    const rang = new Function(hebeKonstante('SUPPLY_RANK') + '\nreturn SUPPLY_RANK;')();
+    assert.ok(rang.off > rang.ok, 'sonst stehen sie zwischen den Sorten, um die es geht');
+  });
+
+  it('vergleicht Namen ohne Rücksicht auf Groß- und Kleinschreibung', () => {
+    // Die Charge trägt "Shiitake", die Pilzsorte "shiitake" — verschieden
+    // geschrieben ist nicht verschieden gemeint.
+    const r = nach(rollupMitProgramm(SH_LEER, [{ id: 1, name: 'shiitake ', imProgramm: false }]), 'Shiitake');
+    assert.equal(r.supply, 'off');
+  });
+});
+
+describe('Nachschub als Tagesaufgabe', () => {
+  // Eine Lücke gehört in die Tagesliste, nicht nur auf den Chargen-Reiter: wer
+  // den Tag abarbeitet, soll sehen, dass die Shiitake ausgehen, ohne dafür
+  // woanders hinzugehen. Die Zeile ist ABGELEITET wie die Umlager- und
+  // Ernte-Zeilen daneben — deshalb funktioniert "bis sie wirklich gemacht ist"
+  // ohne Buchhaltung: Körner gemacht, Zeile weg. Es gibt kein Häkchen, das man
+  // vergessen könnte.
+  function tasks(chargen, sorten) {
+    const code = [
+      hebeKonstante('SUPPLY_RANK'),
+      hebeFunktion('_stageBagsOf'),
+      hebeFunktion('sorteRollup'),
+      hebeFunktion('buildSupplyTasks'),
+      'return buildSupplyTasks();'
+    ].join('\n');
+    return new Function(
+      'batches',
+      'zones',
+      'statusByBatch',
+      'mushroomStrains',
+      `
+      const t = (k, p) => (p ? k + ':' + Object.values(p).join(',') : k);
+      const abbrev = (s) => String(s || '').slice(0, 2).toUpperCase();
+      const stageOf = (role, batchType) =>
+        role === 'fruiting' || role === 'contaminated' ? role : batchType === 'grain' ? 'spawn' : 'incubation';
+      const getStatus = (id) => ({ c: statusByBatch[id] || {} });
+      ${code}
+    `
+    )(
+      chargen.map((c) => ({
+        batchId: c.id,
+        species: c.sorte,
+        batchType: c.typ || 'block',
+        days: 5,
+        due: '2026-09-01T00:00:00.000Z',
+        strainId: null
+      })),
+      ZONEN,
+      Object.fromEntries(chargen.map((c) => [c.id, c.verteilung])),
+      sorten
+    );
+  }
+  const IM_PROGRAMM = [
+    { id: 1, name: 'Shiitake', imProgramm: true },
+    { id: 2, name: 'Blue Oyster', imProgramm: true },
+    { id: 3, name: 'King Oyster', imProgramm: true }
+  ];
+
+  it('stellt eine Zeile ein, wenn hinter einer Sorte nichts steht', () => {
+    const ts = tasks([{ id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }], IM_PROGRAMM);
+    assert.equal(ts.length, 1);
+    assert.equal(ts[0].name, 'Shiitake');
+    assert.equal(ts[0].taskAction, 'make-grain', 'ohne Körner ist Körner ansetzen der erste Schritt');
+  });
+
+  it('verlangt Blöcke statt Körner, wenn Körner da sind', () => {
+    const ts = tasks(
+      [
+        { id: 'BO-G', sorte: 'Blue Oyster', typ: 'grain', verteilung: { SPAWN: 20 } },
+        { id: 'BO-1', sorte: 'Blue Oyster', verteilung: { TENT1: 96 } }
+      ],
+      IM_PROGRAMM
+    );
+    // Körner da, nichts in der Inkubation: 'low', also keine Zeile — die Kette
+    // läuft, sie wird nur dünn. Gemeldet wird, was fehlt, nicht was knapp ist.
+    assert.equal(ts.length, 0);
+  });
+
+  it('meldet "Körner fehlen" als eigene Zeile', () => {
+    const ts = tasks([{ id: 'BO-1', sorte: 'Blue Oyster', verteilung: { INC: 120, TENT1: 192 } }], IM_PROGRAMM);
+    assert.equal(ts.length, 1);
+    assert.equal(ts[0].supply, 'nospawn');
+    assert.equal(ts[0].taskAction, 'make-grain');
+  });
+
+  it('schweigt über Sorten, die gerade nicht angebaut werden', () => {
+    const ts = tasks(
+      [{ id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }],
+      [{ id: 1, name: 'Shiitake', imProgramm: false }]
+    );
+    assert.deepEqual(ts, [], 'sonst steht dieselbe Zeile den ganzen Sommer da');
+  });
+
+  it('schweigt über eine Sorte, die in den Pilzsorten gar nicht steht', () => {
+    // Anders als die Kachel, die sie vorsichtshalber zeigt: eine Tagesaufgabe
+    // ist eine Anweisung, und für die reicht "steht nicht dagegen" nicht.
+    assert.deepEqual(tasks([{ id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }], []), []);
+  });
+
+  it('verschwindet, sobald die Charge wirklich existiert', () => {
+    const leer = tasks([{ id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }], IM_PROGRAMM);
+    assert.equal(leer.length, 1);
+    const gemacht = tasks(
+      [
+        { id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } },
+        { id: 'SH-G', sorte: 'Shiitake', typ: 'grain', verteilung: { SPAWN: 20 } },
+        { id: 'SH-2', sorte: 'Shiitake', verteilung: { INC: 120 } }
+      ],
+      IM_PROGRAMM
+    );
+    assert.deepEqual(gemacht, [], 'kein Häkchen nötig — die Zeile ist abgeleitet');
+  });
+
+  it('stellt die dringendste Sorte nach oben', () => {
+    const ts = tasks(
+      [
+        { id: 'BO-1', sorte: 'Blue Oyster', verteilung: { INC: 120, TENT1: 192 } },
+        { id: 'SH-1', sorte: 'Shiitake', verteilung: { TENT1: 96 } }
+      ],
+      IM_PROGRAMM
+    );
+    assert.deepEqual(
+      ts.map((x) => x.name),
+      ['Shiitake', 'Blue Oyster'],
+      'gar nichts dahinter wiegt schwerer als nur keine Körner'
+    );
+  });
+});
