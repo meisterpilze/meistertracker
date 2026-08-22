@@ -5238,6 +5238,58 @@ function buildSupplyTasks() {
   return out.sort((a, b) => SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.name.localeCompare(b.name));
 }
 
+// Lab stock that has fallen under the floor somebody set for it.
+//
+// The floors already existed and were already drawn on the Labor card, which
+// meant they could only be seen by going and looking — and the whole point of a
+// floor is that it tells you without being asked. Same shape as the Sorten
+// supply rows: derived, so plating three more dishes makes the row go away, and
+// nothing has to be ticked off.
+//
+// Only types with a minimum, and only Sorten in this season's programme —
+// strainsInProduction() is what enforces the second half, and it is why a Sorte
+// parked for the summer stops asking for slants it will not need until autumn.
+function buildLabMinTasks() {
+  const breakdown = getLabStrainBreakdown();
+  const out = [];
+  for (const type of MIN_TYPES) {
+    for (const entry of Object.values(breakdown[type] || {})) {
+      const min = entry.min || 0;
+      // No minimum set is not the same as a minimum of zero: it means nobody
+      // has said what this Sorte needs, and guessing would invent work.
+      if (min <= 0) continue;
+      const have = entry.count || 0;
+      if (have >= min) continue;
+      out.push({
+        type,
+        name: entry.name,
+        kz: entry.kz,
+        have,
+        min,
+        short: min - have,
+        // Grain is kept in kilograms; the three culture types are counted in
+        // pieces. Rounding the shortfall would say "make 0 more" for a real gap.
+        unit: type === 'GS' ? 'kg' : '',
+        empty: have === 0,
+        detail: t('todo.labShort', {
+          type: getLabLabel(type),
+          have: type === 'GS' ? fmtKg(have, 1) : have,
+          min: type === 'GS' ? fmtKg(min, 1) : min
+        })
+      });
+    }
+  }
+  // Empty first — nothing at all of something is a different problem from a
+  // little short of it — then by how far under, then by name so it holds still.
+  return out.sort(
+    (a, b) =>
+      Number(b.empty) - Number(a.empty) ||
+      b.short / b.min - a.short / a.min ||
+      a.name.localeCompare(b.name) ||
+      MIN_TYPES.indexOf(a.type) - MIN_TYPES.indexOf(b.type)
+  );
+}
+
 // beside a backlog nobody is looking at.
 function buildWeekPlan() {
   const midnight = new Date();
@@ -5255,6 +5307,21 @@ function buildWeekPlan() {
     return top;
   };
 
+  for (const l of buildLabMinTasks()) {
+    // Today, like the supply rows and for the same reason: a floor breached is
+    // not a dated job, it is a state, and it is only ever "still under".
+    put(0, {
+      kind: 'labmin',
+      species: l.name,
+      label: l.name + ' · ' + getLabLabel(l.type),
+      detail: l.detail,
+      bags: 0,
+      zone: '',
+      overdue: l.empty,
+      ready: true,
+      task: l
+    });
+  }
   for (const s of buildSupplyTasks()) {
     // Always today. This is not a dated job — it is a gap, and a gap is only
     // ever "still open". It disappears the moment the batch exists, because it
@@ -5674,7 +5741,7 @@ function planCategory(it) {
   // A supply gap is answered by making something, so it counts with the other
   // create work rather than falling into "other", where a row nobody
   // categorised goes to be ignored.
-  if (it.kind === 'supply') return 'create';
+  if (it.kind === 'supply' || it.kind === 'labmin') return 'create';
   if (it.kind === 'grain') return 'create';
   if (it.kind === 'fruiting') return 'move';
   if (it.kind === 'harvest') return 'harvest';
@@ -6070,6 +6137,17 @@ function _planBtn(it) {
   // The row says a Sorte has nothing coming; the button starts the thing that
   // fixes it, with the Sorte already chosen. Grain first when there is none —
   // blocks cannot be made without it.
+  if (it.kind === 'labmin') {
+    return (
+      '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
+      esc(it.species || '') +
+      '" data-labtype="' +
+      esc((it.task && it.task.type) || '') +
+      '" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t('todo.labMake', { type: getLabLabel((it.task && it.task.type) || '') })) +
+      '</button>'
+    );
+  }
   if (it.kind === 'supply') {
     const grain = it.task && it.task.taskAction === 'make-grain';
     return (
@@ -6381,6 +6459,10 @@ function buildHarvestTasks() {
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
 const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
+// The types a Sorte can carry a minimum for. G2G and SY are made to order
+// from the others, so a standing floor for them would ask for stock nobody
+// keeps.
+const MIN_TYPES = ['GS', 'LC', 'MC', 'PD'];
 // MC has been the slant all along — the German interface has said "Slants" for as
 // long as it has existed while the English said "Mother cultures", so a screenshot
 // in one language named something you could not find in the other.
@@ -6417,25 +6499,57 @@ function getLabStockCounts() {
 // A Sorte counts as in production while one of its Chargen is still running.
 // Building the lab list only out of what is in stock hid the one case worth
 // seeing: a Sorte being grown right now with no spawn left to grow it from.
+// Which Sorten the lab has to hold stock for.
+//
+// This used to read "every Sorte with a live batch", which is circular in the
+// one case that matters: a Sorte that has run out has no live batch, so it fell
+// off this list and its zero-stock row disappeared at exactly the moment the
+// row was worth having. The same shape of bug the supply light had.
+//
+// The programme (v78) is the farm's own statement about what it grows, so it is
+// the right basis. Sorten with live batches are unioned in rather than replaced
+// — one being grown but never written down is still being grown, and going
+// quiet about it would hide real work.
 function strainsInProduction() {
   const out = new Map();
+  for (const ms of mushroomStrains || []) {
+    if (ms.imProgramm === false) continue;
+    out.set((ms.name || '') + '|' + (ms.kuerzel || ''), {
+      name: ms.name || 'Unknown',
+      kz: ms.kuerzel || '',
+      desc: ms.description || ''
+    });
+  }
+  const parked = new Set(
+    (mushroomStrains || []).filter((m) => m.imProgramm === false).map((m) => (m.name || '').trim().toLowerCase())
+  );
   for (const b of batches || []) {
     const { status } = getStatus(b.batchId);
     if (['DONE', 'EMPTY', 'CONTAM'].includes(status)) continue;
     const name = b.strainName || b.species || 'Unknown';
+    // A Sorte taken out of the programme keeps its remaining batches; that is
+    // not a reason to start asking for stock of it again.
+    if (parked.has(name.trim().toLowerCase())) continue;
     const kz = b.strainKuerzel || b.strain || '';
     out.set(name + '|' + kz, { name, kz, desc: b.strainDescriptor || '' });
   }
   return out;
 }
 
-// The minimum a Sorte should never fall below, in the unit that type is
-// counted in: kilograms for grain spawn, jars for liquid culture.
+// The minimum a Sorte should never fall below, in the unit that type is counted
+// in: kilograms for grain spawn, and pieces for the three culture types.
+//
+// Slants, plates and liquid culture used to share min_lc — or, for slants and
+// plates, hit the `return 0` above it and have no minimum at all. They are
+// three different things kept for three different reasons and stocked in
+// different numbers (v79), so each reads its own figure now.
+const STRAIN_MIN_FIELD = { GS: 'minSpawnKg', LC: 'minLc', MC: 'minMc', PD: 'minPd' };
 function strainMinFor(type, entry) {
-  if (type !== 'GS' && type !== 'LC') return 0;
+  const field = STRAIN_MIN_FIELD[type];
+  if (!field) return 0;
   const ms = (mushroomStrains || []).find((m) => (entry.kz && m.kuerzel === entry.kz) || m.name === entry.name);
   if (!ms) return 0;
-  return (type === 'GS' ? ms.minSpawnKg : ms.minLc) || 0;
+  return ms[field] || 0;
 }
 
 function getLabStrainBreakdown() {
@@ -6467,17 +6581,18 @@ function getLabStrainBreakdown() {
         breakdown.GS[key].count += (b.qty || 0) * (b.bagKg || 1);
       }
     });
-  // Every Sorte being grown right now gets a row for the two things it cannot
-  // be grown without, even at zero — a missing row reads as "fine" and is the
-  // exact opposite.
+  // Every Sorte being grown right now gets a row for each thing it cannot be
+  // grown without, even at zero — a missing row reads as "fine" and is the exact
+  // opposite. Four types now rather than two: slants and plates carry minimums
+  // of their own since v79.
   for (const [key, sp] of strainsInProduction()) {
-    for (const type of ['GS', 'LC']) {
+    for (const type of MIN_TYPES) {
       if (!breakdown[type][key]) {
         breakdown[type][key] = { name: sp.name, kz: sp.kz, desc: sp.desc, count: 0, color: spColor(sp.name) };
       }
     }
   }
-  for (const type of ['GS', 'LC']) {
+  for (const type of MIN_TYPES) {
     for (const entry of Object.values(breakdown[type])) entry.min = strainMinFor(type, entry);
   }
   return breakdown;
@@ -13329,6 +13444,8 @@ function editMStrain(id) {
   sv('ms-rec-spawn', ms.recSpawnPct || 0);
   sv('ms-min-spawn', ms.minSpawnKg || 0);
   sv('ms-min-lc', ms.minLc || 0);
+  sv('ms-min-mc', ms.minMc || 0);
+  sv('ms-min-pd', ms.minPd || 0);
   msRecShowRef(ms);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!ms.recGypsum;
@@ -13370,6 +13487,8 @@ function cancelMStrain() {
   sv('ms-rec-spawn', 5);
   sv('ms-min-spawn', 0);
   sv('ms-min-lc', 0);
+  sv('ms-min-mc', 0);
+  sv('ms-min-pd', 0);
   msRecShowRef(null);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = false;
@@ -13424,6 +13543,8 @@ function _msReadRecipe() {
     recGypsum: chk('ms-rec-gyp') || v('ms-rec-gyppct') > 0,
     minSpawnKg: v('ms-min-spawn'),
     minLc: v('ms-min-lc'),
+    minMc: v('ms-min-mc'),
+    minPd: v('ms-min-pd'),
     recGrainKg: v('ms-rec-grainkg'),
     recGrainRhPct: v('ms-rec-grainrh'),
     recIncDays: v('ms-rec-days'),
@@ -13537,6 +13658,8 @@ function msRecCopyFrom() {
   sv('ms-rec-spawn', src.recSpawnPct || 0);
   sv('ms-min-spawn', src.minSpawnKg || 0);
   sv('ms-min-lc', src.minLc || 0);
+  sv('ms-min-mc', src.minMc || 0);
+  sv('ms-min-pd', src.minPd || 0);
   msRecShowRef(src);
   const gyp = document.getElementById('ms-rec-gyp');
   if (gyp) gyp.checked = !!src.recGypsum;
@@ -22187,6 +22310,29 @@ function initEventListeners() {
     // A supply row carries a Sorte, not a batch — the batch is what it is
     // asking for. Both buttons open the quick-create the Pilzsorten page
     // already uses, with the Sorte filled in.
+    // A lab floor breached. GS is grain — that is the Labor quick-create, same
+    // as a supply row asking for grain. The three culture types open the
+    // culture form with the type already chosen.
+    if (action === 'labmin-make') {
+      const name = (el.dataset.sorte || '').trim().toLowerCase();
+      const ms = mushroomStrains.find((m) => (m.name || '').trim().toLowerCase() === name);
+      if (!ms) {
+        setFb('err', t('todo.supplyNoSorte'));
+        return;
+      }
+      msQuickLabor(ms.id);
+      // The dialog carries a type picker; the row already knows which one is
+      // short, so answer it rather than making the worker pick it again.
+      const lt = document.getElementById('ms-q-labtype');
+      if (lt && el.dataset.labtype && [...lt.options].some((o) => o.value === el.dataset.labtype)) {
+        lt.value = el.dataset.labtype;
+        // The select's own onchange, called directly. Setting .value in script
+        // does not fire it, and the handler is what refills the parent list —
+        // without it the dialog would offer parents for the previous type.
+        msQuickLabTypeChanged();
+      }
+      return;
+    }
     if (action === 'supply-make-grain' || action === 'supply-make-batch') {
       const name = (el.dataset.sorte || '').trim().toLowerCase();
       const ms = mushroomStrains.find((m) => (m.name || '').trim().toLowerCase() === name);

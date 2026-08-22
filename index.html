@@ -3135,6 +3135,18 @@
                         <span data-i18n="strains.minLc">Mindestbestand Flüssigkultur (Gläser)</span>
                         <input id="ms-min-lc" type="number" min="0" step="1" value="0" />
                       </label>
+                      <!-- A slant is the long-term backup, a plate is what you
+                           work from, a jar of LC is what goes into grain. Three
+                           reasons to keep something, stocked in three different
+                           numbers — so three figures, not one shared with LC. -->
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
+                        <span data-i18n="strains.minMc">Mindestbestand Slants (Stück)</span>
+                        <input id="ms-min-mc" type="number" min="0" step="1" value="0" />
+                      </label>
+                      <label class="fs-meta" style="color: var(--c-text-muted)">
+                        <span data-i18n="strains.minPd">Mindestbestand Petrischalen (Stück)</span>
+                        <input id="ms-min-pd" type="number" min="0" step="1" value="0" />
+                      </label>
                     </div>
                   </div>
                   <div id="ms-rec-graingroup" style="display: none; margin-top: 8px">

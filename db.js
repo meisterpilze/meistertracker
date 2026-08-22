@@ -2303,6 +2303,31 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE mushroom_strains ADD COLUMN im_programm INTEGER DEFAULT 1');
     }
+  },
+  {
+    version: 79,
+    description: 'A minimum of its own for slants and petri dishes, beside the one liquid culture had',
+    fn(db) {
+      // v69 gave a Sorte two minimums: min_spawn_kg for grain, min_lc for
+      // liquid culture. strainMinFor() then read min_lc for every culture type
+      // that was not grain, so slants and petri dishes were held to the
+      // liquid-culture figure — or, in the branch that returned 0, to nothing
+      // at all.
+      //
+      // They are three different things kept for three different reasons: a
+      // slant is the long-term backup, a plate is what you work from, a jar of
+      // LC is what goes into grain. They are stocked in different numbers, and
+      // one figure could not be right for all three.
+      //
+      // Zero means "no minimum set", exactly as min_lc already did, so nothing
+      // begins warning until somebody enters a number.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('mushroom_strains')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('min_mc')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_mc REAL DEFAULT 0');
+      if (!cols.includes('min_pd')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_pd REAL DEFAULT 0');
+    }
   }
 ];
 
@@ -7584,6 +7609,8 @@ function _strainMinFields(d) {
   const out = {};
   if ('minSpawnKg' in d) out.min_spawn_kg = num(d.minSpawnKg, 0);
   if ('minLc' in d) out.min_lc = num(d.minLc, 0);
+  if ('minMc' in d) out.min_mc = num(d.minMc, 0);
+  if ('minPd' in d) out.min_pd = num(d.minPd, 0);
   // Stored as 0/1 rather than a boolean: SQLite has no boolean type, and every
   // other flag in this schema is an integer.
   if ('imProgramm' in d) out.im_programm = d.imProgramm ? 1 : 0;
@@ -7624,6 +7651,10 @@ function listMushroomStrains(db) {
       // v69 — minimum holdings, per Sorte.
       minSpawnKg: r.min_spawn_kg || 0,
       minLc: r.min_lc || 0,
+      // v79 — slants and petri dishes, each with a minimum of their own rather
+      // than borrowing the liquid-culture one.
+      minMc: r.min_mc || 0,
+      minPd: r.min_pd || 0,
       // v78 — is the farm growing this one at the moment? Absent column reads
       // as yes, so a database that has not migrated yet behaves as before.
       imProgramm: r.im_programm == null ? true : r.im_programm !== 0
