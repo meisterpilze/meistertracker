@@ -44,7 +44,22 @@ $trigger.Delay = 'PT1M'
 
 # S4U runs as this user with the profile loaded but needs no stored password.
 # The server needs the user profile for the pm2 home and the printer spooler.
-$principal = New-ScheduledTaskPrincipal -UserId $User -LogonType S4U -RunLevel Highest
+#
+# RunLevel Limited, not Highest, and the reason is pm2 rather than security.
+#
+# pm2 talks to its daemon over \\.\pipe\rpc.sock. A pipe created by an elevated
+# process cannot be opened by a non-elevated one, so a boot instance started at
+# Highest is unreachable from an ordinary START.bat window: `pm2 describe` and
+# `pm2 start` both fail with EPERM, and taskkill cannot stop the process either.
+# The result is a machine where the server runs but can never be updated, and
+# START.bat reports "Server process crashed on startup" while the healthy
+# instance it could not replace keeps serving yesterday's code.
+#
+# Nothing in START.bat needs administrator rights. The only privileged-looking
+# thing the server does is bind port 80 for the HTTP→HTTPS redirect, which
+# Windows permits unprivileged and which already degrades cleanly — server.js
+# catches EACCES and EADDRINUSE there and continues in HTTPS-only mode.
+$principal = New-ScheduledTaskPrincipal -UserId $User -LogonType S4U -RunLevel Limited
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
