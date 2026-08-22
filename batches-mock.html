@@ -295,6 +295,26 @@
         background: var(--c-red-light);
         color: var(--c-red-dark);
       }
+      /* The Status column carried the same three saturated hues as the old
+         stage colours — purple, blue, green — so calming the tiles and leaving
+         the table meant two colour languages for one fact. Same ramp here:
+         three steps of one green, from raw to ready.
+
+         DONE stays grey and CONTAM stays red on purpose. They are not steps
+         along the ramp, they are the two ways off it, and contamination is the
+         one row in this table that should catch an eye. */
+      .pal-quiet .b-spawn {
+        background: #eef1f5;
+        color: #5d6b7a;
+      }
+      .pal-quiet .b-inc {
+        background: #e3ece6;
+        color: #3f6b50;
+      }
+      .pal-quiet .b-tent {
+        background: #cdebd7;
+        color: #14682f;
+      }
       .sp-dot {
         display: inline-block;
         width: 9px;
@@ -656,20 +676,28 @@
         box-shadow: inset 0 0 0 1px var(--c-primary);
         background: var(--c-primary-light);
       }
+      /* Urgent: the whole card is outlined, not one edge. A Sorte with nothing
+         behind it is the one thing on this screen that cannot wait, and a card
+         ringed in red is found without reading — which is the point, since this
+         grid is scanned in a grow room at arm's length. The halo does the
+         carrying, so the fill stays white and the grid stays calm. */
       .stile.urgent {
-        border-color: var(--c-red-border);
+        border: 2px solid var(--c-red-strong);
+        padding: 10px 11px;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+      }
+      .stile.urgent:hover {
+        border-color: var(--c-red-strong);
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18), var(--shadow-md);
+      }
+      .pal-loud .stile.urgent {
         background: #fff7f7;
       }
+      /* Selected AND urgent: keep the red ring, add the selection inset, so
+         one never hides the other. */
       .stile.urgent.on {
-        border-color: var(--c-primary);
-      }
-      /* Quiet: a tinted card for every urgent Sorte turns the grid pink. A
-         left edge says the same thing and leaves the card a card. */
-      .pal-quiet .stile.urgent {
-        background: var(--c-surface);
-        border-color: var(--c-border);
-        border-left: 3px solid #b91c1c;
-        padding-left: 10px;
+        border-color: var(--c-red-strong);
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18), inset 0 0 0 2px var(--c-primary);
       }
       .stile-top {
         display: flex;
@@ -769,9 +797,26 @@
       }
       /* The traffic light, written out. Nothing here means anything by
          colour alone. */
-      .tlegend {
+      .tlegend-btn {
         margin-top: 10px;
-        padding-top: 9px;
+        border: 0;
+        background: none;
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--c-text-muted);
+        cursor: pointer;
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .tlegend-btn:hover {
+        color: var(--c-text-sec);
+      }
+      .tlegend {
+        padding-top: 7px;
+        margin-top: 2px;
         border-top: 1px solid var(--c-border-light);
         display: flex;
         flex-direction: column;
@@ -1025,7 +1070,7 @@
       </div>
       <div class="seg" id="seg-pal">
         <button data-p="quiet" class="on">Farben ruhig</button>
-        <button data-p="loud">kräftig</button>
+        <button data-p="loud">wie heute</button>
       </div>
       <div class="mock-note">Beispieldaten — 24 Chargen, 8 Sorten</div>
     </div>
@@ -1237,6 +1282,7 @@
         variant: 'D',
         device: 'desktop',
         pal: 'quiet',
+        legendOpen: false,
         sortKey: null,
         sortDir: 'asc',
         supSortKey: 'supply',
@@ -1386,11 +1432,11 @@
       function headerStrip(compact) {
         const T = totals();
         const chips = [
-          { k: 'SPAWN RUN', l: 'Spawn', v: T.spawn, n: T.nSpawn, c: 'var(--st-spawn)' },
-          { k: 'INCUBATING', l: 'Inkubation', v: T.inc, n: T.nInc, c: 'var(--st-inc)' },
-          { k: 'FRUITING', l: 'Fruchtung', v: T.fruit, n: T.nFruit, c: 'var(--st-fruit)' },
-          { k: 'DONE', l: 'Fertig', v: T.done, n: T.nDone, c: 'var(--st-done)' },
-          { k: 'CONTAM', l: 'Kontam.', v: T.contam, n: T.nContam, c: 'var(--st-contam)' }
+          { k: 'SPAWN RUN', l: 'Spawn', v: T.spawn, n: T.nSpawn, c: 'var(--st-spawn)', t: 'var(--st-spawn-t)' },
+          { k: 'INCUBATING', l: 'Inkubation', v: T.inc, n: T.nInc, c: 'var(--st-inc)', t: 'var(--st-inc-t)' },
+          { k: 'FRUITING', l: 'Fruchtung', v: T.fruit, n: T.nFruit, c: 'var(--st-fruit)', t: 'var(--st-fruit-t)' },
+          { k: 'DONE', l: 'Fertig', v: T.done, n: T.nDone, c: 'var(--st-done)', t: 'var(--st-done)' },
+          { k: 'CONTAM', l: 'Kontam.', v: T.contam, n: T.nContam, c: 'var(--st-contam)', t: 'var(--st-contam)' }
         ];
         return `<div class="card"><div class="hdr">
           <div>
@@ -1402,7 +1448,7 @@
               .map(
                 (c) => `<button class="schip${S.filterStage === c.k ? ' on' : ''}" style="--sc:${c.c}" data-stage="${c.k}">
                   <span><span class="sl">${c.l}</span><br><span class="sn">${chargen(c.n)}</span></span>
-                  <span class="sv" style="margin-left:auto">${nf(c.v)}</span>
+                  <span class="sv" style="margin-left:auto;color:${c.t}">${nf(c.v)}</span>
                 </button>`
               )
               .join('')}
@@ -1481,19 +1527,29 @@
           <option value="name"${S.tileSort === 'name' ? ' selected' : ''}>Sortieren: Name</option>
         </select>`;
       // The light, spelled out where the tiles are. No colour-only meaning.
+      // Folded away by default. The tiles are the screen; the legend is the
+      // footnote, and a footnote that is always open is just clutter you have
+      // learned to skip. It opens on a tap and stays open until you close it.
       const tileLegend = (R) => {
+        const btn = `<button type="button" class="tlegend-btn" data-legend="1" aria-expanded="${!!S.legendOpen}">
+          <span class="caret">${S.legendOpen ? '▾' : '▸'}</span>Was bedeuten die Farben?
+        </button>`;
+        if (!S.legendOpen) return btn;
         const names = (k) => {
           const a = R.filter((r) => r.supply === k);
           return a.length ? `: <b>${esc(a.map((r) => r.name).join(', '))}</b>` : '';
         };
         const row = (k, why) => `<div><span class="sup sup-${k}">${SUP_LABEL[k]}</span> ${why}${names(k)}</div>`;
-        return `<div class="tlegend">
-          ${row('now', 'nichts in Spawn, nichts in Inkubation — nach der Fruchtung ist die Sorte leer')}
-          ${row('nospawn', 'Inkubation läuft, aber nichts angesetzt — die <b>übernächste</b> Ernte fehlt')}
-          ${row('low', 'es kommt weniger nach, als gerade fruchtet')}
-          ${row('ok', 'mehr im Nachlauf als in der Fruchtung')}
-          <div class="tlegend-note">Spawn und Inkubation zählen getrennt: die Inkubation ist die nächste Ernte, der Spawn die übernächste.</div>
-        </div>`;
+        return (
+          btn +
+          `<div class="tlegend">
+            ${row('now', 'nichts in Spawn, nichts in Inkubation — nach der Fruchtung ist die Sorte leer')}
+            ${row('nospawn', 'Inkubation läuft, aber nichts angesetzt — die <b>übernächste</b> Ernte fehlt')}
+            ${row('low', 'es kommt weniger nach, als gerade fruchtet')}
+            ${row('ok', 'mehr im Nachlauf als in der Fruchtung')}
+            <div class="tlegend-note">Spawn und Inkubation zählen getrennt: die Inkubation ist die nächste Ernte, der Spawn die übernächste.</div>
+          </div>`
+        );
       };
 
       /* ═══ VARIANT A — Kacheln + Kennzahlen + Tabelle ══════════════════ */
@@ -1814,7 +1870,9 @@
           <ul>
             <li><span class="tag">Kachel</span>Je Sorte: Beutel gesamt, darunter <b>beschriftet</b>, wie viele davon in Spawn, Inkubation und Fruchtung stehen. Der Balken ist die Abkürzung dazu, nicht die einzige Lesart.</li>
             <li><span class="tag">Ampel</span>Sagt, <b>was zu tun ist</b>, und liest Spawn und Inkubation <b>getrennt</b> — es sind zwei Vorlaufzeiten: die Inkubation ist die nächste Ernte, der Spawn die übernächste. <i>Blue Oyster</i> hat 120 Beutel in der Inkubation und nichts angesetzt: heute kein Problem, in zwei Zyklen ein sicheres. Das ist „Spawn fehlt“, nicht „knapp“.</li>
-            <li><span class="tag">Farben</span>Oben umschaltbar. <b>Ruhig</b> ist hier Standard: die drei Phasen sind keine Kategorien, sondern eine Reihenfolge — dieselben Beutel auf dem Weg zur Ernte —, also eine Rampe von Schiefer nach Grün statt drei Bunttöne. Der Status ist ein Punkt mit Wort statt einer gefüllten Pille. <b>Kräftig</b> zeigt die Farben, die die App heute benutzt.</li>
+            <li><span class="tag">Farben</span>Oben umschaltbar. <b>Ruhig</b> ist der Vorschlag und gilt jetzt überall — auch für die Status-Spalte der Tabelle: die drei Phasen sind keine Kategorien, sondern eine Reihenfolge, also eine Rampe von Schiefer nach Grün statt drei Bunttöne. Der Status ist ein Punkt mit Wort statt einer gefüllten Pille. <b>Wie heute</b> zeigt zum Vergleich, was die App gerade benutzt.</li>
+            <li><span class="tag">dringend</span>Eine Sorte, hinter der nichts steht, bekommt einen <b>roten Rahmen um die ganze Kachel</b> plus einen weichen Ring. Ohne Lesen findbar — genau dafür ist er da. Der Rest der Kachel bleibt weiß, damit das Raster ruhig bleibt.</li>
+            <li><span class="tag">Legende</span>Standardmäßig <b>zugeklappt</b> — „Was bedeuten die Farben?“ öffnet sie. Die Kacheln sind der Bildschirm, die Legende die Fußnote.</li>
             <li><span class="tag">Tabelle</span>Standard ist <b>ungruppiert</b> — nur so bestimmt die Spaltensortierung wirklich die Reihenfolge. Gruppieren nach Sorte oder Phase bleibt als Auswahl, ist aber nicht mehr aufgezwungen.</li>
             <li><span class="tag">Handy</span>Zwei Kacheln nebeneinander, „Alle Sorten“ zuerst, dann die Liste als Karten.</li>
           </ul>`,
@@ -1898,6 +1956,10 @@
         const sTile = e.target.closest('[data-sorte]');
         if (sTile) {
           S.filterSorte = S.filterSorte === sTile.dataset.sorte ? null : sTile.dataset.sorte;
+          return render();
+        }
+        if (e.target.closest('[data-legend]')) {
+          S.legendOpen = !S.legendOpen;
           return render();
         }
         const grp = e.target.closest('[data-group]');
