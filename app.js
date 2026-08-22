@@ -156,6 +156,19 @@ function loadLang(code) {
 
 // ─── CONSTANTS ───────────────────────────────────────────────
 const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'];
+// The colour a zone falls back to when its row carries none, the shade the role
+// picker suggests, and the default in the new-zone form — one table instead of
+// the three separate literals these used to be, which is how the KPI strip and
+// the zone editor came to disagree about what "fruiting" looks like.
+//
+// Must stay equal to ZONE_SEED_COLOR in db.js; test/zonenfarben.test.js holds
+// the two together, because nothing else would notice them drifting apart.
+const ZONE_ROLE_COLOR = {
+  spawn: '#926bb6',
+  incubation: '#4d829b',
+  fruiting: '#438871',
+  contaminated: '#ef4444'
+};
 let ZONES = [],
   ALL_RACKS = [],
   LOCS = [],
@@ -2687,19 +2700,19 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
     {
       label: t('stage.spawn'),
       value: spawn,
-      color: zSpawn?.color || '#a855f7',
+      color: zSpawn?.color || ZONE_ROLE_COLOR.spawn,
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`
     },
     {
       label: t('stage.incubation'),
       value: inc,
-      color: zInc?.color || '#0ea5e9',
+      color: zInc?.color || ZONE_ROLE_COLOR.incubation,
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
     },
     {
       label: t('stage.fruiting'),
       value: tent,
-      color: zTent?.color || '#10b981',
+      color: zTent?.color || ZONE_ROLE_COLOR.fruiting,
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`
     },
     {
@@ -2711,7 +2724,7 @@ function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
     {
       label: t('stage.contam'),
       value: contam,
-      color: zContam?.color || '#ef4444',
+      color: zContam?.color || ZONE_ROLE_COLOR.contaminated,
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
     }
   ];
@@ -3938,7 +3951,7 @@ function renderFruitingSection(fruitingZones, filtered) {
   let totalBags = 0;
   fruitingZones.forEach((z) => (totalBags += Object.keys(getZoneBags(z.id)).length));
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const color = fruitingZones[0]?.color || '#22c55e';
+  const color = fruitingZones[0]?.color || ZONE_ROLE_COLOR.fruiting;
 
   const tentCols = fruitingZones
     .map((z) => {
@@ -12569,7 +12582,7 @@ async function addZone() {
     renderStatus();
     document.getElementById('zone-name').value = '';
     document.getElementById('zone-racks').value = '';
-    document.getElementById('zone-color').value = '#10b981';
+    document.getElementById('zone-color').value = ZONE_ROLE_COLOR.fruiting;
     document.getElementById('zone-role').value = 'fruiting';
     document.getElementById('zone-capacity').value = '';
   } catch (e) {
@@ -21670,7 +21683,7 @@ function initEventListeners() {
   $('rhythm-save').addEventListener('click', saveRhythmEditor);
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
-    const c = { spawn: '#a855f7', incubation: '#0ea5e9', fruiting: '#10b981', contaminated: '#ef4444' }[this.value];
+    const c = ZONE_ROLE_COLOR[this.value];
     if (c) document.getElementById('zone-color').value = c;
   });
   // Zone list event delegation (CSP blocks inline onclick)

@@ -67,12 +67,34 @@ describe('against a real database', () => {
   });
 
   it('passes on the tree it ships with, and migrates only the copy', () => {
-    // Rewind the live database one migration, the state a server about to be
-    // updated is actually in.
+    // Rewind the live database behind the migration that added fallback_last —
+    // the state a server about to be updated is actually in — and check that
+    // preflight leaves it there.
+    //
+    // The two version numbers used to be written out: delete 76, expect 75.
+    // That made this test a tripwire on every migration added afterwards, which
+    // is a false alarm about the wrong file: adding migration 77 broke an
+    // assertion about migration 76 having not run. Both numbers are derived
+    // now. FALLBACK_MIGRATION is the only one still named, because it is the
+    // one whose column this rewind actually drops.
+    const FALLBACK_MIGRATION = 76;
+    const vorher = (() => {
+      const d = new DatabaseSync(live, { readonly: true });
+      const v = d.prepare('SELECT MAX(version) AS v FROM schema_version').get().v;
+      d.close();
+      return v;
+    })();
     const r = new DatabaseSync(live);
     r.exec('ALTER TABLE duckdns_config DROP COLUMN fallback_last');
-    r.prepare('DELETE FROM schema_version WHERE version=76').run();
+    r.prepare('DELETE FROM schema_version WHERE version >= ?').run(FALLBACK_MIGRATION);
     r.close();
+    const zurueckgesetztAuf = (() => {
+      const d = new DatabaseSync(live, { readonly: true });
+      const v = d.prepare('SELECT MAX(version) AS v FROM schema_version').get().v;
+      d.close();
+      return v;
+    })();
+    assert.ok(zurueckgesetztAuf < vorher, 'the rewind did not actually move the live database back');
 
     assert.equal(preflight.main(['--quiet'], Object.assign({ dbFile: live }, silent)), 0);
 
@@ -82,7 +104,7 @@ describe('against a real database', () => {
       .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('duckdns_config') WHERE name='fallback_last'")
       .get().c;
     after.close();
-    assert.equal(v, 75, 'the live database must still be unmigrated');
+    assert.equal(v, zurueckgesetztAuf, 'the live database must still be unmigrated');
     assert.equal(col, 0, 'and must not have gained the column');
   });
 
