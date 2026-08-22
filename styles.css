@@ -2069,11 +2069,6 @@ textarea.is-invalid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-.g5 {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
 /* Six, for the one place that needs six: the average-composition row in
    Inventory. It was an inline `repeat(6,1fr)` written straight into
    renderThresholds(), and a bare 1fr is minmax(auto, 1fr) — the track cannot
@@ -4491,7 +4486,6 @@ tr.ms-off .ms-prog {
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -4604,7 +4598,6 @@ tr.ms-off .ms-prog {
   }
   .g3,
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4711,7 +4704,6 @@ tr.ms-off .ms-prog {
   .g2,
   .g3,
   .g4,
-  .g5,
   .g6 {
     grid-template-columns: minmax(0, 1fr);
   }

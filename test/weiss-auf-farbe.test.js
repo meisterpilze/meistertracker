@@ -24,6 +24,7 @@
 // or silently changed. The list may shrink; it must never grow.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const { contrast } = require('./helpers/kontrast');
 const fs = require('fs');
 const path = require('path');
 
@@ -35,16 +36,6 @@ const TOKEN = new Map();
   const root = CSS.slice(CSS.indexOf(':root {'), CSS.indexOf('\n}', CSS.indexOf(':root {')));
   for (const m of root.matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;/g)) TOKEN.set(m[1], m[2].toLowerCase());
 }
-
-function relLum(hex) {
-  const c = hex.replace('#', '');
-  const ch = [0, 2, 4].map((i) => {
-    const x = parseInt(c.substr(i, 2), 16) / 255;
-    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-const contrast = (a, b) => (Math.max(relLum(a), relLum(b)) + 0.05) / (Math.min(relLum(a), relLum(b)) + 0.05);
 
 /** A literal, or a token resolved to its value. Null when neither. */
 function resolve(raw) {
