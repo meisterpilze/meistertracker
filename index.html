@@ -3697,6 +3697,32 @@
         </div>
 
         <div class="page" id="p-lab">
+          <!-- Laborarbeit is an ACTION, not a view: it opens the quick-create
+               dialog instead of switching panels. Standing in the strip beside
+               four view-switchers it was a fifth pill that behaved unlike its
+               neighbours, and the only way to find that out was to press it. On
+               its own line, wider and taller, the difference is visible first.
+               It sits above the stock card because that card is reference and
+               this is the work: on a phone the thing you opened the section to
+               do should not be below a panel you came to read.
+               The sp-lab-work panel stays below as that dialog's backing form. -->
+          <button class="btn btn-p btn-wide" id="btn-lab-work">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span data-i18n="lab.logWork">Log work</span>
+          </button>
           <!-- Lab stock — the state of the section, above its tabs -->
           <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
             <!-- ── LAB section ── collapsible -->
@@ -3716,29 +3742,6 @@
             <span>Lab</span>
             <div id="dash-lab-stock"></div>
           </div>
-          <!-- Laborarbeit is an ACTION, not a view: it opens the quick-create
-               dialog instead of switching panels. Standing in the strip beside
-               four view-switchers it was a fifth pill that behaved unlike its
-               neighbours, and the only way to find that out was to press it. On
-               its own line, wider and taller, the difference is visible first.
-               The sp-lab-work panel stays below as that dialog's backing form. -->
-          <button class="btn btn-p btn-wide" id="btn-lab-work">
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span data-i18n="lab.logWork">Log work</span>
-          </button>
           <div class="stabs" data-stab-home="nav.lab">
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
