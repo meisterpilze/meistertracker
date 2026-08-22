@@ -1135,7 +1135,10 @@ function openStab(page, sub) {
   document.querySelectorAll('.sb-admin-nav .sb-btn').forEach((b) => b.classList.remove('active'));
   const snEl = document.getElementById(`sn-${page}-${sub}`);
   if (snEl) snEl.classList.add('active');
-  if (page === 'batch' && sub === 'list') renderBatches();
+  if (page === 'batch' && sub === 'list') {
+    renderSorteTiles();
+    renderBatches();
+  }
   if (page === 'batch' && sub === 'new') {
     _fillNbProducts();
     if (!_nbDefaultsApplied) {
@@ -2688,50 +2691,254 @@ function isBatchOverdue(b, now) {
   return due < today;
 }
 
-function renderPipelineKPIs(tot, spawn, inc, tent, done, contam) {
-  const el = document.getElementById('metrics');
-  if (!el) return;
-  // Pick up zone colors if configured
-  const zSpawn = zones.find((z) => z.role === 'spawn');
-  const zInc = zones.find((z) => z.role === 'incubation');
-  const zTent = zones.find((z) => z.role === 'fruiting');
-  const zContam = zones.find((z) => z.role === 'contaminated');
-  const stages = [
-    {
-      label: t('stage.spawn'),
-      value: spawn,
-      color: zSpawn?.color || ZONE_ROLE_COLOR.spawn,
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="6"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`
-    },
-    {
-      label: t('stage.incubation'),
-      value: inc,
-      color: zInc?.color || ZONE_ROLE_COLOR.incubation,
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
-    },
-    {
-      label: t('stage.fruiting'),
-      value: tent,
-      color: zTent?.color || ZONE_ROLE_COLOR.fruiting,
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>`
-    },
-    {
-      label: t('stage.done'),
-      value: done,
-      color: '#64748b',
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`
-    },
-    {
-      label: t('stage.contam'),
-      value: contam,
-      color: zContam?.color || ZONE_ROLE_COLOR.contaminated,
-      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+// ─── SORTEN OVERVIEW ─────────────────────────────────────────
+// Replaces the pipeline KPI strip. That strip answered "how many bags are in
+// each stage" and mixed its units doing it — "Chargen gesamt" and "Fertig"
+// counted batches while the three stages beside them counted bags, all in one
+// row. It also could not answer the question this page is actually opened
+// with: which Sorte is running out, so which one needs a batch started.
+//
+// Both live here now. The first tile is the old total; the rest are one tile
+// per Sorte, and every number on all of them is bags.
+
+// Bags of one batch, bucketed by production stage. Same source as the status
+// badge and the old strip — getStatus().c is the per-zone count derived from
+// the last scan per bag — so the tiles cannot disagree with the row beneath
+// them. stageOf() is what folds grain jars into 'spawn' regardless of the zone
+// they sit in.
+function _stageBagsOf(b) {
+  const { c } = getStatus(b.batchId);
+  const out = { spawn: 0, incubation: 0, fruiting: 0, contaminated: 0 };
+  for (const z of zones) {
+    const n = c[z.id] || 0;
+    if (!n) continue;
+    const st = stageOf(z.role, b.batchType);
+    if (out[st] !== undefined) out[st] += n;
+  }
+  return out;
+}
+
+// How much of each Sorte is where, and whether anything is behind it.
+//
+// The chain on this farm runs grain -> block -> fruiting, and the verdict reads
+// the first two steps SEPARATELY, because they are different lead times.
+// Incubation is the next harvest; grain is what the harvest after that has to
+// be made from. A Sorte with a full incubation and no grain has no problem
+// today and a certain one in two cycles — a different thing from "running low",
+// wanting a different answer on a different day.
+//
+//   grain 0, incubating 0  -> 'now'      behind the fruiting blocks: nothing
+//   grain 0, incubating >0 -> 'nospawn'  next harvest yes, the one after no
+//   incubating < fruiting  -> 'low'      the chain runs, but it is thinning
+//   otherwise              -> 'ok'
+//
+// ── Why grain is counted apart rather than added in ──
+//
+// stageOf() puts a BLOCK into 'incubation' from any zone that is not fruiting
+// or contaminated — blocks have no spawn-run stage in this app, only grain
+// does. So "bags in spawn" is not a thing a block can be, and reading it that
+// way would have made the spawn count permanently zero and the distinction
+// above meaningless. Grain lives in its own batches (batchType 'grain', listed
+// under Labor), and that is where the number has to come from.
+//
+// It is therefore in a DIFFERENT UNIT: jars, not blocks, and one jar makes
+// several blocks. Adding it to a bag count would repeat exactly the mistake
+// this card was built to fix — the old strip put batch counts and bag counts
+// in one row. So grain stays out of `bags`, out of the bar, and off the row of
+// three; it is named in its own right, in jars, on the footer line.
+//
+// Everything here comes out of data the app already has. A real days-of-cover
+// number would need a target per Sorte or consumption from the order side;
+// neither exists, so it is not guessed at.
+const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3 };
+function sorteRollup() {
+  const bySorte = new Map();
+  for (const b of batches) {
+    const name = (b.species || '').trim() || t('batch.noSorte');
+    let r = bySorte.get(name);
+    if (!r) {
+      r = {
+        name,
+        kuerzel: '',
+        grain: 0, // jars, from grain batches — a different unit, kept apart
+        incubation: 0,
+        fruiting: 0,
+        contaminated: 0,
+        nBatches: 0, // block batches with bags still on the floor
+        nAll: 0, // block batches, live and finished — what the table below lists
+        lastDays: null,
+        nextDue: null
+      };
+      bySorte.set(name, r);
     }
-  ];
-  const totalRow = `<div class="metrics-total-row"><span class="metrics-total-label">${t('dash.totalBatches')}</span><span class="metrics-total-value">${tot}</span></div>`;
+    if (!r.kuerzel && b.strainId) {
+      const ms = mushroomStrains.find((m) => m.id === b.strainId);
+      if (ms) r.kuerzel = ms.kuerzel;
+    }
+    const st = _stageBagsOf(b);
+    // Grain contributes one thing and one thing only: how many jars are ready
+    // to make the next blocks from. It is not a batch on this page and not a
+    // bag in these totals.
+    if (b.batchType === 'grain') {
+      r.grain += st.spawn;
+      continue;
+    }
+    r.nAll++;
+    if (r.lastDays == null || b.days < r.lastDays) r.lastDays = b.days;
+    r.incubation += st.incubation;
+    r.fruiting += st.fruiting;
+    r.contaminated += st.contaminated;
+    if (st.incubation + st.fruiting > 0) {
+      r.nBatches++;
+      // The next batch due to reach fruiting — only the ones not already there.
+      const due = new Date(b.due);
+      if (st.fruiting === 0 && (r.nextDue == null || due < r.nextDue)) r.nextDue = due;
+    }
+  }
+  const out = [...bySorte.values()];
+  for (const r of out) {
+    if (!r.kuerzel) r.kuerzel = abbrev(r.name);
+    // Blocks only — the same unit as every other number on the tile.
+    r.bags = r.incubation + r.fruiting;
+    r.supply =
+      r.grain === 0 && r.incubation === 0
+        ? 'now'
+        : r.grain === 0
+          ? 'nospawn'
+          : r.incubation < r.fruiting
+            ? 'low'
+            : 'ok';
+  }
+  // A Sorte that exists only as grain has no block batches and nothing for the
+  // list below; it still belongs on the card, because "there is spawn ready and
+  // no blocks made from it" is precisely a thing worth seeing.
+  return out;
+}
+
+// Sort order for the tiles. Urgency first by default — the whole point of the
+// card is that the Sorte needing a batch is the one you see without looking.
+let batchTileSort = localStorage.getItem('mp-batch-tile-sort') || 'urgency';
+let batchLegendOpen = false;
+function _sortSorten(rows) {
+  const by = batchTileSort;
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  return [...rows].sort((a, b) => {
+    if (by === 'bags') return b.bags - a.bags || byName(a, b);
+    if (by === 'name') return byName(a, b);
+    return SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.incubation - b.incubation || byName(a, b);
+  });
+}
+
+function _stageSeg(v, total, varName) {
+  return v ? `<i style="width:${(v / Math.max(total, 1)) * 100}%;background:var(${varName})"></i>` : '';
+}
+function _stageNum(v, varName, label) {
+  return (
+    `<span class="tstage"><b style="color:${v ? 'var(' + varName + ')' : 'var(--c-text-muted)'}">${v || '–'}</b>` +
+    `<i>${esc(label)}</i></span>`
+  );
+}
+// The bar and the numbers under it are blocks, and only blocks, so the widths
+// mean something and the three figures can be compared with each other. Grain
+// is jars and sits on the footer line instead — see the note on sorteRollup().
+function _sorteTileBody(r) {
+  return (
+    `<span class="stile-big"><b>${r.bags}</b><span>${esc(t('batch.bagsNBatches', { n: r.nBatches }))}</span></span>` +
+    `<span class="sbar">${_stageSeg(r.incubation, r.bags, '--st-inc')}${_stageSeg(r.fruiting, r.bags, '--st-fruit')}</span>` +
+    `<span class="tstages">${_stageNum(r.grain, '--st-spawn', t('batch.grainJars'))}${_stageNum(r.incubation, '--st-inc', t('stage.incubation'))}${_stageNum(r.fruiting, '--st-fruit', t('stage.fruiting'))}</span>`
+  );
+}
+
+function renderSorteTiles() {
+  const el = document.getElementById('batch-sorten');
+  if (!el) return;
+  const rows = _sortSorten(sorteRollup().filter((r) => r.nAll > 0));
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
+    return;
+  }
+  const tot = rows.reduce(
+    (a, r) => {
+      a.grain += r.grain;
+      a.incubation += r.incubation;
+      a.fruiting += r.fruiting;
+      a.bags += r.bags;
+      a.nBatches += r.nBatches;
+      a.nAll += r.nAll;
+      return a;
+    },
+    { grain: 0, incubation: 0, fruiting: 0, bags: 0, nBatches: 0, nAll: 0 }
+  );
+  const nNow = rows.filter((r) => r.supply === 'now').length;
+  const nNoSpawn = rows.filter((r) => r.supply === 'nospawn').length;
+
+  const totalTile =
+    `<button type="button" class="stile stile-total${batchSorteFilter ? '' : ' on'}" data-action="sorte-all">` +
+    `<span class="stile-top"><span class="stile-name">${esc(t('batch.allSorten'))}</span>` +
+    `<span class="stile-kz">${rows.length}</span></span>` +
+    _sorteTileBody(tot) +
+    `<span class="stile-foot"><span class="stile-fs">${esc(t('batch.nTotalNArchived', { n: tot.nAll, a: tot.nAll - tot.nBatches }))}</span></span>` +
+    `</button>`;
+
+  const tiles = rows
+    .map((r) => {
+      const sel = batchSorteFilter === r.name;
+      const foot =
+        r.supply === 'ok' && r.nextDue
+          ? t('batch.nextDue', { d: fmtDt(r.nextDue) })
+          : r.lastDays != null
+            ? t('batch.lastAgo', { n: r.lastDays })
+            : '';
+      return (
+        `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}"` +
+        ` data-action="sorte-tile" data-sorte="${esc(r.name)}"` +
+        ` title="${esc(r.name + ' — ' + t('batch.supply.' + r.supply + 'Why'))}">` +
+        `<span class="stile-top"><span class="stile-name">${spDot(r.name)}${esc(r.name)}</span>` +
+        `<span class="stile-kz">${esc(r.kuerzel)}</span></span>` +
+        _sorteTileBody(r) +
+        `<span class="stile-foot"><span class="sup sup-${r.supply}">${esc(t('batch.supply.' + r.supply))}</span>` +
+        `<span class="stile-fs">${esc(foot)}</span></span>` +
+        `</button>`
+      );
+    })
+    .join('');
+
+  // Folded away by default: the tiles are the screen, this is the footnote, and
+  // a footnote that is always open is clutter you learn to skip past.
+  let legend =
+    `<button type="button" class="tlegend-btn" data-action="sorte-legend" aria-expanded="${batchLegendOpen}">` +
+    `<span class="tlegend-caret">${batchLegendOpen ? '▾' : '▸'}</span>${esc(t('batch.legendToggle'))}</button>`;
+  if (batchLegendOpen) {
+    const named = (k) => {
+      const n = rows.filter((r) => r.supply === k).map((r) => r.name);
+      return n.length ? ': <b>' + esc(n.join(', ')) + '</b>' : '';
+    };
+    legend +=
+      '<div class="tlegend">' +
+      ['now', 'nospawn', 'low', 'ok']
+        .map(
+          (k) =>
+            `<div><span class="sup sup-${k}">${esc(t('batch.supply.' + k))}</span> ${esc(t('batch.supply.' + k + 'Why'))}${named(k)}</div>`
+        )
+        .join('') +
+      `<div class="tlegend-note">${esc(t('batch.legendNote'))}</div>` +
+      '</div>';
+  }
+
+  const warn =
+    (nNow ? `<span class="sup sup-now">${esc(t('batch.nNeedStart', { n: nNow }))}</span>` : '') +
+    (nNoSpawn ? `<span class="sup sup-nospawn">${esc(t('batch.nNoSpawn', { n: nNoSpawn }))}</span>` : '');
+
   el.innerHTML =
-    totalRow +
-    `<div class="g5 metrics-pipeline">${stages.map((s) => `<div class="met" style="border-left-color:${s.color}"><div class="met-l"><span style="display:inline-flex;vertical-align:middle;margin-right:6px;color:${s.color}">${s.icon}</span>${s.label}</div><div class="met-v" style="color:${s.value > 0 ? s.color : 'var(--c-text-muted)'}">${s.value}</div></div>`).join('')}</div>`;
+    `<div class="sorten-head"><div class="sec" style="margin:0">${esc(t('batch.bySorte'))}</div>` +
+    `<div class="sorten-head-right">${warn}` +
+    `<select class="fs-meta" id="batch-tile-sort" data-i18n-aria-label="batch.tileSortAria" aria-label="Sort the Sorten">` +
+    `<option value="urgency"${batchTileSort === 'urgency' ? ' selected' : ''}>${esc(t('batch.tileSortUrgency'))}</option>` +
+    `<option value="bags"${batchTileSort === 'bags' ? ' selected' : ''}>${esc(t('batch.tileSortBags'))}</option>` +
+    `<option value="name"${batchTileSort === 'name' ? ' selected' : ''}>${esc(t('batch.tileSortName'))}</option>` +
+    `</select></div></div>` +
+    `<div class="sorten-grid">${totalTile}${tiles}</div>` +
+    legend;
 }
 
 function renderOverviewKPIs() {
@@ -3788,30 +3995,26 @@ function renderStatus() {
   if (!zones.length) {
     // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
-    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderSorteTiles();
     renderOverviewKPIs();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
-    renderPipelineKPIs(0, 0, 0, 0, 0, 0);
+    renderSorteTiles();
     renderOverviewKPIs();
     return;
   }
 
-  // Compute per-batch status
-  let tspawn = 0,
-    ti = 0,
-    tt = 0,
-    tc = 0;
+  // Compute per-batch status.
+  //
+  // The four per-stage bag counters that used to be accumulated here fed
+  // renderPipelineKPIs() and nothing else. The Sorten tiles need the same
+  // numbers broken down per Sorte rather than as one total, so they are
+  // summed in sorteRollup() from the same getStatus().c — one place doing
+  // it once, instead of a total here and a breakdown there that could drift.
   const batchData = batches.map((b) => {
     const { c, total, status } = getStatus(b.batchId);
-    zones.forEach((z) => {
-      if (z.role === 'spawn') tspawn += c[z.id] || 0;
-      if (z.role === 'incubation') ti += c[z.id] || 0;
-      if (z.role === 'fruiting') tt += c[z.id] || 0;
-      if (z.role === 'contaminated') tc += c[z.id] || 0;
-    });
     const harv = getHarvested(b.batchId);
     const due = new Date(b.due);
     const ov =
@@ -3853,8 +4056,7 @@ function renderStatus() {
   });
 
   el.innerHTML = html;
-  const tdone = batchData.filter((d) => d.status === 'DONE').length;
-  renderPipelineKPIs(batches.length, tspawn, ti, tt, tdone, tc);
+  renderSorteTiles();
   renderOverviewKPIs();
   updateActionBar();
 }
@@ -8423,10 +8625,19 @@ let _rbLastRenderFp = null;
 const ARCHIVED_STATUSES = ['DONE', 'EMPTY', 'CONTAM'];
 const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
 
-// The batch list was one flat run of every row in due-date order, which is fine
-// for finding a known id and useless for "how much is in incubation". Grouped by
-// stage it reads like the pipeline strip above it, and a stage you are not
-// working on folds away.
+// Grouping the list by stage reads well and used to be unconditional, which
+// quietly broke the thing next to it: renderBatches() sorted the rows, then
+// handed them to _groupBatchRows(), which re-bucketed them by stage. So a click
+// on Art or Menge only reordered rows *inside* Spawn / Inkubation / Fruchtung
+// and the list as a whole never moved — the sort looked broken because its
+// result was being thrown away.
+//
+// Grouping is a setting now, defaulting to none. 'sorte' is the other useful
+// axis, and the one the tiles above are organised by.
+const BATCH_GROUP_MODES = ['none', 'sorte', 'stage'];
+let batchGroupBy = BATCH_GROUP_MODES.includes(localStorage.getItem('mp-batch-group')) ? localStorage.getItem('mp-batch-group') : 'none';
+// Set by tapping a Sorte tile; the tile and the list are one view of one thing.
+let batchSorteFilter = null;
 const BATCH_GROUP_ORDER = ['SPAWN RUN', 'INCUBATING', 'FRUITING', '__archived'];
 const BATCH_GROUP_LABEL = {
   'SPAWN RUN': 'stage.spawn',
@@ -8444,19 +8655,32 @@ function toggleBatchGroup(key) {
 function _batchGroupKey(status) {
   return isArchivedStatus(status) ? '__archived' : status;
 }
-function _groupBatchRows(rows) {
+// `mode` defaults to 'stage' because the grain list in Labor calls this with no
+// second argument and wants exactly what it always got.
+//
+// 'none' returns the rows untouched, in the order they arrived — which is the
+// order the column sort put them in, and the only mode in which that sort
+// decides anything.
+function _groupBatchRows(rows, mode) {
   if (!rows.length) return '';
+  if (mode === 'none') return rows.map((r) => r.html).join('');
+  const bySorte = mode === 'sorte';
   const groups = {};
-  for (const r of rows) (groups[_batchGroupKey(r.status)] = groups[_batchGroupKey(r.status)] || []).push(r);
-  // Known stages in pipeline order, then anything unexpected rather than
-  // dropping it — a row nobody planned for must still be reachable.
-  const keys = BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
-    Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
-  );
+  const keyOf = (r) => (bySorte ? 'sorte:' + (r.sorte || '—') : _batchGroupKey(r.status));
+  for (const r of rows) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
+  // By stage: the pipeline order, then anything unexpected rather than dropping
+  // it — a row nobody planned for must still be reachable. By Sorte: the order
+  // the rows arrived in, so sorting by Menge really does put the Sorte with the
+  // biggest batch on top instead of re-alphabetising behind your back.
+  const keys = bySorte
+    ? [...new Set(rows.map(keyOf))]
+    : BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
+        Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
+      );
   let out = '';
   for (const k of keys) {
     const closed = !!_batchGroupClosed[k];
-    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : k;
+    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : bySorte ? k.slice(6) : k;
     out +=
       '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
       '<button type="button" class="fs-meta" data-action="batch-group" data-key="' +
@@ -8517,6 +8741,9 @@ function batchRowHtml(b) {
       // card layout (styles.css "Batches table — mobile card mode").
       return {
         status,
+        // Carried so _groupBatchRows() can bucket by Sorte without going back
+        // to `batches` for something the caller already had in hand.
+        sorte: b.species,
         html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id fs-micro" style="font-family:monospace"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(b.created)}</td><td class="fs-micro" data-mlabel="${esc(t('th.due'))}" style="color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
       };
 }
@@ -8577,6 +8804,9 @@ function renderBatches() {
       (b.strain || '').toLowerCase().includes(q) ||
       (b.strainName || '').toLowerCase().includes(q);
     if (!matchesQ) return false;
+    // Set by a Sorte tile. Not bypassed by a search: the two narrow together,
+    // which is what "show me BO-... inside Blue Oyster" has to mean.
+    if (batchSorteFilter && (b.species || '') !== batchSorteFilter) return false;
     if (batchAttentionFilter && !batchAttentionFilter.pred(b)) return false;
     // Skip archive filter when searching — explicit lookup wins over the toggle.
     if (!q && archiveFilter !== 'all') {
@@ -8604,6 +8834,10 @@ function renderBatches() {
     // Which stage groups are folded is part of what is on screen — leave it out
     // and the early return below swallows every expand and collapse.
     JSON.stringify(_batchGroupClosed) +
+    '|' +
+    batchGroupBy +
+    '|' +
+    (batchSorteFilter || '') +
     '|' +
     JSON.stringify(tableSort.batches || null) +
     '|' +
@@ -8645,8 +8879,9 @@ function renderBatches() {
   _rbLastRenderFp = renderFp;
   // Each row is returned with its status so _groupBatchRows can bucket it by
   // stage; the row markup itself is unchanged.
-  const _rowsByStage = sorted.map((b) => batchRowHtml(b));
-  body.innerHTML = _groupBatchRows(_rowsByStage) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
+  const _rows = sorted.map((b) => batchRowHtml(b));
+  body.innerHTML =
+    _groupBatchRows(_rows, batchGroupBy) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
 }
 let locColor = {};
 function toggleBatchBags(batchId) {
@@ -21904,6 +22139,52 @@ function initEventListeners() {
   });
   $('batch-q').addEventListener('input', renderBatches);
   $('batch-archive-filter').addEventListener('change', renderBatches);
+  // The stored choice belongs on the control too, or a reload shows "Nicht
+  // gruppieren" over a list that is grouped.
+  $('batch-group-by').value = batchGroupBy;
+  $('batch-group-by').addEventListener('change', function () {
+    batchGroupBy = BATCH_GROUP_MODES.includes(this.value) ? this.value : 'none';
+    try {
+      localStorage.setItem('mp-batch-group', batchGroupBy);
+    } catch (e) {
+      /* storage disabled — the choice still holds for this session */
+    }
+    renderBatches();
+  });
+  // The Sorten card: tiles filter the list, the first tile clears the filter,
+  // and the legend folds. Delegated because the card is re-rendered wholesale
+  // on every data refresh, so nothing inside it may hold a listener.
+  $('batch-sorten').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const a = btn.dataset.action;
+    if (a === 'sorte-legend') {
+      batchLegendOpen = !batchLegendOpen;
+      renderSorteTiles();
+      return;
+    }
+    if (a === 'sorte-all') {
+      if (!batchSorteFilter) return;
+      batchSorteFilter = null;
+    } else if (a === 'sorte-tile') {
+      // Tapping the selected tile again clears it — the same gesture both ways,
+      // so there is nothing to learn about how to get back out.
+      batchSorteFilter = batchSorteFilter === btn.dataset.sorte ? null : btn.dataset.sorte;
+    } else return;
+    renderSorteTiles();
+    renderBatches();
+  });
+  $('batch-sorten').addEventListener('change', (e) => {
+    const sel = e.target.closest('#batch-tile-sort');
+    if (!sel) return;
+    batchTileSort = sel.value;
+    try {
+      localStorage.setItem('mp-batch-tile-sort', batchTileSort);
+    } catch (e2) {
+      /* storage disabled — the choice still holds for this session */
+    }
+    renderSorteTiles();
+  });
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.
   const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests, grain: renderGrainBatches };
