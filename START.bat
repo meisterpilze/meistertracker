@@ -276,6 +276,42 @@ if "%WORKTREE_MODE%"=="1" (
     )
 )
 
+REM Say so when that kill did not work, instead of walking into pm2.
+REM
+REM taskkill's output was discarded, so a refusal looked exactly like a success:
+REM the line above printed either way. Everything below assumes the port is now
+REM free, and when it is not, pm2 fails on a named pipe it cannot open and
+REM prints "connect EPERM //./pipe/rpc.sock" followed by a Node stack trace.
+REM That reads as the application crashing. It is not — it is this script having
+REM failed to stop the previous instance two steps earlier, and the server it
+REM could not replace carries on serving whatever code it started with.
+if not "%WORKTREE_MODE%"=="1" (
+    set "PORT_HOLDER="
+    for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do set "PORT_HOLDER=%%P"
+    if defined PORT_HOLDER (
+        echo.
+        echo  ERROR: port %PORT% is still held by PID !PORT_HOLDER! - the kill was refused.
+        echo.
+        echo  This is the boot task's instance. The "MeisterTracker" scheduled task
+        echo  starts the server before anyone logs in; if it was registered with
+        echo  RunLevel Highest, that instance runs elevated. An ordinary window can
+        echo  neither stop it nor reach its pm2 daemon, so nothing below would work.
+        echo.
+        echo  Fix it once, in an Administrator PowerShell:
+        echo      powershell -ExecutionPolicy Bypass -File "%~dp0install-autostart.ps1"
+        echo  That re-registers the task unelevated, at the same level as this
+        echo  script, and the two stop fighting over the port for good.
+        echo.
+        echo  To get running right now, in an Administrator PowerShell:
+        echo      Stop-Process -Id !PORT_HOLDER! -Force
+        echo      ^& "$env:APPDATA\npm\pm2.cmd" kill
+        echo  then run this script again.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
 REM Match update_server.sh: always delete + start with --update-env so the
 REM new process picks up any .env changes made since the last launch.
 call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
