@@ -98,3 +98,162 @@ jobs:
 
       - name: Tests
         run: npm test
+
+  # ── The two halves that no test on a developer's Mac can reach ─────────────
+  #
+  # The DuckDNS fallback is installed by a systemd unit on Linux and a scheduled
+  # task on Windows, and neither exists on the machine this is usually written
+  # on. Both were therefore shipped on reasoning alone: the unit's quoting was
+  # dry-run through sed and eyeballed, and the PowerShell was never even parsed.
+  # That is the wrong place to be relying on judgement — an installer that fails
+  # is an installer nobody notices has failed, because its whole job is to be
+  # there during an outage.
+  #
+  # These two jobs run the real thing on real runners. They are cheap, and they
+  # keep working after today.
+
+  scheduler-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Shell static analysis
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning scripts/install-duckdns-fallback.sh update_server.sh
+
+      # The deployment path deliberately contains a space. An unquoted
+      # __MT_DIR__ in ExecStart or ReadWritePaths produces a unit that systemd
+      # accepts, enables and then fails to run — while the installer reports
+      # success. That combination is invisible without actually starting it.
+      - name: Install the fallback timer from a path containing a space
+        run: |
+          set -eux
+          DEPLOY="/opt/meister tracker"
+          sudo mkdir -p "$DEPLOY"
+          sudo cp -r duckdns.js db.js scripts "$DEPLOY/"
+          sudo chown -R "$USER:$USER" "$DEPLOY"
+          # setup-node puts node on this step's PATH only, not in a login shell
+          # or in root's. How the installer discovers node is environment
+          # specific and not what this job is about, so make it findable.
+          sudo ln -sf "$(command -v node)" /usr/local/bin/node
+          # A real database, built by the real migrations.
+          node -e "require('$DEPLOY/db.js').openDb('$DEPLOY/meistertracker.db').close()"
+          sudo bash "$DEPLOY/scripts/install-duckdns-fallback.sh"
+
+      - name: systemd accepts the generated unit
+        run: sudo systemd-analyze verify /etc/systemd/system/meistertracker-duckdns.service
+
+      - name: The timer is enabled and active
+        run: |
+          set -eux
+          systemctl is-enabled meistertracker-duckdns.timer
+          systemctl is-active meistertracker-duckdns.timer
+          systemctl list-timers meistertracker-duckdns.timer --all
+
+      # DuckDNS is unconfigured here, so the correct behaviour is to stand down
+      # and exit 0 without touching the network. A unit that cannot start at all
+      # — wrong node, a split ExecStart, a sandbox denial — fails here instead.
+      - name: The job actually runs under the sandbox
+        run: |
+          set -eux
+          sudo systemctl start meistertracker-duckdns.service
+          systemctl show meistertracker-duckdns.service -p Result -p ExecMainStatus
+          sudo journalctl -u meistertracker-duckdns.service --no-pager -n 30
+          test "$(systemctl show meistertracker-duckdns.service -p Result --value)" = "success"
+
+      - name: Uninstalling leaves nothing behind
+        run: |
+          set -eux
+          sudo bash "/opt/meister tracker/scripts/install-duckdns-fallback.sh" --uninstall
+          test ! -f /etc/systemd/system/meistertracker-duckdns.timer
+          test ! -f /etc/systemd/system/meistertracker-duckdns.service
+
+      # A mistyped --uninstall used to fall through to a full install.
+      - name: An unknown argument is refused, not installed
+        run: |
+          set -eu
+          if sudo bash "/opt/meister tracker/scripts/install-duckdns-fallback.sh" --uninstal; then
+            echo "expected a non-zero exit for an unknown argument" >&2
+            exit 1
+          fi
+          test ! -f /etc/systemd/system/meistertracker-duckdns.timer
+
+  scheduler-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # It had never been parsed. A typo in this file surfaces on somebody's
+      # machine, at a UAC prompt, in a window that closes.
+      - name: PowerShell parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path .\install-duckdns-fallback.ps1), [ref]$null, [ref]$errors) > $null
+          if ($errors.Count) { $errors | ForEach-Object { $_.Message }; exit 1 }
+          'parsed clean'
+
+      - name: PowerShell static analysis
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+            Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+          Import-Module PSScriptAnalyzer
+          $r = Invoke-ScriptAnalyzer -Path .\install-duckdns-fallback.ps1 -Severity Error,Warning
+          $r | Format-Table -AutoSize | Out-String | Write-Host
+          if ($r | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
+
+      # The finding this exists for: -RepetitionInterval without an explicit
+      # -RepetitionDuration registers, on some builds, as a single run that
+      # never repeats — while Get-ScheduledTaskInfo still reports success from
+      # that one run. Reading the registered XML back is the only way to know.
+      - name: Registering the task really produces a repeating trigger
+        shell: pwsh
+        run: |
+          $node = (Get-Command node).Source
+          $me   = "$env:USERDOMAIN\$env:USERNAME"
+          # $ErrorActionPreference is Stop inside the script, so a failure
+          # throws and fails this step. $LASTEXITCODE is unreliable after a
+          # script that ends without calling exit, so it is not consulted.
+          .\install-duckdns-fallback.ps1 -Elevated -NoPause -TargetUser $me -TargetNode $node
+
+          [xml]$xml = Export-ScheduledTask -TaskName MeisterTrackerDuckDNS
+          $xml.OuterXml | Write-Host
+
+          $rep = $xml.Task.Triggers.TimeTrigger.Repetition
+          if (-not $rep)                { throw 'the time trigger has no repetition — it would run once and stop' }
+          if ($rep.Interval -ne 'PT5M') { throw "interval is '$($rep.Interval)', expected PT5M" }
+          Write-Host "repetition duration as registered: '$($rep.Duration)'"
+
+          # The privilege posture the documentation promises.
+          if ($xml.Task.Principals.Principal.RunLevel -ne 'LeastPrivilege') {
+            throw "task runs as $($xml.Task.Principals.Principal.RunLevel), expected LeastPrivilege"
+          }
+          if ($xml.Task.Principals.Principal.LogonType -ne 'S4U') {
+            throw "logon type is $($xml.Task.Principals.Principal.LogonType), expected S4U"
+          }
+          # And it must point at the node this account can actually read.
+          if ($xml.Task.Actions.Exec.Command -ne $node) {
+            throw "task runs '$($xml.Task.Actions.Exec.Command)', expected '$node'"
+          }
+          'registered as expected'
+
+      - name: Uninstalling removes it
+        shell: pwsh
+        run: |
+          .\install-duckdns-fallback.ps1 -Elevated -NoPause -Uninstall
+          if (Get-ScheduledTask -TaskName MeisterTrackerDuckDNS -ErrorAction SilentlyContinue) {
+            throw 'task still registered after uninstall'
+          }
+          'removed'
