@@ -1193,6 +1193,8 @@ window.LANG['de'] = {
   'scanFb.actionRemove': 'Aktion: REMOVE \u2192 Beutel scannen',
   'scanFb.actionHarvest': 'Aktion: HARVEST \u2192 Beutel f\u00fcr Gewichtserfassung scannen',
   'scanFb.actionContam': 'Aktion: CONTAM \u2192 Beutel scannen, um Kontamination zu melden',
+  'scanFb.actionCleared': 'Aktion aufgehoben \u2014 normales Scannen',
+  'scan.contamAria': 'Kontaminations-Modus ein/aus',
   'scanFb.location': 'Standort: {loc} \u2192 jetzt Beutel scannen',
   'scanFb.to': 'Nach: {loc} \u2192 jetzt Beutel scannen',
   'scanFb.setAction': 'Zuerst Aktion setzen \u2014 scanne ADD, MOVE, REMOVE oder HARVEST.',

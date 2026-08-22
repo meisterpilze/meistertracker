@@ -16956,6 +16956,64 @@ function updateCamHud() {
   const countChip = document.getElementById('cam-chip-count');
   countChip.className = 'cam-chip' + (scan.count > 0 ? ' ch-set' : '');
 }
+// Put the scanner into an action mode.
+//
+// This was the body of the `if (ACTIONS.includes(val))` branch in the barcode
+// handler, which meant an action could be armed exactly one way: by scanning a
+// printed barcode with the word on it. That is fine at the bench where the
+// sheet is taped to the wall, and no use at all on a phone in a tent — and
+// reporting contamination is precisely the thing you do standing in front of a
+// bad bag, with the phone already in your hand.
+//
+// Nothing about the modes changed; they simply have a second door now. Toggling
+// the same action off returns to plain scanning, so the button that armed it is
+// also the way back out.
+function armScanAction(val) {
+  if (!ACTIONS.includes(val)) return;
+  const keepTo = val === scan.action && scan.to;
+  scan.action = val;
+  scan.from = null;
+  scan.to = keepTo ? scan.to : null;
+  scan.harvestBag = null;
+  const hp = document.getElementById('harvest-panel');
+  if (hp) hp.style.display = 'none';
+  _pendingDupe = null;
+  _pendingRemove = null;
+  clearTimeout(_pendingDupeTimer);
+  clearTimeout(_pendingRemoveTimer);
+  updateSD();
+  setFb(
+    'ok',
+    {
+      ADD: t('scanFb.actionAdd'),
+      MOVE: t('scanFb.actionMove'),
+      MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
+      REMOVE: t('scanFb.actionRemove'),
+      HARVEST: t('scanFb.actionHarvest'),
+      CONTAM: t('scanFb.actionContam')
+    }[val]
+  );
+}
+// Arm CONTAM, or stand down if it is already armed. The camera stays open
+// either way: a worker walking a rack reports several bags in a row.
+function toggleContamScan() {
+  if (scan.action === 'CONTAM') {
+    scan.action = null;
+    updateSD();
+    setFb('ok', t('scanFb.actionCleared'));
+  } else {
+    armScanAction('CONTAM');
+  }
+  updateCamContamBtn();
+}
+function updateCamContamBtn() {
+  const b = document.getElementById('btn-cam-contam');
+  if (!b) return;
+  const on = scan.action === 'CONTAM';
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
 function updateSD() {
   document.getElementById('s-action').textContent = scan.action || '—';
   document.getElementById('s-from').textContent = scan.from || '—';
@@ -17339,28 +17397,7 @@ function processScan(raw) {
     }
   }
   if (ACTIONS.includes(val)) {
-    const keepTo = val === scan.action && scan.to;
-    scan.action = val;
-    scan.from = null;
-    scan.to = keepTo ? scan.to : null;
-    scan.harvestBag = null;
-    document.getElementById('harvest-panel').style.display = 'none';
-    _pendingDupe = null;
-    _pendingRemove = null;
-    clearTimeout(_pendingDupeTimer);
-    clearTimeout(_pendingRemoveTimer);
-    updateSD();
-    setFb(
-      'ok',
-      {
-        ADD: t('scanFb.actionAdd'),
-        MOVE: t('scanFb.actionMove'),
-        MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
-        REMOVE: t('scanFb.actionRemove'),
-        HARVEST: t('scanFb.actionHarvest'),
-        CONTAM: t('scanFb.actionContam')
-      }[val]
-    );
+    armScanAction(val);
     return;
   }
   if (LOCS.includes(val)) {
@@ -21423,6 +21460,9 @@ function openCamScan() {
   _initScanAudio(); // Init AudioContext during user gesture (required by iOS)
   document.getElementById('m-camscan').classList.add('open');
   updateCamHud(); // Sync HUD with current scan state
+  // The mode survives the camera being closed and reopened, so the button has
+  // to say what is actually armed rather than what it looked like last time.
+  updateCamContamBtn();
   // Anything other than idle is an in-flight transition; the modal is already
   // open visually so this no-op is fine (e.g. user double-tapped the FAB).
   if (_camState !== CAM_IDLE) return;
@@ -21810,6 +21850,7 @@ function initEventListeners() {
   $('cls-16').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-torch').addEventListener('click', toggleTorch);
+  $('btn-cam-contam').addEventListener('click', toggleContamScan);
   $('btn-cam-undo').addEventListener('click', camUndoLastScan);
   $('btn-cam-reset').addEventListener('click', function () {
     resetScan();

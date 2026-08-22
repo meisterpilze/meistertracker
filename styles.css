@@ -1364,6 +1364,19 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-btn.torch-on:active {
   background: rgba(250, 204, 21, 0.6);
 }
+/* CONTAM toggle. Armed, every bag scanned opens a contamination report, so it
+   has to be as obvious as the torch that it is on — the failure mode is the
+   same shape: a mode left running that the next scan silently obeys. Unarmed it
+   stays quiet, because it sits beside the torch and the flip on a HUD that is
+   mostly camera. */
+.cam-hud-btn.on {
+  background: rgba(220, 38, 38, 0.55);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(220, 38, 38, 0.55);
+}
+.cam-hud-btn.on:active {
+  background: rgba(220, 38, 38, 0.7);
+}
 .cam-hud-done {
   background: #16a34a;
 }

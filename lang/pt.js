@@ -1107,6 +1107,8 @@ window.LANG['pt'] = {
   'scanFb.actionRemove': 'A\u00e7\u00e3o: REMOVE \u2192 escaneie sacos',
   'scanFb.actionHarvest': 'A\u00e7\u00e3o: HARVEST \u2192 escaneie um saco para registrar peso',
   'scanFb.actionContam': 'A\u00e7\u00e3o: CONTAM \u2192 escaneie um saco para relatar contamina\u00e7\u00e3o',
+  'scanFb.actionCleared': 'A\u00e7\u00e3o cancelada \u2014 leitura normal',
+  'scan.contamAria': 'Ligar/desligar modo de contamina\u00e7\u00e3o',
   'scanFb.location': 'Local: {loc} \u2192 agora escaneie sacos',
   'scanFb.to': 'Para: {loc} \u2192 agora escaneie sacos',
   'scanFb.setAction': 'Defina uma a\u00e7\u00e3o primeiro \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST.',
