@@ -15,13 +15,23 @@ Documentation=https://github.com/meisterpilze/meistertracker/blob/main/DEPLOYMEN
 # be a failure in the journal. The timer fires again in five minutes anyway.
 After=network-online.target
 Wants=network-online.target
+# A board with no battery-backed clock comes up hours behind, and a recorded
+# success then looks like it has not happened yet. shouldRun treats a
+# future-dated timestamp as an untrustworthy clock and acts anyway, but running
+# after the clock is disciplined means it does not have to.
+After=time-sync.target
+Wants=time-sync.target
 
 [Service]
 Type=oneshot
 User=__MT_USER__
 Group=__MT_GROUP__
-WorkingDirectory=__MT_DIR__
-ExecStart=__MT_NODE__ __MT_DIR__/scripts/duckdns-fallback.js --quiet
+# Quoted, all of them. systemd splits ExecStart on whitespace, so an unquoted
+# deployment path containing a space becomes two arguments and node is asked to
+# execute the first half of it — while `systemctl enable --now` still reports
+# success and the job fails silently every five minutes.
+WorkingDirectory="__MT_DIR__"
+ExecStart="__MT_NODE__" "__MT_DIR__/scripts/duckdns-fallback.js" --quiet
 # A stalled request is already bounded at 30 s inside the script; this is the
 # backstop for a process that never gets that far.
 TimeoutStartSec=120
@@ -32,7 +42,12 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=__MT_DIR__
+ReadWritePaths="__MT_DIR__"
+# ReadWritePaths has to cover the directory, not just the database: SQLite
+# creates -wal and -shm beside the file. That hands the one process here that
+# talks to a third-party endpoint every five minutes a writable path to the TLS
+# private key and the backups, so those are taken back out explicitly.
+InaccessiblePaths=-"__MT_DIR__/certs" -"__MT_DIR__/backups" -"__MT_DIR__/.git"
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

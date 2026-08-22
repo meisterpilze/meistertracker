@@ -12,9 +12,8 @@
 
   This registers a scheduled task that runs scripts/duckdns-fallback.js every
   five minutes, and two minutes after boot. It costs nothing while the server is
-  healthy: the script reads one row, sees a recent update and exits without
-  opening a socket. Only a timestamp older than twelve minutes makes it act, so
-  the two never both update.
+  healthy: the script reads one row, sees a recent server update and exits
+  without opening a socket.
 
   Run ONCE. Double-click install-duckdns-fallback.bat, or from any PowerShell:
 
@@ -23,12 +22,12 @@
   It asks Windows for administrator rights itself, so an ordinary shell is
   fine — answer the UAC prompt and it carries on in an elevated window.
 
-  Administrator is needed for the part that matters, and only that part: a task
+  Administrator is needed to REGISTER the task and for nothing else: a task
   registered by an ordinary user runs only while that user is signed in, which
   misses the case this exists for — the machine rebooted and nobody logged in.
   Running without a session, and the at-boot trigger, both need S4U, and S4U
-  needs an elevated shell to register. Nothing here runs elevated afterwards;
-  the script itself only reads a database file and makes one HTTPS request.
+  needs an elevated shell to register. The task itself is registered
+  -RunLevel Limited, so the recurring job runs unprivileged.
 
   This is the Windows counterpart of scripts/install-duckdns-fallback.sh.
   It is separate from install-autostart.ps1 and does not replace it: that one
@@ -36,45 +35,61 @@
 
 .NOTES
   Uninstall with:
-      powershell -ExecutionPolicy Bypass -File .\install-duckdns-fallback.ps1 -Uninstall
+      install-duckdns-fallback.bat -Uninstall
 #>
 
 param(
     [switch]$Uninstall,
-    # Set by the elevated copy this script starts of itself. It means "you are
-    # the child in a window the user did not open", which is the only reason to
-    # hold that window open at the end — otherwise the result flashes past and
-    # nobody ever learns whether it worked.
+    # Set by the elevated copy this script starts of itself.
     [switch]$Elevated,
+    # Skip the "press Enter" at the end. For scripted installs.
+    [switch]$NoPause,
     # Who the task should run as, carried across the elevation boundary.
     #
     # Not a refinement: UAC can be answered with a *different* account's
     # credentials, and then $env:USERNAME in the elevated child is that
     # administrator rather than the person who owns meistertracker.db. The task
     # would be registered for someone with no business reading it, and would
-    # fail every five minutes for a reason nothing on screen explains. The
-    # unelevated parent is the one that knows the right answer, so it says.
-    [string]$TargetUser
+    # fail every five minutes for a reason nothing on screen explains.
+    [string]$TargetUser,
+    # And which node to run, for exactly the same reason. Node installed
+    # per-user (nvm-windows, fnm, Volta, or the installer's "just for me"
+    # option) lives under one profile and is on one account's PATH only, so
+    # resolving it after elevation pins the administrator's copy into a task
+    # that runs as somebody else — which then fails with 0x2, silently, forever.
+    [string]$TargetNode
 )
 
 $ErrorActionPreference = 'Stop'
 
 $TaskName = 'MeisterTrackerDuckDNS'
 $Script   = Join-Path $PSScriptRoot 'scripts\duckdns-fallback.js'
-$User     = if ($TargetUser) { $TargetUser } else { "$env:USERDOMAIN\$env:USERNAME" }
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
+# ── Unelevated half: work out who and what, then ask for rights ──────────────
+#
 # Ask for the rights rather than telling the reader to go and find them. A
 # one-time setup step that begins "right-click PowerShell as Administrator" is a
 # step people postpone, and this one is postponed precisely until the outage it
 # prevents. On Windows the elevation is a UAC prompt, not a password at a
 # terminal, so the honest cost is a single click.
 if (-not $isAdmin) {
+    $me = "$env:USERDOMAIN\$env:USERNAME"
+    $node = (Get-Command node -ErrorAction SilentlyContinue).Source
+    if (-not $node) {
+        Write-Host ""
+        Write-Host "  node was not found on your PATH." -ForegroundColor Red
+        Write-Host "  The scheduled task needs an absolute path to it, and it has to be one"
+        Write-Host "  this account can read. Install Node 22+ and run this again."
+        exit 1
+    }
+
     $argv = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', "`"$PSCommandPath`"",
-              '-Elevated', '-TargetUser', "`"$User`"")
+              '-Elevated', '-TargetUser', "`"$me`"", '-TargetNode', "`"$node`"")
     if ($Uninstall) { $argv += '-Uninstall' }
+    if ($NoPause)   { $argv += '-NoPause' }
     try {
         $child = Start-Process -FilePath 'powershell.exe' -ArgumentList $argv -Verb RunAs -PassThru -Wait
     } catch {
@@ -84,79 +99,123 @@ if (-not $isAdmin) {
         Write-Host "  Administrator rights are needed to register a task that runs without a login."
         exit 1
     }
-    # -PassThru with -Wait gives an exited process whose code we can pass on.
-    # Guarded because a null here would turn "cancelled" into a confusing
-    # property-on-null error.
     if ($null -eq $child) { exit 1 }
     exit $child.ExitCode
 }
 
-if ($Uninstall) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "  Removed scheduled task '$TaskName'." -ForegroundColor Green
-    if ($Elevated) { Read-Host "Press Enter to close" | Out-Null }
-    return
+# ── Elevated half ────────────────────────────────────────────────────────────
+#
+# Everything below runs inside a window the user did not open, so every exit
+# from here has to hold that window open first. The previous version paused only
+# on the two paths that succeeded, and every `throw` — no node, a worktree, a
+# rejected S4U principal — closed instantly. The user saw a UAC prompt, a flash,
+# and nothing else, and reasonably concluded the install had worked.
+try {
+    $User = if ($TargetUser) { $TargetUser } else { "$env:USERDOMAIN\$env:USERNAME" }
+
+    if ($Uninstall) {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Host "  Removed scheduled task '$TaskName'." -ForegroundColor Green
+        return
+    }
+
+    if (-not (Test-Path $Script)) {
+        throw "duckdns-fallback.js not found (expected at $Script)."
+    }
+
+    # A worktree carries the same token and would fight the real instance over
+    # the external record. The script refuses to run from one; refuse to install
+    # it there too. A worktree's .git is a file pointing at the parent repo.
+    $GitPath = Join-Path $PSScriptRoot '.git'
+    if ((Test-Path $GitPath) -and -not (Get-Item $GitPath).PSIsContainer) {
+        throw "$PSScriptRoot is a git worktree. Install this from the deployment checkout."
+    }
+
+    $Node = if ($TargetNode) { $TargetNode } else { (Get-Command node -ErrorAction SilentlyContinue).Source }
+    if (-not $Node) {
+        throw "node not found. A scheduled task needs an absolute path to it."
+    }
+    if (-not (Test-Path $Node)) {
+        throw "node was reported at '$Node' but nothing is there."
+    }
+
+    $action = New-ScheduledTaskAction -Execute $Node `
+        -Argument "`"$Script`" --quiet" -WorkingDirectory $PSScriptRoot
+
+    # Two minutes after boot: late enough that the server has had its chance to
+    # start and update the record itself, early enough to cover the reboot where
+    # it did not come back at all.
+    $boot = New-ScheduledTaskTrigger -AtStartup
+    $boot.Delay = 'PT2M'
+
+    # And every five minutes thereafter, matching the server's own cadence.
+    #
+    # -RepetitionDuration is not optional despite "omit it for indefinite" being
+    # the folklore: the default is version-dependent, and on the builds where the
+    # missing element is not normalised the task registers as a single run that
+    # never repeats — while Get-ScheduledTaskInfo still reports LastTaskResult 0
+    # from that one run, so the documented health check calls a dead timer
+    # healthy. TimeSpan.MaxValue is the unambiguous spelling; older builds reject
+    # it, hence the fallback.
+    try {
+        $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 5) `
+            -RepetitionDuration ([TimeSpan]::MaxValue)
+    } catch {
+        $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Minutes 5) `
+            -RepetitionDuration (New-TimeSpan -Days 3650)
+    }
+
+    # S4U runs as this user with the profile loaded but needs no stored
+    # password. It has to be the user that owns meistertracker.db, because
+    # writing the run back is half the job.
+    #
+    # -RunLevel Limited, deliberately. Elevation is needed to *register* an S4U
+    # task, not to run one, and the job reads a database file and makes one
+    # HTTPS request. Registering it Highest would run node with an administrator
+    # token every five minutes against a script in a directory the same user can
+    # edit without elevation — a standing escalation for no benefit.
+    $principal = New-ScheduledTaskPrincipal -UserId $User -LogonType S4U -RunLevel Limited
+
+    # A run that stalls must not eat the next one's slot. The script's own HTTP
+    # timeout is 30 s, so two minutes is a generous backstop that still leaves
+    # three minutes clear before the next trigger; setting it to the full five
+    # meant a hang was killed at the same instant the next run fired, and
+    # IgnoreNew then dropped whichever lost the race.
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 2) `
+        -MultipleInstances IgnoreNew
+
+    Register-ScheduledTask -TaskName $TaskName `
+        -Action $action -Trigger @($boot, $repeat) -Principal $principal -Settings $settings `
+        -Description 'Updates the DuckDNS record while the MeisterTracker server is not running.' `
+        -Force | Out-Null
+
+    Write-Host ""
+    Write-Host "  Registered scheduled task '$TaskName'." -ForegroundColor Green
+    Write-Host "  Runs as $User, unelevated, every 5 min and 2 min after boot."
+    Write-Host "  Node:  $Node"
+    Write-Host "  It stands down whenever the server is updating the record itself."
+    Write-Host ""
+    Write-Host "  Prove it works without waiting for a real outage:" -ForegroundColor Yellow
+    Write-Host "      node `"$Script`" --force"
+    Write-Host "  See when it last ran and what it returned (0 is good):"
+    Write-Host "      Get-ScheduledTaskInfo -TaskName $TaskName"
+    Write-Host ""
+} catch {
+    Write-Host ""
+    Write-Host "  Install failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ""
+    $failed = $true
+} finally {
+    # One pause, covering success, failure and the uninstall path alike. `return`
+    # from inside the try still runs a finally, which is why it lives here rather
+    # than after the block.
+    if (-not $NoPause) { Read-Host "Press Enter to close" | Out-Null }
 }
 
-if (-not (Test-Path $Script)) {
-    throw "duckdns-fallback.js not found (expected at $Script)."
-}
-
-# A worktree carries the same token and would fight the real instance over the
-# external record. The script refuses to run from one; refuse to install it
-# there too, so the mistake surfaces now instead of in a task history nobody
-# opens. A worktree's .git is a file pointing at the parent repository.
-$GitPath = Join-Path $PSScriptRoot '.git'
-if ((Test-Path $GitPath) -and -not (Get-Item $GitPath).PSIsContainer) {
-    throw "$PSScriptRoot is a git worktree. Install this from the deployment checkout."
-}
-
-$Node = (Get-Command node -ErrorAction SilentlyContinue).Source
-if (-not $Node) {
-    throw "node not found in PATH. A scheduled task needs an absolute path to it."
-}
-
-$action = New-ScheduledTaskAction -Execute $Node `
-    -Argument "`"$Script`" --quiet" -WorkingDirectory $PSScriptRoot
-
-# Two minutes after boot: late enough that the server has had its chance to
-# start and update the record itself, early enough to cover the reboot where it
-# did not come back at all.
-$boot = New-ScheduledTaskTrigger -AtStartup
-$boot.Delay = 'PT2M'
-
-# And every five minutes thereafter, matching the server's own cadence.
-$repeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 5)
-
-# S4U runs as this user with the profile loaded but needs no stored password.
-# It has to be the user that owns meistertracker.db, because writing the
-# updated timestamp back is half the job.
-$principal = New-ScheduledTaskPrincipal -UserId $User -LogonType S4U -RunLevel Highest
-
-# A run that stalls must not keep the next one out, and a laptop on battery is
-# exactly the machine whose address has just changed.
-$settings = New-ScheduledTaskSettingsSet `
-    -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
-    -MultipleInstances IgnoreNew
-
-Register-ScheduledTask -TaskName $TaskName `
-    -Action $action -Trigger @($boot, $repeat) -Principal $principal -Settings $settings `
-    -Description 'Updates the DuckDNS record while the MeisterTracker server is not running.' `
-    -Force | Out-Null
-
-Write-Host ""
-Write-Host "  Registered scheduled task '$TaskName'." -ForegroundColor Green
-Write-Host "  Runs as $User, every 5 min and 2 min after boot."
-Write-Host "  It stands down whenever the server is updating the record itself."
-Write-Host ""
-Write-Host "  Prove it works without waiting for a real outage:" -ForegroundColor Yellow
-Write-Host "      node `"$Script`" --force"
-Write-Host "  See when it last ran and what it returned (0 is good):"
-Write-Host "      Get-ScheduledTaskInfo -TaskName $TaskName"
-Write-Host ""
-
-if ($Elevated) { Read-Host "Press Enter to close" | Out-Null }
+if ($failed) { exit 1 }

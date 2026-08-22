@@ -131,12 +131,35 @@ backup_data() {
 check_duckdns_fallback() {
     if [ "$IS_WORKTREE" = true ]; then return 0; fi
     if ! command -v systemctl >/dev/null 2>&1; then return 0; fi
-    if [ -f /etc/systemd/system/meistertracker-duckdns.timer ]; then return 0; fi
     # Only worth saying on a machine where DuckDNS is actually in use. --check
     # reads one row and makes no request.
     if ! node scripts/duckdns-fallback.js --check --quiet >/dev/null 2>&1; then return 0; fi
+
+    # Ask systemd what the timer is *doing*, not whether a file exists. A unit
+    # that has been disabled or masked leaves its file in /etc/systemd/system
+    # untouched, so the presence check reported "installed" for a timer that had
+    # not run in months — the one state an operator cannot see, and the one that
+    # produces exactly the outage this is here to prevent.
+    local state=""
+    if systemctl is-enabled meistertracker-duckdns.timer >/dev/null 2>&1 \
+       && systemctl is-active meistertracker-duckdns.timer >/dev/null 2>&1; then
+        # Running. Say so only if the job behind it keeps failing.
+        if systemctl is-failed meistertracker-duckdns.service >/dev/null 2>&1; then
+            echo ""
+            echo "  NOTE: the DuckDNS fallback timer is installed but its last run failed."
+            echo "            journalctl -u meistertracker-duckdns.service -n 20"
+            echo ""
+        fi
+        return 0
+    fi
+    if [ -f /etc/systemd/system/meistertracker-duckdns.timer ]; then
+        state="installed but not running"
+    else
+        state="not installed"
+    fi
+
     echo ""
-    echo "  NOTE: DuckDNS is configured, but the fallback timer is not installed."
+    echo "  NOTE: DuckDNS is configured, but the fallback timer is $state."
     echo "        Without it nothing updates the address while this server is"
     echo "        down — which is exactly when the address changes. One-time:"
     echo ""

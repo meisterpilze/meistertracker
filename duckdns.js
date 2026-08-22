@@ -85,6 +85,10 @@ const CLOCK_JUMP_MS = 90 * 1000;
 // as stale. Three healthy cycles plus room for a round of backoff.
 const STALE_AFTER_MS = 20 * 60 * 1000;
 
+// How far ahead of us a recorded timestamp may sit before we stop believing the
+// clock rather than the record.
+const CLOCK_SKEW_TOLERANCE_MS = 60 * 1000;
+
 // When the out-of-process fallback (scripts/duckdns-fallback.js) decides this
 // server has stopped updating its own record and takes over.
 //
@@ -93,12 +97,21 @@ const STALE_AFTER_MS = 20 * 60 * 1000;
 // because that is precisely when nothing in this file is executing, and the
 // record then points at wherever the line used to be until somebody notices.
 //
-// Two missed cycles plus slack: long enough that an ordinary restart or a round
-// of backoff does not wake it, short enough to land *before* STALE_AFTER_MS.
-// That ordering is the point — if the fallback fired later than the UI turns
-// red, the red would be telling the truth about a gap the fallback was supposed
-// to have covered. test/duckdns-fallback.test.js pins it.
-const FALLBACK_AFTER_MS = 12 * 60 * 1000;
+// The number is set against the retry ladder above, not against the banner. A
+// server that is merely having a bad few minutes keeps retrying — 30 s, 60 s,
+// 120 s, 240 s, then 300 s forever — and is 12.5 minutes past its last success
+// by the time that ladder reaches its ceiling. A threshold under that figure
+// wakes the fallback *while the server is still trying*, so both processes ask
+// duckdns.org to set the same name: exactly the double update the fallback is
+// documented not to cause. Fifteen minutes clears the ramp with margin.
+//
+// It was previously chosen to sit below STALE_AFTER_MS so the banner could
+// never go red while the fallback was covering. That was backwards. The banner
+// answers "is this server's own updater working", the fallback covering is a
+// separate fact, and hiding the first behind the second is what let a
+// permanently broken updater look healthy for days. They are now different
+// columns and the ordering between them carries no meaning.
+const FALLBACK_AFTER_MS = 15 * 60 * 1000;
 
 // Verify against the nameservers every N successful updates — and always right
 // after DuckDNS reports it changed something, which is when a wrong write would
@@ -117,6 +130,20 @@ const DNS_TIMEOUT_MS = 5000;
 const DNS_TRIES = 2;
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Is DuckDNS switched on and complete enough to use?
+ *
+ * One definition, because there were four: the scheduler's tick, updateNow, the
+ * fallback's stand-down check and the fallback's `--check` probe each carried
+ * their own copy. `update_server.sh` gates its install reminder on one of them
+ * while the timer that runs five minutes later is gated by another, so the day
+ * they disagreed the deploy log would recommend installing a timer that then
+ * refused every five minutes.
+ */
+function isConfigured(cfg) {
+  return !!(cfg && cfg.enabled && cfg.domain && cfg.token);
+}
 
 /**
  * DuckDNS' verbose reply, as a decided answer.
@@ -160,12 +187,30 @@ function nextDelay(failures) {
  *
  * Never having succeeded is stale — an updater that has been enabled since boot
  * and has nothing to show for it is exactly the case the old UI painted green.
+ *
+ * A timestamp in the *future* is stale too, and that is not pedantry. A board
+ * with no battery-backed clock comes up hours behind, which makes every
+ * recorded success look like it has not happened yet; subtracting gives a
+ * negative age, and anything that reads "younger than the threshold" as healthy
+ * then reports healthy forever — the banner stays green and the fallback stands
+ * down, both during exactly the post-reboot window they exist for. An
+ * unreliable clock is not evidence of freshness.
+ *
+ * `thresholdMs` is a parameter because two callers ask this question with
+ * different deadlines: the banner asks "has this server's updater died"
+ * (STALE_AFTER_MS) and the fallback asks "should I take over" (FALLBACK_AFTER_MS).
+ * They were separate implementations, and the copy in the fallback was the one
+ * missing the clamp.
  */
-function staleness(lastIpUpdate, now) {
+function staleness(lastIpUpdate, now, thresholdMs) {
+  const limit = thresholdMs == null ? STALE_AFTER_MS : thresholdMs;
   const at = lastIpUpdate ? Date.parse(lastIpUpdate) : NaN;
-  if (!Number.isFinite(at)) return { ageMs: null, stale: true };
+  if (!Number.isFinite(at)) return { ageMs: null, stale: true, future: false };
+  // A little slack, because a timestamp written moments ago on a machine whose
+  // clock is being disciplined can legitimately land a second ahead.
+  const future = at - now > CLOCK_SKEW_TOLERANCE_MS;
   const ageMs = Math.max(0, now - at);
-  return { ageMs, stale: ageMs > STALE_AFTER_MS };
+  return { ageMs, stale: future || ageMs > limit, future };
 }
 
 /**
@@ -470,7 +515,7 @@ function start({ database, dbApi, log, skip, deps }) {
       schedule(OK_INTERVAL_MS);
       return;
     }
-    if (!cfg.enabled || !cfg.domain || !cfg.token) {
+    if (!isConfigured(cfg)) {
       schedule(OK_INTERVAL_MS);
       return;
     }
@@ -606,10 +651,15 @@ function start({ database, dbApi, log, skip, deps }) {
  * Bypasses the scheduler's backoff on purpose — somebody asked — but respects
  * the in-flight guard so a held button cannot stack requests.
  */
-async function updateNow({ database, dbApi, log, skip, deps }) {
+async function updateNow({ database, dbApi, log, skip, deps, statusFields }) {
+  // Which column records this run. The server stamps `lastIpUpdate`, which is
+  // what the admin banner reads to decide the in-process updater is alive; the
+  // fallback stamps `fallbackLast` instead, so covering for a broken server
+  // cannot also silence the alarm about it. Defaults to the server's column.
+  statusFields = statusFields || ((at) => ({ lastIpUpdate: at }));
   if (skip) return { ok: false, reason: 'worktree mode' };
   const cfg = dbApi.getDuckdnsCfg(database);
-  if (!cfg.enabled || !cfg.domain || !cfg.token) return { ok: false, reason: 'not configured' };
+  if (!isConfigured(cfg)) return { ok: false, reason: 'not configured' };
   if (inFlight) return { ok: false, reason: 'busy' };
   inFlight = true;
   const s = state || (state = freshState());
@@ -624,12 +674,21 @@ async function updateNow({ database, dbApi, log, skip, deps }) {
     s.failures = 0;
     s.lastError = null;
     s.lastSuccess = s.lastAttempt;
+    // The address is updated where it counts, so this stays a success — but the
+    // caller is told. For the server that distinction is cosmetic; it retries in
+    // five minutes either way. For the out-of-process fallback it is not: the
+    // write is the only record that it ran, and a silent failure there used to
+    // read as a clean exit while nothing had been persisted at all.
+    let wrote = true;
+    let writeError = null;
     try {
-      dbApi.updateDuckdnsStatus(database, { lastIpUpdate: s.lastSuccess, lastIp: r.ip || cfg.lastIp });
+      dbApi.updateDuckdnsStatus(database, Object.assign({ lastIp: r.ip || cfg.lastIp }, statusFields(s.lastSuccess)));
     } catch (e) {
+      wrote = false;
+      writeError = e.message;
       log('warn', 'DuckDNS status write failed', { error: e.message });
     }
-    return { ok: true, ip: r.ip, changed: r.changed };
+    return { ok: true, ip: r.ip, changed: r.changed, wrote, writeError };
   } catch (e) {
     s.failures++;
     s.lastError = e.message;
@@ -643,6 +702,7 @@ module.exports = {
   parseUpdate,
   nextDelay,
   staleness,
+  isConfigured,
   localIpv4Signature,
   clockJumped,
   updateUrl,

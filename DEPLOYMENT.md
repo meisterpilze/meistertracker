@@ -245,12 +245,19 @@ running.
 `scripts/duckdns-fallback.js` closes that. It runs from the system scheduler
 rather than from the server, so it is still there when the server is not.
 
-**It does not double the updates.** The server records the time of each
-successful update; the fallback reads that timestamp and stands down while it is
-fresh, without opening a socket. Only a gap of more than twelve minutes makes it
-act.
+**It does not double the updates.** The server records the time of each of
+*its own* successful updates in one column; the fallback reads that column,
+never writes it, and records itself in another. It stands down while the
+server's column is fresh, without opening a socket, and acts only once that
+column is older than fifteen minutes — long enough that a server merely working
+through its retry backoff is left alone rather than raced.
 
-**Linux (systemd):**
+Keeping the two columns apart is what makes the admin banner still trustworthy:
+a server whose own updater has died goes red even while the fallback is holding
+the record up, and the banner says both.
+
+**Linux (systemd):** start the server once first — the unit runs as whoever
+owns `meistertracker.db`, and the installer refuses rather than guessing.
 
 ```bash
 sudo bash scripts/install-duckdns-fallback.sh
@@ -289,10 +296,11 @@ answer the UAC prompt. That is the whole installation — the script asks Window
 for administrator rights itself, so it does not matter which shell you start it
 from.
 
-Administrator is needed for one thing and nothing else: a task registered by an
-ordinary user only runs while that user is signed in, which misses the case this
-exists for — the machine rebooted and nobody logged in. Running without a
-session needs S4U, and registering S4U needs elevation. The job itself runs
+Administrator is needed to *register* the task and for nothing else: a task
+registered by an ordinary user only runs while that user is signed in, which
+misses the case this exists for — the machine rebooted and nobody logged in.
+Running without a session needs S4U, and registering S4U needs elevation. The
+task is registered `-RunLevel Limited`, so the recurring job itself runs
 unprivileged; it reads a database file and makes one HTTPS request.
 
 This is separate from `install-autostart.ps1` and does not replace it: that one
@@ -304,10 +312,16 @@ good. Remove it with `install-duckdns-fallback.bat -Uninstall`.
 > itself. A worktree usually carries a copy of the same token, and a timer
 > inside one would quietly fight the real instance over the same record.
 
-**How you tell it is working:** Settings → DuckDNS. The banner is green only
-when the nameservers have confirmed the record; it goes red when the last
-successful update is too old, when the updater is not running, or when something
-else keeps overwriting the record — and it says which.
+**How you tell it is working:** Settings → DuckDNS. The banner goes red when
+this server's own updater has stopped succeeding, when it is not running, or
+when something else keeps overwriting the record — and it says which. When the
+fallback is carrying the record it says that too, *underneath* the red: the name
+still resolves, and the in-process updater still needs looking at.
+
+Green means nothing is currently wrong that this server can see. It is not a
+positive confirmation from the nameservers on its own — that check runs after a
+change and on a slow rota, and the banner adds a line saying so when it has
+actually run.
 
 ## 7. Path B — Nginx Reverse Proxy + Certbot (alternative)
 
