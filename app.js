@@ -22787,7 +22787,7 @@ function initEventListeners() {
   // Was added to the markup and never wired, so the room view — the only place
   // bags can be selected and moved in bulk — was unreachable by tapping.
   $('st-batch-locations').addEventListener('click', () => openStab('batch', 'locations'));
-  $('st-batch-new').addEventListener('click', () => openStab('batch', 'new'));
+  $('btn-batch-new').addEventListener('click', () => openStab('batch', 'new'));
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
