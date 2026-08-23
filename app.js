@@ -636,7 +636,6 @@ function defaultInventory() {
     // These are editable in the Inventory → Stock tab
     avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 },
     labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 },
-    weekBagGoal: 0,
     bagCountFrom: null,
     log: []
   };
@@ -3154,148 +3153,6 @@ function renderSorteTiles() {
   el.innerHTML = html;
 }
 
-// Wie viele Beutel jede Woche seit dem Startdatum gebracht hat, gegen das Ziel.
-//
-// Montag bis Sonntag, wie überall sonst — isoWeekNumber(), die Wochenbalken
-// der Übersicht und der Wochenplan rechnen alle so.
-//
-// Körner zählen nicht mit. "70 Beutel die Woche" meint Blöcke; Körnerbrut wird
-// gewogen, seit die Einheiten auseinandergezogen wurden, und Jäser in eine
-// Beutelzahl zu addieren wäre genau die Vermischung, die die Labor-Kachel schon
-// einmal falsch beschriftet hat. (Die ältere Kachel "Beutel angesetzt" in der
-// Übersicht summiert weiterhin beides.)
-//
-// Die laufende Woche läuft: sie ist dabei, aber als solche markiert. Eine Woche
-// mit drei Tagen vor sich als verfehlt zu zeigen wäre eine Aussage über eine
-// Zahl, die noch steigt.
-function _montagVon(d) {
-  const m = new Date(d);
-  m.setHours(0, 0, 0, 0);
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
-  return m;
-}
-function buildWeekBagGoal() {
-  const ziel = (inventory && inventory.weekBagGoal) || 0;
-  const von = inventory && inventory.bagCountFrom;
-  if (!ziel || !von) return null;
-  const start = new Date(von + 'T00:00:00');
-  if (isNaN(start)) return null;
-  const diese = _montagVon(new Date());
-  const wochen = [];
-  for (const w = _montagVon(start); w <= diese; w.setDate(w.getDate() + 7)) {
-    wochen.push({ start: new Date(w), gemacht: 0 });
-  }
-  if (!wochen.length) return null;
-  const nach = new Map(wochen.map((w) => [w.start.getTime(), w]));
-  for (const b of batches || []) {
-    if (b.batchType === 'grain') continue;
-    const d = new Date(b.created);
-    if (isNaN(d)) continue;
-    const w = nach.get(_montagVon(d).getTime());
-    if (w) w.gemacht += b.qty || 0;
-  }
-  return wochen.map((w) => {
-    const ende = new Date(w.start);
-    ende.setDate(ende.getDate() + 6);
-    return {
-      start: w.start,
-      ende,
-      gemacht: w.gemacht,
-      ziel,
-      geschafft: w.gemacht >= ziel,
-      laeuft: w.start.getTime() === diese.getTime()
-    };
-  });
-}
-function renderWeekGoal() {
-  const el = document.getElementById('ov-week-goal');
-  if (!el) return;
-  const wochen = buildWeekBagGoal();
-  if (!wochen) {
-    el.innerHTML =
-      '<div class="sorten-head"><div class="sec" style="margin:0">' +
-      esc(t('goal.title')) +
-      '</div><div class="sorten-head-right">' +
-      _zielKnopf() +
-      '</div></div>' +
-      '<div class="fs-meta" style="color:var(--c-text-muted)">' +
-      esc(t('goal.none')) +
-      '</div>';
-    return;
-  }
-  // Jüngste zuerst: die laufende Woche ist die, nach der man sieht.
-  const zeilen = wochen
-    .slice()
-    .reverse()
-    .map((w) => {
-      const zustand = w.laeuft ? 'low' : w.geschafft ? 'ok' : 'now';
-      const wort = w.laeuft ? 'goal.running' : w.geschafft ? 'goal.met' : 'goal.missed';
-      const pct = Math.max(0, Math.min(100, (w.gemacht / Math.max(1, w.ziel)) * 100));
-      return (
-        '<div class="goal-row">' +
-        '<span class="goal-wk">' +
-        esc(t('goal.week', { n: isoWeekNumber(w.start) })) +
-        '</span>' +
-        '<span class="goal-span fs-xs">' +
-        esc(fmtDtShort(w.start) + ' \u2013 ' + fmtDtShort(w.ende)) +
-        '</span>' +
-        '<span class="sbar goal-bar"><i style="width:' +
-        pct.toFixed(0) +
-        '%;background:var(--st-inc)"></i></span>' +
-        '<b class="goal-n">' +
-        w.gemacht +
-        '<span class="lab-row-min">/' +
-        w.ziel +
-        '</span></b>' +
-        '<span class="sup sup-' +
-        zustand +
-        '">' +
-        esc(t(wort)) +
-        '</span>' +
-        '</div>'
-      );
-    })
-    .join('');
-  el.innerHTML =
-    '<div class="sorten-head"><div class="sec" style="margin:0">' +
-    esc(t('goal.title')) +
-    '</div><div class="sorten-head-right">' +
-    _zielKnopf() +
-    '</div></div>' +
-    zeilen;
-}
-function _zielKnopf() {
-  return (
-    '<button type="button" class="btn btn-sm fs-micro" data-action="set-week-goal">' +
-    esc(t('goal.set')) +
-    '</button>'
-  );
-}
-// Ziel und Startdatum setzen. Zwei Angaben, zwei Fragen — das Startdatum sagt,
-// ab wann gerechnet wird, und db.updateWeekGoal() legt es auf den Montag seiner
-// Woche, damit die erste Woche eine ganze ist.
-async function setWeekGoal() {
-  const jetzt = (inventory && inventory.weekBagGoal) || 0;
-  const zahl = prompt(t('goal.askGoal'), jetzt || '');
-  if (zahl === null) return;
-  const ziel = Math.max(0, Math.round(parseDecimal(zahl) || 0));
-  let von = inventory && inventory.bagCountFrom;
-  if (ziel > 0) {
-    const vorschlag = von || _montagVon(new Date()).toISOString().slice(0, 10);
-    const eingabe = prompt(t('goal.askFrom'), vorschlag);
-    if (eingabe === null) return;
-    von = eingabe.trim();
-  }
-  const r = await apiPost('/api/week-goal', { weekBagGoal: ziel, bagCountFrom: ziel > 0 ? von : null });
-  if (r && r.error) {
-    setFb('err', t('common.error') + ': ' + r.error);
-    return;
-  }
-  inventory.weekBagGoal = r && r.weekBagGoal != null ? r.weekBagGoal : ziel;
-  inventory.bagCountFrom = r && r.bagCountFrom !== undefined ? r.bagCountFrom : von;
-  renderWeekGoal();
-}
-
 function renderOverviewKPIs() {
   const weekEl = document.getElementById('ov-kpi-week');
   const substratesEl = document.getElementById('ov-kpi-substrates');
@@ -3526,7 +3383,6 @@ function renderOverviewKPIs() {
     )
   ].join('');
 
-  renderWeekGoal();
   renderOverviewCharts(periodStart);
 }
 
@@ -5446,15 +5302,69 @@ function rhythmTaskOn(date) {
     planned: true
   };
 }
+// Was an einem Tag wirklich entstanden ist, gemessen am Thema des Tages.
+//
+// Vorher trug der Rhythmus eine eigene Zahl, die nur der "Erfassen"-Knopf
+// bewegte. Wer 70 Blöcke ansetzte und nicht daneben eintippte, dass er es getan
+// hatte, sah den Montag weiter offen stehen — die Anlage führte zwei
+// Buchhaltungen über dieselbe Arbeit, und die zweite war die, die niemand
+// pflegt. Dieselbe Entscheidung wie bei den Versorgungslücken und den
+// Labor-Untergrenzen: abgeleitet, nicht abgehakt. Es gibt nichts zu tippen und
+// nichts zu vergessen.
+//
+// Ein Thema misst das, was an dem Tag dabei herauskommt: Substrattag zaehlt
+// angesetzte Blöcke, Körnertag die Kilogramm Brut, Fruchtungstag die Beutel,
+// die in eine Fruchtungszone gezogen sind, Erntetag die erfassten Ernten,
+// Labortag die angelegten Kulturen.
+function rhythmMadeOn(dateKey, theme) {
+  const amTag = (wert) => {
+    if (!wert) return false;
+    const d = new Date(wert);
+    return !isNaN(d) && _ymd(d) === dateKey;
+  };
+  if (theme === 'substrate') {
+    return (batches || [])
+      .filter((b) => b.batchType !== 'grain' && amTag(b.created))
+      .reduce((s, b) => s + (b.qty || 0), 0);
+  }
+  if (theme === 'grain') {
+    return (batches || [])
+      .filter((b) => b.batchType === 'grain' && amTag(b.created))
+      .reduce((s, b) => s + _grainKgOf(b), 0);
+  }
+  if (theme === 'fruiting') {
+    return (scanLog || []).filter((e) => {
+      if (!e || !e.bag || !e.to || !amTag(e.time)) return false;
+      if (e.action !== 'MOVE' && e.action !== 'MOVE_BATCH') return false;
+      const z = ZONE_BY_ID[toZone(e.to)];
+      return z && z.role === 'fruiting';
+    }).length;
+  }
+  if (theme === 'harvest') return (harvests || []).filter((h) => amTag(h && h.time)).length;
+  if (theme === 'lab') return (cultures || []).filter((c) => amTag(c && c.created)).length;
+  return 0;
+}
+// Ab wann der Rhythmus überhaupt mitzählt.
+//
+// Ohne das steht jeder Montag vor der Inbetriebnahme als verfehlt da, und an
+// einer Woche, die niemand mehr bearbeiten kann, ist nichts nachzuholen.
+function rhythmCountsFrom() {
+  return (inventory && inventory.bagCountFrom) || null;
+}
 // Everything asked for before today and not finished. This is the point of
 // tracking at all: 45 planned for Monday with 30 made means Tuesday still owes
 // 15. Without it the shortfall simply vanished and the same 45 came round again
 // the following week as though nothing had been missed.
 function rhythmArrears(today) {
   const cut = _ymd(today);
+  const ab = rhythmCountsFrom();
   return rhythmTasks
-    .filter((x) => x.date < cut && x.targetQty && (x.doneQty || 0) < x.targetQty)
-    .map((x) => Object.assign({}, x, { outstanding: x.targetQty - (x.doneQty || 0) }))
+    .filter((x) => x.date < cut && x.targetQty && (!ab || x.date >= ab))
+    .map((x) => {
+      const done = rhythmMadeOn(x.date, x.theme);
+      return Object.assign({}, x, { doneQty: done, outstanding: x.targetQty - done });
+    })
+    .filter((x) => x.outstanding > 0)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 // The recipe behind the plan, for the day that is actually open. Empty when no
@@ -5878,6 +5788,8 @@ function _rhythmSyncFromForm() {
 function _renderRhythmRows() {
   const rows = document.getElementById('rhythm-rows');
   if (!rows || !_rhythmDraft) return;
+  const seit = document.getElementById('rhythm-start-now');
+  if (seit) seit.textContent = inventory && inventory.bagCountFrom ? fmtDt(inventory.bagCountFrom) : t('rhythm.startNone');
   // '' is a real choice: a day can have a target without naming a Sorte.
   const strainOpts = (sel) =>
     '<option value="">—</option>' +
@@ -5962,6 +5874,24 @@ function closeRhythmEditor() {
   const m = document.getElementById('m-rhythm');
   if (m) m.classList.remove('open');
   _rhythmDraft = null;
+}
+// Ab wann der Rhythmus mitzählt. Steht beim Bearbeiten der Ziele, weil es
+// dieselbe Frage ist: was diese Anlage sich vornimmt, und ab wann.
+function setRhythmStart() {
+  const jetzt = (inventory && inventory.bagCountFrom) || '';
+  prompt2(t('rhythm.startPrompt'), jetzt, function (raw) {
+    if (raw === null || raw === undefined) return;
+    const s = String(raw).trim();
+    apiPost('/api/rhythm-start', { bagCountFrom: s || null }).then((res) => {
+      if (res && res.error) {
+        toast(res.error, 'err');
+        return;
+      }
+      inventory.bagCountFrom = res && res.bagCountFrom !== undefined ? res.bagCountFrom : s || null;
+      setFb('ok', t('rhythm.startSaved'));
+      renderDashBatchTasks();
+    });
+  });
 }
 function saveRhythmEditor() {
   _rhythmSyncFromForm();
@@ -6340,7 +6270,9 @@ function _weekDayBodyHtml(d, off, isToday) {
 // it belongs to today.
 function _rhythmTaskRowHtml(task, outstanding) {
   const ms = task.strainId ? mushroomStrains.find((m) => m.id === task.strainId) : null;
-  const done = task.doneQty || 0;
+  // Gezählt, nicht gemeldet. Ein geplanter Tag hat noch nichts, worauf man
+  // zählen könnte.
+  const done = task.planned ? 0 : rhythmMadeOn(task.date, task.theme);
   const target = task.targetQty || 0;
   const late = outstanding > 0;
   const label = (ms ? target + '× ' + ms.name : String(target)) + ' · ' + weekThemeLabel(task.theme);
@@ -6371,19 +6303,9 @@ function _rhythmTaskRowHtml(task, outstanding) {
     '">' +
     esc(meta) +
     '</div></div>' +
-    // A future day cannot be logged against — it has no snapshot yet, and
-    // recording work before the day arrives would be recording a guess.
-    (task.planned
-      ? ''
-      : '<button class="btn btn-sm btn-p fs-xs" data-action="rhythm-log" data-date="' +
-        esc(task.date) +
-        '" data-target="' +
-        target +
-        '" data-done="' +
-        done +
-        '" style="padding:3px 10px;flex-shrink:0">' +
-        esc(t('rhythm.log')) +
-        '</button>') +
+    // Kein Erfassen-Knopf mehr: die Zahl kommt aus dem, was angelegt wurde.
+    // Stimmt sie nicht, ist die Charge nicht angelegt — und das ist die
+    // Stelle, an der man das repariert, nicht hier.
     '</div>'
   );
 }
@@ -6398,7 +6320,7 @@ function editRhythmTarget(date, target) {
     if (s === '') return;
     const n = Number(s);
     if (!Number.isInteger(n) || n < 0) {
-      setFb('err', t('rhythm.logBad'));
+      setFb('err', t('rhythm.targetBad'));
       return;
     }
     apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
@@ -6412,35 +6334,6 @@ function editRhythmTarget(date, target) {
       // next load will bring it. Re-render from what we know meanwhile.
       else rhythmTasks.push({ date, weekday: new Date(date).getDay(), theme: '', targetQty: n, doneQty: 0 });
       setFb('ok', t('rhythm.targetSaved'));
-      renderDashBatchTasks();
-    });
-  });
-}
-// Ask how many were actually made, and send the absolute figure. Pre-filled
-// with the target rather than 0: the common answer is "all of them", and the
-// common answer should be one tap away.
-function logRhythmProgress(date, target, done) {
-  if (!date) return;
-  prompt2(t('rhythm.logPrompt', { total: target }), String(done || target || ''), function (raw) {
-    if (raw === null || raw === undefined) return;
-    const s = String(raw).trim();
-    if (s === '') return;
-    const n = Number(s);
-    if (!Number.isInteger(n) || n < 0) {
-      setFb('err', t('rhythm.logBad'));
-      return;
-    }
-    apiPost('/api/rhythm-task', { date, doneQty: n }).then((res) => {
-      if (res && res.error) {
-        toast(res.error, 'err');
-        return;
-      }
-      // Update in place so the row reflects the new figure without waiting for
-      // the next poll; the server is the source of truth on the next load.
-      const row = rhythmTasks.find((x) => x.date === date);
-      if (row) row.doneQty = n;
-      else rhythmTasks.push({ date, weekday: new Date(date).getDay(), theme: '', targetQty: target, doneQty: n });
-      setFb('ok', t('rhythm.logged'));
       renderDashBatchTasks();
     });
   });
@@ -22774,6 +22667,9 @@ function initEventListeners() {
   $('btn-add-zone').addEventListener('click', addZone);
   $('rhythm-cancel').addEventListener('click', closeRhythmEditor);
   $('rhythm-save').addEventListener('click', saveRhythmEditor);
+  $('m-rhythm').addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="rhythm-start"]')) setRhythmStart();
+  });
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
     const c = ZONE_ROLE_COLOR[this.value];
@@ -22889,10 +22785,6 @@ function initEventListeners() {
       openRhythmEditor();
       return;
     }
-    if (action === 'rhythm-log') {
-      logRhythmProgress(el.dataset.date, Number(el.dataset.target), Number(el.dataset.done));
-      return;
-    }
     if (action === 'rhythm-target') {
       editRhythmTarget(el.dataset.date, Number(el.dataset.target));
       return;
@@ -22917,10 +22809,6 @@ function initEventListeners() {
     }
     // Zogen mit den Hinweisen aus der eigenen Karte hierher; ihr alter
     // Zuhörer hängte an #dash-alerts, das es nicht mehr gibt.
-    if (action === 'set-week-goal') {
-      setWeekGoal();
-      return;
-    }
     if (action === 'go-attention') {
       goToBatchesAttention(el.dataset.key);
       return;

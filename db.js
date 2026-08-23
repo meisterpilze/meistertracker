@@ -2740,7 +2740,6 @@ function readAll(db, opts = {}) {
       GS: inv.lab_thresh_gs || 0,
       SY: inv.lab_thresh_sy || 0
     },
-    weekBagGoal: inv.week_bag_goal || 0,
     bagCountFrom: inv.bag_count_from || null,
     log: invLog
   };
@@ -6534,14 +6533,17 @@ function updateLabThresholds(db, labThresholds) {
   incrementDataVersion(db);
 }
 
-// Das Wochenziel und der Tag, ab dem es gilt.
+// Ab wann der Wochenrhythmus mitzählt.
 //
-// Das Datum wird auf den Montag seiner Woche gelegt, bevor es gespeichert wird:
-// die Auswertung zählt in ganzen Wochen, und ein Mittwoch als Anfang hätte eine
-// erste Woche ergeben, die nur aus drei Tagen besteht und das Ziel gar nicht
-// erreichen kann.
-function updateWeekGoal(db, goal, from) {
-  const n = Number.isFinite(+goal) ? Math.max(0, Math.round(+goal)) : 0;
+// Das Datum wird auf den Montag seiner Woche gelegt: gerechnet wird in ganzen
+// Wochen, und ein Mittwoch als Anfang hätte eine erste Woche ergeben, die nur
+// aus drei Tagen besteht und ihr Ziel gar nicht erreichen kann.
+//
+// week_bag_goal aus v80 wird nicht mehr geschrieben. Es war ein zweites
+// Wochenziel neben dem, das der Rhythmus je Wochentag schon führt — zwei
+// Zahlen für dieselbe Frage, und die Spalte bleibt nur stehen, weil SQLite
+// Spalten nicht ohne Tabellenneubau verliert.
+function updateRhythmStart(db, from) {
   let tag = null;
   if (from) {
     const d = new Date(from + 'T00:00:00Z');
@@ -6550,9 +6552,9 @@ function updateWeekGoal(db, goal, from) {
       tag = d.toISOString().slice(0, 10);
     }
   }
-  db.prepare('UPDATE inventory SET week_bag_goal=?, bag_count_from=? WHERE id=1').run(n, tag);
+  db.prepare('UPDATE inventory SET bag_count_from=? WHERE id=1').run(tag);
   incrementDataVersion(db);
-  return { weekBagGoal: n, bagCountFrom: tag };
+  return { bagCountFrom: tag };
 }
 
 // ── Supplier CRUD ──────────────────────────────────────────
@@ -7129,19 +7131,6 @@ function ensureRhythmTasks(db, now) {
 }
 // Record how many were actually made on a date. Absolute, not a delta, so a
 // double-tap or a retried request cannot inflate the count.
-function setRhythmProgress(db, date, doneQty) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
-  const n = Number(doneQty);
-  if (!Number.isInteger(n) || n < 0) throw new Error('Done must be a whole number of 0 or more');
-  const row = db.prepare('SELECT date, target_qty FROM rhythm_task WHERE date = ?').get(date);
-  if (!row) throw new Error('No planned work on ' + date);
-  // Overshooting is real — 50 made against a target of 45 — so it is stored as
-  // it happened rather than clamped to the target.
-  if (n > 100000) throw new Error('Done is implausibly large');
-  db.prepare('UPDATE rhythm_task SET done_qty = ?, updated = ? WHERE date = ?').run(n, new Date().toISOString(), date);
-  incrementDataVersion(db);
-  return n;
-}
 // Change what ONE date is asking for, leaving the recurring rhythm alone. The
 // template is the usual amount; a given week rarely matches it exactly, and
 // editing the template to cover one busy Monday would quietly change every
@@ -8044,7 +8033,6 @@ function getInventory(db, logLimit) {
       GS: inv.lab_thresh_gs || 0,
       SY: inv.lab_thresh_sy || 0
     },
-    weekBagGoal: inv.week_bag_goal || 0,
     bagCountFrom: inv.bag_count_from || null,
     log: logRows.map((r) => ({
       time: r.time,
@@ -9922,7 +9910,7 @@ module.exports = {
   setInventoryAbsolute,
   updateInventoryConfig,
   updateLabThresholds,
-  updateWeekGoal,
+  updateRhythmStart,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,
@@ -9950,7 +9938,6 @@ module.exports = {
   setWeekRhythm,
   WEEK_THEMES,
   ensureRhythmTasks,
-  setRhythmProgress,
   setRhythmTarget,
   listRhythmTasks,
   zoneBagCount,
