@@ -6539,7 +6539,7 @@ function _weekHeadHtml(d, off, sel) {
 // sagt weiterhin, welcher Tag offen ist.
 function _weekColBodyHtml(d, off, sel) {
   return (
-    '<div class="wk-b' + (sel ? ' sel' : '') + '" style="--col:' + (off + 1) + '">' + _weekColPreviewHtml(d) + '</div>'
+    '<div class="wk-b' + (sel ? ' sel' : '') + '" style="--col:' + (off + 1) + '">' + _weekColPreviewHtml(d, sel) + '</div>'
   );
 }
 // What a row actually asks you to do, which is not the same as what it is. A
@@ -6686,7 +6686,7 @@ function _choreChipHtml(it) {
     '</span></button>'
   );
 }
-function _weekColPreviewHtml(d) {
+function _weekColPreviewHtml(d, offen) {
   const task = rhythmTaskOn(d.date);
   let html = '';
   // The amount is editable on every day it appears, not only the open one. It
@@ -6753,14 +6753,24 @@ function _weekColPreviewHtml(d) {
     zeilen += '<span class="wk-count-late">' + esc(t('cat.overdue', { n: overdue })) + '</span>';
   }
   if (zeilen) {
-    html +=
-      '<button type="button" class="wk-counts fs-xs" data-action="dash-day" data-off="' +
-      d.offset +
-      '" title="' +
-      esc(t('dash.openDay')) +
-      '">' +
-      zeilen +
-      '</button>';
+    // Ein Knopf nur, solange es noch etwas zu oeffnen gibt.
+    //
+    // Der offene Tag steht ausfuehrlich unter dem Streifen; seine Zaehlung dort
+    // anzutippen hiess, ihn ein zweites Mal zu oeffnen -- ein Neuaufbau, der
+    // exakt dasselbe zeichnete. Wieder ein Feld, das gedrueckt wird und nichts
+    // tut, nur diesmal, weil es schon getan war.
+    //
+    // Stehen bleibt die Zaehlung trotzdem: ohne sie waere die Spalte des
+    // gearbeiteten Tages die einzige leere in der Woche.
+    html += offen
+      ? '<div class="wk-counts fs-xs is-open">' + zeilen + '</div>'
+      : '<button type="button" class="wk-counts fs-xs" data-action="dash-day" data-off="' +
+        d.offset +
+        '" title="' +
+        esc(t('dash.openDay')) +
+        '">' +
+        zeilen +
+        '</button>';
   }
   return html;
 }
