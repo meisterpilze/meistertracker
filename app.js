@@ -1173,6 +1173,12 @@ function go(page, btnId) {
   }
   // The history charts load on first arrival. applyDashMode() used to do this on
   // the way into Overview mode; the mode is gone and the page is the Overview.
+  // Die Betriebsseite zeichnete sich nie selbst. renderOverviewKPIs() haengt
+  // an renderStatus(), das fuer die Chargen-Seite laeuft — wer Betrieb oeffnete,
+  // sah also, was beim letzten Besuch der Chargen uebrig geblieben war, und beim
+  // Neuladen gar nichts. Dieselbe Sache wie bei Arbeitsgaenge (#566), eine Seite
+  // weiter.
+  if (page === 'dash') renderOverviewKPIs();
   if (page === 'dash' && !kpiHistoryData) loadKpiHistory();
   if (page === 'strains') renderStrains();
   // Same rule as Admin above, and for the same reason: the strip handler already
@@ -1344,6 +1350,7 @@ function refresh() {
   // #dash-batch-tasks steht nicht auf p-dash, der alte Zweig zeichnete also eine
   // Karte, die auf der offenen Seite gar nicht vorkommt.
   if (id === 'work') renderDashBatchTasks();
+  if (id === 'dash') renderOverviewKPIs();
   if (id === 'batch') {
     renderStatus();
     renderBatches();
