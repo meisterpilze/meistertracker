@@ -447,12 +447,12 @@ window.LANG['en'] = {
   'harvest.releaseFailed': '{bag}: harvest saved, release was not',
   'harvest.releasedTotal': '{bag}: {kg} kg released in total',
   // Dashboard
+  'cat.alert': 'Attention',
   'cat.create': 'Make blocks',
   'cat.move': 'Move',
   'cat.harvest': 'Harvest',
   'cat.overdue': '{n} overdue',
   'dash.totalHarvested': 'Total harvested',
-  'dash.alerts': 'Alerts',
   'dash.harvestBySpecies': 'Harvest by species (kg)',
   'dash.noHarvestData': 'No harvest data yet',
   'dash.ov.qualityEff': 'Quality & efficiency',

@@ -449,12 +449,12 @@ window.LANG['de'] = {
   'harvest.releaseFailed': '{bag}: Ernte gespeichert, Freigabe nicht',
   'harvest.releasedTotal': '{bag}: {kg} kg insgesamt freigegeben',
   // Dashboard
+  'cat.alert': 'Achtung',
   'cat.create': 'Ansetzen',
   'cat.move': 'Umziehen',
   'cat.harvest': 'Ernten',
   'cat.overdue': '{n} überfällig',
   'dash.totalHarvested': 'Gesamt geerntet',
-  'dash.alerts': 'Warnungen',
   'dash.harvestBySpecies': 'Ernte nach Art (kg)',
   'dash.noHarvestData': 'Noch keine Erntedaten',
   'dash.ov.qualityEff': 'Qualität & Effizienz',
