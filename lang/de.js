@@ -239,7 +239,7 @@ window.LANG['de'] = {
   'sub.recipe': 'Rezept',
   'sub.targetKg': 'kg fertiges Substrat',
   'sub.notes': 'Notiz',
-  'sub.create': 'Ansatz anlegen',
+  'sub.create': 'Neues Substrat',
   'sub.pickBoth': 'Rezept und Menge wählen.',
   'sub.noRecipe': 'Diese Sorte hat noch kein vollständiges Rezept — Zielfeuchte und Gipsanteil fehlen.',
   'sub.dryMix': 'Trockenmix',
