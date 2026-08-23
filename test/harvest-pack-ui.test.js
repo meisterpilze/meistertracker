@@ -122,9 +122,13 @@ describe('pack sizes — the boxes', () => {
     // rid of it. Unticking did work — an unticked size is not saved — but only
     // the next load cleared the box, so a mistyped 4000 sat there looking
     // permanent, and "add" without a visible "remove" is half a feature.
+    // The class list is matched loosely because it grew: the × carried an inline
+    // font-size until 2026-08-23 and now carries .fs-base instead, so what this
+    // test is about — which size the × belongs to — must not depend on what
+    // else is in the attribute.
     ui.renderHarvestPackSizes([250, 4000]);
-    assert.match(ui.log.html, /class="hf-pack-del" data-size="4000"/, 'the × is on the size somebody typed');
-    assert.equal(/class="hf-pack-del" data-size="250"/.test(ui.log.html), false, 'and not on a ladder size');
+    assert.match(ui.log.html, /class="hf-pack-del[^"]*" data-size="4000"/, 'the × is on the size somebody typed');
+    assert.equal(/class="hf-pack-del[^"]*" data-size="250"/.test(ui.log.html), false, 'and not on a ladder size');
 
     ui.removeHarvestPackSize(4000);
     assert.deepEqual(ui.harvestPackSizes(), [250]);
