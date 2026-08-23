@@ -2328,6 +2328,28 @@ const MIGRATIONS = [
       if (!cols.includes('min_mc')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_mc REAL DEFAULT 0');
       if (!cols.includes('min_pd')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN min_pd REAL DEFAULT 0');
     }
+  },
+  {
+    version: 80,
+    description: 'A weekly bag goal, and the date the counting starts from',
+    fn(db) {
+      // Zwei Zahlen, die zusammengehören: wie viele Beutel eine Woche bringen
+      // soll, und ab wann gezählt wird.
+      //
+      // Das Ab-wann ist nicht Zierrat. Die Bestandsdaten dieser Anlage wurden
+      // zurückgesetzt, und alles davor würde als verfehlte Woche dastehen —
+      // ein Ziel, das mit einer Reihe roter Wochen aufmacht, die niemand mehr
+      // ändern kann, ist beim ersten Blick schon entwertet.
+      //
+      // 0 heißt "kein Ziel gesetzt", wie bei den übrigen Untergrenzen auch:
+      // nichts wird gemessen, bevor jemand eine Zahl nennt.
+      const cols = db
+        .prepare("SELECT name FROM pragma_table_info('inventory')")
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes('week_bag_goal')) db.exec('ALTER TABLE inventory ADD COLUMN week_bag_goal INTEGER DEFAULT 0');
+      if (!cols.includes('bag_count_from')) db.exec('ALTER TABLE inventory ADD COLUMN bag_count_from TEXT');
+    }
   }
 ];
 
@@ -2718,6 +2740,8 @@ function readAll(db, opts = {}) {
       GS: inv.lab_thresh_gs || 0,
       SY: inv.lab_thresh_sy || 0
     },
+    weekBagGoal: inv.week_bag_goal || 0,
+    bagCountFrom: inv.bag_count_from || null,
     log: invLog
   };
 
@@ -6510,6 +6534,27 @@ function updateLabThresholds(db, labThresholds) {
   incrementDataVersion(db);
 }
 
+// Das Wochenziel und der Tag, ab dem es gilt.
+//
+// Das Datum wird auf den Montag seiner Woche gelegt, bevor es gespeichert wird:
+// die Auswertung zählt in ganzen Wochen, und ein Mittwoch als Anfang hätte eine
+// erste Woche ergeben, die nur aus drei Tagen besteht und das Ziel gar nicht
+// erreichen kann.
+function updateWeekGoal(db, goal, from) {
+  const n = Number.isFinite(+goal) ? Math.max(0, Math.round(+goal)) : 0;
+  let tag = null;
+  if (from) {
+    const d = new Date(from + 'T00:00:00Z');
+    if (!isNaN(d)) {
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+      tag = d.toISOString().slice(0, 10);
+    }
+  }
+  db.prepare('UPDATE inventory SET week_bag_goal=?, bag_count_from=? WHERE id=1').run(n, tag);
+  incrementDataVersion(db);
+  return { weekBagGoal: n, bagCountFrom: tag };
+}
+
 // ── Supplier CRUD ──────────────────────────────────────────
 function listSuppliers(db) {
   return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
@@ -7999,6 +8044,8 @@ function getInventory(db, logLimit) {
       GS: inv.lab_thresh_gs || 0,
       SY: inv.lab_thresh_sy || 0
     },
+    weekBagGoal: inv.week_bag_goal || 0,
+    bagCountFrom: inv.bag_count_from || null,
     log: logRows.map((r) => ({
       time: r.time,
       mat: r.mat,
@@ -9875,6 +9922,7 @@ module.exports = {
   setInventoryAbsolute,
   updateInventoryConfig,
   updateLabThresholds,
+  updateWeekGoal,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,
