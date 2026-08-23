@@ -410,7 +410,7 @@ describe('touch targets', () => {
 });
 
 describe('the size utilities that replace the inline styles', () => {
-  const UTILITIES = ['fs-meta', 'fs-xs', 'fs-micro'];
+  const UTILITIES = ['fs-base', 'fs-sm', 'fs-meta', 'fs-xs', 'fs-micro'];
 
   it('declares each one doubled, so it outranks what the inline style outranked', () => {
     // An inline style beats every normal rule. Move one onto a plain class and
@@ -606,6 +606,41 @@ describe('the type sizes follow the reader, not the sheet', () => {
     // reader's setting, free to grow. It is the one honest px left.
     const left = pxSizes(OHNE_DRUCK).filter((v) => v !== 'max(1rem, 16px) !important');
     assert.deepEqual(left, [], `${left.length} px font-size(s) are back: ${left.slice(0, 8).join(' · ')}`);
+  });
+
+  // The other half of the same sweep. styles.css was the 177; app.js wrote 44
+  // more of its own, and an inline font-size beats every rule in the sheet,
+  // so those were the sizes no media query, no token and no reader setting
+  // could reach at all. They are classes now — .fs-sm and .fs-base for the two
+  // that are a mark's desktop value (26 and 8 of the 44), .fs-floor with the
+  // number on the element for the eleven that sit on no rung.
+  it('writes no inline px font-size in app.js outside the printed sheets', () => {
+    const zeilen = APP.split('\n');
+    const uebrig = [];
+    for (const m of APP.matchAll(/font-size:\s*([0-9.]+px)/g)) {
+      const z = APP.slice(0, m.index).split('\n').length;
+      // The marker sits on the statement that builds the sheet, so the window
+      // is the ten lines above the size rather than the line itself: one
+      // marker covers a print document whose whole <style> is one string.
+      const markiert = zeilen
+        .slice(Math.max(0, z - 10), z)
+        .join('\n')
+        .includes('px-auf-papier');
+      if (!markiert) uebrig.push(`app.js:${z} ${m[1]}`);
+    }
+    assert.deepEqual(
+      uebrig,
+      [],
+      `${uebrig.length} inline size(s) in app.js beat the whole stylesheet again: ${uebrig.slice(0, 8).join(' · ')}`
+    );
+  });
+
+  it('marks every px it does keep in app.js as belonging to paper', () => {
+    // The escape hatch has to stay small, or it becomes the rule. Four
+    // statements: one print document opened in its own window, two label
+    // sheets, one calendar task list.
+    const marken = [...APP.matchAll(/px-auf-papier/g)].length;
+    assert.ok(marken > 0 && marken <= 6, `${marken} px-auf-papier markers in app.js — the exception is spreading`);
   });
 
   it('keeps the print block on px, because paper does not read a browser setting', () => {
