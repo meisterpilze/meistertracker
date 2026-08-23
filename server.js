@@ -10733,6 +10733,73 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Lab Thresholds --
+  // Wiederkehrende Aufgaben der Anlage: anlegen, ändern, löschen — und abhaken.
+  //
+  // Dieselbe Grenze wie beim Rhythmus, aus demselben Grund: WAS die Anlage
+  // regelmässig tut, ist eine Festlegung für alle und fortan (Admin); DASS es
+  // an einem Termin getan wurde, meldet, wer es getan hat (jeder Angemeldete).
+  if (req.method === 'POST' && req.url === '/api/recurring-task') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const id = db.saveRecurringTask(database, data || {});
+        log('info', 'Recurring task saved', { actor: req.authUser.username, id });
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, id });
+      } catch (err) {
+        if (/name is required|Interval must be|Not a date|Not a task id|No such task/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const recurringDelMatch = req.url.match(/^\/api\/recurring-task\/(\d+)$/);
+  if (req.method === 'DELETE' && recurringDelMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      db.deleteRecurringTask(database, recurringDelMatch[1]);
+      log('info', 'Recurring task deleted', { actor: req.authUser.username, id: recurringDelMatch[1] });
+      broadcastSSE(res);
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      if (/No such task|Not a task id/.test(err.message)) {
+        jsonErr(res, 404, err.message);
+        return;
+      }
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/recurring-done') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const body = data || {};
+      try {
+        const done = db.setRecurringDone(database, body.taskId, body.date, body.done, req.authUser.username);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, done });
+      } catch (err) {
+        // "Not a due date" ist eine Eingabe, kein Serverfehler: der Client hat
+        // einen Tag angeboten, an dem die Aufgabe nicht fällt.
+        if (/Not a task id|Not a date|No such task|Not a due date/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/rhythm-start') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
