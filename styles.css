@@ -3719,11 +3719,24 @@ tr:hover td {
 }
 .ov-period-toggle {
   display: flex;
+  /* Drei Pillen, die nicht umbrechen konnten, und auf Deutsch sind sie
+     zusammen 344 px breit: „Diese Woche | Diesen Monat | Dieses Jahr". Auf
+     einem 320-px-Telefon war das der einzige Grund, warum die Übersicht als
+     Ganzes breiter war als der Schirm — mit dem Finger verkleinerte das
+     Telefon die ganze Seite auf 89 Prozent, mit der Maus lief sie 17 bis 40 px
+     über den Rand. Ein Fehler mit zwei Gesichtern, wie im Labor.
+
+     `flex-wrap` und `max-width` statt einer Umbruchstelle: Es gibt keine
+     Breite, ab der das richtig wird, es gibt nur „passt" und „passt nicht",
+     und genau das rechnet der Umbruch selbst aus. Auf Englisch passt dieselbe
+     Zeile auch bei 320 px in eine Reihe und bleibt dort. */
+  flex-wrap: wrap;
   background: var(--c-border-light);
   border-radius: 10px;
   padding: 3px;
   gap: 2px;
   width: fit-content;
+  max-width: 100%;
   margin-bottom: 14px;
 }
 .ov-period-btn {
@@ -5688,7 +5701,22 @@ tr.ms-off .ms-prog {
   justify-content: center;
   gap: 3px;
   min-height: 56px;
-  padding: 8px 4px;
+  /* 2 px waagerecht und nicht 4, weil die fünf deutschen Beschriftungen bei
+     320 px genau daran scheiterten. Gemessen, nicht geschätzt: Die Texte
+     „Arbeitsgänge, Dashboard, Chargen, Labor, Kalender" sind 83 + 67 + 52 +
+     36 + 55 = 293 px breit, dazu 5×8 px Polsterung macht 333 — und „Kalender"
+     hing 14 px über den rechten Rand.
+
+     Kein `min-width: 0`, und das ist der Punkt, an dem der naheliegende Griff
+     falsch ist: `flex: 1` hat `flex-basis: 0`, also bekämen mit `min-width: 0`
+     ALLE fünf Knöpfe dieselben 64 px, und „Arbeitsgänge" (83 px) würde
+     abgeschnitten, obwohl die Summe passt. Ohne ihn nimmt jeder Knopf seine
+     Inhaltsbreite, und 293 + 5×4 = 313 passen in 320.
+
+     Der Rest ist sieben Pixel Luft, und die sind dünn. Sie sind aber gemessen
+     und bleiben gemessen: Eine längere Übersetzung meldet der Lauf als
+     OVERFLOW-Befund, statt sie stillschweigend abzuschneiden. */
+  padding: 8px 2px;
   background: none;
   border: none;
   color: var(--c-text-muted);
