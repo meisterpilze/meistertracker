@@ -128,27 +128,52 @@ describe('Der Bestand an Körnerbrut', () => {
       `
       const getStatus = (id) => ({ status: (batches.find((b) => b.batchId === id) || {})._status || 'EMPTY' });
       const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
-      const _hasScanByBatch = new Map(batches.map((b) => [b.batchId, !!b._gescannt]));
+      const ZONE_BY_ID = { CONTAM: { role: 'contaminated' }, SPAWN: { role: 'spawn' } };
+      const toZone = (x) => x;
+      const placementByBag = () => new Map(batches.flatMap((b) => b._platz || []).map((e) => [e.bag.toUpperCase(), e]));
       ${code}
       return getLabStockCounts();
     `
     )(chargen, kulturen);
   }
-  const koerner = (extra) => ({ batchId: 'SH-G1', batchType: 'grain', qty: 20, bagKg: 3, ...extra });
+  // Zwanzig Glaeser zu 3 kg. `verbraucht` gibt so vielen ein REMOVE, wie
+  // nbConsumeSpawnBags() es schreibt.
+  const koerner = ({ verbraucht = 0, ...extra } = {}) => {
+    const bags = Array.from({ length: 20 }, (_, i) => 'SH-G1-' + (i + 1));
+    return {
+      batchId: 'SH-G1',
+      batchType: 'grain',
+      qty: 20,
+      bagKg: 3,
+      bags,
+      bagWeights: Object.fromEntries(bags.map((b) => [b, 3])),
+      _platz: bags.map((b, i) => ({
+        bag: b,
+        action: i < verbraucht ? 'REMOVE' : 'ADD',
+        to: i < verbraucht ? null : 'SPAWN'
+      })),
+      ...extra
+    };
+  };
 
   it('rechnet in Kilogramm, nicht in Gläsern', () => {
     assert.equal(bestand([koerner()]).GS, 60, '20 Gläser zu 3 kg sind 60 kg, nicht 20');
   });
 
   it('zählt frisch angesetzte Brut mit, die noch keinen Scan hat', () => {
-    // createGrainBatch schreibt keine Scan-Einträge, also gibt getStatus() für
-    // heute angesetzte Brut 'EMPTY' zurück. Das als archiviert zu lesen war der
-    // Fehler, den _grainKgOf() zu beheben vorgab.
-    assert.equal(bestand([koerner({ _gescannt: false })]).GS, 60);
+    // createGrainBatch schreibt keine Scan-Einträge. Ein Glas ohne Eintrag ist
+    // heute angesetzt und noch nirgends hingestellt — es steht da.
+    assert.equal(bestand([koerner({ _platz: [] })]).GS, 60);
   });
 
-  it('lässt verbrauchte Brut heraus', () => {
-    assert.equal(bestand([koerner({ _status: 'DONE', _gescannt: true })]).GS, 0);
+  it('lässt verbrauchte Gläser heraus', () => {
+    assert.equal(bestand([koerner({ verbraucht: 20 })]).GS, 0);
+  });
+
+  it('zählt den Rest, wenn erst ein Teil verbraucht ist', () => {
+    // Der Fehler, den das hier festhält: die ganze Charge zählte voll, bis das
+    // letzte Glas ging.
+    assert.equal(bestand([koerner({ verbraucht: 15 })]).GS, 15, 'fünf Gläser zu 3 kg');
   });
 
   it('zählt Kulturen weiterhin in Stück', () => {

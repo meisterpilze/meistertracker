@@ -8854,9 +8854,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
-  // POST /api/rhythm-task — record how many of a planned day actually got made.
-  // Deliberately not admin-only: logging what you just produced is the job.
-  // Editing the rhythm itself still requires an admin.
+  // POST /api/rhythm-task — set what ONE date is asking for.
+  //
+  // Bewusst nicht auf Admins beschränkt: das Wochenziel setzt, wer die Woche
+  // arbeitet. Die Grenze verläuft nicht zwischen Rollen, sondern zwischen einer
+  // Woche und dem Rhythmus:
+  //
+  //   PUT  /api/week-rhythm  — der wiederkehrende Plan, welcher Wochentag was
+  //                            ist. Admin, denn er gilt fortan.
+  //   POST /api/rhythm-start — ab wann überhaupt gezählt wird. Admin, denn er
+  //                            gilt rückwirkend für die ganze Anlage.
+  //   POST /api/rhythm-task  — die Zahl für einen Tag. Jeder Angemeldete.
+  //
+  // Und nur für einen Tag, den der Rhythmus schon zu einem Arbeitstag gemacht
+  // hat: setRhythmTarget() wirft "No rhythm on", wenn für den Wochentag kein
+  // Thema steht. Ein Mitarbeiter kann also eine Vorgabe ändern, aber keinen
+  // Arbeitstag erfinden und keinen Wochentag umwidmen.
+  //
+  // Angemeldet sein muss er: alles außerhalb der öffentlichen Liste läuft oben
+  // durch checkAuth().
+  //
+  // Der Vorgänger dieses Kommentars begründete die Ausnahme mit dem Melden
+  // erledigter Arbeit. Das gibt es nicht mehr — was gemacht wurde, wird
+  // gezählt, nicht gemeldet — also stand hier eine Begründung für einen Zweig,
+  // den es nicht mehr gab.
   if (req.method === 'POST' && req.url === '/api/rhythm-task') {
     jsonBody(req, res, (e, data) => {
       if (e) {
@@ -8879,7 +8900,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         broadcastSSE(res);
         jsonOk(res, out);
       } catch (err) {
-        if (/Not a date|whole number|No planned work|No rhythm on|implausibly large|Target/.test(err.message)) {
+        // 'No planned work' warf nur setRhythmProgress(), und das ist fort.
+        if (/Not a date|whole number|No rhythm on|implausibly large|Target/.test(err.message)) {
           jsonErr(res, 400, err.message);
           return;
         }
