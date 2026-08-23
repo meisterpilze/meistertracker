@@ -250,12 +250,12 @@ window.LANG['pt'] = {
   'harvest.releaseFailed': '{bag}: colheita guardada, liberação não',
   'harvest.releasedTotal': '{bag}: {kg} kg liberados no total',
   // Dashboard
+  'cat.alert': 'Aten\u00e7\u00e3o',
   'cat.create': 'Preparar',
   'cat.move': 'Mover',
   'cat.harvest': 'Colher',
   'cat.overdue': '{n} em atraso',
   'dash.totalHarvested': 'Total colhido',
-  'dash.alerts': 'Alertas',
   'dash.harvestBySpecies': 'Colheita por esp\u00e9cie (kg)',
   'dash.noHarvestData': 'Sem dados de colheita ainda',
   'dash.ov.qualityEff': 'Qualidade & eficiência',
