@@ -4411,6 +4411,59 @@ tr.ms-off .ms-prog {
   margin-top: 3px;
 }
 
+/* Die Menge eines einzelnen Tages: Regel und Ausnahme untereinander.
+   Beschriftung links, Zahl rechts — auf dem Telefon bleibt das nebeneinander,
+   weil die Beschriftung hier die eigentliche Auskunft ist ("gilt für jeden
+   Montag" gegen "nur für den 24.08.") und ein Umbruch sie von ihrem Feld
+   trennen würde. Das Feld ist schmal genug, dass beides passt. */
+.dayqty-sub {
+  color: var(--c-text-muted);
+  margin: -4px 0 14px;
+}
+.dayqty-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.dayqty-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dayqty-hint {
+  color: var(--c-text-muted);
+}
+/* --tap-sm wie bei jedem anderen Bedienelement unbekannter Wichtigkeit. Die
+   allgemeine input-Regel setzt keine Mindesthöhe, und 9px Polsterung ergeben
+   rund 36px — auf dem Telefon, wo diese App meistens läuft, ist das unter der
+   Marke. Auf dem Schreibtisch ist --tap-sm auto, dort ändert sich nichts. */
+.dayqty-in {
+  width: 84px;
+  flex-shrink: 0;
+  min-height: var(--tap-sm);
+  padding: 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-family: inherit;
+  text-align: right;
+}
+/* Ein gesperrtes Feld muss als gesperrt zu erkennen sein, sonst tippt jemand
+   hinein und wundert sich. Der Grund steht in der Beschriftung darunter. */
+.dayqty-in:disabled {
+  background: var(--c-bg);
+  color: var(--c-text-muted);
+  cursor: not-allowed;
+}
+.dayqty-sum {
+  font-weight: 700;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--c-border);
+}
+
 /* ═══ SUCHE ════════════════════════════════════════════════════════════════
    The palette. It is a .modal-bg, so it inherits the backdrop, the blur and
    the z-index; what it overrides is the placement. A centred dialog that grows

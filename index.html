@@ -473,6 +473,39 @@
         </div>
       </div>
     </div>
+    <!-- Was ein einzelner Tag verlangt — beide Zahlen an einer Stelle.
+         Vorher war die wiederkehrende Zahl im Wochenrhythmus und die einmalige
+         in einer nackten Abfrage im Kalender, jede ohne Erwähnung der anderen.
+         Wer die 72 im Kalender sah, konnte nicht wissen, ob sie die Regel oder
+         die Ausnahme war — und dass er eben die Ausnahme setzte, stand nirgends.
+         Hier stehen beide untereinander, beschriftet, mit ihrer Summe. -->
+    <div class="modal-bg" id="m-dayqty" role="dialog" aria-modal="true" aria-labelledby="dayqty-title" hidden>
+      <div class="modal">
+        <h3 id="dayqty-title"></h3>
+        <p class="fs-meta dayqty-sub" id="dayqty-sub"></p>
+        <label class="dayqty-row" for="dayqty-plan">
+          <span class="dayqty-lbl">
+            <span data-i18n="dayqty.plan">Wochenplan</span>
+            <span class="fs-xs dayqty-hint" id="dayqty-plan-hint"></span>
+          </span>
+          <input type="number" min="0" step="1" id="dayqty-plan" class="dayqty-in" />
+        </label>
+        <label class="dayqty-row" for="dayqty-extra">
+          <span class="dayqty-lbl">
+            <span data-i18n="dayqty.extra">Extra nur diese Woche</span>
+            <span class="fs-xs dayqty-hint" id="dayqty-extra-hint"></span>
+          </span>
+          <input type="number" step="1" id="dayqty-extra" class="dayqty-in" />
+        </label>
+        <!-- Die Summe ist die Zahl, die am Ende zählt. Ohne sie muss der Leser
+             die beiden Felder im Kopf addieren, und genau das war die Klage. -->
+        <div class="fs-sm dayqty-sum" id="dayqty-sum" aria-live="polite"></div>
+        <div class="modal-btns">
+          <button id="dayqty-cancel" class="btn" data-i18n="common.cancel">Cancel</button
+          ><button id="dayqty-save" class="btn btn-p" data-i18n="common.save">Save</button>
+        </div>
+      </div>
+    </div>
     <!-- Calendar event modal (create/edit/move) -->
     <div class="modal-bg" id="m-cal-entry" role="dialog" aria-modal="true" aria-labelledby="cal-entry-title" hidden>
       <div class="modal">
