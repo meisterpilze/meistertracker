@@ -17579,7 +17579,15 @@ function updateCamHud() {
   // MOVE_BATCH needs a destination too, so show the chip for it as well —
   // otherwise the HUD hides the one field the worker still has to fill (and
   // with it the tap target that opens the destination picker).
-  const wantsTo = scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
+  //
+  // Und "noch gar kein Vorgang" gehört dazu, denn das ist der Zustand, in dem
+  // der Scanner aufmacht. scanPickDestination() setzt selbst MOVE, wenn keiner
+  // gesetzt ist — dieses Feld anzutippen IST also der Einstieg ins Umziehen.
+  // Ausgeblendet, solange kein Vorgang steht, lag der Einstieg hinter dem
+  // Zustand, den er herstellt: am Telefon blieb nur, einen gedruckten
+  // MOVE-Barcode zu scannen, und den hat in der Kammer niemand dabei.
+  const wantsTo =
+    !scan.action || scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
   toChip.className = 'cam-chip' + (wantsTo && scan.to ? ' ch-set' : '');
   toChip.style.display = wantsTo ? '' : 'none';
   const toPulse = wantsTo && !scan.to;

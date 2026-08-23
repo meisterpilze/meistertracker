@@ -1137,7 +1137,7 @@ window.LANG['pt'] = {
   'scan.contamAria': 'Ligar/desligar modo de contamina\u00e7\u00e3o',
   'scanFb.location': 'Local: {loc} \u2192 agora escaneie sacos',
   'scanFb.to': 'Para: {loc} \u2192 agora escaneie sacos',
-  'scanFb.setAction': 'Defina uma a\u00e7\u00e3o primeiro \u2014 escaneie ADD, MOVE, REMOVE ou HARVEST.',
+  'scanFb.setAction': 'Toque em Para para mover sacos \u2014 ou leia ADD, MOVE, REMOVE ou HARVEST.',
   'scanFb.scanLocFirst': 'Escaneie um local ou estante primeiro.',
   'scanFb.scanToFirst': 'Escaneie o local de destino primeiro.',
   'scanFb.logged': 'Registrado: {action} {val}{to} [{n} nesta sess\u00e3o]',
