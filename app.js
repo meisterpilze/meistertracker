@@ -6522,71 +6522,160 @@ function _rhythmTaskRowHtml(task, outstanding) {
     '</div>'
   );
 }
-// Change what this one date is asking for. The recurring rhythm is the usual
-// amount; this is the week that differs. Says so explicitly, because "45" being
-// editable in two places is exactly the kind of thing that gets misread.
+// Was ein Tag verlangt: die Regel und die Ausnahme, an einer Stelle.
+//
+// Hier stand eine nackte Abfrage — "Wie viele am 24.08.?" — und ein Feld. Wer
+// 72 eintippte, bekam nirgends gesagt, dass er damit eine Ausnahme von den 36
+// des Wochenrhythmus setzte; im Kalender standen danach zwei Zahlen, und keine
+// sagte, welche die Regel war. Zwei Zahlen ohne Beschriftung sind keine zwei
+// Ebenen, sondern ein Widerspruch.
+//
+// Also beide untereinander, jede benannt, und ihre Summe darunter:
+//
+//   Wochenplan             36   gilt für jeden Montag
+//   Extra nur diese Woche  36   Ausnahme nur für den 24.08.
+//   ────────────────────────────────────────────────────
+//   Macht 72 am 24.08.
+//
+// Gespeichert wird weiterhin eine Zahl je Datum, nämlich die Summe. Das Extra
+// ist eine Art, sie einzugeben, kein zweiter Wert, der irgendwo mitgeführt und
+// irgendwann von der ersten abweichen könnte.
+let _dayQty = null;
 function editRhythmTarget(date, target) {
   if (!date) return;
-  // Der Rhythmus wird mitgesagt, statt dass man ihn sich merken muss.
-  //
-  // Ohne ihn waren es zwei Zahlen an zwei Stellen ohne sichtbaren Bezug: hier
-  // eine 72, im Rhythmus-Fenster eine 36, und nichts sagte, dass die eine die
-  // Ausnahme von der anderen ist. Wer die Vorlage danach änderte, sah an diesem
-  // Tag nichts passieren und hielt die beiden für getrennte Systeme.
-  const tplTag = rhythmOf(new Date(date + 'T00:00:00').getDay()) || {};
-  const frage =
-    tplTag.targetQty && tplTag.theme && tplTag.theme !== 'free'
-      ? t('rhythm.targetPromptTpl', {
-          date: fmtDt(date),
-          n: tplTag.targetQty,
-          theme: weekThemeLabel(tplTag.theme)
-        })
-      : t('rhythm.targetPrompt', { date: fmtDt(date) });
-  prompt2(frage, String(target || ''), function (raw) {
-    if (raw === null || raw === undefined) return;
-    const s = String(raw).trim();
-    if (s === '') return;
+  const m = document.getElementById('m-dayqty');
+  if (!m) return;
+  const wd = new Date(date + 'T00:00:00').getDay();
+  const tpl = rhythmOf(wd) || {};
+  const themed = !!(tpl.theme && tpl.theme !== 'free');
+  const plan = tpl.targetQty || 0;
+  const ist = Number.isFinite(target) ? target : plan;
+  // Den Wochenplan ändert nur ein Admin — er gilt fortan für jeden dieser
+  // Wochentage. Die Ausnahme für eine Woche setzt, wer die Woche arbeitet.
+  // Dieselbe Grenze zieht der Server zwischen /api/week-rhythm und
+  // /api/rhythm-task; sie hier nicht zu ziehen hiesse, ein Feld anzubieten,
+  // dessen Speichern dann mit 403 fehlschlägt.
+  const darfPlan = themed && !!(currentUser && currentUser.role === 'admin');
+  _dayQty = { date, weekday: wd, plan, theme: tpl.theme || '', darfPlan };
+
+  const tag = t('rhythm.day.' + wd);
+  document.getElementById('dayqty-title').textContent = fmtDt(date);
+  const sub = document.getElementById('dayqty-sub');
+  sub.textContent = themed ? weekThemeLabel(tpl.theme) : '';
+  sub.hidden = !sub.textContent;
+
+  const fPlan = document.getElementById('dayqty-plan');
+  fPlan.value = plan ? String(plan) : '';
+  fPlan.disabled = !darfPlan;
+  document.getElementById('dayqty-plan-hint').textContent = darfPlan
+    ? t('dayqty.planHint', { day: tag })
+    : t('dayqty.planLocked', { day: tag });
+
+  // Die Differenz, nicht die gespeicherte Zahl: 0 heisst "wie immer", und
+  // genau das soll dastehen, solange niemand eine Ausnahme gemacht hat.
+  const fExtra = document.getElementById('dayqty-extra');
+  fExtra.value = ist - plan === 0 ? '' : String(ist - plan);
+  document.getElementById('dayqty-extra-hint').textContent = t('dayqty.extraHint', { date: fmtDt(date) });
+
+  _renderDayQtySum();
+  m.classList.add('open');
+  setTimeout(() => fExtra.focus(), 80);
+}
+function _dayQtyValues() {
+  const zahl = (id) => {
+    const el = document.getElementById(id);
+    const s = el ? String(el.value).trim() : '';
+    if (s === '') return 0;
     const n = Number(s);
-    if (!Number.isInteger(n) || n < 0) {
-      setFb('err', t('rhythm.targetBad'));
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  };
+  // Ist das Feld gesperrt, gilt der gespeicherte Plan — nicht der Feldwert, den
+  // ein deaktiviertes Feld zwar zeigt, aber niemand ändern durfte.
+  const plan = Math.max(0, _dayQty && !_dayQty.darfPlan ? _dayQty.plan : zahl('dayqty-plan'));
+  const extra = zahl('dayqty-extra');
+  return { plan, extra, gesamt: Math.max(0, plan + extra) };
+}
+function _renderDayQtySum() {
+  const el = document.getElementById('dayqty-sum');
+  if (!el || !_dayQty) return;
+  el.textContent = t('dayqty.sum', { n: _dayQtyValues().gesamt, date: fmtDt(_dayQty.date) });
+}
+function closeDayQty() {
+  const m = document.getElementById('m-dayqty');
+  if (m) m.classList.remove('open');
+  _dayQty = null;
+}
+// Den ganzen Wochenrhythmus zurückschreiben, mit einer geänderten Menge. Die
+// Route nimmt die Woche als Ganzes; aus den sechs unveränderten Tagen wird
+// dabei genau das, was sie vorher waren.
+function _saveWeekdayPlan(weekday, qty) {
+  const map = {};
+  for (const d of WEEK_DAYS) {
+    const e = rhythmOf(d) || {};
+    map[d] =
+      !e.theme || e.theme === 'free'
+        ? { theme: 'free' }
+        : {
+            theme: e.theme,
+            targetQty: d === weekday ? qty || null : e.targetQty,
+            strainId: e.strainId,
+            note: e.note
+          };
+  }
+  return apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
+    if (res && !res.error) weekRhythm = map;
+    return res;
+  });
+}
+function saveDayQty() {
+  if (!_dayQty) return;
+  const { plan, gesamt } = _dayQtyValues();
+  const date = _dayQty.date;
+  const weekday = _dayQty.weekday;
+  const planGeaendert = _dayQty.darfPlan && plan !== _dayQty.plan;
+  // Erst die Regel, dann die Ausnahme. Der Server prüft die Ausnahme gegen die
+  // Vorlage, und das muss die neue sein — sonst bliebe ein Tag als Ausnahme
+  // stehen, der der eben gesetzten Regel exakt entspricht.
+  (planGeaendert ? _saveWeekdayPlan(weekday, plan) : Promise.resolve(null)).then((res) => {
+    if (res && res.error) {
+      toast(res.error, 'err');
       return;
     }
-    apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
-      if (res && res.error) {
-        toast(res.error, 'err');
+    apiPost('/api/rhythm-task', { date, targetQty: gesamt }).then((r) => {
+      if (r && r.error) {
+        toast(r.error, 'err');
         return;
       }
       // Der Tag folgt wieder der Vorlage: der Server hat die eigene Zeile
       // gelöscht, also muss sie auch hier weg, sonst verdeckt eine Zeile, die
       // es nicht mehr gibt, weiterhin den Rhythmus.
-      if (res && res.followsRhythm) {
+      if (r && r.followsRhythm) {
         const i = rhythmTasks.findIndex((x) => x.date === date);
         if (i >= 0) rhythmTasks.splice(i, 1);
-        setFb('ok', t('rhythm.targetFollows'));
-        renderDashBatchTasks();
-        return;
+      } else {
+        const row = rhythmTasks.find((x) => x.date === date);
+        if (row) row.targetQty = gesamt || null;
+        // A future date had no row until now; the server just made one, and the
+        // next load will bring it. Re-render from what we know meanwhile.
+        else {
+          // Mit dem Thema des Wochentags, nicht mit ''. rhythmTaskOn() zieht eine
+          // gespeicherte Zeile der Vorlage vor, also verdeckte der leere Platzhalter
+          // das echte Thema: rhythmMadeOn(date, '') trifft keinen Zweig und gibt 0
+          // zurück, und der Tag las "0 / 45" über 45 gemachten Blöcken. Der Server
+          // setzt es beim Anlegen genauso aus week_rhythm.
+          const tpl = rhythmOf(weekday) || {};
+          rhythmTasks.push({
+            date,
+            weekday,
+            theme: tpl.theme || '',
+            strainId: tpl.strainId || null,
+            targetQty: gesamt || null,
+            doneQty: 0
+          });
+        }
       }
-      const row = rhythmTasks.find((x) => x.date === date);
-      if (row) row.targetQty = n;
-      // A future date had no row until now; the server just made one, and the
-      // next load will bring it. Re-render from what we know meanwhile.
-      else {
-        // Mit dem Thema des Wochentags, nicht mit ''. rhythmTaskOn() zieht eine
-        // gespeicherte Zeile der Vorlage vor, also verdeckte der leere Platzhalter
-        // das echte Thema: rhythmMadeOn(date, '') trifft keinen Zweig und gibt 0
-        // zurück, und der Tag las "0 / 45" über 45 gemachten Blöcken. Der Server
-        // setzt es beim Anlegen genauso aus week_rhythm.
-        const tpl = rhythmOf(new Date(date + 'T00:00:00').getDay()) || {};
-        rhythmTasks.push({
-          date,
-          weekday: new Date(date + 'T00:00:00').getDay(),
-          theme: tpl.theme || '',
-          strainId: tpl.strainId || null,
-          targetQty: n,
-          doneQty: 0
-        });
-      }
-      setFb('ok', t('rhythm.targetSaved'));
+      closeDayQty();
+      setFb('ok', t(r && r.followsRhythm ? 'rhythm.targetFollows' : 'rhythm.targetSaved'));
       renderDashBatchTasks();
     });
   });
@@ -22952,6 +23041,12 @@ function initEventListeners() {
   $('btn-add-zone').addEventListener('click', addZone);
   $('rhythm-cancel').addEventListener('click', closeRhythmEditor);
   $('rhythm-save').addEventListener('click', saveRhythmEditor);
+  $('dayqty-cancel').addEventListener('click', closeDayQty);
+  $('dayqty-save').addEventListener('click', saveDayQty);
+  // Die Summe rechnet mit, während getippt wird. Sie ist die Zahl, die am Ende
+  // zählt, und zwei Felder ohne sie hiessen wieder Kopfrechnen.
+  $('dayqty-plan').addEventListener('input', _renderDayQtySum);
+  $('dayqty-extra').addEventListener('input', _renderDayQtySum);
   $('m-rhythm').addEventListener('click', (e) => {
     if (e.target.closest('[data-action="rhythm-start"]')) setRhythmStart();
   });

@@ -105,11 +105,13 @@ describe('Was die Woche verlangt', () => {
 describe('Kalender und Rhythmus wissen voneinander', () => {
   const DB = quelle('db.js');
 
-  it('nennt beim Ändern eines Tages, was der Rhythmus sagt', () => {
+  it('zeigt beim Ändern eines Tages beide Zahlen, benannt', () => {
     // Sonst sind es zwei Zahlen an zwei Stellen ohne sichtbaren Bezug.
     const fn = hebeFunktion('editRhythmTarget', SRC);
-    assert.match(fn, /rhythm\.targetPromptTpl/, 'die Vorlage wird beim Ändern nicht mitgesagt');
     assert.match(fn, /rhythmOf\(/, 'die Vorlage wird gar nicht erst nachgeschlagen');
+    assert.match(fn, /dayqty\.planHint/, 'das Plan-Feld sagt nicht, wofür es gilt');
+    assert.match(fn, /dayqty\.extraHint/, 'das Extra-Feld sagt nicht, dass es eine Ausnahme ist');
+    assert.doesNotMatch(fn, /prompt2\(/, 'die nackte Abfrage ohne Zusammenhang ist zurück');
   });
 
   it('löscht die Ausnahme, wenn sie der Vorlage gleicht — aber nur in der Zukunft', () => {
@@ -122,7 +124,7 @@ describe('Kalender und Rhythmus wissen voneinander', () => {
   it('räumt die Zeile auch im Browser weg, wenn der Server sie gelöscht hat', () => {
     // Sonst verdeckt eine Zeile, die es serverseitig nicht mehr gibt, bis zum
     // nächsten Laden weiter den Rhythmus.
-    const fn = hebeFunktion('editRhythmTarget', SRC);
+    const fn = hebeFunktion('saveDayQty', SRC);
     const zweig = fn.slice(fn.indexOf('followsRhythm'));
     assert.match(zweig, /rhythmTasks\.splice/, 'die abgelegte Ausnahme bleibt im Speicher stehen');
   });
@@ -131,6 +133,109 @@ describe('Kalender und Rhythmus wissen voneinander', () => {
     const fn = hebeFunktion('setRhythmTarget', DB);
     assert.match(fn, /return \{ targetQty: qty, followsRhythm: (?:true|false) \}/);
     assert.match(quelle('server.js'), /out\.followsRhythm = gesetzt\.followsRhythm/);
+  });
+});
+
+// ── Regel und Ausnahme in einem Fenster ─────────────────────────────────────
+// Zwei Zahlen ohne Beschriftung sind keine zwei Ebenen, sondern ein
+// Widerspruch: wer im Kalender eine 72 sah, konnte nicht wissen, ob sie die
+// Regel oder die Ausnahme war, und dass er gerade die Ausnahme setzte, stand
+// nirgends. Also beide Felder untereinander, benannt, mit ihrer Summe.
+describe('Die Menge eines Tages', () => {
+  // _dayQtyValues() liest zwei Felder und den Zustand. Beides lässt sich
+  // stellen, ohne ein DOM zu bauen.
+  function werte(planFeld, extraFeld, zustand) {
+    const felder = { 'dayqty-plan': { value: planFeld }, 'dayqty-extra': { value: extraFeld } };
+    const code = hebeFunktion('_dayQtyValues', SRC) + '\nreturn _dayQtyValues();';
+    return new Function('document', '_dayQty', code)({ getElementById: (id) => felder[id] || null }, zustand);
+  }
+  const admin = { plan: 36, darfPlan: true };
+
+  it('addiert Plan und Extra zu dem, was der Tag verlangt', () => {
+    assert.equal(werte('36', '36', admin).gesamt, 72);
+  });
+
+  it('nimmt ein leeres Extra als "wie immer"', () => {
+    const v = werte('36', '', admin);
+    assert.equal(v.extra, 0);
+    assert.equal(v.gesamt, 36, 'ohne Ausnahme muss der Plan übrig bleiben');
+  });
+
+  it('lässt ein Minus zu, für die Woche, in der weniger gebraucht wird', () => {
+    assert.equal(werte('36', '-10', admin).gesamt, 26);
+  });
+
+  it('fällt nicht unter null', () => {
+    // Ein Tag, der -64 verlangt, ist keine Aussage über Arbeit.
+    assert.equal(werte('36', '-100', admin).gesamt, 0);
+  });
+
+  it('nimmt bei gesperrtem Plan-Feld den gespeicherten Plan, nicht das Feld', () => {
+    // Ein deaktiviertes Feld zeigt zwar einen Wert, aber niemand durfte ihn
+    // ändern — ihn zu lesen hiesse, eine Änderung anzunehmen, die es nicht gab.
+    const v = werte('999', '4', { plan: 36, darfPlan: false });
+    assert.equal(v.plan, 36);
+    assert.equal(v.gesamt, 40);
+  });
+
+  it('macht aus einer angetippten Kommazahl eine ganze', () => {
+    assert.equal(werte('36', '2.7', admin).gesamt, 38);
+  });
+
+  it('führt das Extra als Differenz, nicht als zweiten gespeicherten Wert', () => {
+    // Gespeichert wird eine Zahl je Datum: die Summe. Ein zweiter Wert könnte
+    // irgendwann von der ersten abweichen, und dann gäbe es wieder zwei
+    // Buchhaltungen über dieselbe Sache.
+    assert.match(hebeFunktion('editRhythmTarget', SRC), /ist - plan === 0 \? '' : String\(ist - plan\)/);
+    assert.match(hebeFunktion('saveDayQty', SRC), /targetQty: gesamt/);
+  });
+
+  it('schreibt erst die Regel, dann die Ausnahme', () => {
+    // Der Server prüft die Ausnahme gegen die Vorlage. Ist die Vorlage noch die
+    // alte, bliebe ein Tag als Ausnahme stehen, der der neuen Regel entspricht.
+    const fn = hebeFunktion('saveDayQty', SRC);
+    const plan = fn.indexOf('_saveWeekdayPlan');
+    const tag = fn.indexOf("apiPost('/api/rhythm-task'");
+    assert.ok(plan > 0 && tag > 0, 'eine der beiden Schreibungen fehlt');
+    assert.ok(plan < tag, 'die Ausnahme wird gegen die alte Vorlage geprueft');
+  });
+
+  it('bietet niemandem ein Feld an, dessen Speichern der Server ablehnt', () => {
+    // /api/week-rhythm ist Admin-Sache, /api/rhythm-task nicht. Dieselbe Grenze
+    // muss im Fenster stehen, sonst tippt ein Mitarbeiter eine Zahl ein und
+    // bekommt beim Speichern ein 403.
+    const auf = hebeFunktion('editRhythmTarget', SRC);
+    assert.match(auf, /currentUser && currentUser\.role === 'admin'/);
+    assert.match(auf, /fPlan\.disabled = !darfPlan/);
+    assert.match(auf, /dayqty\.planLocked/, 'das gesperrte Feld sagt nicht, warum');
+    assert.match(hebeFunktion('saveDayQty', SRC), /_dayQty\.darfPlan && plan !== _dayQty\.plan/);
+  });
+
+  it('lässt die sechs anderen Wochentage in Ruhe', () => {
+    // Die Route nimmt die Woche als Ganzes; nur der bearbeitete Tag darf sich
+    // ändern, sonst löscht ein Griff in einen Montag die Mengen der übrigen.
+    const fn = hebeFunktion('_saveWeekdayPlan', SRC);
+    assert.match(fn, /d === weekday \? qty \|\| null : e\.targetQty/);
+    assert.match(fn, /theme: e\.theme/, 'die Themen der anderen Tage gehen verloren');
+  });
+
+  it('hat beide Felder samt Beschriftung und Summe im Fenster', () => {
+    assert.match(HTML, /id="m-dayqty"/);
+    assert.match(HTML, /id="dayqty-plan"[\s\S]{0,40}class="dayqty-in"/);
+    assert.match(HTML, /id="dayqty-extra"[\s\S]{0,40}class="dayqty-in"/);
+    assert.match(HTML, /data-i18n="dayqty\.plan"/, 'das Plan-Feld ist unbeschriftet');
+    assert.match(HTML, /data-i18n="dayqty\.extra"/, 'das Extra-Feld ist unbeschriftet');
+    assert.match(HTML, /id="dayqty-sum"/, 'die Summe fehlt, also muss wieder im Kopf addiert werden');
+  });
+
+  it('zeigt ein gesperrtes Feld auch als gesperrt', () => {
+    assert.match(CSS, /\.dayqty-in:disabled \{[^}]*cursor: not-allowed;/);
+  });
+
+  it('gibt den Feldern eine Tippfläche, die auf dem Telefon zu treffen ist', () => {
+    // Die allgemeine input-Regel setzt keine Mindesthöhe; 9px Polsterung
+    // ergeben rund 36px, und getippt wird hier meistens mit dem Daumen.
+    assert.match(CSS, /\.dayqty-in \{[^}]*min-height: var\(--tap-sm\);/);
   });
 });
 
