@@ -61,7 +61,7 @@ window.LANG['en'] = {
   'pickupLoc.name': 'Name',
   'pickupLoc.namePh': 'e.g. Erlangen market stall',
   'pickupLoc.address': 'Address (optional)',
-  'pickupLoc.addressPh': 'e.g. Marktplatz 1, 91054 Erlangen',
+  'pickupLoc.addressPh': 'e.g. Musterweg 1, 00000 Musterstadt',
   'pickupLoc.order': 'Sort order',
   'pickupLoc.nameHint':
     "Ends up next to a time on a customer's screen: the harvest feed sends it along with every pickup window. A different name here means something different is read outside.",

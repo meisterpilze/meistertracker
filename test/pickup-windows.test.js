@@ -237,7 +237,7 @@ describe('pickup windows – what goes out on the harvest feed', () => {
 
   before(() => {
     ({ db: d, path: p } = tmpDb());
-    locId = db.upsertPickupLocation(d, { name: 'Marktstand Erlangen', address: 'Marktplatz 1, 91054 Erlangen' });
+    locId = db.upsertPickupLocation(d, { name: 'Marktstand Erlangen', address: 'Musterweg 1, 00000 Musterstadt' });
   });
   after(() => {
     d.close();

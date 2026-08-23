@@ -5,6 +5,14 @@
 // and a stand that measures those screens reports that the layout holds. It
 // held because there was nothing in it.
 //
+// 3. **Every name and address is invented.** This repository is public, and a
+//    real name beside a real street says where a particular person stands on a
+//    particular weekday — that is not a measurement, it is a fact about
+//    somebody. The stand needs values that are LONG, not values that are true.
+//    A fixture carrying both went in and every rule in leak-scan passed it: an
+//    address is not a host, not an IP and not a token, so nothing looked. There
+//    is a rule for it now.
+//
 // Two rules shape the fixture, and both are about width:
 //
 // 1. **The values are long on purpose.** A column is not too narrow for
@@ -139,7 +147,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
         done: false,
         priority: 'high',
         created: iso(base, -2),
-        assignee: 'Julian Zienert',
+        assignee: 'A. Beispiel',
         dueDate: iso(base, 1).slice(0, 10)
       },
       {
@@ -150,7 +158,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
         dueDate: iso(base, 3).slice(0, 10)
       },
       {
-        text: 'Marktstand Erlangen Neustädter Kirchenplatz vorbereiten',
+        text: 'Marktstand Musterstadt Grüner Markt vorbereiten',
         done: true,
         priority: 'low',
         created: iso(base, -4),
@@ -158,7 +166,7 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
       }
     ],
     teamMembers: [
-      { name: 'Julian Zienert', role: 'admin', added: iso(base, -90) },
+      { name: 'A. Beispiel', role: 'admin', added: iso(base, -90) },
       { name: 'Jonas', role: 'user', added: iso(base, -60) }
     ]
   };
@@ -168,13 +176,13 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
   // Pickup locations and suppliers have their own upserts rather than a section
   // in writeAll, so they are written the same way the app writes them.
   db.upsertPickupLocation(database, {
-    name: 'Marktstand Erlangen Neustädter Kirchenplatz',
-    address: 'Neustädter Kirchenplatz 1, 91054 Erlangen',
+    name: 'Marktstand Musterstadt Grüner Markt',
+    address: 'Musterweg 1, 00000 Musterstadt',
     active: 1
   });
   db.upsertPickupLocation(database, {
-    name: 'Marktschwärmer Abholung Erlangen Süd',
-    address: 'Äußere Brucker Straße 49, 91052 Erlangen',
+    name: 'Abholstelle Musterstadt Süd',
+    address: 'Beispielstraße 49, 00000 Musterstadt',
     active: 1
   });
   db.upsertSupplier(database, {

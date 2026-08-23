@@ -101,6 +101,24 @@ const IPV4_RE = /(^|[^0-9A-Za-z.:-])((?:\d{1,3}\.){3}\d{1,3})(?![0-9A-Za-z.-])/g
 
 // Credential shapes. The value has to be a long literal, so `token: cfg.token`
 // and `password: form.value` stay quiet.
+// A street address: a street word, a house number, then a five-digit postcode
+// and a town.
+//
+// This exists for the same reason as everything above it, one category over. A
+// fixture went in carrying an operator's name beside two real market-stall
+// addresses, and every rule here passed it: an address is not a host, not an IP
+// and not a token, so nothing looked. It identifies an installation at least as
+// precisely as a hostname — more so, because it says where a named person
+// stands on a given weekday.
+//
+// A pattern, not a list. Writing the real streets into this file would publish
+// them, which is exactly why there is no denylist of real hostnames either.
+//
+// 00000 is let through on purpose: it is not a real postcode, so it is the one
+// an invented address can safely use.
+const POSTAL_RE =
+  /\b[A-Z\u00c4\u00d6\u00dc][\w\u00e4\u00f6\u00fc\u00df.-]*\s?(?:stra\u00dfe|strasse|str\.|platz|weg|gasse|allee|ring|damm)\s+\d{1,4}[a-z]?\s*,\s*(\d{5})\s+[A-Z\u00c4\u00d6\u00dc]/giu;
+
 const CREDENTIAL_RE =
   /\b[A-Za-z0-9_]*(?:token|secret|passwd|password|api[_-]?key|apikey|authorization|bearer)\b\s*[=:]\s*(?:bearer\s+|basic\s+|token\s+)?['"`]?([A-Za-z0-9_\-+/]{16,})/gi;
 
@@ -173,7 +191,8 @@ const RULES = {
   'dynamic-host': 'a concrete host under a dynamic-DNS or tunnel domain',
   'public-ip': 'a routable IPv4 address',
   'private-ip': 'an internal LAN address',
-  credential: 'something shaped like a token, key or password'
+  credential: 'something shaped like a token, key or password',
+  'postal-address': 'a street and postcode, which says where somebody actually is'
 };
 
 /**
@@ -225,6 +244,11 @@ function scan(text, opts) {
     CREDENTIAL_RE.lastIndex = 0;
     while ((m = CREDENTIAL_RE.exec(line)) !== null) {
       if (looksLikeSecret(m[1], line[m.index + m[0].length] || '')) at(m.index, 'credential');
+    }
+
+    POSTAL_RE.lastIndex = 0;
+    while ((m = POSTAL_RE.exec(line)) !== null) {
+      if (m[1] !== '00000') at(m.index, 'postal-address');
     }
   });
 
