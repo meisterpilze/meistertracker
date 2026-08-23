@@ -61,7 +61,7 @@ window.LANG['de'] = {
   'pickupLoc.name': 'Name',
   'pickupLoc.namePh': 'z.B. Marktstand Erlangen',
   'pickupLoc.address': 'Adresse (optional)',
-  'pickupLoc.addressPh': 'z.B. Marktplatz 1, 91054 Erlangen',
+  'pickupLoc.addressPh': 'z.B. Musterweg 1, 00000 Musterstadt',
   'pickupLoc.order': 'Reihenfolge',
   'pickupLoc.nameHint':
     'Steht später neben einer Uhrzeit auf dem Bildschirm eines Kunden: Der Ernte-Feed schickt ihn zu jedem Abholfenster mit. Ein anderer Name hier heißt, draußen steht etwas anderes.',

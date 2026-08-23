@@ -61,7 +61,7 @@ window.LANG['pt'] = {
   'pickupLoc.name': 'Nome',
   'pickupLoc.namePh': 'ex. Banca de Erlangen',
   'pickupLoc.address': 'Morada (opcional)',
-  'pickupLoc.addressPh': 'ex. Marktplatz 1, 91054 Erlangen',
+  'pickupLoc.addressPh': 'ex. Musterweg 1, 00000 Musterstadt',
   'pickupLoc.order': 'Ordem',
   'pickupLoc.nameHint':
     'Aparece ao lado de uma hora no ecrã de um cliente: o feed de colheita envia-o com cada janela de levantamento. Outro nome aqui significa que lá fora se lê outra coisa.',

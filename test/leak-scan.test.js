@@ -85,9 +85,31 @@ describe('leak-scan: the shapes that leaked', () => {
     assert.deepEqual(rules(prose('DUCKDNS_TOKEN=a7b3c9d1e4f24e2fb8c1d0e9f7a6b5c4')), ['credential']);
     assert.deepEqual(rules(prose('Authorization: Bearer 9f8e7d6c5b4a39281706fedcba098765')), ['credential']);
   });
+
+  it('catches a street and postcode, which say where somebody actually is', () => {
+    // Der Anlass: eine Messvorrichtung ging mit dem Namen eines Betreibers und
+    // zwei echten Marktstand-Anschriften hinein, und jede Regel davor ließ sie
+    // durch — eine Anschrift ist kein Host, keine IP und kein Token, also sah
+    // niemand hin. Sie benennt eine Anlage so genau wie ein Hostname, und dazu,
+    // an welchem Wochentag jemand dort steht.
+    //
+    // Die Werte hier sind erfunden, wie überall in dieser Datei: eine echte
+    // Straße in den Test zu schreiben wäre dieselbe Veröffentlichung noch
+    // einmal.
+    assert.deepEqual(rules(scan("address: 'Ahornweg 12, 12345 Beispielheim'")), ['postal-address']);
+    assert.deepEqual(rules(scan('Lieferung an Lindenstraße 3a, 54321 Musterhausen')), ['postal-address']);
+    assert.deepEqual(rules(scan('Treffpunkt: Alter Markt 7, 99999 Irgendwo')), []);
+  });
 });
 
 describe('leak-scan: the legitimate uses in this repository', () => {
+  it('leaves an invented address alone, so a fixture has something to use', () => {
+    // 00000 ist keine echte Postleitzahl. Deshalb ist sie die, mit der eine
+    // erfundene Anschrift arbeiten darf — sonst hätte eine Vorrichtung, die
+    // lange Werte braucht, keine erlaubte Wahl.
+    assert.deepEqual(rules(scan("address: 'Musterweg 1, 00000 Musterstadt'")), []);
+    assert.deepEqual(rules(scan("address: 'Beispielstraße 49, 00000 Musterstadt'")), []);
+  });
   it('leaves the DuckDNS API host alone', () => {
     // server.js posts to this, the settings tab links to it, three language
     // files mention it. Flagging it would make the guard useless.
