@@ -686,7 +686,7 @@ window.LANG['pt'] = {
   'print.selectBatchAbove': 'Selecione um lote acima.',
   'print.tickCulturesPreview': 'Marque as culturas na lista para pré-visualizar etiquetas.',
   // To-do
-  'todo.batchTasks': 'Tarefas dos lotes',
+  'todo.batchTasks': 'O que est\u00e1 pendente',
   'todo.dueAgo': 'Vencido h\u00e1 {n} dia(s)',
   'todo.dueIn': 'Vence em {n} dia(s)',
   'todo.dueToday': 'Vence hoje',
