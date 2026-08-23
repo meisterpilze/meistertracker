@@ -2191,21 +2191,12 @@
              they happen. Every tile opens a flow that works by clicking — the
              scanner stays the fast path on the tablet, but nothing here needs it. -->
         <div class="page active" id="p-work">
-          <div class="wk-head">
-            <div>
-              <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
-              <div class="wk-sub" data-i18n="work.sub">
-                Wähle den Arbeitsgang — die App fragt den Rest ab.
-              </div>
-            </div>
-          </div>
           <!-- What is due, above the seven jobs that do it. This lived on the
                Dashboard, and the two screens pointed at each other: a strip here read
                "Weißt du nicht, was ansteht?" and sent you there, and the first thing
                there was two buttons that came straight back — the same redundancy the
                speed-dial FAB was deleted for. One screen answers both halves now, and
                the Dashboard keeps what only it has. -->
-          <!-- Batch tasks + Alerts side by side -->
           <div class="dash-top-row">
             <!-- Batch tasks (worker-first — top of page) -->
             <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
@@ -2221,6 +2212,20 @@
                  to be its own card here. It is now the LIEGENGEBLIEBEN section of
                  the Batch tasks card: same data (getSplitBatches), but read as an
                  instruction alongside the dated work instead of a separate table. -->
+          </div>
+          <!-- Diese Überschrift stand ganz oben, über der Liste. Sie beschreibt
+               aber die Kacheln: "Wähle den Arbeitsgang" ist keine Antwort auf
+               "was steht an", sondern auf "ich habe gerade etwas getan". Die
+               Seite beantwortet zwei Fragen, und eine Überschrift, die nur für
+               die untere gilt, stand über der oberen. Jetzt steht sie da, wo
+               sie hingehört, und die Liste trägt ihre eigene. -->
+          <div class="wk-head">
+            <div>
+              <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
+              <div class="wk-sub" data-i18n="work.sub">
+                Wähle den Arbeitsgang — die App fragt den Rest ab.
+              </div>
+            </div>
           </div>
           <div class="wk-tiles">
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">

@@ -852,7 +852,7 @@ window.LANG['en'] = {
   'print.selectBatchAbove': 'Select a batch above.',
   'print.tickCulturesPreview': 'Tick cultures in the list to preview labels.',
   // To-do
-  'todo.batchTasks': 'Batch tasks',
+  'todo.batchTasks': "What's due",
   'todo.dueAgo': 'Due {n} day(s) ago',
   'todo.dueIn': 'Due in {n} day(s)',
   'todo.dueToday': 'Due today',
