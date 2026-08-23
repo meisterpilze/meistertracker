@@ -238,7 +238,7 @@ window.LANG['en'] = {
   'sub.recipe': 'Recipe',
   'sub.targetKg': 'kg finished substrate',
   'sub.notes': 'Note',
-  'sub.create': 'Create mix',
+  'sub.create': 'New substrate',
   'sub.pickBoth': 'Pick a recipe and an amount.',
   'sub.noRecipe': 'This strain has no complete recipe yet — target moisture and gypsum share are missing.',
   'sub.dryMix': 'Dry mix',
