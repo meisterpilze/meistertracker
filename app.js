@@ -636,6 +636,8 @@ function defaultInventory() {
     // These are editable in the Inventory → Stock tab
     avgComposition: { hwPct: 75, wbPct: 25, rhPct: 63, bagKg: 3, grainBagKg: 1, grainRhPct: 52 },
     labThresholds: { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 },
+    weekBagGoal: 0,
+    bagCountFrom: null,
     log: []
   };
 }
@@ -3145,6 +3147,148 @@ function renderSorteTiles() {
   el.innerHTML = html;
 }
 
+// Wie viele Beutel jede Woche seit dem Startdatum gebracht hat, gegen das Ziel.
+//
+// Montag bis Sonntag, wie überall sonst — isoWeekNumber(), die Wochenbalken
+// der Übersicht und der Wochenplan rechnen alle so.
+//
+// Körner zählen nicht mit. "70 Beutel die Woche" meint Blöcke; Körnerbrut wird
+// gewogen, seit die Einheiten auseinandergezogen wurden, und Jäser in eine
+// Beutelzahl zu addieren wäre genau die Vermischung, die die Labor-Kachel schon
+// einmal falsch beschriftet hat. (Die ältere Kachel "Beutel angesetzt" in der
+// Übersicht summiert weiterhin beides.)
+//
+// Die laufende Woche läuft: sie ist dabei, aber als solche markiert. Eine Woche
+// mit drei Tagen vor sich als verfehlt zu zeigen wäre eine Aussage über eine
+// Zahl, die noch steigt.
+function _montagVon(d) {
+  const m = new Date(d);
+  m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+}
+function buildWeekBagGoal() {
+  const ziel = (inventory && inventory.weekBagGoal) || 0;
+  const von = inventory && inventory.bagCountFrom;
+  if (!ziel || !von) return null;
+  const start = new Date(von + 'T00:00:00');
+  if (isNaN(start)) return null;
+  const diese = _montagVon(new Date());
+  const wochen = [];
+  for (const w = _montagVon(start); w <= diese; w.setDate(w.getDate() + 7)) {
+    wochen.push({ start: new Date(w), gemacht: 0 });
+  }
+  if (!wochen.length) return null;
+  const nach = new Map(wochen.map((w) => [w.start.getTime(), w]));
+  for (const b of batches || []) {
+    if (b.batchType === 'grain') continue;
+    const d = new Date(b.created);
+    if (isNaN(d)) continue;
+    const w = nach.get(_montagVon(d).getTime());
+    if (w) w.gemacht += b.qty || 0;
+  }
+  return wochen.map((w) => {
+    const ende = new Date(w.start);
+    ende.setDate(ende.getDate() + 6);
+    return {
+      start: w.start,
+      ende,
+      gemacht: w.gemacht,
+      ziel,
+      geschafft: w.gemacht >= ziel,
+      laeuft: w.start.getTime() === diese.getTime()
+    };
+  });
+}
+function renderWeekGoal() {
+  const el = document.getElementById('ov-week-goal');
+  if (!el) return;
+  const wochen = buildWeekBagGoal();
+  if (!wochen) {
+    el.innerHTML =
+      '<div class="sorten-head"><div class="sec" style="margin:0">' +
+      esc(t('goal.title')) +
+      '</div><div class="sorten-head-right">' +
+      _zielKnopf() +
+      '</div></div>' +
+      '<div class="fs-meta" style="color:var(--c-text-muted)">' +
+      esc(t('goal.none')) +
+      '</div>';
+    return;
+  }
+  // Jüngste zuerst: die laufende Woche ist die, nach der man sieht.
+  const zeilen = wochen
+    .slice()
+    .reverse()
+    .map((w) => {
+      const zustand = w.laeuft ? 'low' : w.geschafft ? 'ok' : 'now';
+      const wort = w.laeuft ? 'goal.running' : w.geschafft ? 'goal.met' : 'goal.missed';
+      const pct = Math.max(0, Math.min(100, (w.gemacht / Math.max(1, w.ziel)) * 100));
+      return (
+        '<div class="goal-row">' +
+        '<span class="goal-wk">' +
+        esc(t('goal.week', { n: isoWeekNumber(w.start) })) +
+        '</span>' +
+        '<span class="goal-span fs-xs">' +
+        esc(fmtDtShort(w.start) + ' \u2013 ' + fmtDtShort(w.ende)) +
+        '</span>' +
+        '<span class="sbar goal-bar"><i style="width:' +
+        pct.toFixed(0) +
+        '%;background:var(--st-inc)"></i></span>' +
+        '<b class="goal-n">' +
+        w.gemacht +
+        '<span class="lab-row-min">/' +
+        w.ziel +
+        '</span></b>' +
+        '<span class="sup sup-' +
+        zustand +
+        '">' +
+        esc(t(wort)) +
+        '</span>' +
+        '</div>'
+      );
+    })
+    .join('');
+  el.innerHTML =
+    '<div class="sorten-head"><div class="sec" style="margin:0">' +
+    esc(t('goal.title')) +
+    '</div><div class="sorten-head-right">' +
+    _zielKnopf() +
+    '</div></div>' +
+    zeilen;
+}
+function _zielKnopf() {
+  return (
+    '<button type="button" class="btn btn-sm fs-micro" data-action="set-week-goal">' +
+    esc(t('goal.set')) +
+    '</button>'
+  );
+}
+// Ziel und Startdatum setzen. Zwei Angaben, zwei Fragen — das Startdatum sagt,
+// ab wann gerechnet wird, und db.updateWeekGoal() legt es auf den Montag seiner
+// Woche, damit die erste Woche eine ganze ist.
+async function setWeekGoal() {
+  const jetzt = (inventory && inventory.weekBagGoal) || 0;
+  const zahl = prompt(t('goal.askGoal'), jetzt || '');
+  if (zahl === null) return;
+  const ziel = Math.max(0, Math.round(parseDecimal(zahl) || 0));
+  let von = inventory && inventory.bagCountFrom;
+  if (ziel > 0) {
+    const vorschlag = von || _montagVon(new Date()).toISOString().slice(0, 10);
+    const eingabe = prompt(t('goal.askFrom'), vorschlag);
+    if (eingabe === null) return;
+    von = eingabe.trim();
+  }
+  const r = await apiPost('/api/week-goal', { weekBagGoal: ziel, bagCountFrom: ziel > 0 ? von : null });
+  if (r && r.error) {
+    setFb('err', t('common.error') + ': ' + r.error);
+    return;
+  }
+  inventory.weekBagGoal = r && r.weekBagGoal != null ? r.weekBagGoal : ziel;
+  inventory.bagCountFrom = r && r.bagCountFrom !== undefined ? r.bagCountFrom : von;
+  renderWeekGoal();
+}
+
 function renderOverviewKPIs() {
   const weekEl = document.getElementById('ov-kpi-week');
   const substratesEl = document.getElementById('ov-kpi-substrates');
@@ -3375,6 +3519,7 @@ function renderOverviewKPIs() {
     )
   ].join('');
 
+  renderWeekGoal();
   renderOverviewCharts(periodStart);
 }
 
@@ -22765,6 +22910,10 @@ function initEventListeners() {
     }
     // Zogen mit den Hinweisen aus der eigenen Karte hierher; ihr alter
     // Zuhörer hängte an #dash-alerts, das es nicht mehr gibt.
+    if (action === 'set-week-goal') {
+      setWeekGoal();
+      return;
+    }
     if (action === 'go-attention') {
       goToBatchesAttention(el.dataset.key);
       return;
