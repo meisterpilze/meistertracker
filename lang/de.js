@@ -1223,7 +1223,7 @@ window.LANG['de'] = {
   'scan.contamAria': 'Kontaminations-Modus ein/aus',
   'scanFb.location': 'Standort: {loc} \u2192 jetzt Beutel scannen',
   'scanFb.to': 'Nach: {loc} \u2192 jetzt Beutel scannen',
-  'scanFb.setAction': 'Zuerst Aktion setzen \u2014 scanne ADD, MOVE, REMOVE oder HARVEST.',
+  'scanFb.setAction': 'Ziel antippen, um Beutel umzuziehen \u2014 oder ADD, MOVE, REMOVE bzw. HARVEST scannen.',
   'scanFb.scanLocFirst': 'Zuerst Standort oder Regal scannen.',
   'scanFb.scanToFirst': 'Erst Ziel-Standort scannen.',
   'scanFb.logged': 'Erfasst: {action} {val}{to} [{n} diese Sitzung]',
