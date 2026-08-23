@@ -10,6 +10,8 @@
 //   node scripts/measure-mobile.js --app         # with app.js running on real data
 //   node scripts/measure-mobile.js --app --width 1440 --pointer fine --census
 //                                                # the desk type census (npm run census)
+//   node scripts/measure-mobile.js --app --shots bilder/
+//                                                # a PNG per page at 320/390/768/860/1024/1440
 //
 // ⚠️ **This used to be hand-driven, and that is the change.** The old version
 // printed a snippet, told you to size a window to exactly 375px, and waited for
@@ -123,6 +125,13 @@ const CENSUS_WRITE = args.includes('--census-write');
 // width test/desktop-baseline.json already uses, so the two instruments answer
 // about the same screen.
 const CENSUS_WIDTH = 1440;
+// Pictures, for the two things numbers cannot do: showing somebody what changed,
+// and catching a change that moves something without making it overflow. A
+// container query is exactly that kind of change -- containment can move an
+// absolutely positioned descendant to a different containing block, and nothing
+// in TYPE, TOUCH, FIELDS or OVERFLOW would say a word about it.
+const SHOTS = flag('--shots');
+const SHOT_WIDTHS = [320, 390, 768, 860, 1024, 1440];
 const CENSUS_FILE = path.join(ROOT, 'test', 'type-census.json');
 const zensus = {};
 
@@ -922,6 +931,13 @@ async function main() {
         for (const r of m.feld) rows.push({ kind: 'feld', pointer: point.name, width, ...r });
         if ((CENSUS || CENSUS_WRITE) && width === CENSUS_WIDTH && point.name === 'fine') {
           zensus[stop.name] = { sizes: m.sizes, bySize: m.bySize };
+        }
+        if (SHOTS && SHOT_WIDTHS.includes(width)) {
+          fs.mkdirSync(SHOTS, { recursive: true });
+          await page.screenshot({
+            path: path.join(SHOTS, `${String(width).padStart(4, '0')}-${point.name}-${stop.name}.png`),
+            fullPage: true
+          });
         }
         for (const r of m.touch) {
           // Which of the two floors this one is under, decided per row and kept
