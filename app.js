@@ -5862,6 +5862,14 @@ function buildWeekPlan() {
       zone: '',
       overdue: laborMin.some((l) => l.empty),
       ready: true,
+      // Diese eine Zeile steht fuer 38. Ohne das zaehlte die Wochenspalte
+      // "1 Labor" und beim Aufklappen wurden daraus 38 -- eine Zahl, die sagte,
+      // wie viele Zeilen gerade gezeichnet sind, statt wie viel Arbeit ansteht.
+      //
+      // Aufgeklappt null, denn dann stehen die 38 selbst daneben und wuerden
+      // sonst doppelt gezaehlt.
+      weight: dashLabGroupOpen ? 0 : laborMin.length,
+      overdueWeight: dashLabGroupOpen ? 0 : laborMin.filter((l) => l.empty).length,
       task: { rows: laborMin }
     });
   }
@@ -6456,7 +6464,7 @@ function _weekHeadHtml(d, off, sel) {
   const task = rhythmTaskOn(d.date);
   // The number is the day's own load: what the rhythm asks for if it asks for
   // anything, otherwise how much generated work landed on it.
-  const n = task && task.targetQty ? task.targetQty : d.items.length;
+  const n = task && task.targetQty ? task.targetQty : d.items.reduce((k, it) => k + planWeight(it), 0);
   const short = th.theme && th.theme !== 'free' ? weekThemeLabel(th.theme) : '';
   // Weekday label over a big day number — the same shape as the month and week
   // calendars (.cal-week-hdr-cell), because this strip is read as a calendar.
@@ -6632,9 +6640,25 @@ function planCategory(it) {
   const k = planKind(it);
   return k ? k.cat : 'other';
 }
+// Fuer wie viele Arbeiten eine Zeile steht. Fast immer fuer sich selbst -- nur
+// die Labor-Zusammenfassung vertritt viele, und dann muss die Zahl daneben ihre
+// und nicht ihre eigene sein.
+function planWeight(it) {
+  return it && Number.isFinite(it.weight) ? it.weight : 1;
+}
+// Und wie viele davon zu spaet sind. Bei der Zusammenfassung sind das nicht
+// alle, nur weil eine es ist.
+function planOverdue(it) {
+  if (!it) return 0;
+  if (Number.isFinite(it.overdueWeight)) return it.overdueWeight;
+  return it.overdue ? planWeight(it) : 0;
+}
+// Gezaehlt wird Arbeit, nicht Zeilen. Der Unterschied ist genau die
+// Zusammenfassung: eine Zeile, die 38 vertritt, hat als "1" gezaehlt, und die
+// Spalte sagte damit aus, wie viel gerade gezeichnet ist statt wie viel ansteht.
 function countByCategory(items) {
   const c = {};
-  for (const it of items) c[planCategory(it)] = (c[planCategory(it)] || 0) + 1;
+  for (const it of items) c[planCategory(it)] = (c[planCategory(it)] || 0) + planWeight(it);
   return c;
 }
 // A column's work at a glance: what, and how much. No actions — this is for
@@ -6725,7 +6749,7 @@ function _weekColPreviewHtml(d, offen) {
   for (const c of aufgaben) html += _choreChipHtml(c);
   const rest = d.items.filter((it) => it.kind !== 'chore');
   const counts = countByCategory(rest);
-  const overdue = rest.filter((i) => i.overdue).length;
+  const overdue = rest.reduce((n, i) => n + planOverdue(i), 0);
   // Die Zaehlung ist ein Knopf, und er oeffnet den Tag.
   //
   // Vorher war sie totes Papier: "4 Achtung, 4 Ansetzen, 5 ueberfaellig" stand
