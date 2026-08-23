@@ -4411,6 +4411,64 @@ tr.ms-off .ms-prog {
   margin-top: 3px;
 }
 
+/* Die eigenen Aufgaben, unter der Wochensumme. Eine Zeile je Aufgabe: Name,
+   Takt, und der Weg hinaus. Der Name darf schrumpfen, Takt und Knopf nicht —
+   ein umgebrochener Takt neben einem abgeschnittenen Namen liest sich als
+   zwei Zeilen, die nicht zusammengehören. */
+.rhythm-own {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--c-border);
+}
+.rhythm-own[hidden] {
+  display: none;
+}
+.rhythm-own-head {
+  font-weight: 600;
+}
+.rhythm-own-hint {
+  color: var(--c-text-muted);
+  margin: 2px 0 8px;
+}
+.rhythm-own-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.rhythm-own-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rhythm-own-when {
+  color: var(--c-text-muted);
+  flex-shrink: 0;
+}
+/* Auf dem Telefon umbrechen statt vier Felder in eine 300px-Zeile zu quetschen:
+   der Name nimmt die volle Breite, Takt und Wochentag teilen sich die nächste. */
+.rhythm-own-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.rhythm-own-add input {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: var(--tap-sm);
+}
+.rhythm-own-add select {
+  flex: 1 1 96px;
+  min-width: 0;
+  min-height: var(--tap-sm);
+}
+.rhythm-own-add .btn {
+  flex: 0 0 auto;
+}
+
 /* Die Menge eines einzelnen Tages: Regel und Ausnahme untereinander.
    Beschriftung links, Zahl rechts — auf dem Telefon bleibt das nebeneinander,
    weil die Beschriftung hier die eigentliche Auskunft ist ("gilt für jeden

@@ -339,7 +339,8 @@ let mushroomStrains = [],
   suppliers = [],
   pickupLocations = [],
   weekRhythm = {},
-  rhythmTasks = [];
+  rhythmTasks = [],
+  recurringTasks = [];
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
 let barcodeRegistry = new Map(),
   barcodeByEntity = new Map();
@@ -602,6 +603,7 @@ function applyData(d) {
   pickupLocations = d.pickupLocations || [];
   weekRhythm = d.weekRhythm || {};
   rhythmTasks = d.rhythmTasks || [];
+  recurringTasks = d.recurringTasks || [];
   datenGeladen = true;
   // Build barcode registry from server data
   barcodeRegistry = new Map();
@@ -5304,7 +5306,18 @@ function themeFor(weekday) {
 }
 // ─── Weekly rhythm ──────────────────────────────────────────
 // Must stay in step with WEEK_THEMES in db.js, which rejects anything else.
-const WEEK_THEMES = ['substrate', 'grain', 'fruiting', 'harvest', 'lab', 'free'];
+// Nur, was sich planen UND zaehlen laesst. Muss mit WEEK_THEMES in db.js
+// uebereinstimmen, die alles andere ablehnt.
+//
+// Fruchtung, Ernte und Labor standen hier, weil sie zaehlbar sind. Geplant hat
+// sie nie jemand: man zieht um, wenn durchwachsen ist, und erntet, wenn reif
+// ist, nicht dienstags. Sechs Eintraege, von denen zwei benutzt werden, machen
+// aus einer Auswahl eine Suche.
+//
+// Alles Uebrige, was regelmaessig zu tun ist, ist jetzt eine eigene Aufgabe mit
+// eigenem Namen und eigenem Takt -- der Platz, an dem so etwas wachsen darf,
+// ohne dass diese Liste mitwaechst.
+const WEEK_THEMES = ['substrate', 'grain', 'free'];
 // Weekdays in the order a working week reads, not the order getDay() numbers
 // them — Monday first, Sunday last, while the stored keys stay 0 = Sunday.
 const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0];
@@ -5431,6 +5444,71 @@ function rhythmMadeOn(dateKey, theme) {
 // einer Woche, die niemand mehr bearbeiten kann, ist nichts nachzuholen.
 function rhythmCountsFrom() {
   return (inventory && inventory.bagCountFrom) || null;
+}
+
+// --- Eigene Aufgaben der Anlage ---------------------------------------------
+//
+// Der Rhythmus zaehlt Produktion; er kann nur, was eine Buchung hinterlaesst.
+// Das hier ist alles andere, was regelmaessig ansteht und keine hinterlaesst:
+// putzen, warten, pruefen. Selbst benannt, selbst getaktet, selbst abgehakt.
+//
+// Abgehakt und nicht gezaehlt -- als Einziges in dieser Datei. Das ist keine
+// Ruecknahme des Grundsatzes, sondern seine Bedingung: gezaehlt wird, wo es
+// etwas zu zaehlen gibt, und hinter einem geputzten Raum steht nichts, woraus
+// sich das ableiten liesse. Ein Haken ist hier die einzige Quelle, die es gibt.
+
+// Zwilling von recurringDueOn() in db.js: der Server prueft, der Browser
+// zeichnet, und beide muessen dasselbe sagen. In UTC gerechnet, damit die
+// Sommerzeit aus sieben Tagen nicht 6,96 macht.
+function recurringDueOn(anchor, everyWeeks, dateKey) {
+  if (!anchor || !dateKey || dateKey < anchor) return false;
+  const n = Number(everyWeeks);
+  if (!Number.isInteger(n) || n < 1) return false;
+  const a = Date.parse(anchor + 'T00:00:00Z');
+  const d = Date.parse(dateKey + 'T00:00:00Z');
+  if (isNaN(a) || isNaN(d)) return false;
+  return Math.round((d - a) / 864e5) % (7 * n) === 0;
+}
+function recurringDoneOn(task, dateKey) {
+  return !!(task && task.done && task.done.indexOf(dateKey) >= 0);
+}
+// Was an einem Tag faellt, mit dem Stand des Hakens.
+function recurringOn(dateKey) {
+  return (recurringTasks || [])
+    .filter((x) => x && x.active && recurringDueOn(x.anchor, x.everyWeeks, dateKey))
+    .map((x) => ({ task: x, done: recurringDoneOn(x, dateKey) }));
+}
+const RECURRING_LOOKBACK_DAYS = 14;
+// Versaeumte Termine -- je Aufgabe hoechstens einer, naemlich der juengste.
+//
+// Wer zweimal nicht geputzt hat, putzt einmal und ist wieder aktuell. Drei
+// offene Putztermine nebeneinander waeren eine Liste, die niemand abarbeiten
+// kann und die deshalb keiner mehr liest: genau die Dauerwarnung, gegen die an
+// dieser Stelle ueberall geschrieben ist.
+//
+// Und nie weiter zurueck als bis zum anchor: eine heute angelegte Aufgabe hat
+// nicht rueckwirkend seit Januar gefehlt.
+function recurringArrears(today) {
+  const out = [];
+  for (const x of recurringTasks || []) {
+    if (!x || !x.active) continue;
+    const takt = 7 * (Number(x.everyWeeks) || 1);
+    const weit = Math.max(RECURRING_LOOKBACK_DAYS, takt);
+    for (let back = 1; back <= weit; back++) {
+      const d = _ymd(new Date(today.getTime() - back * 864e5));
+      if (d < x.anchor) break;
+      if (!recurringDueOn(x.anchor, x.everyWeeks, d)) continue;
+      // Der erste Treffer rueckwaerts IST der juengste Termin. Ob er offen ist
+      // oder nicht, danach wird nicht weiter gesucht.
+      if (!recurringDoneOn(x, d)) out.push({ task: x, date: d });
+      break;
+    }
+  }
+  return out;
+}
+// "jede Woche" / "alle 2 Wochen" -- eine Eins liest sich anders als eine Zahl.
+function recurEveryLabel(n) {
+  return Number(n) === 1 ? t('recur.everyWeek') : t('recur.everyN', { n: Number(n) || 1 });
 }
 // Everything asked for before today and not finished. This is the point of
 // tracking at all: 45 planned for Monday with 30 made means Tuesday still owes
@@ -5725,6 +5803,40 @@ function buildWeekPlan() {
       task: a
     });
   }
+  // Eigene Aufgaben: was an dem Tag faellt, samt Stand des Hakens.
+  for (let i = 0; i < days.length; i++) {
+    const key = _ymd(days[i].date);
+    for (const f of recurringOn(key)) {
+      put(i, {
+        kind: 'chore',
+        species: '',
+        label: f.task.name,
+        detail: recurEveryLabel(f.task.everyWeeks),
+        bags: 0,
+        zone: '',
+        overdue: false,
+        ready: true,
+        done: f.done,
+        task: { id: f.task.id, date: key, done: f.done }
+      });
+    }
+  }
+  // Und der eine versaeumte Termin je Aufgabe, auf heute gezogen und mit seinem
+  // eigenen Datum beschriftet -- so wie ein Rueckstand aus dem Rhythmus auch.
+  for (const r of recurringArrears(midnight)) {
+    put(0, {
+      kind: 'chore',
+      species: '',
+      label: r.task.name,
+      detail: t('recur.missedFrom', { date: fmtDt(r.date) }),
+      bags: 0,
+      zone: '',
+      overdue: true,
+      ready: true,
+      done: false,
+      task: { id: r.task.id, date: r.date, done: false }
+    });
+  }
   const laborMin = buildLabMinTasks();
   const gebuendelt = laborMin.length > LABMIN_GROUP_AT;
   if (gebuendelt) {
@@ -5874,6 +5986,11 @@ function todayProgress(todayItems) {
     if (!isNaN(dt) && dt >= midnight) done++;
   }
   for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
+  // Eine abgehakte eigene Aufgabe ist erledigte Arbeit wie jede andere. Ohne
+  // diese Zeile wuechse durch PLAN_KINDS.chore.counts nur der Nenner, und ein
+  // fertiger Tag laese 7/8 -- derselbe Fehler, gegen den der Absatz darunter
+  // geschrieben ist, nur von der anderen Seite.
+  for (const it of todayItems) if (it && it.kind === 'chore' && it.done) done++;
   // Supply and lab-floor rows are derived from stock levels: they clear when
   // the stock changes, never by being ticked, and counting them in the
   // denominator made a finished day read 5/8. They are work, but they are not
@@ -6034,10 +6151,116 @@ function openRhythmEditor() {
   }
   if (hint) hint.textContent = saved ? '' : t('rhythm.suggested');
   _renderRhythmRows();
+  _renderRhythmOwn();
   // .modal-bg is display:none and only .modal-bg.open is display:flex, so
   // clearing the hidden attribute alone leaves the dialog invisible.
   modal.hidden = false;
   modal.classList.add('open');
+}
+// Die eigenen Aufgaben, verwaltet an derselben Stelle wie der Rhythmus: beides
+// beantwortet dieselbe Frage, naemlich was diese Anlage regelmaessig tut.
+//
+// Nur fuer Admins sichtbar. Eine wiederkehrende Aufgabe anzulegen ist eine
+// Festlegung fuer alle und fortan -- dieselbe Grenze, die der Server zwischen
+// /api/recurring-task (Admin) und /api/recurring-done (jeder) zieht. Ein Feld
+// anzubieten, dessen Speichern mit 403 zurueckkommt, waere schlimmer als keins.
+const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12];
+function _renderRhythmOwn() {
+  const el = document.getElementById('rhythm-own');
+  if (!el) return;
+  const admin = !!(currentUser && currentUser.role === 'admin');
+  el.hidden = !admin;
+  if (!admin) return;
+  const zeilen = (recurringTasks || [])
+    .map(
+      (x) =>
+        '<div class="rhythm-own-row">' +
+        '<span class="rhythm-own-name">' +
+        esc(x.name) +
+        '</span><span class="fs-xs rhythm-own-when">' +
+        esc(recurEveryLabel(x.everyWeeks) + ' · ' + t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay())) +
+        '</span><button type="button" class="btn btn-sm fs-xs" data-action="own-del" data-id="' +
+        esc(String(x.id)) +
+        '">' +
+        esc(t('recur.remove')) +
+        '</button></div>'
+    )
+    .join('');
+  el.innerHTML =
+    '<div class="fs-sm rhythm-own-head">' +
+    esc(t('recur.title')) +
+    '</div><div class="fs-xs rhythm-own-hint">' +
+    esc(t('recur.hint')) +
+    '</div>' +
+    (zeilen || '<div class="fs-xs rhythm-own-hint">' + esc(t('recur.none')) + '</div>') +
+    '<div class="rhythm-own-add">' +
+    '<input type="text" id="own-name" maxlength="80" placeholder="' +
+    esc(t('recur.namePh')) +
+    '" />' +
+    '<select id="own-every">' +
+    RECUR_EVERY_CHOICES.map((n) => '<option value="' + n + '">' + esc(recurEveryLabel(n)) + '</option>').join('') +
+    '</select><select id="own-day">' +
+    WEEK_DAYS.map((d) => '<option value="' + d + '">' + esc(t('rhythm.day.' + d)) + '</option>').join('') +
+    '</select><button type="button" class="btn btn-sm btn-p" data-action="own-add">' +
+    esc(t('recur.add')) +
+    '</button></div>';
+}
+function addOwnTask() {
+  const feld = document.getElementById('own-name');
+  const name = ((feld && feld.value) || '').trim();
+  if (!name) {
+    setFb('err', t('recur.needName'));
+    return;
+  }
+  const every = Number(document.getElementById('own-every').value) || 1;
+  const wd = Number(document.getElementById('own-day').value);
+  // Der anchor ist der naechste Termin dieses Wochentags, heute eingeschlossen.
+  // Damit ist er zugleich Wochentag und Phase des Takts -- und eine heute
+  // angelegte Aufgabe hat nicht rueckwirkend seit Januar gefehlt.
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  const vor = (wd - heute.getDay() + 7) % 7;
+  const anchor = _ymd(new Date(heute.getTime() + vor * 864e5));
+  apiPost('/api/recurring-task', { name, everyWeeks: every, anchor }).then((res) => {
+    if (!res || res.error) {
+      toast((res && res.error) || t('recur.saveFailed'), 'err');
+      return;
+    }
+    recurringTasks.push({ id: res.id, name, everyWeeks: every, anchor, active: true, done: [] });
+    _renderRhythmOwn();
+    renderDashBatchTasks();
+    setFb('ok', t('recur.added', { name }));
+  });
+}
+function delOwnTask(id) {
+  apiDelete('/api/recurring-task/' + encodeURIComponent(id)).then((res) => {
+    if (res && res.error) {
+      toast(res.error, 'err');
+      return;
+    }
+    const i = (recurringTasks || []).findIndex((x) => String(x.id) === String(id));
+    if (i >= 0) recurringTasks.splice(i, 1);
+    _renderRhythmOwn();
+    renderDashBatchTasks();
+  });
+}
+// Ein Tipp hakt ab, der naechste nimmt es zurueck. Der Server laesst den Haken
+// nur auf einem Datum zu, an dem die Aufgabe wirklich faellt.
+function setChoreDone(id, date, done) {
+  apiPost('/api/recurring-done', { taskId: Number(id), date, done: !!done }).then((res) => {
+    if (!res || res.error) {
+      toast((res && res.error) || t('recur.saveFailed'), 'err');
+      return;
+    }
+    const task = (recurringTasks || []).find((x) => String(x.id) === String(id));
+    if (task) {
+      task.done = task.done || [];
+      const i = task.done.indexOf(date);
+      if (done && i < 0) task.done.push(date);
+      if (!done && i >= 0) task.done.splice(i, 1);
+    }
+    renderDashBatchTasks();
+  });
 }
 function closeRhythmEditor() {
   const m = document.getElementById('m-rhythm');
@@ -6299,6 +6522,12 @@ const PLAN_KINDS = {
   fruiting: { cat: 'move', rank: null, counts: true, btn: 'task' },
   harvest: { cat: 'harvest', rank: null, counts: true, btn: 'harvest' },
   manual: { cat: 'other', rank: null, counts: true, btn: 'manual' },
+  // Eine eigene Aufgabe der Anlage. rank 50, damit sie die Sechs-Zeilen-Klappe
+  // ueberlebt: sie hat keine Zone, faellt sonst auf 999 und waere als Erstes
+  // verdeckt -- an einem Putztag ist sie aber das, was ansteht.
+  // counts:true, denn sie ist Arbeit, die abgehakt wird; todayProgress() zaehlt
+  // den Haken auf der Gegenseite mit, sonst wuechse nur der Nenner.
+  chore: { cat: 'other', rank: 50, counts: true, btn: 'chore' },
   left: { cat: 'other', rank: null, counts: true, btn: '' }
 };
 function planKind(it) {
@@ -6813,6 +7042,24 @@ function _planBtn(it) {
       : 'data-action="go-page" data-page="' + esc(a.goPage || '') + '" data-btn="' + esc(a.goBtn || '') + '"';
     return (
       '<button class="btn btn-sm fs-xs" ' + ziel + ' style="padding:3px 10px;flex-shrink:0">' + esc(t('dash.view')) + '</button>'
+    );
+  }
+  if (it.kind === 'chore') {
+    // Ein Tipp, und ein zweiter nimmt ihn zurueck. Keine Rueckfrage: die
+    // Bestaetigung waere teurer als der Fehler, den sie verhindert.
+    const k = it.task || {};
+    return (
+      '<button class="btn btn-sm fs-xs' +
+      (k.done ? '' : ' btn-p') +
+      '" data-action="chore-done" data-task="' +
+      esc(String(k.id)) +
+      '" data-date="' +
+      esc(k.date) +
+      '" data-done="' +
+      (k.done ? '1' : '0') +
+      '" style="padding:3px 10px;flex-shrink:0">' +
+      esc(t(k.done ? 'recur.undo' : 'recur.tick')) +
+      '</button>'
     );
   }
   if (it.kind === 'labgroup') {
@@ -23049,7 +23296,16 @@ function initEventListeners() {
   $('dayqty-plan').addEventListener('input', _renderDayQtySum);
   $('dayqty-extra').addEventListener('input', _renderDayQtySum);
   $('m-rhythm').addEventListener('click', (e) => {
-    if (e.target.closest('[data-action="rhythm-start"]')) setRhythmStart();
+    if (e.target.closest('[data-action="rhythm-start"]')) {
+      setRhythmStart();
+      return;
+    }
+    if (e.target.closest('[data-action="own-add"]')) {
+      addOwnTask();
+      return;
+    }
+    const weg = e.target.closest('[data-action="own-del"]');
+    if (weg) delOwnTask(weg.dataset.id);
   });
   $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
   $('zone-role').addEventListener('change', function () {
@@ -23164,6 +23420,10 @@ function initEventListeners() {
     }
     if (action === 'edit-rhythm') {
       openRhythmEditor();
+      return;
+    }
+    if (action === 'chore-done') {
+      setChoreDone(el.dataset.task, el.dataset.date, el.dataset.done !== '1');
       return;
     }
     if (action === 'rhythm-target') {

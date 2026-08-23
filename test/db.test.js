@@ -1767,8 +1767,8 @@ describe('db – week rhythm', () => {
   });
 
   it('round-trips a full week keyed the way getDay() counts', () => {
-    db.setWeekRhythm(d, { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
-    assert.deepEqual(themes(), { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'fruiting', 5: 'harvest' });
+    db.setWeekRhythm(d, { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'grain', 5: 'free' });
+    assert.deepEqual(themes(), { 1: 'substrate', 2: 'substrate', 3: 'grain', 4: 'grain', 5: 'free' });
   });
 
   it('replaces the whole week, so a dropped day is really gone', () => {
@@ -1842,13 +1842,22 @@ describe('db – week rhythm', () => {
   it('rolls back completely when one day of the save is bad', () => {
     db.setWeekRhythm(d, { 1: 'substrate', 3: 'grain' });
     const before = rhythm();
-    assert.throws(() => db.setWeekRhythm(d, { 1: 'lab', 2: 'nonsense' }));
+    assert.throws(() => db.setWeekRhythm(d, { 1: 'substrate', 2: 'nonsense' }));
     assert.deepEqual(rhythm(), before, 'a failed save left the week half-applied');
+  });
+
+  it('refuses a theme the list no longer offers', () => {
+    // Fruchtung, Ernte und Labor sind aus der Auswahl geflogen: sie folgen aus
+    // der Arbeit, statt sie vorzugeben. Ein alter Client darf sie nicht wieder
+    // hereinschreiben, sonst stuende im Dropdown ein Wert, den es nicht gibt.
+    for (const weg of ['fruiting', 'harvest', 'lab']) {
+      assert.throws(() => db.setWeekRhythm(d, { 1: weg }), /Unknown theme/, weg + ' kam durch');
+    }
   });
 
   it('bumps the data version so other clients pick the change up', () => {
     const v = db.getDataVersion(d);
-    db.setWeekRhythm(d, { 4: 'fruiting' });
+    db.setWeekRhythm(d, { 4: 'grain' });
     assert.equal(db.getDataVersion(d), v + 1);
   });
 });
@@ -1915,10 +1924,10 @@ describe('db – rhythm tasks carry forward', () => {
 
   it('tracks nothing for a themed day that carries no target', () => {
     const m = {};
-    for (let i = 0; i < 7; i++) m[i] = { theme: 'fruiting' };
+    for (let i = 0; i < 7; i++) m[i] = { theme: 'grain' };
     db.setWeekRhythm(d, m);
     db.ensureRhythmTasks(d);
-    assert.equal(tasks().length, 0, '"Thursday is fruiting day" is not a countable job');
+    assert.equal(tasks().length, 0, '"Thursday is grain day" is not a countable job');
   });
 
   it('tracks nothing at all until a rhythm exists', () => {
