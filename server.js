@@ -8866,15 +8866,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const body = data || {};
       // Either field, or both: adjusting what a day asks for and recording what
       // it produced are the same kind of edit to the same row.
-      if (body.doneQty === undefined && body.targetQty === undefined) {
-        jsonErr(res, 400, 'doneQty or targetQty is required');
+      // doneQty is no longer accepted: what was made is counted from the
+      // batches, cultures, moves and harvests themselves. A second figure that
+      // somebody had to type was the one nobody kept up to date.
+      if (body.targetQty === undefined) {
+        jsonErr(res, 400, 'targetQty is required');
         return;
       }
       try {
         const out = { ok: true };
-        // Target first: it may create the row that progress is then recorded on.
-        if (body.targetQty !== undefined) out.targetQty = db.setRhythmTarget(database, body.date, body.targetQty);
-        if (body.doneQty !== undefined) out.doneQty = db.setRhythmProgress(database, body.date, body.doneQty);
+        out.targetQty = db.setRhythmTarget(database, body.date, body.targetQty);
         broadcastSSE(res);
         jsonOk(res, out);
       } catch (err) {
@@ -10705,7 +10706,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Lab Thresholds --
-  if (req.method === 'POST' && req.url === '/api/week-goal') {
+  if (req.method === 'POST' && req.url === '/api/rhythm-start') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
       if (e) {
@@ -10713,8 +10714,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const saved = db.updateWeekGoal(database, data.weekBagGoal, data.bagCountFrom);
-        log('info', 'Week goal updated', { actor: req.authUser.username });
+        const saved = db.updateRhythmStart(database, data.bagCountFrom);
+        log('info', 'Rhythm start updated', { actor: req.authUser.username });
         broadcastSSE(res);
         jsonOk(res, saved);
       } catch (err) {
