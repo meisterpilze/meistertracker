@@ -620,7 +620,7 @@ function applyData(d) {
   cultures.forEach((c) => spColor(c.species));
   fillStrainSelects();
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-  fillCultureSelect('gs-culture', ['PD', 'LC']);
+  fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
   updateTodoBadge();
   if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
   if (d.notifications && typeof d.notifications.unread === 'number') {
@@ -6661,7 +6661,12 @@ function buildHarvestTasks() {
 
 
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
-const LAB_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
+// G2G steht nicht mehr darunter. Korn-zu-Korn ist kein eigener Bestand, den
+// man zählt — es ist eine Herkunft: die neue Körnerbrut wird aus einer alten
+// angesetzt, und was dabei entsteht, ist eine Körner-Charge wie jede andere.
+// Als Kulturtyp hatte es nie einen Datensatz erzeugt; die Auswahl im Labor-
+// formular endete in einem Fehler-Toast, der auf die Scan-Leiste verwies.
+const LAB_TYPES = ['MC', 'PD', 'LC', 'GS', 'SY'];
 // The types a Sorte can carry a minimum for. G2G and SY are made to order
 // from the others, so a standing floor for them would ask for stock nobody
 // keeps.
@@ -6857,7 +6862,6 @@ const LAB_TYPE_COLORS = {
   MC: { bg: '#f0ebf4', fg: '#7241a0', accent: '#926bb6' },
   PD: { bg: '#ebeff4', fg: '#3a598d', accent: '#5e7daf' },
   LC: { bg: '#ebf4ee', fg: '#2a6741', accent: '#43895d' },
-  G2G: { bg: '#f4f1eb', fg: '#6f572d', accent: '#937748' },
   GS: { bg: '#f4ebee', fg: '#913b58', accent: '#b2647e' },
   SY: { bg: '#ebf3f4', fg: '#2c626c', accent: '#478590' }
 };
@@ -14259,7 +14263,8 @@ function msQuickFillCulture() {
   }
   let types;
   if (_msQuickCtx.mode === 'charge') {
-    types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC'] : ['PD', 'LC', 'G2G', 'GS'];
+    // Körner aus Körnern: eine bestehende Körnerbrut darf die nächste ansetzen.
+    types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC', 'GS'] : ['PD', 'LC', 'G2G', 'GS'];
   } else {
     const lt = document.getElementById('ms-q-labtype').value;
     // KB matches the full grain form, which inoculates from a PD or LC.
@@ -14351,7 +14356,7 @@ function msQuickConfirm() {
       // trägt, ist das die ungenauere Zahl, und sie entscheidet, wie viel
       // trockenes Korn vom Lagerbestand abgeht.
       setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
-      fillCultureSelect('gs-culture', ['PD', 'LC']);
+      fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
       const gsc = document.getElementById('gs-culture');
       if (gsc) gsc.value = sourceCulture;
       setv('lw-notes', '');
@@ -14389,7 +14394,7 @@ function msQuickConfirm() {
     }
     setv('gs-days', days);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
-    fillCultureSelect('gs-culture', ['PD', 'LC']);
+    fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
     const gsc = document.getElementById('gs-culture');
     if (gsc) gsc.value = sourceCulture;
     setv('lw-notes', '');
@@ -14612,7 +14617,7 @@ function deleteCulture(id) {
       renderCultures();
       renderLabLog();
       fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-      fillCultureSelect('gs-culture', ['PD', 'LC']);
+      fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
     }
   );
 }
@@ -14638,7 +14643,7 @@ function lwUpdate() {
     if (kbRows) kbRows.style.display = 'flex';
     if (strainTextRow) strainTextRow.style.display = 'block';
     document.getElementById('lw-prev-box').style.display = 'none';
-    fillCultureSelect('gs-culture', ['PD', 'LC']);
+    fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
     // Prefill grain hydration % from current inventory default
     const gsRh = document.getElementById('gs-rh');
     if (gsRh) gsRh.value = getAvgComp().grainRhPct;
@@ -14742,10 +14747,6 @@ function logLabWork() {
     st = ms.kuerzel;
   const parentId = document.getElementById('lw-parent')?.value || null,
     qty = parseInt(document.getElementById('lw-qty').value) || 1;
-  if (type === 'G2G') {
-    toast(t('lab.g2gNote'), 'err');
-    return;
-  }
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr() + '-';
@@ -14779,7 +14780,7 @@ function logLabWork() {
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
   renderLabLog();
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-  fillCultureSelect('gs-culture', ['PD', 'LC']);
+  fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
   lwPreview();
   // Show result card with created IDs and print button
   lastCreatedCultureIds = newC.map((c) => c.id);

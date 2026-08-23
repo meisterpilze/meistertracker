@@ -98,7 +98,7 @@ function kachel(html, typ) {
 describe('Labor-Karte', () => {
   it('zeichnet eine Kachel je Kulturtyp', () => {
     const html = zeichne({ sorten: [SH] });
-    assert.equal((html.match(/<div class="stile/g) || []).length, 6, 'MC, PD, LC, G2G, GS, SY');
+    assert.equal((html.match(/<div class="stile/g) || []).length, 5, 'MC, PD, LC, GS, SY — G2G ist kein Bestand');
     assert.ok(html.startsWith('<div class="sorten-grid">'), 'im selben Raster wie die Chargen-Kacheln');
   });
 
@@ -170,13 +170,13 @@ describe('Labor-Karte', () => {
   it('bietet keinen Knopf, wo es nichts zu setzen gibt', () => {
     // G2G und Spritzen haben keine Spalte je Sorte, und eine Sorte ohne
     // Pilzsorten-Zeile hat nichts, wohin die Zahl geschrieben würde.
-    const html = zeichne({ sorten: [SH], kulturen: [{ typ: 'G2G', sorte: 'Shiitake', kz: 'SH' }] });
-    assert.doesNotMatch(kachel(html, 'G2G'), /lab-set-strain-min/);
+    const html = zeichne({ sorten: [SH], kulturen: [{ typ: 'SY', sorte: 'Shiitake', kz: 'SH' }] });
+    assert.doesNotMatch(kachel(html, 'SY'), /lab-set-strain-min/);
   });
 
   it('gibt jedem Knopf seinen Typ mit, statt inline zu rufen', () => {
     const html = zeichne({ sorten: [SH] });
-    assert.equal((html.match(/data-action="lab-set-min"/g) || []).length, 6);
+    assert.equal((html.match(/data-action="lab-set-min"/g) || []).length, 5, 'einer je Kachel');
     assert.doesNotMatch(html, /onclick=/, 'die Karte wird bei jedem Sync neu gebaut — Handler werden delegiert');
   });
 });
