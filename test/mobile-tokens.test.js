@@ -665,3 +665,73 @@ describe('the type sizes follow the reader, not the sheet', () => {
     assert.deepEqual(krumm, [], `${krumm.length} rem value(s) land between pixels: ${krumm.join(', ')}`);
   });
 });
+
+// ── Rule R2: the box measures, not the window ──────────────────────────────
+// A block that has to exist twice — once as @media for a browser without
+// container queries, once as @container for every browser that has them — is
+// safe exactly as long as the two copies say the same thing, which is to say
+// until somebody edits one of them. So they are marked as twins in the sheet
+// and compared here.
+describe('the container queries and their fallbacks say the same thing', () => {
+  const { src } = maskedCss(CSS);
+
+  // Every `/* zwilling: NAME */` marker and the block that follows it. The
+  // markers are found in the RAW sheet, because maskedCss() blanks comments —
+  // and the braces are counted in the masked one, because a comment may
+  // contain a brace. Both have the same offsets: masking replaces characters,
+  // it does not remove them.
+  const zwillinge = new Map();
+  for (const m of CSS.matchAll(/\/\*\s*zwilling:\s*([a-zä-ü]+)/g)) {
+    const auf = src.indexOf('{', m.index);
+    let tiefe = 1;
+    let i = auf + 1;
+    while (i < src.length && tiefe) {
+      if (src[i] === '{') tiefe++;
+      else if (src[i] === '}') tiefe--;
+      i++;
+    }
+    const kopf = src.slice(src.lastIndexOf('@', auf), auf).trim();
+    if (!zwillinge.has(m[1])) zwillinge.set(m[1], []);
+    zwillinge.get(m[1]).push({ kopf, koerper: src.slice(auf + 1, i - 1) });
+  }
+
+  const eng = (t) => t.replace(/\s+/g, ' ').trim();
+
+  it('finds a pair for every twin name, one @media and one @container', () => {
+    assert.ok(zwillinge.size > 0, 'no zwilling markers at all — did the container blocks go?');
+    for (const [name, paar] of zwillinge) {
+      assert.equal(paar.length, 2, `zwilling "${name}" has ${paar.length} block(s), not 2`);
+      const arten = paar.map((b) => b.kopf.split(/[\s(]/)[0]).sort();
+      assert.deepEqual(arten, ['@container', '@media'], `zwilling "${name}" is ${arten.join(' + ')}`);
+    }
+  });
+
+  it('keeps the two copies of each twin identical', () => {
+    for (const [name, paar] of zwillinge) {
+      assert.equal(
+        eng(paar[0].koerper),
+        eng(paar[1].koerper),
+        `the two copies of zwilling "${name}" have drifted — the fallback and the container query ` +
+          'now lay the same thing out differently, and only one of them is ever visible at a time'
+      );
+    }
+  });
+
+  it('asks the named container, so a later box cannot quietly take the question', () => {
+    // Without a name, @container asks the NEAREST ancestor that has a
+    // container-type. Put one in between later — a card, a panel — and every
+    // one of these rules silently starts measuring something else.
+    const namenlos = [...src.matchAll(/@container\s+([^{]*)\{/g)]
+      .map((m) => m[1].trim())
+      .filter((c) => !/^[a-zä-ü]+\s/.test(c));
+    assert.deepEqual(namenlos, [], `${namenlos.length} @container rule(s) name no container: ${namenlos.join(' · ')}`);
+  });
+
+  it('names a container that something actually declares', () => {
+    const erklaert = new Set([...src.matchAll(/container-name:\s*([a-zä-ü-]+)/g)].map((m) => m[1]));
+    const gefragt = new Set([...src.matchAll(/@container\s+([a-zä-ü-]+)\s/g)].map((m) => m[1]));
+    for (const g of gefragt) {
+      assert.ok(erklaert.has(g), `@container ${g} asks a container nothing declares — the rule never fires`);
+    }
+  });
+});
