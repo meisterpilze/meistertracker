@@ -2630,6 +2630,57 @@ tr:hover td {
   border-top: 1px solid var(--c-border);
 }
 
+/* Die Zählung einer Spalte — ein Knopf, der den Tag öffnet.
+
+   Vorher war sie totes Papier: „4 Achtung, 4 Ansetzen, 5 überfällig" stand da,
+   man tippte darauf, und nichts geschah. Ein Kasten mit Zahlen darin sieht aus
+   wie etwas zum Aufklappen, also klappt er jetzt auf.
+
+   Randlos und ohne Fläche, wie die Mengenzahl darüber: eine antippbare Fläche,
+   kein Knopf. Ein Knopf um alle Zeilen und nicht einer je Zeile — sie führen
+   alle an dieselbe Stelle. */
+.wk-counts {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.wk-counts:hover {
+  background: var(--c-bg);
+}
+.wk-count {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px;
+  margin-bottom: 2px;
+  border-left: 2px solid var(--c-text-muted);
+}
+.wk-count-n {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.wk-count-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-sec);
+}
+/* Versäumtes ist das Einzige, was den Blick quer über die Woche ziehen soll. */
+.wk-count-late {
+  display: block;
+  padding: 1px 2px;
+  color: var(--c-red-dark);
+  font-size: var(--fs-micro);
+}
+
 /* Woche oder Tag. Sieben Spalten sind eine Übersicht und ein Kompromiss: jede
    ist ein Siebtel breit, und was darin steht, muss klein sein. Wer den Tag
    arbeitet, braucht die Übersicht gerade nicht — dann fällt sie weg und der Tag
