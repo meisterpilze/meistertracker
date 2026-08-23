@@ -67,17 +67,34 @@ function charge(name, { inc = 0, frucht = 0, kontam = 0, tageAlt = 5, strainId =
     _c: { INC: inc, TENT1: frucht, CONTAM: kontam }
   };
 }
-// Eine Körner-Charge: bare Name, Gewicht statt Scans.
-function koerner(name, { kg = 0, glaeser = 1, strainId = 1, kz = 'SH', status } = {}) {
+// Eine Körner-Charge, in Gläsern.
+//
+// `verbraucht` sagt, wie viele der Gläser schon in Blöcke gegangen sind: die
+// bekommen ein REMOVE als letzten Scan, wie nbConsumeSpawnBags() es schreibt.
+// `kontam` stellt Gläser in die Kontaminationszone. Beides ist der Weg, auf dem
+// Brut in echt verschwindet — nicht ein Status auf der ganzen Charge.
+function koerner(name, { kg = 0, glaeser = 1, strainId = 1, kz = 'SH', status, verbraucht = 0, kontam = 0 } = {}) {
+  const id = kz + '-G' + ++_n;
+  const bags = Array.from({ length: glaeser }, (_, i) => id + '-' + (i + 1));
+  const proGlas = kg / Math.max(1, glaeser);
   return {
-    batchId: kz + '-G' + ++_n,
+    batchId: id,
     species: name, // <- ohne Suffix, anders als die Block-Charge
     strainId,
     strainName: name,
     strainKuerzel: kz,
     batchType: 'grain',
     qty: glaeser,
-    bagKg: kg / Math.max(1, glaeser),
+    bagKg: proGlas,
+    bags,
+    bagWeights: Object.fromEntries(bags.map((b) => [b, proGlas])),
+    _platz: bags.map((b, i) =>
+      i < verbraucht
+        ? { bag: b, action: 'REMOVE', to: null }
+        : i < verbraucht + kontam
+          ? { bag: b, action: 'MOVE', to: 'CONTAM' }
+          : { bag: b, action: 'ADD', to: 'SPAWN' }
+    ),
     days: 14,
     created: new Date().toISOString(),
     due: '2026-09-01T00:00:00.000Z',
@@ -88,7 +105,6 @@ function koerner(name, { kg = 0, glaeser = 1, strainId = 1, kz = 'SH', status } 
     // Wer einen Status mitgibt, meint eine Charge mit Scan-Geschichte; eine
     // verbrauchte hat eine.
     _status: status || 'EMPTY',
-    _gescannt: !!status,
     _c: {}
   };
 }
@@ -119,7 +135,9 @@ function lauf(ausdruck, chargen, sorten) {
     const t = (k, p) => (p ? k + ':' + Object.values(p).join(',') : k);
     const abbrev = (s) => String(s || '').slice(0, 2).toUpperCase();
     const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
-    const _hasScanByBatch = new Map(Object.entries(hatScan));
+    const ZONE_BY_ID = { CONTAM: { role: 'contaminated' }, SPAWN: { role: 'spawn' } };
+    const toZone = (x) => x;
+    const placementByBag = () => new Map(hatScan.map((e) => [e.bag.toUpperCase(), e]));
     const stageOf = (role, batchType) =>
       role === 'fruiting' || role === 'contaminated' ? role : batchType === 'grain' ? 'spawn' : 'incubation';
     const getStatus = (id) => ({ c: statusByBatch[id] || {}, status: statusByBatchName[id] || 'INCUBATING' });
@@ -130,12 +148,9 @@ function lauf(ausdruck, chargen, sorten) {
     ZONEN,
     Object.fromEntries(chargen.map((b) => [b.batchId, b._c])),
     Object.fromEntries(chargen.map((b) => [b.batchId, b._status || 'INCUBATING'])),
-    // Welche Chargen überhaupt im Scan-Log stehen. Blöcke immer, Körner nur,
-    // wenn der Test es sagt — das ist der Unterschied zwischen "noch nirgends
-    // hingestellt" und "leer, weil aufgebraucht", und beide heißen EMPTY.
-    Object.fromEntries(
-      chargen.map((b) => [b.batchId, b._gescannt != null ? b._gescannt : Object.keys(b._c || {}).length > 0])
-    ),
+    // Der letzte Scan je Glas. Ein Glas ohne Eintrag ist heute angesetzt und
+    // noch nirgends hingestellt; ein REMOVE ist in Blöcke gegangen.
+    chargen.flatMap((b) => b._platz || []),
     sorten
   );
 }
@@ -230,11 +245,34 @@ describe('Körner werden gewogen, nicht gescannt', () => {
     assert.equal(r.grain, 15, 'nicht 5 Gläser');
   });
 
-  it('zählt verbrauchte Körner nicht mehr mit', () => {
-    const g = koerner('Shiitake', { kg: 20, status: 'DONE' });
+  it('zählt verbrauchte Gläser nicht mehr mit', () => {
+    // Verbraucht wird glasweise, mit einem REMOVE je Glas, wie
+    // nbConsumeSpawnBags() es schreibt.
+    const g = koerner('Shiitake', { kg: 20, glaeser: 10, verbraucht: 10 });
     const r = nach(rollup([g, charge('Shiitake', { frucht: 96 })]), 'Shiitake');
     assert.equal(r.grain, 0);
     assert.equal(r.supply, 'now');
+  });
+
+  it('zählt den Rest, wenn erst ein Teil verbraucht ist', () => {
+    // Der eigentliche Punkt: neun von zehn Gläsern gingen in Blöcke, und die
+    // Kachel meldete weiter zehn, weil die Charge als Ganzes noch nicht
+    // archiviert war. "Körner fehlen" konnte damit erst umschlagen, wenn das
+    // letzte Glas der letzten Charge ging.
+    const g = koerner('Shiitake', { kg: 20, glaeser: 10, verbraucht: 9 });
+    assert.equal(nach(rollup([g]), 'Shiitake').grain, 2, 'ein Glas von zehn zu je 2 kg');
+  });
+
+  it('zählt kontaminierte Gläser nicht mit', () => {
+    // Sie stehen noch da, aber ansetzen lässt sich daraus nichts.
+    const g = koerner('Shiitake', { kg: 20, glaeser: 10, kontam: 4 });
+    assert.equal(nach(rollup([g]), 'Shiitake').grain, 12, 'sechs brauchbare Gläser zu je 2 kg');
+  });
+
+  it('zählt ein mit null gewogenes Glas als null, nicht als ein Kilo', () => {
+    // `w || 1` stand hier und machte aus einem leeren Glas eines von einem Kilo.
+    const g = koerner('Shiitake', { kg: 0, glaeser: 4 });
+    assert.equal(nach(rollup([g]), 'Shiitake').grain, 0);
   });
 
   it('hält Körner aus den Beutelzahlen heraus', () => {

@@ -580,8 +580,8 @@ function applyData(d) {
   // P-05: invalidate per-batch status cache. scanLog is replaced wholesale,
   // so the lazy rebuild on next getStatus() will pick up the new state.
   _statusByBatch = null;
-  _hasScanByBatch = null;
   _rhythmIndex = null;
+  _placementByBag = null;
   // Same reason, same wholesale replacement: the search index is built from
   // these arrays and every one of them is about to be a different array.
   gsIndexInvalidate();
@@ -1353,8 +1353,8 @@ function refresh() {
   // don't go through applyData. The cache is rebuilt lazily on first
   // getStatus() call within this render pass, then reused for the rest.
   _statusByBatch = null;
-  _hasScanByBatch = null;
   _rhythmIndex = null;
+  _placementByBag = null;
   const active = document.querySelector('.page.active');
   if (!active) return;
   const id = active.id.replace('p-', '');
@@ -2687,7 +2687,6 @@ const sbadge = (s) => {
 // render. We now build a per-batch lookup map once per applyData() and
 // invalidate it whenever scanLog mutates (set _statusByBatch = null).
 let _statusByBatch = null;
-let _hasScanByBatch = null; // batch -> true (used for the EMPTY-vs-DONE branch)
 function _emptyStatus() {
   const c = {};
   if (Array.isArray(ZONES)) ZONES.forEach((z) => (c[z] = 0));
@@ -2738,10 +2737,8 @@ function _buildStatusByBatch() {
   // by server id (see db.js getScanLog ORDER BY s.id), so a simple
   // forward iteration makes the highest-id entry win for each bag.
   const lastByBatchBag = new Map(); // batchId -> Map<bagKey, event>
-  const hasByBatch = new Map();
   for (const e of scanLog) {
     if (!e.batch) continue;
-    hasByBatch.set(e.batch, true);
     let m = lastByBatchBag.get(e.batch);
     if (!m) {
       m = new Map();
@@ -2765,7 +2762,6 @@ function _buildStatusByBatch() {
     }
     out.set(batchId, _statusFromCounts(c, true, typeById.get(batchId)));
   }
-  _hasScanByBatch = hasByBatch;
   return out;
 }
 function getStatus(id) {
@@ -2910,32 +2906,53 @@ function _stageBagsOf(b) {
 // number would need a target per Sorte or consumption from the order side;
 // neither exists, so it is not guessed at.
 const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3, off: 4 };
-// How much grain of one batch is on the shelf, in KILOGRAMS.
+// Wieviel Körnerbrut dieser Charge noch dasteht, in KILOGRAMM.
 //
-// This used to read getStatus().c, i.e. jars that have a scan position — and
-// createGrainBatch writes no scan entries at all, so grain made this morning
-// counted as zero and the tile reported "Körner fehlen" over a full shelf.
-// Worse, it counted JARS while the Labor card and min_spawn_kg are kilograms,
-// so the two screens disagreed about the same Sorte in both value and unit.
+// Eine Regel, ein Glas: es zählt, solange sein letzter Scan kein REMOVE ist und
+// es nicht in einer Kontaminationszone steht. Sonst nichts.
 //
-// This is now the identical computation getLabStrainBreakdown() uses for GS,
-// which is what makes the tile, the Labor card and the minimum agree by
-// construction rather than by coincidence.
+// Das ersetzt zwei Sonderfälle, die beide falsch lagen. Der eine las
+// getStatus().c, also Gläser mit Scan-Position — und createGrainBatch schreibt
+// keine Scans, also war heute angesetzte Brut null. Der andere warf die ganze
+// Charge weg, sobald sie archiviert war, und zählte sie bis dahin voll: neun von
+// zehn Gläsern verbraucht, und die Kachel meldete weiter zehn. "Körner fehlen"
+// konnte damit erst umschlagen, wenn das letzte Glas der letzten Charge ging.
+//
+// Die eine Regel deckt beides ab, ohne einen Zweig für keins von beidem:
+//   kein Eintrag  — heute angesetzt, noch nirgends hingestellt → zählt
+//   ADD / MOVE    — steht irgendwo → zählt
+//   REMOVE        — in Blöcke gegangen oder verworfen → zählt nicht
+//   in CONTAM     — da, aber nicht brauchbar → zählt nicht
+//
+// Ist eine Charge ganz verbraucht, ergibt die Summe von selbst 0; es braucht
+// keine Archiv-Abfrage mehr — und damit auch keinen Merker dafür, ob eine
+// Charge überhaupt schon gescannt wurde.
+//
+// Das Gewicht kommt je Glas aus bagWeights, das db.js schon auflöst (bag_kg der
+// Zeile, sonst der Charge, sonst 3). `w || 1` stand hier und machte aus einem
+// mit 0 gewogenen Glas eines von einem Kilo — und widersprach nebenbei dem
+// Standardwert der Serverseite.
 function _grainKgOf(b) {
-  const { status } = getStatus(b.batchId);
-  // "EMPTY" means two different things and only one of them is empty. getStatus()
-  // has nothing to answer with for a batch that has no scan rows at all —
-  // and createGrainBatch writes none, so that is every grain batch made today.
-  // Reading that as archived returned 0 for precisely the grain the note above
-  // says this function was written to find: the tile went on saying "Körner
-  // fehlen" over a full shelf, and the fix only looked like one. _hasScanByBatch,
-  // filled by the getStatus() call on the line before, tells the two apart.
-  const gesehen = _hasScanByBatch && _hasScanByBatch.get(b.batchId);
-  if (gesehen && isArchivedStatus(status)) return 0;
-  if (b.bagWeights && Object.keys(b.bagWeights).length) {
-    return Object.values(b.bagWeights).reduce((s, w) => s + (w || 1), 0);
+  const platz = placementByBag();
+  const glasKg = (bag) => {
+    const w = b.bagWeights && b.bagWeights[bag];
+    if (Number.isFinite(w)) return w;
+    return Number.isFinite(b.bagKg) ? b.bagKg : 0;
+  };
+  const glaeser = b.bags && b.bags.length ? b.bags : null;
+  // Ohne Glasliste bleibt nur die Angabe der Charge selbst.
+  if (!glaeser) return (b.qty || 0) * (Number.isFinite(b.bagKg) ? b.bagKg : 0);
+  let kg = 0;
+  for (const bag of glaeser) {
+    const letzter = platz.get(String(bag).toUpperCase());
+    if (letzter && letzter.action === 'REMOVE') continue;
+    if (letzter && letzter.to) {
+      const z = ZONE_BY_ID[toZone(letzter.to)];
+      if (z && z.role === 'contaminated') continue;
+    }
+    kg += glasKg(bag);
   }
-  return (b.qty || 0) * (b.bagKg || 1);
+  return kg;
 }
 function sorteRollup() {
   const bySorte = new Map();
@@ -6406,7 +6423,22 @@ function editRhythmTarget(date, target) {
       if (row) row.targetQty = n;
       // A future date had no row until now; the server just made one, and the
       // next load will bring it. Re-render from what we know meanwhile.
-      else rhythmTasks.push({ date, weekday: new Date(date).getDay(), theme: '', targetQty: n, doneQty: 0 });
+      else {
+        // Mit dem Thema des Wochentags, nicht mit ''. rhythmTaskOn() zieht eine
+        // gespeicherte Zeile der Vorlage vor, also verdeckte der leere Platzhalter
+        // das echte Thema: rhythmMadeOn(date, '') trifft keinen Zweig und gibt 0
+        // zurück, und der Tag las "0 / 45" über 45 gemachten Blöcken. Der Server
+        // setzt es beim Anlegen genauso aus week_rhythm.
+        const tpl = rhythmOf(new Date(date + 'T00:00:00').getDay()) || {};
+        rhythmTasks.push({
+          date,
+          weekday: new Date(date + 'T00:00:00').getDay(),
+          theme: tpl.theme || '',
+          strainId: tpl.strainId || null,
+          targetQty: n,
+          doneQty: 0
+        });
+      }
       setFb('ok', t('rhythm.targetSaved'));
       renderDashBatchTasks();
     });
@@ -7998,6 +8030,8 @@ function nbConsumeSpawnBags(batchObj, bags) {
   });
   if (!entries.length) return;
   _statusByBatch = null; // the grain batch may now be DONE
+  _placementByBag = null; // and those jars are off the shelf
+  _rhythmIndex = null;
   postScanEntries(entries, { zoneCheck: false });
   setFb('ok', t('batch.spawnConsumed', { n: entries.length, id: batchObj.batchId }), { noModal: true });
 }
@@ -8997,6 +9031,17 @@ function postScanEntries(entries, opts) {
 // bag → its last placement-relevant entry (ADD / MOVE / REMOVE). Built once per
 // caller: the previous shape reverse-copied the entire scan log for every bag,
 // so placing a 20-bag batch against a long log did 20 full array copies.
+// Dieselbe Karte, einmal je Auffrischung gebaut.
+//
+// buildLastPlacementByBag() geht das ganze Scan-Log durch, und _grainKgOf()
+// braucht sie jetzt je Körner-Charge — ohne Merker wäre das Log mal Chargen,
+// bei jedem SSE-Ereignis. Verworfen wird sie, wo _statusByBatch verworfen wird,
+// und an der einen Stelle, die das Log selbst fortschreibt.
+let _placementByBag = null;
+function placementByBag() {
+  if (!_placementByBag) _placementByBag = buildLastPlacementByBag();
+  return _placementByBag;
+}
 function buildLastPlacementByBag() {
   const m = new Map();
   for (const e of scanLog) {
