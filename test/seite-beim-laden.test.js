@@ -60,9 +60,12 @@ describe('Die offene Seite zeichnet sich, wenn Daten kommen', () => {
     //
     // Zwei Seiten stehen bewusst nicht in refresh(): Einstellungen und Drucken
     // sind Formulare, die niemand von außen füllt. Sie stehen hier namentlich,
-    // damit eine dritte auffällt, statt still dazuzukommen. 'dash' lädt in go()
-    // nur die KPI-Historie nach, das ist kein Neuzeichnen.
-    const ohneGrund = ['settings', 'print', 'dash'];
+    // damit eine dritte auffällt, statt still dazuzukommen.
+    //
+    // 'dash' stand hier einmal mit, weil go() dort nur die KPI-Historie nachlud.
+    // Das war kein Grund, sondern derselbe Fehler wie bei 'work': die Seite
+    // zeichnete sich nie selbst. Jetzt tut sie es, und die Ausnahme ist weg.
+    const ohneGrund = ['settings', 'print'];
     const nurGo = [...seiten(rumpf('go'), 'page')].filter(
       (s) => !seiten(rumpf('refresh'), 'id').has(s) && !ohneGrund.includes(s)
     );
