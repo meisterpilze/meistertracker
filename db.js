@@ -2350,6 +2350,62 @@ const MIGRATIONS = [
       if (!cols.includes('week_bag_goal')) db.exec('ALTER TABLE inventory ADD COLUMN week_bag_goal INTEGER DEFAULT 0');
       if (!cols.includes('bag_count_from')) db.exec('ALTER TABLE inventory ADD COLUMN bag_count_from TEXT');
     }
+  },
+  {
+    version: 81,
+    description: 'Recurring jobs of the farm’s own naming, on their own interval',
+    fn(db) {
+      // Der Wochenrhythmus kann nur, was gezählt werden kann.
+      //
+      // Seine Themen sind fest verdrahtet, weil hinter jedem eine Buchung
+      // steht, aus der sich "gemacht" ableiten lässt: Chargen sind Chargen,
+      // Körnerbrut sind Gläser. Das ist die Stärke des Rhythmus und zugleich
+      // seine Grenze — "alle zwei Wochen die Growrooms putzen" ist ebenso
+      // wiederkehrende Arbeit, hinterlässt aber keine Buchung, aus der sich
+      // etwas ableiten liesse, und ein festes Thema dafür zu erfinden hiesse,
+      // beim nächsten Einfall wieder eines zu erfinden.
+      //
+      // Also zwei getrennte Dinge nebeneinander statt eines, das beides halb
+      // kann: der Rhythmus zählt Produktion, und daneben stehen Aufgaben, die
+      // die Anlage selbst benennt und selbst abhakt.
+      //
+      // anchor ist ein Datum, an dem die Aufgabe fällt, und damit beides
+      // zugleich: der Wochentag und die Phase des Takts. Ein zweites Feld für
+      // den Wochentag wäre eine zweite Wahrheit, die dem anchor widersprechen
+      // könnte — dieselbe Falle, aus der der Rhythmus gerade erst herausgeholt
+      // wurde.
+      db.exec(`CREATE TABLE IF NOT EXISTS recurring_task (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        every_weeks INTEGER NOT NULL DEFAULT 1,
+        anchor TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created TEXT NOT NULL
+      )`);
+      // Ein Haken je Termin, nicht je Aufgabe: welcher Montag geputzt wurde,
+      // ist die Frage, und ein Zähler auf der Aufgabe könnte sie nicht
+      // beantworten. Der Primärschlüssel macht doppeltes Tippen wirkungslos.
+      db.exec(`CREATE TABLE IF NOT EXISTS recurring_done (
+        task_id INTEGER NOT NULL REFERENCES recurring_task(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        done TEXT NOT NULL,
+        who TEXT,
+        PRIMARY KEY (task_id, date)
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_recurring_done_date ON recurring_done(date)');
+
+      // Und die Themen, die nie ein Wochentag war, verschwinden aus der Auswahl.
+      // Fruchtung, Ernte und Labor standen im Dropdown, weil sie zählbar sind —
+      // geplant hat sie niemand, denn sie folgen aus der Arbeit, statt sie
+      // vorzugeben. Sechs Einträge, von denen zwei benutzt werden, machen die
+      // Liste zur Suchaufgabe.
+      //
+      // Nur die Vorlage wird umgeschrieben. Aufgezeichnete Tage bleiben, wie sie
+      // waren, und werden weiterhin gezählt — eine Aufnahme der Vergangenheit
+      // anzufassen, weil sich das Menü geändert hat, wäre die Umkehrung von
+      // allem, was an dieser Stelle gilt.
+      db.exec("UPDATE week_rhythm SET theme = 'free', target_qty = NULL WHERE theme IN ('fruiting', 'harvest', 'lab')");
+    }
   }
 ];
 
@@ -2856,6 +2912,7 @@ function readAll(db, opts = {}) {
     manualTasks,
     weekRhythm,
     rhythmTasks,
+    recurringTasks: listRecurringTasks(db),
     harvests,
     cultures,
     inventory,
@@ -7028,7 +7085,17 @@ function setZoneCapacity(db, id, cap) {
 
 // The themes a weekday can carry. Kept here rather than in the client so the
 // endpoint can reject a typo instead of storing a theme nothing renders.
-const WEEK_THEMES = ['substrate', 'grain', 'fruiting', 'harvest', 'lab', 'free'];
+// Nur, was sich planen UND zählen lässt.
+//
+// Fruchtung, Ernte und Labor standen hier, weil sie zählbar sind. Geplant hat
+// sie nie jemand: sie folgen aus der Arbeit, statt sie vorzugeben — man zieht
+// um, wenn durchwachsen ist, und erntet, wenn reif ist, nicht dienstags. Sechs
+// Einträge, von denen zwei benutzt werden, machen aus einer Auswahl eine Suche.
+//
+// Alles andere, was regelmässig zu tun ist, ist jetzt eine eigene Aufgabe mit
+// eigenem Namen und eigenem Takt (recurring_task) — das ist der Platz, an dem
+// so etwas wachsen darf, ohne dass diese Liste mitwächst.
+const WEEK_THEMES = ['substrate', 'grain', 'free'];
 
 // Replaces the whole week in one transaction. A partial update would let a
 // half-applied save leave two days claiming to be grain day, and the editor
@@ -7200,6 +7267,122 @@ function listRhythmTasks(db) {
       note: r.note || null,
       doneQty: r.done_qty || 0
     }));
+}
+
+// ─── Wiederkehrende Aufgaben der Anlage ─────────────────────────────────────
+//
+// Der Rhythmus zählt Produktion. Das hier ist alles andere, was regelmässig zu
+// tun ist und keine Buchung hinterlässt: putzen, warten, prüfen. Selbst
+// benannt, selbst getaktet, selbst abgehakt.
+
+// Fällt die Aufgabe an diesem Tag?
+//
+// anchor ist ein Termin, everyWeeks der Takt. Alles andere folgt daraus: der
+// Wochentag steckt im anchor, und ob ein Datum ein Termin ist, ist eine
+// Division. Vor dem anchor fällt nichts an — eine Aufgabe, die heute angelegt
+// wird, hat nicht rückwirkend seit Januar gefehlt.
+//
+// In UTC gerechnet, damit die Sommerzeit nicht aus sieben Tagen 6,96 macht.
+function recurringDueOn(anchor, everyWeeks, date) {
+  if (!anchor || !date || date < anchor) return false;
+  const n = Number(everyWeeks);
+  if (!Number.isInteger(n) || n < 1) return false;
+  const a = Date.parse(anchor + 'T00:00:00Z');
+  const d = Date.parse(date + 'T00:00:00Z');
+  if (isNaN(a) || isNaN(d)) return false;
+  return Math.round((d - a) / 864e5) % (7 * n) === 0;
+}
+
+// Die Haken der letzten Wochen, nicht alle. Der Plan schaut sieben Tage vor und
+// vierzehn zurück; was davor liegt, müsste die App bei jedem Laden mitschleppen,
+// ohne es je anzusehen.
+const RECURRING_DONE_WINDOW_DAYS = 60;
+function listRecurringTasks(db, now) {
+  const heute = now ? new Date(now) : new Date();
+  const seit = _ymd(new Date(heute.getTime() - RECURRING_DONE_WINDOW_DAYS * 864e5));
+  const haken = new Map();
+  for (const r of db.prepare('SELECT task_id, date FROM recurring_done WHERE date >= ?').all(seit)) {
+    if (!haken.has(r.task_id)) haken.set(r.task_id, []);
+    haken.get(r.task_id).push(r.date);
+  }
+  return db
+    .prepare('SELECT id, name, every_weeks, anchor, active, created FROM recurring_task ORDER BY id')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      everyWeeks: r.every_weeks,
+      anchor: r.anchor,
+      active: r.active === 1,
+      done: (haken.get(r.id) || []).sort()
+    }));
+}
+
+function saveRecurringTask(db, t) {
+  const name = String((t && t.name) || '')
+    .trim()
+    .slice(0, 80);
+  if (!name) throw new Error('A name is required');
+  const every = Number(t.everyWeeks);
+  // 52 als Obergrenze, weil darüber "wiederkehrend" nichts mehr beschreibt.
+  if (!Number.isInteger(every) || every < 1 || every > 52) throw new Error('Interval must be 1 to 52 weeks');
+  const anchor = String(t.anchor || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) throw new Error('Not a date: ' + anchor);
+  const aktiv = t.active === false ? 0 : 1;
+  if (t.id !== undefined && t.id !== null && t.id !== '') {
+    const id = Number(t.id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + t.id);
+    const info = db
+      .prepare('UPDATE recurring_task SET name = ?, every_weeks = ?, anchor = ?, active = ? WHERE id = ?')
+      .run(name, every, anchor, aktiv, id);
+    if (!info.changes) throw new Error('No such task: ' + id);
+    incrementDataVersion(db);
+    return id;
+  }
+  const info = db
+    .prepare('INSERT INTO recurring_task(name, every_weeks, anchor, active, created) VALUES(?, ?, ?, ?, ?)')
+    .run(name, every, anchor, aktiv, new Date().toISOString());
+  incrementDataVersion(db);
+  return Number(info.lastInsertRowid);
+}
+
+function deleteRecurringTask(db, id) {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) throw new Error('Not a task id: ' + id);
+  // Die Haken gehen mit: ON DELETE CASCADE steht in der Tabelle, aber
+  // PRAGMA foreign_keys ist nicht überall an, und verwaiste Haken wären
+  // Zeilen, die auf niemanden mehr zeigen.
+  db.prepare('DELETE FROM recurring_done WHERE task_id = ?').run(n);
+  const info = db.prepare('DELETE FROM recurring_task WHERE id = ?').run(n);
+  if (!info.changes) throw new Error('No such task: ' + n);
+  incrementDataVersion(db);
+  return true;
+}
+
+// Einen Termin abhaken — oder den Haken wieder wegnehmen.
+//
+// Nur auf einem Datum, an dem die Aufgabe wirklich fällt. Ohne diese Prüfung
+// liesse sich ein beliebiger Tag abhaken, und die Rückstandsrechnung fände
+// dann Haken auf Tagen, die sie gar nicht kennt.
+function setRecurringDone(db, taskId, date, done, who) {
+  const id = Number(taskId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + taskId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
+  const t = db.prepare('SELECT every_weeks, anchor FROM recurring_task WHERE id = ?').get(id);
+  if (!t) throw new Error('No such task: ' + id);
+  if (!recurringDueOn(t.anchor, t.every_weeks, date)) throw new Error('Not a due date for this task: ' + date);
+  if (done === false) {
+    db.prepare('DELETE FROM recurring_done WHERE task_id = ? AND date = ?').run(id, date);
+  } else {
+    db.prepare('INSERT OR REPLACE INTO recurring_done(task_id, date, done, who) VALUES(?, ?, ?, ?)').run(
+      id,
+      date,
+      new Date().toISOString(),
+      who ? String(who).slice(0, 60) : null
+    );
+  }
+  incrementDataVersion(db);
+  return done !== false;
 }
 
 // -- Camera dashboard (admin WIP) --------------------------------------------
@@ -9961,6 +10144,11 @@ module.exports = {
   WEEK_THEMES,
   ensureRhythmTasks,
   setRhythmTarget,
+  recurringDueOn,
+  listRecurringTasks,
+  saveRecurringTask,
+  deleteRecurringTask,
+  setRecurringDone,
   listRhythmTasks,
   zoneBagCount,
   rackBagCount,
