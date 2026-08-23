@@ -16,16 +16,6 @@
       "reason": "Opened on a 320px phone the dashboard is genuinely 360px wide, so the phone renders it at 89 percent. The widest thing on it is the period toggle (Diese Woche / Diesen Monat / Dieses Jahr) at 344px, which is also the OVERFLOW line below: one cause, two symptoms, depending on whether the meta viewport applies."
     },
     {
-      "kind": "widened",
-      "pointer": "coarse",
-      "at": "n-lab",
-      "from": 769,
-      "to": 860,
-      "mode": "app",
-      "package": "P3",
-      "reason": "The lab page is 864px wide between 769 and 860px, so a tablet in that band renders it at 89 percent. 769 is where the sidebar comes back and takes its width off the content, which is exactly the band nobody measured."
-    },
-    {
       "kind": "over",
       "at": "bn-cal",
       "to": 320,
@@ -42,16 +32,6 @@
       "mode": "app",
       "package": "P3",
       "reason": "The dashboard's period toggle and its 'Dieses Jahr' button hang 17 to 40px past the edge below 360px with a mouse. Three pills in a row that do not wrap. Same cause as the ZOOMED OUT line for n-dash above; with a mouse the meta viewport does not apply, so it overflows instead of shrinking."
-    },
-    {
-      "kind": "over",
-      "pointer": "fine",
-      "at": "st-lab-contam",
-      "from": 769,
-      "to": 800,
-      "mode": "app",
-      "package": "P3",
-      "reason": "The lab's Kontamination tab hangs up to 33px past the edge between 769 and 800px. Same band and same cause as the lab's ZOOMED OUT line: at 769 the sidebar returns and the content column loses its width without the tab strip noticing."
     }
   ],
   "_mode": "Each line says which MODE can see it. `markup` is the run without --app, over index.html's own markup; `app` is the run with app.js and a seeded database. Without this a line would be reported as 'can go' by whichever mode cannot see it -- the <summary> below is in index.html and is therefore visible to the static run, while in the live app it sits inside a collapsed form and is never measured. A line with no mode belongs to both.",
@@ -61,22 +41,8 @@
       "id": "chargentabelle-spalten",
       "asked": "Jonas, point 61 in neubau/FUER-JONAS.md (private repo), 2026-08-21",
       "package": "P5",
-      "assumed": [
-        "batchId",
-        "species",
-        "qty",
-        "due",
-        "status",
-        "actions"
-      ],
-      "folded": [
-        "strain",
-        "inc",
-        "substrate",
-        "source",
-        "created",
-        "notes"
-      ],
+      "assumed": ["batchId", "species", "qty", "due", "status", "actions"],
+      "folded": ["strain", "inc", "substrate", "source", "created", "notes"],
       "why": "The twelve columns of the Chargen table need 728px in the header row alone, and at a 769px window there are 439px of content width. Which six somebody actually needs in passing is known only by the person who works with it, and no stylesheet can decide it. Until the answer arrives P5 keeps the six above visible and folds the other six into the expandable part of the card. Written down here rather than left in a commit message, because an assumption nobody can find is indistinguishable from a decision nobody made.",
       "goes_when": "Jonas answers point 61, and the line is then either confirmed or replaced by his list."
     },
@@ -86,5 +52,6 @@
       "note": "Der Sprungbefund war ein Messfehler des Messstands, nicht ein Fehler der Anwendung. Gemessen wurde unmittelbar nach setViewport, und der Layout-Viewport laeuft danach erst ueber rund 100 bis 200 ms ein: Uebersicht 600, 583, 547, 502, 390, 360; Kalender und Labor entsprechend auf 320. Mit einer Ruhebedingung von drei gleichen Frames ist die Klasse in vier aufeinanderfolgenden Laeufen 0 offen, ohne sie schwankte sie zwischen 11 und 20. Was bleibt, ist ZOOMED OUT: zwei Seiten sind schon beim Oeffnen breiter als das Telefon."
     }
   ],
-  "_2026_08_22_p1": "Package P1 closed every touch line. The desktop half of the token layer said `--tap: auto` and `--tap-min: 0px`, which meant no floor at all on a fine pointer: 24px is WCAG 2.5.8 Target Size (Minimum), level AA, and level AA knows nothing about input devices. The coarse half was already right, because it hangs on `hover: hover` rather than on a width. Three controls needed a floor of their own on top of the tokens: the collapsible location header (21px on both axes), the day circle in the month grid (28px under a finger at every width from 769px up) and the <summary> of #nb-sub-section (18px on a desk, and only the static run can see it). `.btn` gained a min-WIDTH as well: a tap target has two measurements, and the lab's close button was 23 x 24."
+  "_2026_08_22_p1": "Package P1 closed every touch line. The desktop half of the token layer said `--tap: auto` and `--tap-min: 0px`, which meant no floor at all on a fine pointer: 24px is WCAG 2.5.8 Target Size (Minimum), level AA, and level AA knows nothing about input devices. The coarse half was already right, because it hangs on `hover: hover` rather than on a width. Three controls needed a floor of their own on top of the tokens: the collapsible location header (21px on both axes), the day circle in the month grid (28px under a finger at every width from 769px up) and the <summary> of #nb-sub-section (18px on a desk, and only the static run can see it). `.btn` gained a min-WIDTH as well: a tap target has two measurements, and the lab's close button was 23 x 24.",
+  "_2026_08_23_p3": "P3 hat die beiden Labor-Zeilen genommen: `widened coarse n-lab 769-860` und `over fine st-lab-contam 769-800`. Beides war EIN Fehler mit zwei Gesichtern — bei 769 px kommt die Seitenleiste zurück und nimmt 240 px vom Inhalt, und Kartenmodus wie Untertableiste fragten weiter das Fenster. Sie fragen jetzt `.main` (Regel R2), und der Lauf meldete die beiden Zeilen von selbst als „line can go\"."
 }

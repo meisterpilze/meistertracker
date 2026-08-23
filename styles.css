@@ -1507,6 +1507,25 @@ body:has(.modal-bg.open) .cam-fab {
   padding: var(--pad-page);
   max-width: 1400px;
   margin: 0 auto;
+  /* Regel R2: der Kasten misst, nicht das Fenster.
+     Alles, was in dieser Spalte steht, kann von hier ab nach IHRER Breite
+     fragen statt nach der des Fensters — und das sind zwei verschiedene
+     Zahlen, sobald die Seitenleiste da ist: bei 769 px Fenster bleiben
+     769 − 240 − 48 = 481 px übrig. Genau diese Lücke war die Klippe bei
+     769 px, an der zwei Ratschenzeilen hingen.
+
+     Der Name ist nötig und nicht Zierde: ohne ihn fragt eine
+     Container-Abfrage den NÄCHSTEN Vorfahren mit container-type, und wer
+     später einen zweiten Kasten dazwischensetzt, verschiebt lautlos, worauf
+     sich jede dieser Regeln bezieht.
+
+     Was das sonst noch tut, ist gemessen und nicht angenommen:
+     `container-type` macht `.main` in keiner der beiden Maschinen zum
+     Bezugsrahmen für `position: fixed` (P0, maschinen/), und dass nichts
+     darin an einen anderen Platz rutscht, halten 142 Bilder vorher/nachher
+     aus `--shots`. */
+  container-type: inline-size;
+  container-name: inhalt;
 }
 .page {
   display: none;
@@ -1730,7 +1749,107 @@ summary.fs-meta {
    that opens on its index instead falls out of the same rule rather than a
    name: Admin's default tab is display:none, so there is no sub-page to land
    on, and the list is what you get. */
+/* zwilling: untertableiste */
 @media (max-width: 768px) {
+  .stabs {
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 0;
+    margin-bottom: 12px;
+    border-bottom: none;
+  }
+  .stab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    /* --tap, not --tap-sm: on a phone this is the page's navigation, which is
+       the argument the base rule makes for keeping it small in reverse. */
+    min-height: var(--tap);
+    border-radius: 0;
+    border-bottom: 1px solid var(--c-border-light);
+    text-align: left;
+    font-size: var(--fs-base);
+    color: var(--c-text);
+  }
+  /* A full-width green bar for "you were last here" would read as the page's
+     primary action. In a list, the mark is the label. */
+  .stab.active {
+    background: transparent;
+    color: var(--c-primary);
+    font-weight: 600;
+  }
+  .stab:hover:not(.active) {
+    background: transparent;
+  }
+  /* Drawn, not typed: a › from the font renders at a different size and
+     baseline in every fallback, and this one has to line up with the others. */
+  .stab::after {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-right: 2px solid var(--c-text-muted);
+    border-bottom: 2px solid var(--c-text-muted);
+    transform: rotate(-45deg);
+  }
+  .stab.active::after {
+    border-color: var(--c-primary);
+  }
+  .page.stab-drilled > .stabs {
+    display: none;
+  }
+  .page.stab-drilled > .stab-back {
+    display: flex;
+  }
+  .stab-back {
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 4px;
+    margin-bottom: 12px;
+    border: none;
+    border-bottom: 1px solid var(--c-border-light);
+    background: transparent;
+    color: var(--c-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .stab-back-ico {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  /* On the index there is no sub-page. The .active panel keeps its class, so
+     going back into it needs no state of its own — this rule outranks
+     `.sp.active` on specificity alone (0,4,0 against 0,2,0).
+
+     `.stab-drill` is not decoration: it is added by stabDrillInit(), so this
+     reaches only the pages that were given a back row — any page whose strip is
+     hidden is skipped there and would otherwise render blank on a phone, every
+     sub-page hidden and no index to reach them by. (Bestellungen was that page
+     until its five views stopped being sidebar entries.) It also means the whole
+     mechanism is inert if the script does not run, which is the right way round. */
+  .page.stab-drill:not(.stab-drilled) .sp {
+    display: none;
+  }
+}
+
+/* zwilling: untertableiste
+   Regel R2, dieselbe Rechnung wie beim Kartenmodus: 768 − 2×16 = 736. Die
+   Leiste wird zur Liste, sobald IHRE Spalte schmal ist, nicht wenn das
+   Fenster es ist. Der Kontaminationsstreifen des Labors hing zwischen 769
+   und 800 px bis zu 33 px über den Rand, weil er bei 769 px die Breite des
+   Fensters annahm, während die Seitenleiste ihm 240 px davon genommen hatte.
+
+   Zweimal geschrieben wie der Kartenmodus, und aus demselben Grund; ein Test
+   hält die beiden Fassungen gleich. */
+@container inhalt (max-width: 736px) {
   .stabs {
     flex-direction: column;
     gap: 0;
@@ -5633,7 +5752,228 @@ tr.ms-off .ms-prog {
   [role='button'] {
     align-content: center;
   }
+}
 
+/* zwilling: kartenmodus */
+@media (max-width: 768px) {
+  /* ── Tables as cards ────────────────────────────────────────
+     A 12-column table on a 360px viewport puts its Actions column
+     roughly 700px off-screen. Below this breakpoint the rows become
+     stacked cards: thead off, tr a card, td a label/value row, and the
+     label read from the data-mlabel the renderer already writes.
+
+     One mechanism, applied by class. Four tables had this spelled out
+     separately — #t-batches, #t-cultures, #t-log, #t-harvest — in four
+     blocks that were the same rules under different ids, 306 lines of
+     it. The cost of that shape was never the duplication: #t-grain is
+     filled by batchRowHtml(), the *same function* that fills
+     #t-batches, so every one of its cells already carried a
+     data-mlabel — and it still got a sideways-scrolling table, because
+     the fifth copy of the block was never written.
+
+     Two structural facts now do the work four ids used to:
+       - the card header is the first cell, in all four tables and by
+         construction — batch id, culture id, log time, harvest date;
+       - the actions cell is the one with no data-mlabel, because a row
+         of buttons has nothing to label. That is what distinguishes it
+         from a last cell that *is* data, which is what #t-harvest has
+         and why :last-child would have been wrong. */
+  .t-cards {
+    border: 0;
+    width: 100%;
+  }
+  .t-cards > thead {
+    display: none;
+  }
+  .t-cards > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  .t-cards > tbody > tr > td {
+    display: block;
+    padding: 4px 0;
+    border: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    /* The card carries the background now, not the cell. Two table rules
+       still target these cells — `tr:nth-child(even) td` and `tr:hover td`
+       — and both outlive the layout they were written for: zebra striping
+       tints every second *card* grey instead of every second row, and a
+       tap on a coarse pointer leaves the hover tint stuck on. Neither was
+       introduced by the card mode; neither had been looked at since it
+       arrived. */
+    background: none;
+  }
+  /* Label in a gutter, value in normal flow.
+
+     This cell was `display: flex` with the label as its first item, which
+     reads correctly and is wrong: making the cell a flex container makes
+     *every* element child a flex item, so the layout silently depended on
+     each cell holding exactly one. #t-batches' Substrat cell holds three —
+     batchRowHtml() writes one .sub-tag per material — and they became three
+     competing items on a nowrap line, each shrunk until "HW 60% WB 20%"
+     wrapped to four lines inside a 99px-radius pill. Eight cards, every
+     batch, and no count could see it: the chips do not exist until the
+     renderer runs, so both the source census and measure-mobile.js (which
+     serves the page with the scripts stripped) looked straight past them.
+
+     Normal flow is also what these chips get from the desktop table cell
+     they were written for, so the two layouts now differ in where the label
+     sits and not in how the value is laid out. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child) {
+    position: relative;
+    padding-left: 92px;
+  }
+  /* The label was 10–11px here, which is the size this whole project
+     exists to stop shipping. Uppercase, 600 and muted already say
+     "this is a label" without help from a size below the floor.
+     84px fits every label the renderers emit except "Chargen-ID" at 87px,
+     which is a first cell and hidden; the rest top out at 72px. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child)::before {
+    content: attr(data-mlabel);
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 84px;
+    color: var(--c-text-muted);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* The other half of the same cell. Normal flow fixed the three chips
+     competing as flex items; it does not fix each chip being an inline box,
+     which splits its background and its 99px radius across two line boxes the
+     moment it wraps — "RH 63%" came out as a 155×39 smear. A pill has to be a
+     box. Scoped to the card because the desktop table's Substrat column is
+     ~63px wide, where the same keyword wraps every chip into a padded stack
+     and takes #t-batches from 760px to 1093px tall. Same defect, different
+     fix: the desktop needs its column widths looked at. */
+  .t-cards .sub-tag {
+    display: inline-block;
+  }
+  /* First cell: the card's header. What it looks like is per table — an
+     id wants to be big, a timestamp wants to be a quiet subtitle — so
+     this sets only what they share. Its label is not hidden here but never
+     written: the :not(:first-child) above is what keeps 184 of the 189
+     first cells from indenting 92px around a label nobody wants to see. */
+  .t-cards > tbody > tr > td:first-child {
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  /* Actions row — full width, buttons share it equally. The
+     (pointer: coarse) rule near .btn-sm already gives them 44px. */
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):not(.empty) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--c-border-light);
+    white-space: normal !important;
+  }
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):empty {
+    display: none;
+  }
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-sm,
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-xs {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0 !important;
+    text-align: center;
+  }
+  /* Empty/no-matches row keeps a centred full-row look. */
+  .t-cards > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+    border-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  /* ── Per table, only what is genuinely its own ───────────────── */
+
+  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  #t-batches > tbody > tr > td.bt-id,
+  #t-grain > tbody > tr > td.bt-id,
+  #t-cultures > tbody > tr > td.cu-id {
+    font-size: 0.9375rem !important;
+    font-weight: 600;
+  }
+  /* The scan log and the harvest log lead with a time, which is not a
+     name — it dates the row rather than titling it. */
+  #t-log > tbody > tr > td.lg-time,
+  #t-harvest > tbody > tr > td.hv-date {
+    font-size: max(0.75rem, var(--fs-min)) !important;
+    color: var(--c-text-sec) !important;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+  }
+  /* Sub-row injected by toggleBatchBags() — keep its full-width layout
+     for the bag chips, just retint it as a connected detail panel. */
+  #t-batches > tbody > tr[id^='brow-'],
+  #t-grain > tbody > tr[id^='brow-'] {
+    border: 1px dashed var(--c-border);
+    padding: 10px 12px;
+    background: var(--c-bg);
+  }
+  /* The status dropdown in the cultures action row is a control, not a
+     button; stretching it to share the row makes it unreadable. */
+  #t-cultures > tbody > tr > td.cu-actions select {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  /* Harvest cards: grams pinned top-right as a big amber number, the
+     most-scanned value when reading a harvest log on a phone. */
+  #t-harvest > tbody > tr {
+    position: relative;
+  }
+  #t-harvest > tbody > tr > td.hv-date {
+    padding-right: 96px;
+  }
+  #t-harvest > tbody > tr > td.hv-grams {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+    line-height: 1.1;
+    padding: 0 !important;
+  }
+  #t-harvest > tbody > tr > td.hv-grams::before {
+    display: none;
+  }
+}
+
+/* zwilling: kartenmodus
+   ── Regel R2: der Kasten misst, nicht das Fenster ───────────────────────
+   Der Kartenmodus hing an der Fensterbreite, und darin steckte die Klippe bei
+   769 px: dort kommt die Seitenleiste zurück und nimmt 240 px vom Inhalt weg,
+   die Tabelle bekommt aber weiter das Layout für 769 px statt für die 497 px,
+   die ihr geblieben sind. Gemessen war das der Grund für zwei Ratschenzeilen
+   (Labor 769-860 px verkleinert, Kontaminationsstreifen 769-800 px über den
+   Rand) — ein Fehler mit zwei Gesichtern, je nachdem ob die Meta-Ansicht gilt.
+
+   736 px ist keine neue Grenze, sondern dieselbe: Auf dem Telefon ist die
+   Seitenleiste weg und `.main` hat 2×16 px Polsterung, 768 − 32 = 736. Der
+   Kartenmodus setzt also auf dem Telefon exakt dort ein wie vorher, und auf
+   dem Schreibtisch zusätzlich, sobald die Inhaltsspalte schmal genug ist —
+   was auch heißt: Wird die Seitenleiste eingeklappt, folgt er von selbst.
+   Keine Medienabfrage der Welt kann das.
+
+   ZWEIMAL GESCHRIEBEN, mit Absicht. Die @media-Fassung ist die Rückfallebene
+   für einen Browser ohne Container-Abfragen (Chrome vor 105, Safari vor 16);
+   dort bleibt alles, wie es heute ist. Ein Test hält die beiden Fassungen
+   Zeichen für Zeichen gleich, weil zwei Kopien sonst genau so lange
+   übereinstimmen, bis jemand eine davon ändert. */
+@container inhalt (max-width: 736px) {
   /* ── Tables as cards ────────────────────────────────────────
      A 12-column table on a 360px viewport puts its Actions column
      roughly 700px off-screen. Below this breakpoint the rows become
