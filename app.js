@@ -5971,6 +5971,49 @@ function _renderRhythmRows() {
       _renderRhythmRows();
     });
   });
+  // Die Summe rechnet beim Tippen mit, aber die Zeilen werden dabei NICHT neu
+  // gebaut: ein Neuaufbau mitten in der Eingabe nimmt dem Feld den Fokus und
+  // setzt den Cursor zurück, und man tippt "70" als "0".
+  rows.querySelectorAll('[data-rhythm-qty]').forEach((i) => {
+    i.addEventListener('input', () => {
+      _rhythmSyncFromForm();
+      _renderRhythmTotal();
+    });
+  });
+  _renderRhythmTotal();
+}
+// Was die Woche verlangt, je Thema.
+//
+// Getrennt und nicht als eine Zahl: Substrat sind Blöcke, Körnerbrut sind
+// Gläser, Ernte ist Kilogramm. "112 diese Woche" über drei Einheiten summiert
+// wäre eine Zahl, die nichts misst — und genau die Frage, die hier gestellt
+// wird ("70 Substrat die Woche"), stellt sich ohnehin je Thema.
+function _rhythmWeekTotals() {
+  const sums = {};
+  for (const d of WEEK_DAYS) {
+    const e = (_rhythmDraft && _rhythmDraft[d]) || {};
+    const th = e.theme || 'free';
+    // NaN aus einem halb getippten Feld ist falsy und fällt hier heraus, statt
+    // die Summe auf NaN zu ziehen.
+    if (th === 'free' || !e.targetQty) continue;
+    sums[th] = (sums[th] || 0) + e.targetQty;
+  }
+  return sums;
+}
+function _renderRhythmTotal() {
+  const el = document.getElementById('rhythm-total');
+  if (!el) return;
+  const sums = _rhythmWeekTotals();
+  const teile = WEEK_THEMES.filter((k) => sums[k]).map((k) => sums[k] + ' ' + weekThemeLabel(k));
+  el.innerHTML =
+    '<div class="fs-sm rhythm-total-sum">' +
+    esc(t('rhythm.weekTotal')) +
+    ' ' +
+    esc(teile.length ? teile.join(' · ') : t('rhythm.weekTotalNone')) +
+    '</div>' +
+    '<div class="fs-xs rhythm-total-hint">' +
+    esc(t('rhythm.weekTotalHint')) +
+    '</div>';
 }
 // Opens on the saved week, or — the first time, when nothing has been saved —
 // on the one derived from the farm's own history, so the first interaction is
@@ -6127,12 +6170,24 @@ function _weekHeadHtml(d, off, sel) {
   // sits where a date belongs. Empty stays a blank line rather than a "·" — a
   // quiet day is not missing data — but the line is held open with a nbsp so
   // the seven columns keep the same height.
-  const foot = [
-    n ? '<span style="font-weight:700;color:var(--c-text-sec)">' + n + '</span>' : '',
-    short ? esc(short) : ''
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const nHtml = n ? '<span style="font-weight:700;color:var(--c-text-sec)">' + n + '</span>' : '';
+  // Die Vorgabezahl stand zweimal übereinander: hier im Kopf und 20px darunter
+  // im Spaltenkörper, wo sie zusätzlich bearbeitbar ist.
+  //
+  // Weg kann sie nur an einer Stelle, und welche das ist, hängt von der Breite
+  // ab: auf breitem Schirm sind alle sieben Körper sichtbar, also trägt dort
+  // der Körper die Zahl und der Kopf nur das Thema. Auf dem Telefon zeigt von
+  // sechs Tagen nur der Kopf etwas (.wk-b { display: none }), also muss sie
+  // dort im Kopf stehen. Das entscheidet .wk-h-t in styles.css, nicht dieser
+  // Zweig — eine Bedingung auf die Auswahl hin würde die Zahl beim Tagwechsel
+  // springen lassen.
+  //
+  // Nur für die Vorgabezahl. Wo n die Anzahl der Arbeitszeilen ist, wiederholt
+  // der Körper sie nirgends, und sie bleibt auf jedem Schirm stehen.
+  const foot =
+    task && task.targetQty
+      ? '<span class="wk-h-t">' + nHtml + (short ? ' · ' : '') + '</span>' + (short ? esc(short) : '&nbsp;')
+      : [nHtml, short ? esc(short) : ''].filter(Boolean).join(' · ');
   return (
     '<button type="button" role="tab" data-action="dash-day" data-off="' +
     off +
@@ -6472,7 +6527,22 @@ function _rhythmTaskRowHtml(task, outstanding) {
 // editable in two places is exactly the kind of thing that gets misread.
 function editRhythmTarget(date, target) {
   if (!date) return;
-  prompt2(t('rhythm.targetPrompt', { date: fmtDt(date) }), String(target || ''), function (raw) {
+  // Der Rhythmus wird mitgesagt, statt dass man ihn sich merken muss.
+  //
+  // Ohne ihn waren es zwei Zahlen an zwei Stellen ohne sichtbaren Bezug: hier
+  // eine 72, im Rhythmus-Fenster eine 36, und nichts sagte, dass die eine die
+  // Ausnahme von der anderen ist. Wer die Vorlage danach änderte, sah an diesem
+  // Tag nichts passieren und hielt die beiden für getrennte Systeme.
+  const tplTag = rhythmOf(new Date(date + 'T00:00:00').getDay()) || {};
+  const frage =
+    tplTag.targetQty && tplTag.theme && tplTag.theme !== 'free'
+      ? t('rhythm.targetPromptTpl', {
+          date: fmtDt(date),
+          n: tplTag.targetQty,
+          theme: weekThemeLabel(tplTag.theme)
+        })
+      : t('rhythm.targetPrompt', { date: fmtDt(date) });
+  prompt2(frage, String(target || ''), function (raw) {
     if (raw === null || raw === undefined) return;
     const s = String(raw).trim();
     if (s === '') return;
@@ -6484,6 +6554,16 @@ function editRhythmTarget(date, target) {
     apiPost('/api/rhythm-task', { date, targetQty: n }).then((res) => {
       if (res && res.error) {
         toast(res.error, 'err');
+        return;
+      }
+      // Der Tag folgt wieder der Vorlage: der Server hat die eigene Zeile
+      // gelöscht, also muss sie auch hier weg, sonst verdeckt eine Zeile, die
+      // es nicht mehr gibt, weiterhin den Rhythmus.
+      if (res && res.followsRhythm) {
+        const i = rhythmTasks.findIndex((x) => x.date === date);
+        if (i >= 0) rhythmTasks.splice(i, 1);
+        setFb('ok', t('rhythm.targetFollows'));
+        renderDashBatchTasks();
         return;
       }
       const row = rhythmTasks.find((x) => x.date === date);
