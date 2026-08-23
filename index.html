@@ -454,6 +454,14 @@
         <h3 id="rhythm-title" data-i18n="rhythm.title">Wochenrhythmus</h3>
         <p class="fs-meta" id="rhythm-hint" style="color: var(--c-text-muted); margin: 0 0 10px"></p>
         <div id="rhythm-rows"></div>
+        <!-- Ab wann gerechnet wird. Ohne das steht jede Woche vor der
+             Inbetriebnahme als verfehlt da, und daran ist nichts nachzuholen. -->
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px">
+          <button type="button" class="btn btn-sm fs-xs" data-action="rhythm-start" data-i18n="rhythm.startSet">
+            Ab wann zaehlen
+          </button>
+          <span class="fs-xs" id="rhythm-start-now" style="color: var(--c-text-muted)"></span>
+        </div>
         <div class="modal-btns">
           <button id="rhythm-cancel" class="btn" data-i18n="common.cancel">Cancel</button
           ><button id="rhythm-save" class="btn btn-p" data-i18n="common.save">Save</button>
@@ -2418,11 +2426,6 @@
               <div class="ov-kpi-group-label" id="ov-period-label">This week</div>
               <div class="g4" id="ov-kpi-week"></div>
             </div>
-
-            <!-- Wochenziel: was jede Woche seit dem Startdatum gebracht hat.
-                 Steht bei den Produktionszahlen, weil es eine davon ist — nur
-                 gegen eine Vorgabe gelesen statt fuer sich allein. -->
-            <div class="card form-card" id="ov-week-goal" style="margin-bottom: 10px"></div>
 
             <!-- Substrates KPI row -->
             <div class="ov-kpi-group" style="margin-bottom: 10px">

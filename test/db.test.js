@@ -1913,43 +1913,6 @@ describe('db – rhythm tasks carry forward', () => {
     );
   });
 
-  it('records what was actually made, and leaves the target alone', () => {
-    everyDay(45);
-    db.ensureRhythmTasks(d);
-    const day = ymd(daysAgo(1));
-    db.setRhythmProgress(d, day, 30);
-    const row = tasks().find((x) => x.date === day);
-    assert.equal(row.doneQty, 30);
-    assert.equal(row.targetQty, 45, 'recording progress moved the target');
-  });
-
-  it('is absolute, so a retried request cannot inflate the count', () => {
-    everyDay(45);
-    db.ensureRhythmTasks(d);
-    const day = ymd(daysAgo(1));
-    db.setRhythmProgress(d, day, 30);
-    db.setRhythmProgress(d, day, 30);
-    assert.equal(tasks().find((x) => x.date === day).doneQty, 30, 'the same value applied twice added up');
-  });
-
-  it('stores an overshoot as it happened rather than clamping it', () => {
-    everyDay(45);
-    db.ensureRhythmTasks(d);
-    const day = ymd(daysAgo(1));
-    db.setRhythmProgress(d, day, 50);
-    assert.equal(tasks().find((x) => x.date === day).doneQty, 50);
-  });
-
-  it('refuses a bad date, a bad count, or a day nothing was planned for', () => {
-    everyDay(45);
-    db.ensureRhythmTasks(d);
-    const day = ymd(daysAgo(1));
-    assert.throws(() => db.setRhythmProgress(d, 'Montag', 5), /Not a date/);
-    assert.throws(() => db.setRhythmProgress(d, day, -1), /whole number/);
-    assert.throws(() => db.setRhythmProgress(d, day, 2.5), /whole number/);
-    assert.throws(() => db.setRhythmProgress(d, '1999-01-01', 5), /No planned work/);
-  });
-
   it('tracks nothing for a themed day that carries no target', () => {
     const m = {};
     for (let i = 0; i < 7; i++) m[i] = { theme: 'fruiting' };
@@ -2003,15 +1966,6 @@ describe('db – rhythm tasks carry forward', () => {
     assert.equal(row.theme, 'substrate', 'the new row lost its theme');
     assert.equal(row.strainId, 3, 'the new row lost its Sorte');
     assert.equal(row.doneQty, 0);
-  });
-
-  it('keeps what was already recorded when the amount is corrected', () => {
-    everyDay(45);
-    db.ensureRhythmTasks(d);
-    const day = ymd(daysAgo(1));
-    db.setRhythmProgress(d, day, 30);
-    db.setRhythmTarget(d, day, 60);
-    assert.equal(tasks().find((x) => x.date === day).doneQty, 30, 'correcting the target discarded the progress');
   });
 
   it('treats zero as clearing the day rather than as a job for nothing', () => {

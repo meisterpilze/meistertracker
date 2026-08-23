@@ -129,6 +129,9 @@ describe('a late row says late, in both places that draw one', () => {
       '_rhythmTargetBtn',
       'esc',
       'spColor',
+      // Die Zeile zaehlt jetzt selbst, was gemacht wurde; hier interessiert nur
+      // der Streifen, also liefert die Attrappe eine feste Zahl.
+      'rhythmMadeOn',
       src[0] + '\nreturn _rhythmTaskRowHtml;'
     )(
       [],
@@ -137,7 +140,8 @@ describe('a late row says late, in both places that draw one', () => {
       () => 'theme',
       () => '<button></button>',
       (s) => String(s == null ? '' : s),
-      () => '#000000'
+      () => '#000000',
+      () => 0
     );
     return fn({ date: '2026-08-21', targetQty: 4, doneQty: 0, theme: 'x', planned: false }, late ? 2 : 0);
   }
