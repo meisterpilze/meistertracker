@@ -7139,7 +7139,7 @@ function ensureRhythmTasks(db, now) {
 // Upserts, because a future date has no snapshot yet — "this Thursday we need
 // 60" has to be sayable before Thursday arrives. The row is seeded from the
 // template so the Sorte, theme and note come along with it.
-function setRhythmTarget(db, date, targetQty) {
+function setRhythmTarget(db, date, targetQty, now) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
   let qty = null;
   if (targetQty !== null && targetQty !== undefined && targetQty !== '') {
@@ -7148,22 +7148,44 @@ function setRhythmTarget(db, date, targetQty) {
     if (n > 100000) throw new Error('Target is implausibly large');
     qty = n === 0 ? null : n;
   }
+  const weekday = new Date(date + 'T00:00:00').getDay();
+  const tpl =
+    db.prepare('SELECT theme, target_qty, strain_id, note FROM week_rhythm WHERE weekday = ?').get(weekday) || {};
   const row = db.prepare('SELECT date FROM rhythm_task WHERE date = ?').get(date);
   const stamp = new Date().toISOString();
+
+  // Dieselbe Zahl wie der Rhythmus ist keine Ausnahme, sondern das Ende einer.
+  //
+  // Sonst gab es keinen Weg zurück: wer einen Tag einmal im Kalender angefasst
+  // hatte, hatte ihn für immer vom Rhythmus abgekoppelt, und zwar unsichtbar —
+  // die Vorlage später zu ändern ging an diesem Tag wortlos vorbei. Genau das
+  // "die beiden wissen nichts voneinander", das die Zahl an zwei Stellen
+  // bearbeitbar macht.
+  //
+  // Nur für Tage, die noch nicht da waren. Ein vergangener Tag ist eine
+  // Aufnahme dessen, was verlangt war; die darf keine Vorlagenänderung von
+  // heute rückwirkend umschreiben.
+  const heute = _ymd(now ? new Date(now) : new Date());
+  if (date > heute && tpl.theme && tpl.theme !== 'free' && qty != null && (tpl.target_qty || null) === qty) {
+    if (row) {
+      db.prepare('DELETE FROM rhythm_task WHERE date = ?').run(date);
+      incrementDataVersion(db);
+    }
+    return { targetQty: qty, followsRhythm: true };
+  }
+
   if (row) {
     db.prepare('UPDATE rhythm_task SET target_qty = ?, updated = ? WHERE date = ?').run(qty, stamp, date);
   } else {
     // Seed from the weekday's template so the new row is a real job, not a bare
     // number floating on a date.
-    const weekday = new Date(date + 'T00:00:00').getDay();
-    const tpl = db.prepare('SELECT theme, strain_id, note FROM week_rhythm WHERE weekday = ?').get(weekday) || {};
     if (!tpl.theme || tpl.theme === 'free') throw new Error('No rhythm on ' + date);
     db.prepare(
       'INSERT INTO rhythm_task(date, weekday, theme, target_qty, strain_id, note, done_qty, created) VALUES(?, ?, ?, ?, ?, ?, 0, ?)'
     ).run(date, weekday, tpl.theme, qty, tpl.strain_id, tpl.note, stamp);
   }
   incrementDataVersion(db);
-  return qty;
+  return { targetQty: qty, followsRhythm: false };
 }
 function listRhythmTasks(db) {
   return db

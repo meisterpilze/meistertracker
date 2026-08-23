@@ -524,6 +524,12 @@ window.LANG['de'] = {
   'rhythm.setQty': '+ Menge',
   'rhythm.targetEdit': 'Menge für diesen Tag ändern',
   'rhythm.targetPrompt': 'Wie viele am {date}? (ändert nur diesen Tag, nicht den Wochenrhythmus)',
+  'rhythm.targetPromptTpl':
+    'Der Wochenrhythmus sagt {n} {theme} für diesen Wochentag. Wie viele am {date}? (dieselbe Zahl = folgt wieder dem Rhythmus)',
+  'rhythm.targetFollows': 'Der Tag folgt wieder dem Wochenrhythmus',
+  'rhythm.weekTotal': 'Woche gesamt:',
+  'rhythm.weekTotalNone': 'noch keine Mengen eingetragen',
+  'rhythm.weekTotalHint': 'Summe der Tage oben. Eine einzelne Woche änderst du im Kalender — das lässt den Rhythmus in Ruhe.',
   'rhythm.targetSaved': 'Menge für diesen Tag gespeichert',
   'rhythm.targetBad': 'Bitte eine ganze Zahl ab 0 eingeben',
   'rhythm.startSet': 'Ab wann z\u00e4hlen',

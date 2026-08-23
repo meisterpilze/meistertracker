@@ -325,6 +325,12 @@ window.LANG['pt'] = {
   'rhythm.setQty': '+ Quantidade',
   'rhythm.targetEdit': 'Alterar a quantidade deste dia',
   'rhythm.targetPrompt': 'Quantos em {date}? (altera só este dia, não o ritmo semanal)',
+  'rhythm.targetPromptTpl':
+    'O ritmo semanal pede {n} {theme} neste dia da semana. Quantos em {date}? (o mesmo número = volta a seguir o ritmo)',
+  'rhythm.targetFollows': 'Este dia volta a seguir o ritmo semanal',
+  'rhythm.weekTotal': 'Total da semana:',
+  'rhythm.weekTotalNone': 'ainda sem quantidades',
+  'rhythm.weekTotalHint': 'Soma dos dias acima. Uma semana isolada altera-se no calendário — isso não mexe no ritmo.',
   'rhythm.targetSaved': 'Quantidade guardada para este dia',
   'rhythm.targetBad': 'Introduza um n\u00famero inteiro de 0 ou mais',
   'rhythm.startSet': 'Contar a partir de',
