@@ -6667,19 +6667,6 @@ tr.ms-off .ms-prog {
    gemischt und die Charge zieht sofort daraus, also gehören sie in einen Blick.
    Der Substrat-Block ist schmaler, weil er weniger zu fragen hat. Unter 1000 px
    fällt beides untereinander — im Labor wird am Handy gearbeitet. */
-.nb-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 12px;
-}
-@media (max-width: 1000px) {
-  .nb-split {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* Der geführte Weg zum Anlegen einer Charge: dieselbe Hülle wie Ernte und Umzug,
    nur mit eigenen Bausteinen. Alle Bedienelemente sind fingerhoch, weil der
    Ablauf im Labor am Tablet läuft. */

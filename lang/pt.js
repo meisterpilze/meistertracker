@@ -963,8 +963,6 @@ window.LANG['pt'] = {
   'sub.running': 'A criar a preparação…',
   'sub.done': '{id} criada — {kg} kg de substrato disponíveis.',
   'sub.failed': 'Falhou: {err}',
-  'sub.openMixes': 'Preparações em aberto',
-  'sub.noneOpen': 'Nenhuma preparação em aberto. Crie uma acima.',
   'sub.fromMix': 'Da preparação de substrato',
   'sub.selectNone': '— sem preparação (registar substrato à parte) —',
   'sub.mixComposition': 'Composição: {hw}% pellets / {wb}% farelo a {rh}% de humidade',
