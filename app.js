@@ -23040,6 +23040,7 @@ function initEventListeners() {
     });
   $('btn-add-zone').addEventListener('click', addZone);
   $('rhythm-cancel').addEventListener('click', closeRhythmEditor);
+  $('rhythm-close').addEventListener('click', closeRhythmEditor);
   $('rhythm-save').addEventListener('click', saveRhythmEditor);
   $('dayqty-cancel').addEventListener('click', closeDayQty);
   $('dayqty-save').addEventListener('click', saveDayQty);
