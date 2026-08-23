@@ -255,8 +255,6 @@ window.LANG['en'] = {
   'sub.running': 'Creating mix…',
   'sub.done': '{id} created — {kg} kg of substrate available.',
   'sub.failed': 'Failed: {err}',
-  'sub.openMixes': 'Open mixes',
-  'sub.noneOpen': 'No open mix. Create one above.',
   'sub.fromMix': 'From substrate mix',
   'sub.selectNone': '— no mix (book substrate separately) —',
   'sub.mixComposition': 'Mix composition: {hw}% pellets / {wb}% bran at {rh}% moisture',

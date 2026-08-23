@@ -2666,24 +2666,18 @@
           <!-- Every mix ever made, open and spent. Not front and center: this is
                where you go to count them and to find the one that went wrong. -->
           <div class="sp" id="sp-batch-substrate">
-            <div class="card">
-              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
-                <div class="sec" data-i18n="sub.allTitle">Substrat-Ansätze</div>
-                <label class="fs-meta" style="color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
-                  <input type="checkbox" id="sb-show-spent" style="width: auto" onchange="renderSubstrateTab()" />
-                  <span data-i18n="sub.showSpent">Verbrauchte anzeigen</span>
-                </label>
-              </div>
-              <div class="fs-meta" id="sb-tab-summary" style="color: var(--c-text-sec); margin: 4px 0 10px"></div>
-              <div id="sb-tab-list"></div>
-            </div>
-          </div>
-          <!-- New batch -->
-          <div class="sp" id="sp-batch-new">
-            <!-- Step one: mix substrate in bulk. Species-neutral — the recipe is
-                 only the blend it is mixed to, and any Sorte may draw from it.
-                 This is the only place raw materials leave the shelf. -->
-            <div class="nb-split">
+            <!-- Mixing substrate and the list of mixes are one subject, so
+                 they are one tab. The form used to sit in "Neue Charge",
+                 beside the Growbags card, because mixing is step one of that
+                 workflow — but it is also the thing this tab is about, and a
+                 form on one tab whose results are listed on another asks the
+                 reader to hold the connection in their head.
+                 Its own "Offene Ansätze" list went with the move: the table
+                 below shows the same mixes with more columns and a switch for
+                 the spent ones.
+                 Species-neutral — a mix is only the blend it was made to, and
+                 any Sorte may draw from it. This is the only place raw material
+                 leaves the shelf. -->
             <div class="card" id="sb-card" style="border: 1px solid var(--c-accent)">
               <div class="card-head" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
                 <span class="card-head-art" aria-hidden="true"><svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="20" width="100" height="52" rx="26" fill="currentColor" opacity=".15"/><ellipse cx="46" cy="46" rx="13" ry="26" fill="currentColor" opacity=".10"/><path d="M44 33l26 26M44 59l26-26" stroke="currentColor" stroke-width="3.4" opacity=".20" stroke-linecap="round"/><path d="M96 14a26 26 0 0 1 12 14" stroke="currentColor" stroke-width="3.4" opacity=".28" stroke-linecap="round" fill="none"/><path d="M110 30l-1-9 -8 5z" fill="currentColor" opacity=".28"/><path d="M40 72l-9 30M104 72l9 30" stroke="currentColor" stroke-width="5" opacity=".20" stroke-linecap="round"/><path d="M24 104h96" stroke="currentColor" stroke-width="4" opacity=".26" stroke-linecap="round"/></svg></span>
@@ -2722,210 +2716,221 @@
                 </button>
                 <span class="fs-meta" id="sb-status" style="color: var(--c-text-sec)"></span>
               </div>
-              <div style="margin-top: 12px; border-top: 1px solid var(--c-border); padding-top: 8px">
-                <div class="fs-meta" style="font-weight: 600; margin-bottom: 4px" data-i18n="sub.openMixes">
-                  Offene Ansätze
-                </div>
-                <div id="sb-list"></div>
-              </div>
             </div>
-              <div class="card">
-                <div class="card-head" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
-                  <span class="card-head-art" aria-hidden="true"><svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M40 34h60v58a10 10 0 0 1-10 10H50a10 10 0 0 1-10-10z" fill="currentColor" opacity=".16"/><path d="M40 34l-9-14 15 5 12-7 12 7 15-5-9 14z" fill="currentColor" opacity=".28"/><circle cx="70" cy="64" r="11" fill="currentColor" opacity=".20"/><circle cx="70" cy="64" r="4" fill="currentColor" opacity=".26"/><path d="M50 86h40" stroke="currentColor" stroke-width="3" opacity=".18" stroke-linecap="round"/></svg></span>
-                  <div class="sec" style="margin: 0" data-i18n="batch.createNew">Growbags Batch</div>
-                  <button type="button" class="btn btn-sm btn-p" id="nb-guided" data-i18n="batch.guided">
-                    Schritt für Schritt
-                  </button>
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+                <div class="sec" data-i18n="sub.allTitle">Substrat-Ansätze</div>
+                <label class="fs-meta" style="color: var(--c-text-sec); display: flex; align-items: center; gap: 6px">
+                  <input type="checkbox" id="sb-show-spent" style="width: auto" onchange="renderSubstrateTab()" />
+                  <span data-i18n="sub.showSpent">Verbrauchte anzeigen</span>
+                </label>
+              </div>
+              <div class="fs-meta" id="sb-tab-summary" style="color: var(--c-text-sec); margin: 4px 0 10px"></div>
+              <div id="sb-tab-list"></div>
+            </div>
+          </div>
+          <!-- New batch -->
+          <div class="sp" id="sp-batch-new">
+            <!-- Step two. The mix is made one tab over, on Substrat-Ansätze, and
+                 this draws kilos out of it — so a Charge cannot be started
+                 before there is something to start it from, which is the order
+                 the two steps have always had. -->
+            <div class="card">
+              <div class="card-head" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
+                <span class="card-head-art" aria-hidden="true"><svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M40 34h60v58a10 10 0 0 1-10 10H50a10 10 0 0 1-10-10z" fill="currentColor" opacity=".16"/><path d="M40 34l-9-14 15 5 12-7 12 7 15-5-9 14z" fill="currentColor" opacity=".28"/><circle cx="70" cy="64" r="11" fill="currentColor" opacity=".20"/><circle cx="70" cy="64" r="4" fill="currentColor" opacity=".26"/><path d="M50 86h40" stroke="currentColor" stroke-width="3" opacity=".18" stroke-linecap="round"/></svg></span>
+                <div class="sec" style="margin: 0" data-i18n="batch.createNew">Growbags Batch</div>
+                <button type="button" class="btn btn-sm btn-p" id="nb-guided" data-i18n="batch.guided">
+                  Schritt für Schritt
+                </button>
+              </div>
+              <div class="fs-meta"
+                id="nb-source-banner"
+                style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: 6px; background: #dcfce7; border-left: 4px solid #16a34a; color: #14532d"
+              ></div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
+                <div>
+                  <label data-i18n="batch.bagWeight">Bag weight</label>
+                  <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px" id="nb-weight-btns">
+                    <button type="button" class="btn btn-sm btn-p" id="wbtn-3">3 kg</button>
+                    <button type="button" class="btn btn-sm" id="wbtn-5">5 kg</button>
+                    <button type="button" class="btn btn-sm" id="wbtn-other" data-i18n="batch.otherWeight">
+                      anderes
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    id="nb-weight"
+                    value="3"
+                    style="margin-top: 6px; width: 100px; display: none"
+                    autocomplete="off"
+                  />
+                </div>
+                <div>
+                  <label data-i18n="strains.pilzsorte">Pilzsorte</label>
+                  <select id="nb-strain-sel" onchange="nbStrainChanged()">
+                    <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
+                  </select>
+                  <div class="fs-xs"
+                    id="nb-no-strains-hint"
+                    style="display: none; color: var(--c-red); margin-top: 4px"
+                  >
+                    <span data-i18n="strains.noStrainsHint"
+                      >Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.</span
+                    >
+                    <button
+                      type="button"
+                      id="nb-create-strain-btn"
+                      class="btn btn-sm btn-p fs-xs"
+                      style="margin-left: 6px"
+                      data-i18n="strains.createNow"
+                    >
+                      Jetzt Pilzsorte anlegen →
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label data-i18n="batch.strainLabel">Strain</label>
+                  <input
+                    type="text"
+                    id="nb-strain-text"
+                    data-i18n-placeholder="batch.strainPlaceholder"
+                    placeholder="z.B. BHA-1, Amazing, Top Genetics…"
+                    autocomplete="off"
+                  />
+                </div>
+                <div>
+                  <label data-i18n="batch.fromProduct">Aus Produkt (optional)</label>
+                  <select id="nb-product" onchange="_nbProductChanged()">
+                    <option value="" data-i18n="batch.noProduct">— ohne Produkt —</option>
+                  </select>
+                  <div class="fs-xs"
+                    id="nb-product-hint"
+                    style="color: var(--c-text-muted); margin-top: 2px"
+                    data-i18n="batch.fromProductHint"
+                  >
+                    Produkt wählen → Substrat, Kokos & Grain werden automatisch berechnet.
+                  </div>
+                </div>
+                <!-- v67: pick a mix and this Charge is portioned out of it —
+                     no substrate is booked, only the spawn. -->
+                <div style="margin-bottom: 8px">
+                  <label data-i18n="sub.fromMix">Aus Substrat-Ansatz</label>
+                  <select id="nb-substrate-batch" onchange="nbSubstrateChanged()"></select>
+                  <div id="nb-substrate-info" style="display: none; margin-top: 6px"></div>
+                </div>
+                <div class="g2">
+                  <div>
+                    <label data-i18n="batch.qty">Qty (bags)</label
+                    ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-qty" value="10" oninput="nbSubstrateNeed()" />
+                  </div>
+                  <div>
+                    <label data-i18n="batch.incDays">Incubation days</label
+                    ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-days" value="14" />
+                  </div>
+                </div>
+                <details id="nb-sub-section" style="background: var(--c-bg); border-radius: 8px; padding: 10px">
+                  <summary class="fs-meta" style="color: var(--c-text-sec); cursor: pointer">
+                    <span data-i18n="batch.substrate">Substrate</span>
+                    <!-- Filled by nbSubSum() so the composition that will actually be
+                         deducted stays visible while this section is collapsed. -->
+                    <span id="nb-sub-head" style="font-weight: 600; color: var(--c-text)"></span>
+                  </summary>
+                  <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">
+                    <div class="g2">
+                      <div>
+                        <label data-i18n="batch.hardwood">Hardwood %</label
+                        ><input type="number" id="nb-hw" placeholder="70" min="0" max="100" />
+                      </div>
+                      <div>
+                        <label data-i18n="batch.wheatBran">Wheat bran %</label
+                        ><input type="number" id="nb-wb" placeholder="30" min="0" max="100" />
+                      </div>
+                    </div>
+                    <div class="g2">
+                      <div>
+                        <label data-i18n="batch.fieldCapacity">Field capacity %RH</label
+                        ><input type="number" id="nb-rh" placeholder="65" min="0" max="100" />
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px; padding-top: 18px">
+                        <input type="checkbox" id="nb-gyp" style="width: 22px; height: 22px; margin: 0" />
+                        <label
+                          style="margin: 0; font-size: 13px; color: var(--c-text); cursor: pointer"
+                          for="nb-gyp"
+                          data-i18n="batch.gypsumAdded"
+                          >Gypsum added</label
+                        >
+                      </div>
+                    </div>
+                    <div class="g2">
+                      <div>
+                        <label data-i18n="batch.coir">Kokos / CVG %</label
+                        ><input type="number" id="nb-coir" placeholder="0" min="0" max="100" />
+                      </div>
+                      <div></div>
+                    </div>
+                    <div class="g2">
+                      <div>
+                        <label data-i18n="batch.grainKg">Grain kg/Beutel</label
+                        ><input type="number" id="nb-grainkg" placeholder="0" min="0" step="0.01" />
+                      </div>
+                      <div>
+                        <label data-i18n="batch.grainRh">Grain Hydration %</label
+                        ><input type="number" id="nb-grainrh" placeholder="52" min="0" max="100" />
+                      </div>
+                    </div>
+                    <div class="fs-xs" id="nb-subsum" style="color: var(--c-text-muted)"></div>
+                  </div>
+                </details>
+                <!-- One field for every kind of inoculant. Cultures live in
+                     `cultures`, grain spawn in `batches` as G-… bags, but the
+                     worker just scans what is in their hand. Nothing is consumed
+                     automatically — after the batch saves we ask whether it was
+                     used up (see inocAskConsume). -->
+                <div>
+                  <label data-i18n="inoc.label">Beimpft mit (optional)</label>
+                  <div style="display: flex; gap: 6px; align-items: center">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      id="nb-inoc-scan"
+                      style="flex: none; white-space: nowrap"
+                    >
+                      <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
+                    </button>
+                    <select id="nb-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('nb')"></select>
+                  </div>
+                  <div id="nb-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
+                  <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 3px" data-i18n="inoc.hint">
+                    Flüssigkultur, Petrischale, Mutterkultur oder Körnerbrut — scannen oder wählen
+                  </div>
+                </div>
+                <!-- Kept for createBatch's sourceId and for the scan autofill;
+                     the visible control above is what the operator uses. -->
+                <select id="nb-culture" style="display: none"></select>
+                <div>
+                  <label data-i18n="batch.notes">Notes (optional)</label
+                  ><textarea
+                    id="nb-notes"
+                    rows="2"
+                    data-i18n-placeholder="batch.notesPlaceholder"
+                    placeholder="Any notes..."
+                  ></textarea>
+                </div>
+                <div class="met">
+                  <div class="met-l" data-i18n="batch.idPreview">Batch ID preview</div>
+                  <div
+                    id="nb-prev"
+                    style="font-family: monospace; font-size: 13px; font-weight: 600; margin-top: 3px"
+                  >
+                    —
+                  </div>
                 </div>
                 <div class="fs-meta"
-                  id="nb-source-banner"
-                  style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: 6px; background: #dcfce7; border-left: 4px solid #16a34a; color: #14532d"
+                  id="nb-mat-preview"
+                  style="display: none; background: var(--c-primary-light); border: 1px solid var(--c-green-border); border-radius: 8px; padding: 10px 12px; color: var(--c-green-dark); line-height: 1.8"
                 ></div>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
-                  <div>
-                    <label data-i18n="batch.bagWeight">Bag weight</label>
-                    <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px" id="nb-weight-btns">
-                      <button type="button" class="btn btn-sm btn-p" id="wbtn-3">3 kg</button>
-                      <button type="button" class="btn btn-sm" id="wbtn-5">5 kg</button>
-                      <button type="button" class="btn btn-sm" id="wbtn-other" data-i18n="batch.otherWeight">
-                        anderes
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      inputmode="decimal"
-                      id="nb-weight"
-                      value="3"
-                      style="margin-top: 6px; width: 100px; display: none"
-                      autocomplete="off"
-                    />
-                  </div>
-                  <div>
-                    <label data-i18n="strains.pilzsorte">Pilzsorte</label>
-                    <select id="nb-strain-sel" onchange="nbStrainChanged()">
-                      <option value="" data-i18n="strains.selectPlaceholder">— Pilzsorte wählen —</option>
-                    </select>
-                    <div class="fs-xs"
-                      id="nb-no-strains-hint"
-                      style="display: none; color: var(--c-red); margin-top: 4px"
-                    >
-                      <span data-i18n="strains.noStrainsHint"
-                        >Keine Pilzsorten angelegt. Bitte zuerst eine Pilzsorte anlegen.</span
-                      >
-                      <button
-                        type="button"
-                        id="nb-create-strain-btn"
-                        class="btn btn-sm btn-p fs-xs"
-                        style="margin-left: 6px"
-                        data-i18n="strains.createNow"
-                      >
-                        Jetzt Pilzsorte anlegen →
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label data-i18n="batch.strainLabel">Strain</label>
-                    <input
-                      type="text"
-                      id="nb-strain-text"
-                      data-i18n-placeholder="batch.strainPlaceholder"
-                      placeholder="z.B. BHA-1, Amazing, Top Genetics…"
-                      autocomplete="off"
-                    />
-                  </div>
-                  <div>
-                    <label data-i18n="batch.fromProduct">Aus Produkt (optional)</label>
-                    <select id="nb-product" onchange="_nbProductChanged()">
-                      <option value="" data-i18n="batch.noProduct">— ohne Produkt —</option>
-                    </select>
-                    <div class="fs-xs"
-                      id="nb-product-hint"
-                      style="color: var(--c-text-muted); margin-top: 2px"
-                      data-i18n="batch.fromProductHint"
-                    >
-                      Produkt wählen → Substrat, Kokos & Grain werden automatisch berechnet.
-                    </div>
-                  </div>
-                  <!-- v67: pick a mix and this Charge is portioned out of it —
-                       no substrate is booked, only the spawn. -->
-                  <div style="margin-bottom: 8px">
-                    <label data-i18n="sub.fromMix">Aus Substrat-Ansatz</label>
-                    <select id="nb-substrate-batch" onchange="nbSubstrateChanged()"></select>
-                    <div id="nb-substrate-info" style="display: none; margin-top: 6px"></div>
-                  </div>
-                  <div class="g2">
-                    <div>
-                      <label data-i18n="batch.qty">Qty (bags)</label
-                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-qty" value="10" oninput="nbSubstrateNeed()" />
-                    </div>
-                    <div>
-                      <label data-i18n="batch.incDays">Incubation days</label
-                      ><input type="text" inputmode="numeric" enterkeyhint="next" id="nb-days" value="14" />
-                    </div>
-                  </div>
-                  <details id="nb-sub-section" style="background: var(--c-bg); border-radius: 8px; padding: 10px">
-                    <summary class="fs-meta" style="color: var(--c-text-sec); cursor: pointer">
-                      <span data-i18n="batch.substrate">Substrate</span>
-                      <!-- Filled by nbSubSum() so the composition that will actually be
-                           deducted stays visible while this section is collapsed. -->
-                      <span id="nb-sub-head" style="font-weight: 600; color: var(--c-text)"></span>
-                    </summary>
-                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">
-                      <div class="g2">
-                        <div>
-                          <label data-i18n="batch.hardwood">Hardwood %</label
-                          ><input type="number" id="nb-hw" placeholder="70" min="0" max="100" />
-                        </div>
-                        <div>
-                          <label data-i18n="batch.wheatBran">Wheat bran %</label
-                          ><input type="number" id="nb-wb" placeholder="30" min="0" max="100" />
-                        </div>
-                      </div>
-                      <div class="g2">
-                        <div>
-                          <label data-i18n="batch.fieldCapacity">Field capacity %RH</label
-                          ><input type="number" id="nb-rh" placeholder="65" min="0" max="100" />
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; padding-top: 18px">
-                          <input type="checkbox" id="nb-gyp" style="width: 22px; height: 22px; margin: 0" />
-                          <label
-                            style="margin: 0; font-size: 13px; color: var(--c-text); cursor: pointer"
-                            for="nb-gyp"
-                            data-i18n="batch.gypsumAdded"
-                            >Gypsum added</label
-                          >
-                        </div>
-                      </div>
-                      <div class="g2">
-                        <div>
-                          <label data-i18n="batch.coir">Kokos / CVG %</label
-                          ><input type="number" id="nb-coir" placeholder="0" min="0" max="100" />
-                        </div>
-                        <div></div>
-                      </div>
-                      <div class="g2">
-                        <div>
-                          <label data-i18n="batch.grainKg">Grain kg/Beutel</label
-                          ><input type="number" id="nb-grainkg" placeholder="0" min="0" step="0.01" />
-                        </div>
-                        <div>
-                          <label data-i18n="batch.grainRh">Grain Hydration %</label
-                          ><input type="number" id="nb-grainrh" placeholder="52" min="0" max="100" />
-                        </div>
-                      </div>
-                      <div class="fs-xs" id="nb-subsum" style="color: var(--c-text-muted)"></div>
-                    </div>
-                  </details>
-                  <!-- One field for every kind of inoculant. Cultures live in
-                       `cultures`, grain spawn in `batches` as G-… bags, but the
-                       worker just scans what is in their hand. Nothing is consumed
-                       automatically — after the batch saves we ask whether it was
-                       used up (see inocAskConsume). -->
-                  <div>
-                    <label data-i18n="inoc.label">Beimpft mit (optional)</label>
-                    <div style="display: flex; gap: 6px; align-items: center">
-                      <button
-                        type="button"
-                        class="btn btn-sm"
-                        id="nb-inoc-scan"
-                        style="flex: none; white-space: nowrap"
-                      >
-                        <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
-                      </button>
-                      <select id="nb-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('nb')"></select>
-                    </div>
-                    <div id="nb-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
-                    <div class="fs-xs" style="color: var(--c-text-muted); margin-top: 3px" data-i18n="inoc.hint">
-                      Flüssigkultur, Petrischale, Mutterkultur oder Körnerbrut — scannen oder wählen
-                    </div>
-                  </div>
-                  <!-- Kept for createBatch's sourceId and for the scan autofill;
-                       the visible control above is what the operator uses. -->
-                  <select id="nb-culture" style="display: none"></select>
-                  <div>
-                    <label data-i18n="batch.notes">Notes (optional)</label
-                    ><textarea
-                      id="nb-notes"
-                      rows="2"
-                      data-i18n-placeholder="batch.notesPlaceholder"
-                      placeholder="Any notes..."
-                    ></textarea>
-                  </div>
-                  <div class="met">
-                    <div class="met-l" data-i18n="batch.idPreview">Batch ID preview</div>
-                    <div
-                      id="nb-prev"
-                      style="font-family: monospace; font-size: 13px; font-weight: 600; margin-top: 3px"
-                    >
-                      —
-                    </div>
-                  </div>
-                  <div class="fs-meta"
-                    id="nb-mat-preview"
-                    style="display: none; background: var(--c-primary-light); border: 1px solid var(--c-green-border); border-radius: 8px; padding: 10px 12px; color: var(--c-green-dark); line-height: 1.8"
-                  ></div>
-                  <button id="btn-24" class="btn btn-p" data-i18n="batch.create">Create batch</button>
-                </div>
+                <button id="btn-24" class="btn btn-p" data-i18n="batch.create">Create batch</button>
               </div>
             </div>
           </div>
