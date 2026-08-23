@@ -855,7 +855,7 @@ window.LANG['de'] = {
   'print.selectBatchAbove': 'Charge oben w\u00e4hlen.',
   'print.tickCulturesPreview': 'Kulturen in der Liste anhaken, um Etiketten in der Vorschau zu sehen.',
   // To-do
-  'todo.batchTasks': 'Chargen-Aufgaben',
+  'todo.batchTasks': 'Was ansteht',
   'todo.dueAgo': 'F\u00e4llig vor {n} Tag(en)',
   'todo.dueIn': 'F\u00e4llig in {n} Tag(en)',
   'todo.dueToday': 'Heute fällig',
