@@ -107,8 +107,7 @@ async function selberFahren(port) {
   } catch {
     return false;
   }
-  const CHROME =
-    process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   if (!fs.existsSync(CHROME)) return false;
   const browser = await puppeteer.launch({
     executablePath: CHROME,
@@ -146,11 +145,11 @@ async function selberFahren(port) {
 selberFahren(PORT).then((gefahren) => {
   if (gefahren) return;
   console.log(`\nServing on http://127.0.0.1:${PORT}/index.html`);
-// Size first, then load. Resizing a page that is already open can leave
-// elements holding computed styles from the old width — during Phase 0 that
-// reported .sb-btn as "moved" three separate times when it had not.
-console.log(`Size the viewport to exactly ${WIDTH}px wide FIRST, then open it (a resize after`);
-console.log(`loading can leave stale computed styles), and run this in the console:\n`);
-console.log(SNIPPET);
+  // Size first, then load. Resizing a page that is already open can leave
+  // elements holding computed styles from the old width — during Phase 0 that
+  // reported .sb-btn as "moved" three separate times when it had not.
+  console.log(`Size the viewport to exactly ${WIDTH}px wide FIRST, then open it (a resize after`);
+  console.log(`loading can leave stale computed styles), and run this in the console:\n`);
+  console.log(SNIPPET);
   console.log(`\nWaiting for the capture${compare ? ' (compare mode)' : ''}…`);
 });
