@@ -395,3 +395,59 @@ describe('Der Tag, der schon offen ist', () => {
     assert.doesNotMatch(fn, /if \(offen\) return html;/, 'die offene Spalte fällt leer aus');
   });
 });
+
+// ── Gezählt wird Arbeit, nicht Zeilen ───────────────────────────────────────
+describe('Was eine Spalte zählt', () => {
+  function zaehle(items) {
+    const code = [
+      hebeKonstante('PLAN_KINDS', SRC),
+      hebeFunktion('planKind', SRC),
+      hebeFunktion('planCategory', SRC),
+      hebeFunktion('planWeight', SRC),
+      hebeFunktion('planOverdue', SRC),
+      hebeFunktion('countByCategory', SRC)
+    ].join('\n');
+    return new Function(
+      'items',
+      code + '\nreturn { counts: countByCategory(items), overdue: items.reduce((n, i) => n + planOverdue(i), 0) };'
+    )(items);
+  }
+
+  it('zählt die Arbeit, nicht die Zeilen', () => {
+    // Die Labor-Zusammenfassung ist EINE Zeile für 38 Posten. Sie zählte als 1,
+    // und beim Aufklappen wurden daraus 38 — die Zahl sagte, wie viel gerade
+    // gezeichnet ist, statt wie viel ansteht.
+    const r = zaehle([{ kind: 'labgroup', weight: 38, overdueWeight: 12 }]);
+    assert.equal(r.counts.lab, 38, 'die Spalte sagt weiterhin 1');
+    assert.equal(r.overdue, 12, 'und eine überfällige Zeile machte 38 überfällige Posten zu einem');
+  });
+
+  it('zählt aufgeklappt nicht doppelt', () => {
+    // Dann steht die Zusammenfassung neben den 38 Einzelzeilen, und beide zu
+    // zählen ergäbe 76.
+    const auf = [{ kind: 'labgroup', weight: 0, overdueWeight: 0 }].concat(
+      Array.from({ length: 38 }, (_, i) => ({ kind: 'labmin', overdue: i < 12 }))
+    );
+    const r = zaehle(auf);
+    assert.equal(r.counts.lab, 38);
+    assert.equal(r.overdue, 12);
+  });
+
+  it('nimmt für alles andere weiter eine Zeile als eine Arbeit', () => {
+    const r = zaehle([{ kind: 'supply' }, { kind: 'supply' }, { kind: 'harvest', overdue: true }]);
+    assert.equal(r.counts.create, 2);
+    assert.equal(r.counts.harvest, 1);
+    assert.equal(r.overdue, 1);
+  });
+
+  it('holt das Gewicht der Zusammenfassung aus ihrer Zeilenzahl', () => {
+    const fn = hebeFunktion('buildWeekPlan', SRC);
+    assert.match(fn, /weight: dashLabGroupOpen \? 0 : laborMin\.length/);
+    assert.match(fn, /overdueWeight: dashLabGroupOpen \? 0 : laborMin\.filter\(\(l\) => l\.empty\)\.length/);
+  });
+
+  it('nennt im Spaltenkopf dieselbe Zahl', () => {
+    // Sonst stünde oben "1" und zwei Zeilen darunter "38".
+    assert.match(hebeFunktion('_weekHeadHtml', SRC), /d\.items\.reduce\(\(k, it\) => k \+ planWeight\(it\), 0\)/);
+  });
+});
