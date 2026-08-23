@@ -251,7 +251,8 @@ window.LANG['pt'] = {
   'harvest.releasedTotal': '{bag}: {kg} kg liberados no total',
   // Dashboard
   'cat.alert': 'Aten\u00e7\u00e3o',
-  'cat.create': 'Preparar',
+  'cat.lab': 'Laboratório',
+  'cat.create': 'Lotes',
   'cat.move': 'Mover',
   'cat.harvest': 'Colher',
   'cat.overdue': '{n} em atraso',
@@ -319,6 +320,7 @@ window.LANG['pt'] = {
   'dash.toFruiting': 'Frutificação',
   'dash.noFruitingZone': 'Nenhuma zona de frutificação definida',
   'dash.destLabel': 'Destino:',
+  'dash.openDay': 'Abrir este dia',
   'dash.viewWeek': 'Semana',
   'dash.viewDay': 'Dia',
   'dash.dayPrev': 'Dia anterior',

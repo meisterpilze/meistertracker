@@ -291,3 +291,32 @@ describe('Was eine Versorgungslücke sagt', () => {
     assert.match(h, /_msqPickType\('KB'\)/, 'es öffnet ohne die Körnerbrut vorgewählt');
   });
 });
+
+// ── Wie der Tag gegliedert ist ──────────────────────────────────────────────
+describe('Labor und Chargen sind zwei Arbeiten', () => {
+  const tabelle = () => new Function(hebeKonstante('PLAN_KINDS') + String.fromCharCode(10) + 'return PLAN_KINDS;')();
+
+  it('stellt sie nicht mehr unter dieselbe Überschrift', () => {
+    // "33 Sorten unter Labor-Minimum" und "Blue Oyster · Körnerbrut ansetzen"
+    // standen nebeneinander unter "Ansetzen" — zwei Arbeiten in zwei Räumen
+    // unter einer Überschrift, die keine von beiden benennt.
+    const k = tabelle();
+    assert.equal(k.labmin.cat, 'lab');
+    assert.equal(k.labgroup.cat, 'lab');
+  });
+
+  it('lässt die Körnerbrut aber bei den Chargen', () => {
+    // Sie IST eine Charge (batchType 'grain'), und wer Blöcke ansetzt, setzt
+    // auch die Körner an.
+    const k = tabelle();
+    assert.equal(k.supply.cat, 'create');
+    assert.equal(k.grain.cat, 'create');
+  });
+
+  it('führt die Kategorien in der Reihenfolge, in der die Kette läuft', () => {
+    const cats = new Function(hebeKonstante('PLAN_CATS') + String.fromCharCode(10) + 'return PLAN_CATS;')();
+    assert.ok(cats.indexOf('lab') < cats.indexOf('create'), 'die Chargen stünden vor dem Labor');
+    assert.ok(cats.indexOf('create') < cats.indexOf('move'), 'umgezogen würde vor dem Ansetzen');
+    assert.ok(cats.indexOf('move') < cats.indexOf('harvest'));
+  });
+});

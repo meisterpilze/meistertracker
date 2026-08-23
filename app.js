@@ -6548,9 +6548,20 @@ function _weekColBodyHtml(d, off, sel) {
 // Die Reihenfolge hier ist die Reihenfolge auf dem Schirm; rank() unten
 // entscheidet nur, wer die sechs Zeilen überlebt. Beides muss stimmen, sonst
 // steht ein Hinweis zwar in der Liste, aber unter dem Rundgang.
-const PLAN_CATS = ['alert', 'create', 'move', 'harvest', 'chore', 'other'];
+// In der Reihenfolge, in der die Kette laeuft: was fehlt, dann das Labor, dann
+// die Chargen, dann umziehen und ernten.
+//
+// 'lab' war vorher mit 'create' zusammen unter "Ansetzen". Darunter standen
+// dann "33 Sorten unter Labor-Minimum" und "Blue Oyster -- Koernerbrut
+// ansetzen" nebeneinander: zwei Arbeiten, die in verschiedenen Raeumen
+// stattfinden, unter einer Ueberschrift, die keine von beiden benennt.
+//
+// Koernerbrut bleibt bei den Chargen, nicht beim Labor: sie ist eine Charge
+// (batchType 'grain'), und wer Bloecke ansetzt, setzt auch die Koerner an.
+const PLAN_CATS = ['alert', 'lab', 'create', 'move', 'harvest', 'chore', 'other'];
 const PLAN_CAT_LABEL = {
   alert: 'cat.alert',
+  lab: 'cat.lab',
   create: 'cat.create',
   move: 'cat.move',
   harvest: 'cat.harvest',
@@ -6559,6 +6570,7 @@ const PLAN_CAT_LABEL = {
 };
 const PLAN_CAT_COLOR = {
   alert: 'var(--c-red-dark)',
+  lab: 'var(--c-teal-dark)',
   create: 'var(--c-accent)',
   move: 'var(--c-blue-dark, var(--c-accent))',
   harvest: 'var(--c-amber-dark)',
@@ -6591,8 +6603,8 @@ const PLAN_CAT_COLOR = {
 const PLAN_KINDS = {
   alert: { cat: 'alert', rank: -10, counts: false, btn: 'alert' },
   supply: { cat: 'create', rank: -1, counts: false, btn: 'supply' },
-  labmin: { cat: 'create', rank: -1, counts: false, btn: 'labmin' },
-  labgroup: { cat: 'create', rank: -1, counts: false, btn: 'labgroup' },
+  labmin: { cat: 'lab', rank: -1, counts: false, btn: 'labmin' },
+  labgroup: { cat: 'lab', rank: -1, counts: false, btn: 'labgroup' },
   grain: { cat: 'create', rank: null, counts: true, btn: 'task' },
   fruiting: { cat: 'move', rank: null, counts: true, btn: 'task' },
   harvest: { cat: 'harvest', rank: null, counts: true, btn: 'harvest' },
@@ -6714,24 +6726,41 @@ function _weekColPreviewHtml(d) {
   const rest = d.items.filter((it) => it.kind !== 'chore');
   const counts = countByCategory(rest);
   const overdue = rest.filter((i) => i.overdue).length;
+  // Die Zaehlung ist ein Knopf, und er oeffnet den Tag.
+  //
+  // Vorher war sie totes Papier: "4 Achtung, 4 Ansetzen, 5 ueberfaellig" stand
+  // da, man tippte darauf, und nichts geschah. Ein Kasten mit Zahlen darin sieht
+  // aus wie etwas, das man aufklappen kann -- und genau das soll er auch tun.
+  //
+  // Ein einziger Knopf um alle Zeilen, nicht einer je Zeile: sie fuehren alle
+  // an dieselbe Stelle, und drei Knoepfe untereinander, die dasselbe tun, sind
+  // drei Entscheidungen, wo es keine gibt. Ausserhalb der eigenen Aufgaben, die
+  // ihren eigenen Haken haben -- ein Knopf im Knopf geht nicht.
+  let zeilen = '';
   for (const cat of PLAN_CATS) {
     if (!counts[cat]) continue;
-    html +=
-      '<div class="fs-xs" style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
+    zeilen +=
+      '<span class="wk-count" style="border-left-color:' +
       PLAN_CAT_COLOR[cat] +
-      ';margin-bottom:2px">' +
-      '<span style="font-weight:700;flex-shrink:0">' +
+      '"><span class="wk-count-n">' +
       counts[cat] +
-      '</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-sec)">' +
+      '</span><span class="wk-count-t">' +
       esc(t(PLAN_CAT_LABEL[cat])) +
-      '</span></div>';
+      '</span></span>';
   }
   // Late work is the one thing that should pull the eye across the week.
   if (overdue) {
+    zeilen += '<span class="wk-count-late">' + esc(t('cat.overdue', { n: overdue })) + '</span>';
+  }
+  if (zeilen) {
     html +=
-      '<div class="fs-micro" style="color:var(--c-red-dark);padding:1px 2px">' +
-      esc(t('cat.overdue', { n: overdue })) +
-      '</div>';
+      '<button type="button" class="wk-counts fs-xs" data-action="dash-day" data-off="' +
+      d.offset +
+      '" title="' +
+      esc(t('dash.openDay')) +
+      '">' +
+      zeilen +
+      '</button>';
   }
   return html;
 }

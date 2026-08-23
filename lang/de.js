@@ -450,7 +450,8 @@ window.LANG['de'] = {
   'harvest.releasedTotal': '{bag}: {kg} kg insgesamt freigegeben',
   // Dashboard
   'cat.alert': 'Achtung',
-  'cat.create': 'Ansetzen',
+  'cat.lab': 'Labor',
+  'cat.create': 'Chargen',
   'cat.move': 'Umziehen',
   'cat.harvest': 'Ernten',
   'cat.overdue': '{n} überfällig',
@@ -518,6 +519,7 @@ window.LANG['de'] = {
   'dash.toFruiting': 'Fruchtung',
   'dash.noFruitingZone': 'Keine Fruchtungszone definiert',
   'dash.destLabel': 'Ziel:',
+  'dash.openDay': 'Diesen Tag öffnen',
   'dash.viewWeek': 'Woche',
   'dash.viewDay': 'Tag',
   'dash.dayPrev': 'Vorheriger Tag',
