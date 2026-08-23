@@ -581,6 +581,7 @@ function applyData(d) {
   // so the lazy rebuild on next getStatus() will pick up the new state.
   _statusByBatch = null;
   _hasScanByBatch = null;
+  _rhythmIndex = null;
   // Same reason, same wholesale replacement: the search index is built from
   // these arrays and every one of them is about to be a different array.
   gsIndexInvalidate();
@@ -1278,7 +1279,8 @@ function openStab(page, sub) {
   // shut into a sub-page. And a tab that is not in the list is not a place to
   // land — see stabLandable().
   const pgEl = document.getElementById(`p-${page}`);
-  if (pgEl && pgEl.classList.contains('stab-drill') && stabLandable(stEl)) pgEl.classList.add('stab-drilled');
+  if (pgEl && pgEl.classList.contains('stab-drill') && stabLandable(stEl, spEl))
+    pgEl.classList.add('stab-drilled');
 }
 
 // A sub-tab hidden from the strip is not somewhere to send a phone: the list it
@@ -1286,7 +1288,21 @@ function openStab(page, sub) {
 // that exists — it opens on first visit of a session and is display:none in
 // both the strip and the sidebar list — so on a phone Admin opens on its index
 // instead of on a panel the index cannot reach.
-function stabLandable(stab) {
+// Zweiter Weg hinein: ein Panel, das ein Leitknopf über der Leiste öffnet.
+//
+// "Neue Charge" und "Laborarbeit" waren einmal Reiter. Sie sind jetzt Knöpfe
+// über der Leiste, weil sie etwas anlegen statt eine Ansicht zu wechseln —
+// und mit dem Reiter verschwand das Element, an dem diese Prüfung hängt. Am
+// Telefon hieß das: Knopf antippen, .sp bekommt .active, und die Regel
+// `.page.stab-drill:not(.stab-drilled) .sp { display: none }` lässt es
+// trotzdem verborgen. Der Knopf tat nichts, auf genau dem Gerät, auf dem die
+// Anwendung meistens läuft.
+//
+// Die ursprüngliche Begründung bleibt gültig: ein Ziel braucht einen Weg
+// zurück, den die Liste anbietet. Ein Leitknopf ist so ein Weg, er steht nur
+// über der Liste statt darin. Panels, die so erreicht werden, sagen es selbst.
+function stabLandable(stab, panel) {
+  if (panel && panel.dataset && panel.dataset.stabLead !== undefined) return true;
   return !!stab && stab.style.display !== 'none';
 }
 
@@ -1338,6 +1354,7 @@ function refresh() {
   // getStatus() call within this render pass, then reused for the rest.
   _statusByBatch = null;
   _hasScanByBatch = null;
+  _rhythmIndex = null;
   const active = document.querySelector('.page.active');
   if (!active) return;
   const id = active.id.replace('p-', '');
@@ -3051,7 +3068,13 @@ function renderSorteTiles() {
   // filter goes with it.
   if (batchSorteFilter && !rows.some((r) => r.key === batchSorteFilter)) batchSorteFilter = '';
   if (!rows.length) {
-    el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
+    // Auch der leere Stand ist ein Stand. Ohne diese Zeile blieb der
+    // Fingerabdruck auf dem letzten gefuellten Aufbau stehen: kommen danach
+    // genau dieselben Daten zurueck, haelt die Abkuerzung unten den leeren
+    // Text fest, waehrend die Tabelle darunter jede Charge auflistet.
+    const leer = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
+    el.__sortenFp = leer;
+    el.innerHTML = leer;
     return;
   }
   const tot = rows.reduce(
@@ -4206,25 +4229,28 @@ function renderStatus() {
   if (!el) return;
   // The room view moved to its own sub-tab, and rebuilding it while that tab is
   // closed is pure waste: getRackBags/getZoneBags walk the entire scan log, and
-  // this function calls them about thirty times. The Sorten tiles and the
-  // overview KPIs still have to run, so only the rack markup is skipped.
+  // this function calls them about thirty times. Only the Sorten tiles still
+  // have to run, so only the rack markup is skipped.
+  //
+  // renderOverviewKPIs() stand hier einmal mit, aus der Zeit, als die
+  // Betriebsseite sich nicht selbst zeichnete. Es endet in
+  // renderOverviewCharts(), und das ruft .destroy() und new Chart() auf vier
+  // Leinwaenden — auf einer Seite mit display:none, bei jedem Scan. Seit
+  // go() und refresh() die Betriebsseite kennen, zeichnet sie sich selbst.
   const panel = document.getElementById('sp-batch-locations');
   if (panel && !panel.classList.contains('active')) {
     renderSorteTiles();
-    renderOverviewKPIs();
     return;
   }
   if (!zones.length) {
     // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
     renderSorteTiles();
-    renderOverviewKPIs();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
     renderSorteTiles();
-    renderOverviewKPIs();
     return;
   }
 
@@ -4279,7 +4305,6 @@ function renderStatus() {
 
   el.innerHTML = html;
   renderSorteTiles();
-  renderOverviewKPIs();
   updateActionBar();
 }
 
@@ -5320,33 +5345,68 @@ function rhythmTaskOn(date) {
 // angesetzte Blöcke, Körnertag die Kilogramm Brut, Fruchtungstag die Beutel,
 // die in eine Fruchtungszone gezogen sind, Erntetag die erfassten Ernten,
 // Labortag die angelegten Kulturen.
-function rhythmMadeOn(dateKey, theme) {
-  const amTag = (wert) => {
-    if (!wert) return false;
+// Was an welchem Tag entstanden ist, in EINEM Durchgang je Auffrischung.
+//
+// rhythmMadeOn() lief vorher je rückständigem Tag und ging dabei jedes Mal
+// batches, scanLog, harvests und cultures ganz durch, mit einem Date-Aufbau je
+// Element — und rhythmArrears() warf danach die erledigten Tage weg, die den
+// Durchgang schon bezahlt hatten. rhythmTasks wächst um eine Zeile je Tag und
+// wird nie beschnitten, also wuchs das mit dem Alter der Anlage: gemessen 156 ms
+// nach drei Monaten, 2314 ms nach einem Jahr, auf der Startseite, bei jedem
+// SSE-Ereignis. Ein Index, gebaut wie _statusByBatch und in refresh() genauso
+// verworfen, macht daraus einen Kartenzugriff.
+let _rhythmIndex = null;
+function _rhythmMadeIndex() {
+  if (_rhythmIndex) return _rhythmIndex;
+  const idx = new Map();
+  const bucket = (wert) => {
+    if (!wert) return null;
     const d = new Date(wert);
-    return !isNaN(d) && _ymd(d) === dateKey;
+    if (isNaN(d)) return null;
+    const k = _ymd(d);
+    let e = idx.get(k);
+    if (!e) idx.set(k, (e = { substrate: 0, grain: 0, fruiting: 0, harvest: 0, lab: 0 }));
+    return e;
   };
-  if (theme === 'substrate') {
-    return (batches || [])
-      .filter((b) => b.batchType !== 'grain' && amTag(b.created))
-      .reduce((s, b) => s + (b.qty || 0), 0);
+  for (const b of batches || []) {
+    const e = bucket(b.created);
+    if (!e) continue;
+    // Beides zaehlt, was an dem Tag ENTSTANDEN ist, und nicht, was davon heute
+    // noch dasteht. _grainKgOf() waere hier falsch: es gibt 0 zurueck, sobald
+    // eine Charge archiviert ist, also kam ein erfuellter Koernertag als
+    // Rueckstand zurueck, sobald die Glaeser verbraucht waren -- dauerhaft, und
+    // ohne Knopf, der ihn noch schliessen koennte.
+    //
+    // Und in Glaesern, nicht in Kilogramm: das Ziel wird als Anzahl eingegeben
+    // ('Wie viele am {date}?', setRhythmTarget verlangt eine ganze Zahl), also
+    // muss die Zahl daneben dieselbe Einheit haben. In Kilogramm gemessen war
+    // ein Ziel von 20 mit sieben 3-kg-Glaesern erfuellt, und mit 0,5-kg-Glaesern
+    // nie.
+    if (b.batchType === 'grain') e.grain += b.qty || 0;
+    else e.substrate += b.qty || 0;
   }
-  if (theme === 'grain') {
-    return (batches || [])
-      .filter((b) => b.batchType === 'grain' && amTag(b.created))
-      .reduce((s, b) => s + _grainKgOf(b), 0);
+  for (const s of scanLog || []) {
+    if (!s || !s.bag || !s.to) continue;
+    if (s.action !== 'MOVE' && s.action !== 'MOVE_BATCH') continue;
+    const z = ZONE_BY_ID[toZone(s.to)];
+    if (!z || z.role !== 'fruiting') continue;
+    const e = bucket(s.time);
+    if (e) e.fruiting++;
   }
-  if (theme === 'fruiting') {
-    return (scanLog || []).filter((e) => {
-      if (!e || !e.bag || !e.to || !amTag(e.time)) return false;
-      if (e.action !== 'MOVE' && e.action !== 'MOVE_BATCH') return false;
-      const z = ZONE_BY_ID[toZone(e.to)];
-      return z && z.role === 'fruiting';
-    }).length;
+  for (const h of harvests || []) {
+    const e = bucket(h && h.time);
+    if (e) e.harvest++;
   }
-  if (theme === 'harvest') return (harvests || []).filter((h) => amTag(h && h.time)).length;
-  if (theme === 'lab') return (cultures || []).filter((c) => amTag(c && c.created)).length;
-  return 0;
+  for (const c of cultures || []) {
+    const e = bucket(c && c.created);
+    if (e) e.lab++;
+  }
+  _rhythmIndex = idx;
+  return idx;
+}
+function rhythmMadeOn(dateKey, theme) {
+  const tag = _rhythmMadeIndex().get(dateKey);
+  return tag && tag[theme] != null ? tag[theme] : 0;
 }
 // Ab wann der Rhythmus überhaupt mitzählt.
 //
@@ -5539,7 +5599,11 @@ function buildLabMinTasks() {
       // has said what this Sorte needs, and guessing would invent work.
       if (min <= 0) continue;
       const have = entry.count || 0;
-      if (have >= min) continue;
+      // Auf ein Tausendstel genau, denn beide Seiten sind Gleitkomma: drei
+      // Gläser zu 1,2 kg ergeben 3.5999999999999996, und gegen eine Untergrenze
+      // von 3,6 blieb eine Aufgabe stehen, die "3,6 von 3,6" las und sich nie
+      // schließen ließ.
+      if (have >= min - 0.001) continue;
       out.push({
         type,
         key,
@@ -6228,7 +6292,11 @@ function _weekDayBodyHtml(d, off, isToday) {
   const rank = (it) =>
     it.kind === 'alert'
       ? -10 + ((it.task && it.task.rang) || 0)
-      : it.kind === 'supply' || it.kind === 'labmin'
+      : // 'labgroup' vertritt die labmin-Zeilen und muss dorthin, wo sie
+        // stünden. Ohne diesen Zweig fiel es auf 999 und wurde als Erstes von
+        // der Sechs-Zeilen-Klappe verdeckt — die Zusammenfassung, die genau
+        // dafür erfunden wurde, dass die Klappe den Rundgang nicht frisst.
+        it.kind === 'supply' || it.kind === 'labmin' || it.kind === 'labgroup'
         ? -1
         : it.zone && order[it.zone] != null
           ? order[it.zone]
@@ -6275,8 +6343,10 @@ function _weekDayBodyHtml(d, off, isToday) {
 function _rhythmTaskRowHtml(task, outstanding) {
   const ms = task.strainId ? mushroomStrains.find((m) => m.id === task.strainId) : null;
   // Gezählt, nicht gemeldet. Ein geplanter Tag hat noch nichts, worauf man
-  // zählen könnte.
-  const done = task.planned ? 0 : rhythmMadeOn(task.date, task.theme);
+  // zählen könnte. rhythmArrears() hat die Zahl für rückständige Tage schon
+  // ermittelt und legt sie in doneQty ab; sie hier ein zweites Mal zu holen war
+  // reine Wiederholung.
+  const done = task.planned ? 0 : task.doneQty != null ? task.doneQty : rhythmMadeOn(task.date, task.theme);
   const target = task.targetQty || 0;
   const late = outstanding > 0;
   const label = (ms ? target + '× ' + ms.name : String(target)) + ' · ' + weekThemeLabel(task.theme);
@@ -6896,20 +6966,12 @@ function strainsInProduction() {
   return out;
 }
 
-// The minimum a Sorte should never fall below, in the unit that type is counted
-// in: kilograms for grain spawn, and pieces for the three culture types.
+
+// Welche Spalte einer Pilzsorte die Untergrenze eines Kulturtyps traegt.
 //
-// Slants, plates and liquid culture used to share min_lc — or, for slants and
-// plates, hit the `return 0` above it and have no minimum at all. They are
-// three different things kept for three different reasons and stocked in
-// different numbers (v79), so each reads its own figure now.
+// GS heisst min_spawn_kg und nicht min_gs, weil die Spalte aus v69 stammt; die
+// Tabelle bruecht den Unterschied, damit ihn sonst niemand kennen muss.
 const STRAIN_MIN_FIELD = { GS: 'minSpawnKg', LC: 'minLc', MC: 'minMc', PD: 'minPd' };
-function strainMinFor(type, entry) {
-  const field = STRAIN_MIN_FIELD[type];
-  if (!field) return 0;
-  const ms = _strainOfEntry(entry);
-  return ms ? ms[field] || 0 : 0;
-}
 // Die Pilzsorten-Zeile hinter einem Eintrag der Aufschlüsselung.
 //
 // Über das Kürzel zuerst, dann über den bereinigten Namen — `m.name === entry.name`
@@ -12849,16 +12911,13 @@ function getLabAlerts() {
         warn: true
       });
     }
-    if (!MIN_TYPES.includes(type)) return;
-    const low = Object.values(breakdown[type] || {}).filter((s) => s.min > 0 && s.count < s.min);
-    if (!low.length) return;
-    const names = low.map((s) => s.kz || s.name).join(', ');
-    alerts.push({
-      text: t('lab.lowLabAlert', { type: getLabLabel(type) }) + ': ' + names,
-      detail: names,
-      urgent: low.some((s) => s.count === 0),
-      warn: true
-    });
+    // Die Untergrenzen je Sorte liest buildLabMinTasks(), und nur die. Hier
+    // standen sie ein zweites Mal: dieselbe Aufschlüsselung, dieselbe
+    // Bedingung, und beide Ergebnisse landeten in derselben Tagesliste — eine
+    // gerissene Untergrenze als zwei Zeilen. Schlimmer noch, diese Kopie
+    // überging die Programm-Kennzeichnung, die die andere achtet, also blieb
+    // eine geparkte Sorte hier stehen und rief jeden Tag weiter. Genau die
+    // Dauerwarnung, gegen die v78 geschrieben wurde.
   });
   return alerts;
 }
@@ -21399,6 +21458,19 @@ function gsPageIndex() {
     const nav = document.querySelector('.sb-btn[data-page="' + page + '"]');
     if (!nav || nav.style.display === 'none') return;
     const home = strip.dataset.stabHome ? t(strip.dataset.stabHome) : label(nav);
+    // Panels, die ein Leitknopf oeffnet, stehen in keiner Leiste und fielen
+    // deshalb aus dem Suchindex: "Neue Charge" und "Laborarbeit" waren ueber
+    // die Suche nicht mehr zu finden, seit sie Knoepfe wurden. Sie tragen ihre
+    // Beschriftung selbst.
+    strip.parentElement.querySelectorAll('.sp[data-stab-lead]').forEach((sp) => {
+      out.push({
+        type: 'page',
+        id: home + ' › ' + t(sp.dataset.stabLead),
+        sub: '',
+        page,
+        stab: sp.id.replace('sp-' + page + '-', '')
+      });
+    });
     strip.querySelectorAll('.stab').forEach((st) => {
       if (!stabLandable(st)) return;
       out.push({

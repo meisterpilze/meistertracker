@@ -280,7 +280,9 @@ function helferQuelle() {
     // fix. Asked of the DOM, because the label string where() builds is not a
     // nesting path and the caller used to ask it of that instead.
     outermost: function (rows) {
-      return rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
+      return rows
+        .filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el)))
+        .map(({ el: _el, ...rest }) => rest);
     },
     // How many fetches are still out. Clicking a sidebar entry marks the button
     // `active` in the same turn, which is what the run used to wait for — but
@@ -437,7 +439,7 @@ function measure(typeFloor, touchFloor, FELD_MIN) {
 // page is open, because a nav entry was clicked, exactly as a user meets it.
 /* global document, window, getComputedStyle */
 function measureLive(typeFloor, touchFloor, FELD_MIN) {
-  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
+  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, outermost } = window.__mess;
   const type = [];
   const touch = [];
   const feld = [];
@@ -1101,7 +1103,6 @@ async function main() {
   const feld = findings.filter((f) => f.kind === 'feld' && f.pointer === 'coarse');
   const typeFine = findings.filter((f) => f.kind === 'type' && f.pointer === 'fine');
   const over = findings.filter((f) => f.kind === 'over');
-  const tapFloorOf = (f) => POINTERS.find((p) => p.name === f.pointer).tapFloor;
   const tooSmall = findings.filter((f) => f.kind === 'touch' && f.band === 'boden');
   // Between the pointer's own floor and the Feld floor: reported, never counted.
   // A Büro control at 48px is where section 9 put it; the same control is too

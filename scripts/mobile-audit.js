@@ -170,7 +170,11 @@ for (const key of ['inline', 'declared', 'base']) {
   }
 }
 
-if (!failed && counts.inline === 0 && /\[style\*='font-size/.test(fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8'))) {
+if (
+  !failed &&
+  counts.inline === 0 &&
+  /\[style\*='font-size/.test(fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8'))
+) {
   console.log('\n✓ no inline sub-floor sizes left — delete the bridge block in styles.css.');
 }
 process.exit(failed ? 1 : 0);

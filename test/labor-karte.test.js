@@ -36,7 +36,6 @@ function zeichne({ kulturen = [], sorten = [], schwellen = {} } = {}) {
     hebeFunktion('_labName'),
     hebeFunktion('strainsInProduction'),
     hebeFunktion('_strainOfEntry'),
-    hebeFunktion('strainMinFor'),
     hebeFunktion('getLabStrainBreakdown'),
     hebeFunktion('renderDashLabStock'),
     'renderDashLabStock();'

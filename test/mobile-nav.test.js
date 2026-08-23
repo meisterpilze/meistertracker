@@ -122,7 +122,24 @@ describe('the sub-tab drill-down', () => {
       /function stabLandable\(/,
       'the landable rule is gone — Admin opens on a panel its list cannot reach'
     );
-    assert.match(APP, /stabLandable\(stEl\)/, 'openStab() no longer checks whether the tab is one you can land on');
+    assert.match(APP, /stabLandable\(stEl[,)]/, 'openStab() no longer checks whether the tab is one you can land on');
+  });
+
+  it('does send a phone to a panel a lead button opens', () => {
+    // "Neue Charge" und "Laborarbeit" waren Reiter und sind jetzt Knoepfe ueber
+    // der Leiste. Mit dem Reiter verschwand das Element, an dem stabLandable
+    // haengt, und am Telefon liess die Regel
+    // `.page.stab-drill:not(.stab-drilled) .sp { display:none }` das Panel
+    // verborgen: der Knopf tat nichts. Ein Leitknopf ist ein Weg hinein, er
+    // steht nur ueber der Liste statt darin.
+    assert.match(APP, /panel\.dataset\.stabLead/, 'stabLandable ignores a panel a lead button opens');
+    for (const id of ['sp-batch-new', 'sp-lab-work']) {
+      assert.match(
+        HTML,
+        new RegExp('id="' + id + '"[^>]*data-stab-lead'),
+        id + ' is opened by a lead button but does not say so, so a phone cannot land on it'
+      );
+    }
   });
 
   it('marks the page drilled from the one place every route runs through', () => {
