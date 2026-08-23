@@ -338,3 +338,30 @@ describe('Woche oder Tag', () => {
     assert.match(CSS, /\.wk-view-btn \{[^}]*min-height: var\(--tap-sm\);/);
   });
 });
+
+// ── Die Zählung einer Spalte ────────────────────────────────────────────────
+describe('Was in einer Spalte gezählt steht', () => {
+  it('öffnet den Tag, wenn man darauf tippt', () => {
+    // Vorher totes Papier: "4 Achtung · 4 Ansetzen · 5 überfällig" stand da, man
+    // tippte darauf, und nichts geschah. Ein Kasten mit Zahlen darin sieht aus
+    // wie etwas zum Aufklappen.
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    assert.match(fn, /class="wk-counts fs-xs" data-action="dash-day" data-off="/);
+    assert.match(fn, /d\.offset/, 'der Knopf weiß nicht, welchen Tag er öffnen soll');
+  });
+
+  it('ist eine antippbare Fläche, kein Knopf', () => {
+    // Wie die Mengenzahl darüber: randlos und ohne Füllung.
+    assert.match(CSS, /\.wk-counts \{[^}]*border: 0;/);
+    assert.match(CSS, /\.wk-counts \{[^}]*background: none;/);
+  });
+
+  it('lässt die eigene Aufgabe daneben ihren eigenen Haken behalten', () => {
+    // Ein Knopf im Knopf geht nicht, und der Haken darf nicht den Tag öffnen
+    // statt abzuhaken.
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    const chips = fn.indexOf('_choreChipHtml(c)');
+    const knopf = fn.indexOf('wk-counts');
+    assert.ok(chips > 0 && knopf > chips, 'die Aufgaben stehen im Zählknopf');
+  });
+});
