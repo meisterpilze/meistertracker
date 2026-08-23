@@ -1264,9 +1264,14 @@ function refresh() {
   const active = document.querySelector('.page.active');
   if (!active) return;
   const id = active.id.replace('p-', '');
-  if (id === 'dash') {
-    renderDashBatchTasks();
-  }
+  // Arbeitsgänge ist die Seite, mit der die App aufmacht, und der einzige Zweig,
+  // der ihre Liste zeichnete, hieß 'dash' — dort stand die Karte, bevor sie
+  // hierher zog. Also zeigte ein Neuladen die sieben Kacheln und darüber nichts,
+  // bis man die Seite verließ und über go() zurückkam; und solange man blieb,
+  // frischte weder ein SSE-Ereignis noch der 30-Sekunden-Takt sie je auf.
+  // #dash-batch-tasks steht nicht auf p-dash, der alte Zweig zeichnete also eine
+  // Karte, die auf der offenen Seite gar nicht vorkommt.
+  if (id === 'work') renderDashBatchTasks();
   if (id === 'batch') {
     renderStatus();
     renderBatches();
