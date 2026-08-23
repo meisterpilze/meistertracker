@@ -345,7 +345,7 @@ body {
   flex-shrink: 0;
 }
 .sb-logo-text {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--c-text);
   white-space: nowrap;
@@ -353,7 +353,7 @@ body {
 .sb-logo-text small {
   font-weight: 400;
   color: var(--c-text-sec);
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 .sb-toggle {
   background: none;
@@ -384,7 +384,7 @@ body {
   padding: 12px 10px;
 }
 .sb-group-label {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -518,7 +518,7 @@ body.admin-mode #n-settings .sb-ico-back {
    on a timer. min-width: 0 is what lets a flex child shrink far enough to
    ellipsize instead of forcing the row wider. */
 .sb-sync-label {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   flex: 1;
   min-width: 0;
@@ -528,7 +528,7 @@ body.admin-mode #n-settings .sb-ico-back {
 }
 .sb-lang-sel {
   width: auto;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   padding: 3px 6px;
   border: 1px solid var(--c-border);
   border-radius: 6px;
@@ -588,7 +588,7 @@ body.admin-mode #n-settings .sb-ico-back {
   background: repeating-linear-gradient(45deg, #f59e0b 0 14px, #fbbf24 14px 28px);
   color: #1f1300;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 8px 16px;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
   padding-left: calc(16px + env(safe-area-inset-left, 0px));
@@ -599,7 +599,7 @@ body.admin-mode #n-settings .sb-ico-back {
   line-height: 1.35;
 }
 .worktree-banner-icon {
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
 }
 .worktree-banner-text b {
@@ -742,7 +742,7 @@ body:has(.modal-bg.open) .cam-fab {
   right: 4px;
   background: none;
   border: none;
-  font-size: 28px;
+  font-size: 1.75rem;
   cursor: pointer;
   color: var(--c-text-muted);
   line-height: 1;
@@ -789,7 +789,7 @@ body:has(.modal-bg.open) .cam-fab {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--c-text);
   padding: 16px 20px 12px;
@@ -868,7 +868,7 @@ body:has(.modal-bg.open) .cam-fab {
   border-radius: 9px;
   background: var(--c-border);
   color: var(--c-text-muted);
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 700;
 }
 .scan-tab.active .scan-tab-count {
@@ -907,7 +907,7 @@ body:has(.modal-bg.open) .cam-fab {
   padding: 40px 20px;
   text-align: center;
   color: var(--c-text-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-style: italic;
 }
 .scan-successes-list:not(:empty) + .scan-successes-empty,
@@ -922,12 +922,12 @@ body:has(.modal-bg.open) .cam-fab {
   background: var(--c-bg);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 .scan-success-time {
   color: var(--c-text-muted);
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-success-body {
@@ -942,7 +942,7 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .scan-success-loc {
   color: var(--c-text-muted);
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
 }
 .scan-success-undo {
   background: var(--c-surface);
@@ -955,7 +955,7 @@ body:has(.modal-bg.open) .cam-fab {
   min-height: var(--tap);
   min-width: var(--tap);
   padding: 4px 10px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   flex-shrink: 0;
   transition: all 0.15s;
@@ -982,14 +982,14 @@ body:has(.modal-bg.open) .cam-fab {
     box-shadow 0.2s;
 }
 .chip-l {
-  font-size: max(9px, var(--fs-min));
+  font-size: max(0.5625rem, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 .chip-v {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--c-text);
   margin-top: 2px;
@@ -1000,7 +1000,7 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .chip-last-scan .chip-v {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
 }
 /* Chip pulse animation for missing input hints */
 .chip-pulse {
@@ -1025,7 +1025,7 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .btn-xs {
   padding: 6px 12px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 500;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -1062,7 +1062,7 @@ body:has(.modal-bg.open) .cam-fab {
 .scan-toast-inline {
   padding: 10px 14px;
   border-radius: var(--radius);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   font-family: ui-monospace, 'Cascadia Code', monospace;
   text-align: center;
@@ -1104,7 +1104,7 @@ body:has(.modal-bg.open) .cam-fab {
   flex: 1;
   min-height: 120px;
   overflow-y: auto;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   display: flex;
   flex-direction: column-reverse;
@@ -1137,7 +1137,7 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .scan-log-entry .sle-time {
   color: var(--c-text-muted);
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   flex-shrink: 0;
 }
 .scan-log-entry .sle-msg {
@@ -1149,7 +1149,7 @@ body:has(.modal-bg.open) .cam-fab {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   cursor: pointer;
   color: var(--c-text-muted);
   flex-shrink: 0;
@@ -1184,7 +1184,7 @@ body:has(.modal-bg.open) .cam-fab {
   border: 1px solid var(--c-border);
 }
 .scan-session-summary h3 {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   margin: 0 0 12px;
 }
@@ -1202,17 +1202,17 @@ body:has(.modal-bg.open) .cam-fab {
   text-align: center;
 }
 .scan-summary-stat .ss-num {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--c-text);
 }
 .scan-summary-stat .ss-lbl {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
   text-transform: uppercase;
 }
 .scan-summary-batches {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 12px;
 }
@@ -1281,7 +1281,7 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-toast {
   width: 100%;
   text-align: center;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   padding: 0;
   max-height: 0;
@@ -1330,7 +1330,7 @@ body:has(.modal-bg.open) .cam-fab {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 99px;
@@ -1342,7 +1342,7 @@ body:has(.modal-bg.open) .cam-fab {
     transform 0.15s;
 }
 .cam-chip-l {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 400;
   opacity: 0.6;
   text-transform: uppercase;
@@ -1351,7 +1351,7 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-chip-arrow {
   padding: 4px 2px;
   opacity: 0.4;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .cam-chip.ch-set {
   background: rgba(255, 255, 255, 0.25);
@@ -1461,7 +1461,7 @@ body:has(.modal-bg.open) .cam-fab {
   border: none;
   background: var(--c-primary, #16a34a);
   color: #fff;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -1507,6 +1507,25 @@ body:has(.modal-bg.open) .cam-fab {
   padding: var(--pad-page);
   max-width: 1400px;
   margin: 0 auto;
+  /* Regel R2: der Kasten misst, nicht das Fenster.
+     Alles, was in dieser Spalte steht, kann von hier ab nach IHRER Breite
+     fragen statt nach der des Fensters — und das sind zwei verschiedene
+     Zahlen, sobald die Seitenleiste da ist: bei 769 px Fenster bleiben
+     769 − 240 − 48 = 481 px übrig. Genau diese Lücke war die Klippe bei
+     769 px, an der zwei Ratschenzeilen hingen.
+
+     Der Name ist nötig und nicht Zierde: ohne ihn fragt eine
+     Container-Abfrage den NÄCHSTEN Vorfahren mit container-type, und wer
+     später einen zweiten Kasten dazwischensetzt, verschiebt lautlos, worauf
+     sich jede dieser Regeln bezieht.
+
+     Was das sonst noch tut, ist gemessen und nicht angenommen:
+     `container-type` macht `.main` in keiner der beiden Maschinen zum
+     Bezugsrahmen für `position: fixed` (P0, maschinen/), und dass nichts
+     darin an einen anderen Platz rutscht, halten 142 Bilder vorher/nachher
+     aus `--shots`. */
+  container-type: inline-size;
+  container-name: inhalt;
 }
 .page {
   display: none;
@@ -1611,6 +1630,17 @@ summary.fs-meta {
   display: flex;
   align-items: center;
 }
+/* The two steps at the top of the ladder, added on 2026-08-23 for the inline
+   sizes in app.js. 13px and 15px are the two commonest numbers there by a long
+   way -- 26 and 8 of the 44 -- and both are already a mark's desktop value, so
+   the class changes nothing on a desk and gives the phone the 15 and 17 the
+   token layer decided on. */
+.fs-sm.fs-sm {
+  font-size: var(--fs-sm);
+}
+.fs-base.fs-base {
+  font-size: var(--fs-base);
+}
 .fs-meta.fs-meta {
   font-size: var(--fs-meta);
 }
@@ -1650,7 +1680,7 @@ summary.fs-meta {
   padding: 4px 8px;
 }
 .sec {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1719,6 +1749,7 @@ summary.fs-meta {
    that opens on its index instead falls out of the same rule rather than a
    name: Admin's default tab is display:none, so there is no sub-page to land
    on, and the list is what you get. */
+/* zwilling: untertableiste */
 @media (max-width: 768px) {
   .stabs {
     flex-direction: column;
@@ -1791,7 +1822,106 @@ summary.fs-meta {
     cursor: pointer;
   }
   .stab-back-ico {
-    font-size: 20px;
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  /* On the index there is no sub-page. The .active panel keeps its class, so
+     going back into it needs no state of its own — this rule outranks
+     `.sp.active` on specificity alone (0,4,0 against 0,2,0).
+
+     `.stab-drill` is not decoration: it is added by stabDrillInit(), so this
+     reaches only the pages that were given a back row — any page whose strip is
+     hidden is skipped there and would otherwise render blank on a phone, every
+     sub-page hidden and no index to reach them by. (Bestellungen was that page
+     until its five views stopped being sidebar entries.) It also means the whole
+     mechanism is inert if the script does not run, which is the right way round. */
+  .page.stab-drill:not(.stab-drilled) .sp {
+    display: none;
+  }
+}
+
+/* zwilling: untertableiste
+   Regel R2, dieselbe Rechnung wie beim Kartenmodus: 768 − 2×16 = 736. Die
+   Leiste wird zur Liste, sobald IHRE Spalte schmal ist, nicht wenn das
+   Fenster es ist. Der Kontaminationsstreifen des Labors hing zwischen 769
+   und 800 px bis zu 33 px über den Rand, weil er bei 769 px die Breite des
+   Fensters annahm, während die Seitenleiste ihm 240 px davon genommen hatte.
+
+   Zweimal geschrieben wie der Kartenmodus, und aus demselben Grund; ein Test
+   hält die beiden Fassungen gleich. */
+@container inhalt (max-width: 736px) {
+  .stabs {
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 0;
+    margin-bottom: 12px;
+    border-bottom: none;
+  }
+  .stab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    /* --tap, not --tap-sm: on a phone this is the page's navigation, which is
+       the argument the base rule makes for keeping it small in reverse. */
+    min-height: var(--tap);
+    border-radius: 0;
+    border-bottom: 1px solid var(--c-border-light);
+    text-align: left;
+    font-size: var(--fs-base);
+    color: var(--c-text);
+  }
+  /* A full-width green bar for "you were last here" would read as the page's
+     primary action. In a list, the mark is the label. */
+  .stab.active {
+    background: transparent;
+    color: var(--c-primary);
+    font-weight: 600;
+  }
+  .stab:hover:not(.active) {
+    background: transparent;
+  }
+  /* Drawn, not typed: a › from the font renders at a different size and
+     baseline in every fallback, and this one has to line up with the others. */
+  .stab::after {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-right: 2px solid var(--c-text-muted);
+    border-bottom: 2px solid var(--c-text-muted);
+    transform: rotate(-45deg);
+  }
+  .stab.active::after {
+    border-color: var(--c-primary);
+  }
+  .page.stab-drilled > .stabs {
+    display: none;
+  }
+  .page.stab-drilled > .stab-back {
+    display: flex;
+  }
+  .stab-back {
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0 4px;
+    margin-bottom: 12px;
+    border: none;
+    border-bottom: 1px solid var(--c-border-light);
+    background: transparent;
+    color: var(--c-primary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .stab-back-ico {
+    font-size: 1.25rem;
     line-height: 1;
   }
   /* On the index there is no sub-page. The .active panel keeps its class, so
@@ -1821,11 +1951,11 @@ summary.fs-meta {
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .oh-ch {
   display: inline-block;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   border-radius: 6px;
   padding: 1px 7px;
@@ -1849,7 +1979,7 @@ summary.fs-meta {
 }
 .oh-st {
   display: inline-block;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   border-radius: 999px;
   padding: 2px 9px;
@@ -1883,7 +2013,7 @@ summary.fs-meta {
   color: var(--c-red-dark);
 }
 .oh-fchip {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 600;
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -1941,7 +2071,7 @@ summary.fs-meta {
 
 /* ═══ FORMS ═════════════════════════════════════════════════════ */
 label {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 500;
   color: var(--c-text-sec);
   display: block;
@@ -1969,7 +2099,7 @@ textarea {
   padding: 9px 12px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: 0.875rem;
   background: var(--c-surface);
   color: var(--c-text);
   font-family: inherit;
@@ -1979,6 +2109,41 @@ textarea {
   resize: vertical;
   min-height: 64px;
   line-height: 1.5;
+}
+
+/* The anti-zoom floor, and it moved axis on 2026-08-23 rather than moving
+   value. iOS Safari zooms the whole page in when a focused field's text is
+   under 16 CSS px and never zooms back out; the way back is a pinch the user
+   has to know about.
+
+   It used to live inside `@media (max-width: 768px)`, which is rule R1 broken
+   in the plainest way there is: a WIDTH deciding a TOUCH behaviour. A tablet
+   in landscape is 1024px wide and still has a finger, so from 769px up the
+   rule stopped applying and 26 fields across nine pages went back to 13 and
+   14px — measured, not argued: measure-mobile.js --app reported every one of
+   them starting at exactly 769px.
+
+   `any-pointer` and not `pointer`, for the same reason the shop's axis rules
+   use it: a touchscreen laptop reports `pointer: fine`, because its PRIMARY
+   pointer is the trackpad, and `any-pointer: coarse` alongside. It is the
+   device most likely to be carried into a growing room, and `pointer: coarse`
+   is exactly the spelling that misses it.
+
+   max() and not a flat 16px, because the two halves say different things.
+   `1rem` is the reader's own setting and must be allowed to grow; 16px is
+   WebKit's threshold and must never shrink below it, whatever the reader set.
+   A flat 16px would throw a reader who chose 20px back down to 16.
+
+   !important because .fs-meta is (0,2,0) against this selector's (0,0,3), and
+   .fs-meta is what the compact filter and search fields wear since the inline
+   sizes were cleaned up. Without it Safari gets a 13px field to zoom into on
+   exactly the pages that were tidied. */
+@media (any-pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 16px) !important;
+  }
 }
 input:focus,
 select:focus,
@@ -2054,7 +2219,7 @@ button {
 .btn-lead {
   gap: 8px;
   padding: 11px 20px;
-  font-size: max(14px, var(--fs-min));
+  font-size: max(0.875rem, var(--fs-min));
   font-weight: 600;
   margin-bottom: 10px;
 }
@@ -2096,7 +2261,7 @@ textarea.is-invalid {
 
 .btn-sm {
   padding: 5px 10px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 /* Touch-device tap targets — covers phones AND tablets in landscape, which the
    old (max-width:768px) breakpoint missed. Applies to every .btn-xs / .btn-sm
@@ -2164,13 +2329,13 @@ textarea.is-invalid {
   border-left: 4px solid var(--c-primary);
 }
 .met-l {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 4px;
   font-weight: 500;
 }
 .met-v {
-  font-size: 26px;
+  font-size: 1.625rem;
   font-weight: 700;
   color: var(--c-text);
   line-height: 1.2;
@@ -2179,7 +2344,7 @@ textarea.is-invalid {
 /* ═══ BADGES ════════════════════════════════════════════════════ */
 .badge {
   display: inline-block;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   padding: 3px 9px;
   border-radius: 99px;
@@ -2280,10 +2445,10 @@ textarea.is-invalid {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 th {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2306,7 +2471,7 @@ th.sortable {
   }
 }
 th.sortable .arrow {
-  font-size: max(9px, var(--fs-min));
+  font-size: max(0.5625rem, var(--fs-min));
   opacity: 0.35;
   margin-left: 3px;
 }
@@ -2341,7 +2506,7 @@ tr:hover td {
 .empty {
   text-align: center;
   color: var(--c-text-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 3rem;
 }
 .sp-dot {
@@ -2370,7 +2535,7 @@ tr:hover td {
    That is a desktop layout change, not a phone fix, and it needs the column
    widths looked at rather than a display keyword. */
 .sub-tag {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   background: var(--c-bg);
   color: var(--c-text-sec);
   padding: 3px 8px;
@@ -2427,7 +2592,7 @@ tr:hover td {
   grid-row: 2;
   grid-column: var(--col);
   min-width: 0;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   /* A rule between the days, not just a gap. Seven columns of similar-looking
      rows run together without one, and the eye loses which day it is reading.
      Left edge on every column but the first, so the outer edges stay clean. */
@@ -2522,7 +2687,7 @@ tr:hover td {
 }
 .tag {
   display: inline-block;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   padding: 2px 8px;
   border-radius: 99px;
   margin-left: 4px;
@@ -2596,7 +2761,7 @@ tr:hover td {
   background: var(--c-surface);
   color: var(--c-text);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 1rem;
   transition: all 0.15s;
 }
 .cal-nav-btn:hover {
@@ -2612,7 +2777,7 @@ tr:hover td {
   background: var(--c-surface);
   color: var(--c-text);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
   transition: all 0.15s;
@@ -2623,7 +2788,7 @@ tr:hover td {
   border-color: var(--c-primary);
 }
 .cal-title {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 800;
   color: var(--c-text);
   margin-left: 8px;
@@ -2637,7 +2802,7 @@ tr:hover td {
 }
 .cal-vbtn {
   padding: 7px 18px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   border: none;
   background: var(--c-surface);
@@ -2672,7 +2837,7 @@ tr:hover td {
   background: var(--c-surface);
   color: var(--c-text-sec);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 1rem;
   transition: all 0.15s;
   flex-shrink: 0;
 }
@@ -2689,7 +2854,7 @@ tr:hover td {
   background: var(--c-primary);
   color: #fff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
   transition: all 0.15s;
@@ -2707,7 +2872,7 @@ tr:hover td {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 14px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
   padding: 8px 12px;
   background: var(--c-surface);
@@ -2766,7 +2931,7 @@ tr:hover td {
 .cal-hdr {
   background: var(--c-bg);
   text-align: center;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   padding: 10px 4px;
@@ -2797,7 +2962,7 @@ tr:hover td {
   background: var(--c-primary-light);
 }
 .cal-day {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--c-text-sec);
   margin-bottom: 5px;
@@ -2829,7 +2994,7 @@ tr:hover td {
   color: #fff;
 }
 .cal-event {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: #fff;
   padding: 2px 7px;
   border-radius: 4px;
@@ -2870,7 +3035,7 @@ tr:hover td {
   }
 }
 .cal-ev-assignees {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   opacity: 0.85;
   display: inline;
   white-space: nowrap;
@@ -2879,7 +3044,7 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   padding: 1px 8px;
   background: #eee;
   border-radius: 12px;
@@ -2888,7 +3053,7 @@ tr:hover td {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 0;
   line-height: 1;
 }
@@ -2896,13 +3061,13 @@ tr:hover td {
   display: block;
   padding: 4px 8px;
   cursor: pointer;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 #cal-ev-assignee-dropdown label:hover {
   background: #f0f0f0;
 }
 .cal-more {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-primary);
   cursor: pointer;
   padding: 2px 7px;
@@ -2936,7 +3101,7 @@ tr:hover td {
 .cal-week-hdr-cell {
   text-align: center;
   padding: 10px 4px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -2944,7 +3109,7 @@ tr:hover td {
 }
 .cal-week-hdr-cell .wk-day-num {
   display: block;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 800;
   color: var(--c-text);
   letter-spacing: -0.5px;
@@ -2964,7 +3129,7 @@ tr:hover td {
   min-height: 36px;
 }
 .cal-week-allday-label {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
   padding: 6px;
   display: flex;
@@ -2989,7 +3154,7 @@ tr:hover td {
   overflow-y: auto;
 }
 .cal-week-time {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px 0 0;
@@ -3022,7 +3187,7 @@ tr:hover td {
   right: 2px;
   border-radius: 5px;
   padding: 2px 6px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -3082,14 +3247,14 @@ tr:hover td {
 }
 .cal-day-allday .sec {
   margin-bottom: 6px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--c-text-muted);
   font-weight: 700;
 }
 .cal-day-allday-empty {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
 }
@@ -3101,7 +3266,7 @@ tr:hover td {
   position: relative;
 }
 .cal-day-time {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
   text-align: right;
   padding: 0 8px;
@@ -3130,7 +3295,7 @@ tr:hover td {
   right: 4px;
   border-radius: 5px;
   padding: 3px 8px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: #fff;
   overflow: hidden;
   z-index: 2;
@@ -3337,7 +3502,7 @@ tr:hover td {
   transform: rotate(-90deg);
 }
 .location-section-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--c-text);
   display: flex;
@@ -3351,7 +3516,7 @@ tr:hover td {
   flex-shrink: 0;
 }
 .location-section-count {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -3383,12 +3548,12 @@ tr:hover td {
   margin-bottom: 6px;
 }
 .rack-card-name {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--c-text);
 }
 .rack-card-count {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
@@ -3433,7 +3598,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 .batch-card-species {
   font-weight: 600;
@@ -3443,12 +3608,12 @@ tr:hover td {
   gap: 4px;
 }
 .batch-card-count {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 500;
 }
 .batch-card-meta {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 3px;
   display: flex;
@@ -3471,7 +3636,7 @@ tr:hover td {
   display: flex;
 }
 .bag-chip {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-family: ui-monospace, 'Cascadia Code', monospace;
   padding: 4px 8px;
   border-radius: 6px;
@@ -3496,7 +3661,7 @@ tr:hover td {
   min-height: 80px;
 }
 .tent-column-header {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--c-text);
   margin-bottom: 8px;
@@ -3505,7 +3670,7 @@ tr:hover td {
   gap: 6px;
 }
 .tent-column-empty {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   font-style: italic;
   text-align: center;
@@ -3536,7 +3701,7 @@ tr:hover td {
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 .action-bar-sticky .action-bar-count {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
 }
@@ -3554,11 +3719,24 @@ tr:hover td {
 }
 .ov-period-toggle {
   display: flex;
+  /* Drei Pillen, die nicht umbrechen konnten, und auf Deutsch sind sie
+     zusammen 344 px breit: „Diese Woche | Diesen Monat | Dieses Jahr". Auf
+     einem 320-px-Telefon war das der einzige Grund, warum die Übersicht als
+     Ganzes breiter war als der Schirm — mit dem Finger verkleinerte das
+     Telefon die ganze Seite auf 89 Prozent, mit der Maus lief sie 17 bis 40 px
+     über den Rand. Ein Fehler mit zwei Gesichtern, wie im Labor.
+
+     `flex-wrap` und `max-width` statt einer Umbruchstelle: Es gibt keine
+     Breite, ab der das richtig wird, es gibt nur „passt" und „passt nicht",
+     und genau das rechnet der Umbruch selbst aus. Auf Englisch passt dieselbe
+     Zeile auch bei 320 px in eine Reihe und bleibt dort. */
+  flex-wrap: wrap;
   background: var(--c-border-light);
   border-radius: 10px;
   padding: 3px;
   gap: 2px;
   width: fit-content;
+  max-width: 100%;
   margin-bottom: 14px;
 }
 .ov-period-btn {
@@ -3567,7 +3745,7 @@ tr:hover td {
   border-radius: 8px;
   background: transparent;
   color: var(--c-text-muted);
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -3589,7 +3767,7 @@ tr:hover td {
 }
 .dash-search-inline {
   width: 200px;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   padding: 6px 10px;
   border: 2px solid var(--c-border-strong, #94a3b8);
   border-radius: var(--radius-sm);
@@ -3710,7 +3888,7 @@ tr:hover td {
 }
 .stile-name {
   font-weight: 700;
-  font-size: max(14px, var(--fs-min));
+  font-size: max(0.875rem, var(--fs-min));
   line-height: 1.25;
   display: flex;
   align-items: center;
@@ -3719,7 +3897,7 @@ tr:hover td {
   text-overflow: ellipsis;
 }
 .stile-kz {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 700;
   color: var(--c-text-muted);
   background: var(--c-bg);
@@ -3738,14 +3916,14 @@ tr:hover td {
   flex-wrap: wrap;
 }
 .stile-big b {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 .stile-big span {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   font-weight: 600;
 }
@@ -3772,7 +3950,7 @@ tr:hover td {
 }
 .tstage b {
   display: block;
-  font-size: max(15px, var(--fs-min));
+  font-size: max(0.9375rem, var(--fs-min));
   font-weight: 800;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -3780,7 +3958,7 @@ tr:hover td {
 .tstage i {
   display: block;
   font-style: normal;
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -3800,7 +3978,7 @@ tr:hover td {
   margin-top: auto;
 }
 .stile-fs {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 
@@ -3811,7 +3989,7 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-sec);
   white-space: nowrap;
@@ -3878,7 +4056,7 @@ tr:hover td {
   }
 }
 .lab-chip {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 5px;
@@ -3895,7 +4073,7 @@ tr:hover td {
   gap: 8px;
   padding: 5px 0;
   border-top: 1px solid var(--c-border-light);
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
 }
 .goal-wk {
   font-weight: 600;
@@ -3924,7 +4102,7 @@ tr:hover td {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-sec);
   min-width: 0;
 }
@@ -3990,16 +4168,25 @@ tr:hover td {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
   user-select: none;
 }
 .ms-prog input {
   width: auto;
   margin: 0;
-  /* Coarse pointers get a real target; the row is tapped in a grow room. */
-  min-width: 20px;
-  min-height: 20px;
+  /* Der Schalter ist die Tippfläche, nicht das Label darum: Das Label ist
+     `inline-flex` und genau so hoch wie sein Inhalt, also hilft es nicht.
+     20 px stand hier mit dem Kommentar „coarse pointers get a real target" —
+     das war 20, und die Marken sind 24 (Maus, WCAG 2.5.8 AA) und 44 (Finger).
+     Gemessen vom Messstand über das ganze Band auf beiden Achsen; der
+     Kommentar hat eine Absicht beschrieben und keine Zahl geprüft.
+
+     `--tap-sm-min` und nicht `--tap-min`: Das ist die 48er-Marke für Chrom,
+     das auf jedem Bildschirm mitfährt, nicht die 56er für eine Feld-Fläche.
+     Am Rechner sind es 24 px, in der Hand 48. */
+  min-width: max(20px, var(--tap-sm-min));
+  min-height: max(20px, var(--tap-sm-min));
 }
 tr.ms-off td {
   opacity: 0.6;
@@ -4015,7 +4202,7 @@ tr.ms-off .ms-prog {
   border: 0;
   background: none;
   font: inherit;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-muted);
   cursor: pointer;
@@ -4028,7 +4215,7 @@ tr.ms-off .ms-prog {
   color: var(--c-text-sec);
 }
 .tlegend-caret {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
 }
 .tlegend {
   padding-top: 7px;
@@ -4036,7 +4223,7 @@ tr.ms-off .ms-prog {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-sec);
   line-height: 1.45;
 }
@@ -4063,7 +4250,7 @@ tr.ms-off .ms-prog {
 
 /* ═══ OVERVIEW KPI CARDS ════════════════════════════════════════ */
 .ov-kpi-group-label {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -4098,13 +4285,13 @@ tr.ms-off .ms-prog {
   flex: 1;
 }
 .ov-kpi-value {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.1;
   margin-bottom: 2px;
 }
 .ov-kpi-label {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -4112,7 +4299,7 @@ tr.ms-off .ms-prog {
   text-overflow: ellipsis;
 }
 .ov-kpi-sub {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-top: 1px;
   white-space: nowrap;
@@ -4165,13 +4352,13 @@ tr.ms-off .ms-prog {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
 }
 .modal h3 {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   margin-bottom: 10px;
   color: var(--c-text);
 }
 .modal p {
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--c-text-sec);
   margin-bottom: 14px;
   line-height: 1.6;
@@ -4232,7 +4419,7 @@ tr.ms-off .ms-prog {
   border: none;
   background: transparent;
   padding: 0;
-  font-size: max(16px, var(--fs-min));
+  font-size: max(1rem, var(--fs-min));
   color: var(--c-text);
 }
 .gs-field input:focus {
@@ -4247,7 +4434,7 @@ tr.ms-off .ms-prog {
   border-radius: var(--radius-sm);
   padding: 3px 8px;
   font-family: monospace;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   cursor: pointer;
   /* Both floors, not just the tall one. On a phone the word "esc" is swapped
      for a ✕ and this stops being a reminder and starts being the only way out
@@ -4282,7 +4469,7 @@ tr.ms-off .ms-prog {
 }
 .gs-group {
   padding: 8px 14px 3px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .gs-row {
@@ -4300,14 +4487,14 @@ tr.ms-off .ms-prog {
   white-space: nowrap;
 }
 .gs-row-t {
-  font-size: max(14px, var(--fs-min));
+  font-size: max(0.875rem, var(--fs-min));
   color: var(--c-text);
 }
 .gs-mono {
   font-family: monospace;
 }
 .gs-row-s {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
 }
 /* Selection is one thing, and it is the same thing whether the keyboard or the
@@ -4327,7 +4514,7 @@ tr.ms-off .ms-prog {
 .gs-empty,
 .gs-more {
   padding: 14px;
-  font-size: max(13px, var(--fs-min));
+  font-size: max(0.8125rem, var(--fs-min));
   color: var(--c-text-sec);
 }
 .gs-more {
@@ -4341,7 +4528,7 @@ tr.ms-off .ms-prog {
   gap: 12px;
   padding: 9px 14px;
   border-top: 1px solid var(--c-border);
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .gs-hint {
@@ -4371,7 +4558,7 @@ tr.ms-off .ms-prog {
   border-radius: 4px;
   padding: 1px 5px;
   font-family: monospace;
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .sidebar.sb-collapsed .sb-search-key {
@@ -4510,7 +4697,7 @@ tr.ms-off .ms-prog {
   border-radius: 12px;
   background: #14201a;
   color: #eaf3ed;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.3;
   box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.5);
   opacity: 0;
@@ -4543,7 +4730,7 @@ tr.ms-off .ms-prog {
   border: 1px solid rgba(255, 255, 255, 0.25);
   color: #7ee2a1;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 7px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -4579,7 +4766,7 @@ tr.ms-off .ms-prog {
    ein Eingabefeld aus. Gleiche Höhe wie ein Feld, damit die Reihe nicht
    springt, aber ohne Rahmen und ohne Cursor. */
 .avg-wert {
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 5px 8px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -4669,17 +4856,6 @@ tr.ms-off .ms-prog {
   .sb-is-collapsed .content-wrap {
     margin-left: 0;
   }
-  /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px).
-     !important is still required, for a different reason than when this was
-     written: the inline style="font-size:12px" it used to fight is gone from
-     every compact filter and search field, but the .fs-meta class that replaced
-     it is (0,2,0) and this selector is (0,0,3). Drop the !important and Safari
-     gets a 13px field to zoom into on the pages that were just cleaned up. */
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
   /* Constrain inline-sized inputs so they can't overflow narrow viewports */
   input[style*='width:'],
   select[style*='width:'] {
@@ -4698,7 +4874,7 @@ tr.ms-off .ms-prog {
   .cal-print-btn {
     width: 44px;
     height: 44px;
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   .cal-today-btn,
   .cal-add-btn {
@@ -4744,7 +4920,7 @@ tr.ms-off .ms-prog {
     padding: 7px 6px;
   }
   .met-v {
-    font-size: 22px;
+    font-size: 1.375rem;
   }
   .cal-cell {
     min-height: 72px;
@@ -4758,7 +4934,7 @@ tr.ms-off .ms-prog {
     justify-content: center;
   }
   .cal-title {
-    font-size: 16px;
+    font-size: 1rem;
     margin-left: 4px;
   }
   /* Bigger day cells on phone (audit Section 1.14: gloved hands can't
@@ -4768,13 +4944,13 @@ tr.ms-off .ms-prog {
   .cal-day {
     width: 36px;
     height: 36px;
-    font-size: 13px;
+    font-size: 0.8125rem;
   }
   .cal-event {
     padding: 1px 5px;
   }
   .cal-week-hdr-cell .wk-day-num {
-    font-size: 16px;
+    font-size: 1rem;
   }
   /* The drawer stops repeating the bottom bar. app.js marks these from the same
      list that wires the bar's buttons, so the two cannot drift apart: 19 rows
@@ -5134,7 +5310,7 @@ tr.ms-off .ms-prog {
 }
 .zone-row-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .zone-row-racks {
   display: flex;
@@ -5143,7 +5319,7 @@ tr.ms-off .ms-prog {
   margin-top: 6px;
 }
 .zone-rack-chip {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-family: monospace;
   padding: 2px 8px;
   border-radius: 4px;
@@ -5154,12 +5330,12 @@ tr.ms-off .ms-prog {
 }
 .zone-rack-del {
   padding: 1px 4px !important;
-  font-size: max(9px, var(--fs-min)) !important;
+  font-size: max(0.5625rem, var(--fs-min)) !important;
   margin-left: 4px;
   line-height: 1;
 }
 .zone-group-header {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -5178,7 +5354,7 @@ tr.ms-off .ms-prog {
   width: 18px;
   height: 22px;
   margin-right: 2px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: -2px;
   color: var(--c-text-muted);
@@ -5205,7 +5381,7 @@ tr.ms-off .ms-prog {
 .zone-direct-badge {
   background: var(--c-red) !important;
   color: #fff !important;
-  font-size: max(12px, var(--fs-min)) !important;
+  font-size: max(0.75rem, var(--fs-min)) !important;
   font-weight: 700 !important;
   padding: 4px 10px !important;
   border-radius: 6px !important;
@@ -5234,7 +5410,7 @@ tr.ms-off .ms-prog {
   gap: 4px;
 }
 .zone-qr-label {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   font-family: monospace;
   color: var(--c-text-sec);
@@ -5327,7 +5503,7 @@ tr.ms-off .ms-prog {
   border-radius: 9px;
   background: #ef4444;
   color: #fff;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   line-height: 18px;
   text-align: center;
@@ -5396,12 +5572,12 @@ tr.ms-off .ms-prog {
   border-bottom: 1px solid var(--c-border-light);
 }
 .notif-title {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--c-text);
 }
 .notif-mark-read {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-primary);
   background: transparent;
   border: none;
@@ -5442,7 +5618,7 @@ tr.ms-off .ms-prog {
   filter: brightness(0.97);
 }
 .notif-item-title {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   margin-bottom: 2px;
   display: flex;
@@ -5458,19 +5634,19 @@ tr.ms-off .ms-prog {
   flex-shrink: 0;
 }
 .notif-item-body {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 3px;
 }
 .notif-item-time {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .notif-empty {
   padding: 24px 14px;
   text-align: center;
   color: var(--c-text-muted);
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 
 @media (max-width: 768px) {
@@ -5534,11 +5710,26 @@ tr.ms-off .ms-prog {
   justify-content: center;
   gap: 3px;
   min-height: 56px;
-  padding: 8px 4px;
+  /* 2 px waagerecht und nicht 4, weil die fünf deutschen Beschriftungen bei
+     320 px genau daran scheiterten. Gemessen, nicht geschätzt: Die Texte
+     „Arbeitsgänge, Dashboard, Chargen, Labor, Kalender" sind 83 + 67 + 52 +
+     36 + 55 = 293 px breit, dazu 5×8 px Polsterung macht 333 — und „Kalender"
+     hing 14 px über den rechten Rand.
+
+     Kein `min-width: 0`, und das ist der Punkt, an dem der naheliegende Griff
+     falsch ist: `flex: 1` hat `flex-basis: 0`, also bekämen mit `min-width: 0`
+     ALLE fünf Knöpfe dieselben 64 px, und „Arbeitsgänge" (83 px) würde
+     abgeschnitten, obwohl die Summe passt. Ohne ihn nimmt jeder Knopf seine
+     Inhaltsbreite, und 293 + 5×4 = 313 passen in 320.
+
+     Der Rest ist sieben Pixel Luft, und die sind dünn. Sie sind aber gemessen
+     und bleiben gemessen: Eine längere Übersetzung meldet der Lauf als
+     OVERFLOW-Befund, statt sie stillschweigend abzuschneiden. */
+  padding: 8px 2px;
   background: none;
   border: none;
   color: var(--c-text-muted);
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -5598,7 +5789,10 @@ tr.ms-off .ms-prog {
   [role='button'] {
     align-content: center;
   }
+}
 
+/* zwilling: kartenmodus */
+@media (max-width: 768px) {
   /* ── Tables as cards ────────────────────────────────────────
      A 12-column table on a 360px viewport puts its Actions column
      roughly 700px off-screen. Below this breakpoint the rows become
@@ -5641,7 +5835,7 @@ tr.ms-off .ms-prog {
     display: block;
     padding: 4px 0;
     border: 0;
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.4;
     /* The card carries the background now, not the cell. Two table rules
        still target these cells — `tr:nth-child(even) td` and `tr:hover td`
@@ -5747,14 +5941,14 @@ tr.ms-off .ms-prog {
   #t-batches > tbody > tr > td.bt-id,
   #t-grain > tbody > tr > td.bt-id,
   #t-cultures > tbody > tr > td.cu-id {
-    font-size: 15px !important;
+    font-size: 0.9375rem !important;
     font-weight: 600;
   }
   /* The scan log and the harvest log lead with a time, which is not a
      name — it dates the row rather than titling it. */
   #t-log > tbody > tr > td.lg-time,
   #t-harvest > tbody > tr > td.hv-date {
-    font-size: max(12px, var(--fs-min)) !important;
+    font-size: max(0.75rem, var(--fs-min)) !important;
     color: var(--c-text-sec) !important;
     padding-bottom: 4px;
     margin-bottom: 4px;
@@ -5785,7 +5979,225 @@ tr.ms-off .ms-prog {
     position: absolute;
     top: 8px;
     right: 12px;
-    font-size: 20px !important;
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+    line-height: 1.1;
+    padding: 0 !important;
+  }
+  #t-harvest > tbody > tr > td.hv-grams::before {
+    display: none;
+  }
+}
+
+/* zwilling: kartenmodus
+   ── Regel R2: der Kasten misst, nicht das Fenster ───────────────────────
+   Der Kartenmodus hing an der Fensterbreite, und darin steckte die Klippe bei
+   769 px: dort kommt die Seitenleiste zurück und nimmt 240 px vom Inhalt weg,
+   die Tabelle bekommt aber weiter das Layout für 769 px statt für die 497 px,
+   die ihr geblieben sind. Gemessen war das der Grund für zwei Ratschenzeilen
+   (Labor 769-860 px verkleinert, Kontaminationsstreifen 769-800 px über den
+   Rand) — ein Fehler mit zwei Gesichtern, je nachdem ob die Meta-Ansicht gilt.
+
+   736 px ist keine neue Grenze, sondern dieselbe: Auf dem Telefon ist die
+   Seitenleiste weg und `.main` hat 2×16 px Polsterung, 768 − 32 = 736. Der
+   Kartenmodus setzt also auf dem Telefon exakt dort ein wie vorher, und auf
+   dem Schreibtisch zusätzlich, sobald die Inhaltsspalte schmal genug ist —
+   was auch heißt: Wird die Seitenleiste eingeklappt, folgt er von selbst.
+   Keine Medienabfrage der Welt kann das.
+
+   ZWEIMAL GESCHRIEBEN, mit Absicht. Die @media-Fassung ist die Rückfallebene
+   für einen Browser ohne Container-Abfragen (Chrome vor 105, Safari vor 16);
+   dort bleibt alles, wie es heute ist. Ein Test hält die beiden Fassungen
+   Zeichen für Zeichen gleich, weil zwei Kopien sonst genau so lange
+   übereinstimmen, bis jemand eine davon ändert. */
+@container inhalt (max-width: 736px) {
+  /* ── Tables as cards ────────────────────────────────────────
+     A 12-column table on a 360px viewport puts its Actions column
+     roughly 700px off-screen. Below this breakpoint the rows become
+     stacked cards: thead off, tr a card, td a label/value row, and the
+     label read from the data-mlabel the renderer already writes.
+
+     One mechanism, applied by class. Four tables had this spelled out
+     separately — #t-batches, #t-cultures, #t-log, #t-harvest — in four
+     blocks that were the same rules under different ids, 306 lines of
+     it. The cost of that shape was never the duplication: #t-grain is
+     filled by batchRowHtml(), the *same function* that fills
+     #t-batches, so every one of its cells already carried a
+     data-mlabel — and it still got a sideways-scrolling table, because
+     the fifth copy of the block was never written.
+
+     Two structural facts now do the work four ids used to:
+       - the card header is the first cell, in all four tables and by
+         construction — batch id, culture id, log time, harvest date;
+       - the actions cell is the one with no data-mlabel, because a row
+         of buttons has nothing to label. That is what distinguishes it
+         from a last cell that *is* data, which is what #t-harvest has
+         and why :last-child would have been wrong. */
+  .t-cards {
+    border: 0;
+    width: 100%;
+  }
+  .t-cards > thead {
+    display: none;
+  }
+  .t-cards > tbody > tr {
+    display: block;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+  .t-cards > tbody > tr > td {
+    display: block;
+    padding: 4px 0;
+    border: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    /* The card carries the background now, not the cell. Two table rules
+       still target these cells — `tr:nth-child(even) td` and `tr:hover td`
+       — and both outlive the layout they were written for: zebra striping
+       tints every second *card* grey instead of every second row, and a
+       tap on a coarse pointer leaves the hover tint stuck on. Neither was
+       introduced by the card mode; neither had been looked at since it
+       arrived. */
+    background: none;
+  }
+  /* Label in a gutter, value in normal flow.
+
+     This cell was `display: flex` with the label as its first item, which
+     reads correctly and is wrong: making the cell a flex container makes
+     *every* element child a flex item, so the layout silently depended on
+     each cell holding exactly one. #t-batches' Substrat cell holds three —
+     batchRowHtml() writes one .sub-tag per material — and they became three
+     competing items on a nowrap line, each shrunk until "HW 60% WB 20%"
+     wrapped to four lines inside a 99px-radius pill. Eight cards, every
+     batch, and no count could see it: the chips do not exist until the
+     renderer runs, so both the source census and measure-mobile.js (which
+     serves the page with the scripts stripped) looked straight past them.
+
+     Normal flow is also what these chips get from the desktop table cell
+     they were written for, so the two layouts now differ in where the label
+     sits and not in how the value is laid out. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child) {
+    position: relative;
+    padding-left: 92px;
+  }
+  /* The label was 10–11px here, which is the size this whole project
+     exists to stop shipping. Uppercase, 600 and muted already say
+     "this is a label" without help from a size below the floor.
+     84px fits every label the renderers emit except "Chargen-ID" at 87px,
+     which is a first cell and hidden; the rest top out at 72px. */
+  .t-cards > tbody > tr > td[data-mlabel]:not(:first-child)::before {
+    content: attr(data-mlabel);
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 84px;
+    color: var(--c-text-muted);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* The other half of the same cell. Normal flow fixed the three chips
+     competing as flex items; it does not fix each chip being an inline box,
+     which splits its background and its 99px radius across two line boxes the
+     moment it wraps — "RH 63%" came out as a 155×39 smear. A pill has to be a
+     box. Scoped to the card because the desktop table's Substrat column is
+     ~63px wide, where the same keyword wraps every chip into a padded stack
+     and takes #t-batches from 760px to 1093px tall. Same defect, different
+     fix: the desktop needs its column widths looked at. */
+  .t-cards .sub-tag {
+    display: inline-block;
+  }
+  /* First cell: the card's header. What it looks like is per table — an
+     id wants to be big, a timestamp wants to be a quiet subtitle — so
+     this sets only what they share. Its label is not hidden here but never
+     written: the :not(:first-child) above is what keeps 184 of the 189
+     first cells from indenting 92px around a label nobody wants to see. */
+  .t-cards > tbody > tr > td:first-child {
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--c-border-light);
+  }
+  /* Actions row — full width, buttons share it equally. The
+     (pointer: coarse) rule near .btn-sm already gives them 44px. */
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):not(.empty) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--c-border-light);
+    white-space: normal !important;
+  }
+  .t-cards > tbody > tr > td:not([data-mlabel]):not(:first-child):empty {
+    display: none;
+  }
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-sm,
+  .t-cards > tbody > tr > td:not([data-mlabel]) .btn-xs {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0 !important;
+    text-align: center;
+  }
+  /* Empty/no-matches row keeps a centred full-row look. */
+  .t-cards > tbody > tr > td.empty {
+    display: block;
+    text-align: center;
+    padding: 18px 0;
+    border-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  /* ── Per table, only what is genuinely its own ───────────────── */
+
+  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  #t-batches > tbody > tr > td.bt-id,
+  #t-grain > tbody > tr > td.bt-id,
+  #t-cultures > tbody > tr > td.cu-id {
+    font-size: 0.9375rem !important;
+    font-weight: 600;
+  }
+  /* The scan log and the harvest log lead with a time, which is not a
+     name — it dates the row rather than titling it. */
+  #t-log > tbody > tr > td.lg-time,
+  #t-harvest > tbody > tr > td.hv-date {
+    font-size: max(0.75rem, var(--fs-min)) !important;
+    color: var(--c-text-sec) !important;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+  }
+  /* Sub-row injected by toggleBatchBags() — keep its full-width layout
+     for the bag chips, just retint it as a connected detail panel. */
+  #t-batches > tbody > tr[id^='brow-'],
+  #t-grain > tbody > tr[id^='brow-'] {
+    border: 1px dashed var(--c-border);
+    padding: 10px 12px;
+    background: var(--c-bg);
+  }
+  /* The status dropdown in the cultures action row is a control, not a
+     button; stretching it to share the row makes it unreadable. */
+  #t-cultures > tbody > tr > td.cu-actions select {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  /* Harvest cards: grams pinned top-right as a big amber number, the
+     most-scanned value when reading a harvest log on a phone. */
+  #t-harvest > tbody > tr {
+    position: relative;
+  }
+  #t-harvest > tbody > tr > td.hv-date {
+    padding-right: 96px;
+  }
+  #t-harvest > tbody > tr > td.hv-grams {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 1.25rem !important;
     font-weight: 600 !important;
     line-height: 1.1;
     padding: 0 !important;
@@ -5815,7 +6227,7 @@ tr.ms-off .ms-prog {
    resize at 1280px / quality 0.8). */
 .cr-label {
   display: block;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   color: var(--c-text-muted);
   text-transform: uppercase;
@@ -5835,7 +6247,7 @@ tr.ms-off .ms-prog {
   border: 1px solid var(--c-border);
   border-radius: 8px;
   background: var(--c-surface);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -5870,7 +6282,7 @@ tr.ms-off .ms-prog {
   border-radius: 8px;
   background: var(--c-surface);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -5906,7 +6318,7 @@ tr.ms-off .ms-prog {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   cursor: pointer;
   overflow: hidden;
@@ -5916,7 +6328,7 @@ tr.ms-off .ms-prog {
 }
 .contam-photo-tile.add {
   border-style: dashed;
-  font-size: 22px;
+  font-size: 1.375rem;
 }
 .contam-photo-tile img {
   width: 100%;
@@ -5933,7 +6345,7 @@ tr.ms-off .ms-prog {
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   border: none;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -5955,7 +6367,7 @@ tr.ms-off .ms-prog {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
 }
 
 /* ═══ PHOTO ANNOTATION MODAL ══════════════════════════════════
@@ -5984,7 +6396,7 @@ tr.ms-off .ms-prog {
 }
 .pa-title {
   flex: 1;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   min-width: 100px;
 }
@@ -6008,7 +6420,7 @@ tr.ms-off .ms-prog {
 }
 .pa-hint {
   padding: 8px 12px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   text-align: center;
   border-top: 1px solid var(--c-border-light);
@@ -6046,7 +6458,7 @@ tr.ms-off .ms-prog {
   align-items: center;
   justify-content: center;
   color: var(--c-text-muted);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 .contam-list-thumb img {
   width: 100%;
@@ -6068,16 +6480,16 @@ tr.ms-off .ms-prog {
 }
 .contam-list-bag {
   font-family: monospace;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 .contam-list-batch {
   font-family: monospace;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .contam-list-when {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -6087,7 +6499,7 @@ tr.ms-off .ms-prog {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   background: rgba(0, 0, 0, 0.04);
 }
@@ -6097,7 +6509,7 @@ tr.ms-off .ms-prog {
   border-radius: 50%;
 }
 .contam-sev-badge {
-  font-size: max(10px, var(--fs-min));
+  font-size: max(0.625rem, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -6117,7 +6529,7 @@ tr.ms-off .ms-prog {
   color: #991b1b;
 }
 .contam-resolved-badge {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -6125,7 +6537,7 @@ tr.ms-off .ms-prog {
   color: #14532d;
 }
 .contam-open-badge {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -6153,7 +6565,7 @@ tr.ms-off .ms-prog {
   border-top: 1px solid var(--c-border-light);
 }
 .contam-list-notes {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-sec);
   white-space: nowrap;
   overflow: hidden;
@@ -6166,11 +6578,11 @@ tr.ms-off .ms-prog {
   grid-template-columns: 1fr 1fr;
   gap: 8px 16px;
   margin-bottom: 14px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .cd-meta-grid .label {
   color: var(--c-text-muted);
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -6203,7 +6615,7 @@ tr.ms-off .ms-prog {
   padding: 10px 12px;
   background: var(--c-bg);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -6370,7 +6782,7 @@ tr.ms-off .ms-prog {
 .wk-tile-when {
   position: relative;
   z-index: 2;
-  font-size: max(11.5px, var(--fs-min));
+  font-size: max(0.71875rem, var(--fs-min));
   color: var(--c-text-muted);
   line-height: 1.4;
   max-width: 64%;
@@ -6416,7 +6828,7 @@ tr.ms-off .ms-prog {
 .wkf-head h3 {
   margin: 0;
   flex: 1;
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 .wkf-chips {
   display: flex;
@@ -6425,7 +6837,7 @@ tr.ms-off .ms-prog {
   margin-bottom: 14px;
 }
 .wkf-chip {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -6444,7 +6856,7 @@ tr.ms-off .ms-prog {
   border-color: var(--c-primary);
 }
 .wkf-empty {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--c-text-muted);
   padding: 22px 0;
   text-align: center;
@@ -6491,15 +6903,15 @@ tr.ms-off .ms-prog {
 }
 .wkf-row-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: max(12.5px, var(--fs-min));
+  font-size: max(0.78125rem, var(--fs-min));
   font-weight: 700;
 }
 .wkf-row-meta {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-row-zone {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   font-weight: 700;
   color: var(--c-green-dark);
   background: var(--c-green-light);
@@ -6516,7 +6928,7 @@ tr.ms-off .ms-prog {
   margin-bottom: 10px;
 }
 .wkf-bar-sp {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-left: auto;
 }
@@ -6525,7 +6937,7 @@ tr.ms-off .ms-prog {
   align-items: center;
   gap: 8px;
   min-height: var(--tap);
-  font-size: max(12.5px, var(--fs-min));
+  font-size: max(0.78125rem, var(--fs-min));
   color: var(--c-text-sec);
   margin-bottom: 10px;
 }
@@ -6557,11 +6969,11 @@ tr.ms-off .ms-prog {
 }
 .wkf-bag-id {
   font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: max(12.5px, var(--fs-min));
+  font-size: max(0.78125rem, var(--fs-min));
   font-weight: 650;
 }
 .wkf-prev {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   white-space: nowrap;
 }
@@ -6570,7 +6982,7 @@ tr.ms-off .ms-prog {
   font-weight: 700;
 }
 .wkf-unit {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 .wkf-sum {
@@ -6582,11 +6994,11 @@ tr.ms-off .ms-prog {
   border-top: 2px solid var(--c-border);
 }
 .wkf-sum b {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 800;
 }
 .wkf-sum span {
-  font-size: max(12px, var(--fs-min));
+  font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
 }
 
@@ -6622,7 +7034,7 @@ tr.ms-off .ms-prog {
   flex: none;
 }
 .wkf-zone-n {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
 }
 
@@ -6639,7 +7051,7 @@ tr.ms-off .ms-prog {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 .wkf-r-tick {
   width: 24px;
@@ -6649,7 +7061,7 @@ tr.ms-off .ms-prog {
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 800;
   flex: none;
 }
@@ -6663,7 +7075,7 @@ tr.ms-off .ms-prog {
 .wkf-r-lines div {
   display: flex;
   gap: 10px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   align-items: baseline;
 }
 .wkf-r-k {
@@ -6760,7 +7172,7 @@ tr.ms-off .ms-prog {
    nur mit eigenen Bausteinen. Alle Bedienelemente sind fingerhoch, weil der
    Ablauf im Labor am Tablet läuft. */
 .wkf-q {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: -0.01em;
   margin-bottom: 2px;
@@ -6772,7 +7184,7 @@ tr.ms-off .ms-prog {
   margin-bottom: 10px;
 }
 .wkf-field > label {
-  font-size: max(11.5px, var(--fs-min));
+  font-size: max(0.71875rem, var(--fs-min));
   color: var(--c-text-sec);
   font-weight: 600;
   margin: 0;
@@ -6802,7 +7214,7 @@ tr.ms-off .ms-prog {
   padding: 0 12px;
   min-height: max(44px, var(--tap-min));
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 650;
   color: var(--c-text-sec);
   cursor: pointer;
@@ -6818,7 +7230,7 @@ tr.ms-off .ms-prog {
   color: var(--c-green-dark);
   border-radius: 9px;
   padding: 10px 12px;
-  font-size: max(12.5px, var(--fs-min));
+  font-size: max(0.78125rem, var(--fs-min));
   line-height: 1.6;
   margin-bottom: 10px;
 }
@@ -6848,7 +7260,7 @@ tr.ms-off .ms-prog {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .wkf-sum-card > div {
   display: flex;
@@ -6857,7 +7269,7 @@ tr.ms-off .ms-prog {
   flex-wrap: wrap;
 }
 .wkf-hint {
-  font-size: max(11px, var(--fs-min));
+  font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
   margin-bottom: 10px;
 }

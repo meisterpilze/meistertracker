@@ -29,6 +29,7 @@ const {
   subFloorSizes,
   blocks,
   MAX_WIDTH_BLOCK,
+  MEDIA_BLOCK,
   maskedCss,
   maskedSource
 } = require('../scripts/mobile-size-scan.js');
@@ -409,7 +410,7 @@ describe('touch targets', () => {
 });
 
 describe('the size utilities that replace the inline styles', () => {
-  const UTILITIES = ['fs-meta', 'fs-xs', 'fs-micro'];
+  const UTILITIES = ['fs-base', 'fs-sm', 'fs-meta', 'fs-xs', 'fs-micro'];
 
   it('declares each one doubled, so it outranks what the inline style outranked', () => {
     // An inline style beats every normal rule. Move one onto a plain class and
@@ -532,8 +533,205 @@ describe('the bridge, now that it is gone', () => {
   it('keeps form controls at 16px, which is what stops iOS zooming the page', () => {
     assert.match(
       CSS,
-      /input,\s*\n\s*select,\s*\n\s*textarea \{\s*\n\s*font-size: 16px !important;/,
+      /input,\s*\n\s*select,\s*\n\s*textarea \{\s*\n\s*font-size: max\(1rem, 16px\) !important;/,
       'the anti-zoom rule lost its !important or its shape — a phone now zooms when a field is focused'
     );
+  });
+
+  // And the half that took twice as long to notice as the rule itself: which
+  // axis it hangs on. Until 2026-08-23 it sat in `@media (max-width: 768px)`,
+  // so a tablet in landscape — 1024px wide, still a finger — lost it, and 26
+  // fields on nine pages went back to 13 and 14px from exactly 769px up.
+  //
+  // Read as text rather than measured because measure-mobile.js only sweeps
+  // widths the band contains and pointers the emulator can set: it proves the
+  // fields are 16px today, not that the rule cannot be moved back onto a width
+  // tomorrow. This is the assertion that says which axis it belongs to.
+  it('hangs the anti-zoom rule on the pointer, never on a width', () => {
+    const { src } = maskedCss(CSS);
+    const at = src.indexOf('font-size: max(1rem, 16px) !important');
+    assert.ok(at > 0, 'the anti-zoom rule is gone');
+    // Every @media whose body contains it. blocks() yields the body, so the
+    // header is the text between the last `@media` before it and its brace.
+    const umgebend = [...blocks(src, MEDIA_BLOCK)].filter((b) => b.start < at && at < b.end);
+    assert.ok(umgebend.length > 0, 'the anti-zoom rule sits in no media block at all — it now applies to a mouse too');
+    const bedingungen = umgebend.map((b) => src.slice(src.lastIndexOf('@media', b.start), b.start - 1).trim());
+    for (const c of bedingungen) {
+      assert.ok(
+        !/width/.test(c),
+        `the anti-zoom rule is back inside a width query (${c.trim()}) — a landscape tablet loses it again`
+      );
+      assert.ok(
+        /any-pointer:\s*coarse/.test(c),
+        `the anti-zoom rule asks ${c.trim()}, not any-pointer: coarse — a touchscreen laptop reports pointer: fine`
+      );
+    }
+  });
+});
+
+// ── The type sizes themselves, not just the tokens ─────────────────────────
+// The tokens became rem in the commit before this one; these are the 177
+// declarations that were still writing their own px, and after them the
+// browser's font setting reaches the whole sheet rather than fourteen names.
+//
+// Worth stating what this does NOT prove: a rem value is not automatically the
+// right value. It proves the reader's setting is not thrown away, which is a
+// different and smaller claim than "the type scale is good".
+describe('the type sizes follow the reader, not the sheet', () => {
+  // @media print is a physical medium: 10px there is a tenth of an inch of
+  // paper, and a reader who set 20px in the browser would get a calendar that
+  // no longer fits the sheet. So it keeps px, deliberately, and the list of
+  // survivors below is what says so out loud.
+  const OHNE_DRUCK = (() => {
+    const { src } = maskedCss(CSS);
+    const p = src.indexOf('@media print');
+    if (p < 0) return src;
+    const open = src.indexOf('{', p);
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0)
+        return src.slice(0, p) + src.slice(p, i + 1).replace(/[^\n]/g, ' ') + src.slice(i + 1);
+    }
+    return src;
+  })();
+
+  const pxSizes = (text) =>
+    [...text.matchAll(/font-size\s*:\s*([^;}]+)/g)].map((m) => m[1].trim()).filter((v) => /\d(?:\.\d+)?px\b/.test(v));
+
+  it('writes no px font-size outside the print block, bar the anti-zoom rule', () => {
+    // The 16px inside `max(1rem, 16px)` on a form control is not a type size,
+    // it is iOS Safari's zoom threshold — a fixed count of CSS pixels that does
+    // not move when the reader changes their font. The 1rem beside it is the
+    // reader's setting, free to grow. It is the one honest px left.
+    const left = pxSizes(OHNE_DRUCK).filter((v) => v !== 'max(1rem, 16px) !important');
+    assert.deepEqual(left, [], `${left.length} px font-size(s) are back: ${left.slice(0, 8).join(' · ')}`);
+  });
+
+  // The other half of the same sweep. styles.css was the 177; app.js wrote 44
+  // more of its own, and an inline font-size beats every rule in the sheet,
+  // so those were the sizes no media query, no token and no reader setting
+  // could reach at all. They are classes now — .fs-sm and .fs-base for the two
+  // that are a mark's desktop value (26 and 8 of the 44), .fs-floor with the
+  // number on the element for the eleven that sit on no rung.
+  it('writes no inline px font-size in app.js outside the printed sheets', () => {
+    const zeilen = APP.split('\n');
+    const uebrig = [];
+    for (const m of APP.matchAll(/font-size:\s*([0-9.]+px)/g)) {
+      const z = APP.slice(0, m.index).split('\n').length;
+      // The marker sits on the statement that builds the sheet, so the window
+      // is the ten lines above the size rather than the line itself: one
+      // marker covers a print document whose whole <style> is one string.
+      const markiert = zeilen
+        .slice(Math.max(0, z - 10), z)
+        .join('\n')
+        .includes('px-auf-papier');
+      if (!markiert) uebrig.push(`app.js:${z} ${m[1]}`);
+    }
+    assert.deepEqual(
+      uebrig,
+      [],
+      `${uebrig.length} inline size(s) in app.js beat the whole stylesheet again: ${uebrig.slice(0, 8).join(' · ')}`
+    );
+  });
+
+  it('marks every px it does keep in app.js as belonging to paper', () => {
+    // The escape hatch has to stay small, or it becomes the rule. Four
+    // statements: one print document opened in its own window, two label
+    // sheets, one calendar task list.
+    const marken = [...APP.matchAll(/px-auf-papier/g)].length;
+    assert.ok(marken > 0 && marken <= 6, `${marken} px-auf-papier markers in app.js — the exception is spreading`);
+  });
+
+  it('keeps the print block on px, because paper does not read a browser setting', () => {
+    const { src } = maskedCss(CSS);
+    const inPrint = pxSizes(src).length - pxSizes(OHNE_DRUCK).length;
+    assert.ok(inPrint >= 10, `only ${inPrint} px sizes left in @media print — did the block move or shrink?`);
+  });
+
+  it('lands every rem value back on the pixel it was converted from', () => {
+    // 13px is 0.8125rem, and 0.8125 × 16 is exactly 13. This is the guard on
+    // the conversion itself: a value that does not land on a size the sheet
+    // could have written means it was derived from a number that was never
+    // there, and the desktop moved by a fraction nobody asked for.
+    //
+    // Half pixels are allowed because six of them were already half pixels —
+    // 11.5px and 12.5px, the fractional sizes the :root comment calls out as
+    // "named where they are used". Allowing halves keeps those honest; allowing
+    // anything finer would let a 0.703125rem through and mean nothing.
+    const krumm = [...maskedCss(CSS).src.matchAll(/font-size\s*:\s*([^;}]+)/g)]
+      .flatMap((m) => [...m[1].matchAll(/(\d+(?:\.\d+)?)rem\b/g)].map((r) => Number(r[1])))
+      .filter((n) => Math.abs(n * 32 - Math.round(n * 32)) > 1e-9);
+    assert.deepEqual(krumm, [], `${krumm.length} rem value(s) land between pixels: ${krumm.join(', ')}`);
+  });
+});
+
+// ── Rule R2: the box measures, not the window ──────────────────────────────
+// A block that has to exist twice — once as @media for a browser without
+// container queries, once as @container for every browser that has them — is
+// safe exactly as long as the two copies say the same thing, which is to say
+// until somebody edits one of them. So they are marked as twins in the sheet
+// and compared here.
+describe('the container queries and their fallbacks say the same thing', () => {
+  const { src } = maskedCss(CSS);
+
+  // Every `/* zwilling: NAME */` marker and the block that follows it. The
+  // markers are found in the RAW sheet, because maskedCss() blanks comments —
+  // and the braces are counted in the masked one, because a comment may
+  // contain a brace. Both have the same offsets: masking replaces characters,
+  // it does not remove them.
+  const zwillinge = new Map();
+  for (const m of CSS.matchAll(/\/\*\s*zwilling:\s*([a-zä-ü]+)/g)) {
+    const auf = src.indexOf('{', m.index);
+    let tiefe = 1;
+    let i = auf + 1;
+    while (i < src.length && tiefe) {
+      if (src[i] === '{') tiefe++;
+      else if (src[i] === '}') tiefe--;
+      i++;
+    }
+    const kopf = src.slice(src.lastIndexOf('@', auf), auf).trim();
+    if (!zwillinge.has(m[1])) zwillinge.set(m[1], []);
+    zwillinge.get(m[1]).push({ kopf, koerper: src.slice(auf + 1, i - 1) });
+  }
+
+  const eng = (t) => t.replace(/\s+/g, ' ').trim();
+
+  it('finds a pair for every twin name, one @media and one @container', () => {
+    assert.ok(zwillinge.size > 0, 'no zwilling markers at all — did the container blocks go?');
+    for (const [name, paar] of zwillinge) {
+      assert.equal(paar.length, 2, `zwilling "${name}" has ${paar.length} block(s), not 2`);
+      const arten = paar.map((b) => b.kopf.split(/[\s(]/)[0]).sort();
+      assert.deepEqual(arten, ['@container', '@media'], `zwilling "${name}" is ${arten.join(' + ')}`);
+    }
+  });
+
+  it('keeps the two copies of each twin identical', () => {
+    for (const [name, paar] of zwillinge) {
+      assert.equal(
+        eng(paar[0].koerper),
+        eng(paar[1].koerper),
+        `the two copies of zwilling "${name}" have drifted — the fallback and the container query ` +
+          'now lay the same thing out differently, and only one of them is ever visible at a time'
+      );
+    }
+  });
+
+  it('asks the named container, so a later box cannot quietly take the question', () => {
+    // Without a name, @container asks the NEAREST ancestor that has a
+    // container-type. Put one in between later — a card, a panel — and every
+    // one of these rules silently starts measuring something else.
+    const namenlos = [...src.matchAll(/@container\s+([^{]*)\{/g)]
+      .map((m) => m[1].trim())
+      .filter((c) => !/^[a-zä-ü]+\s/.test(c));
+    assert.deepEqual(namenlos, [], `${namenlos.length} @container rule(s) name no container: ${namenlos.join(' · ')}`);
+  });
+
+  it('names a container that something actually declares', () => {
+    const erklaert = new Set([...src.matchAll(/container-name:\s*([a-zä-ü-]+)/g)].map((m) => m[1]));
+    const gefragt = new Set([...src.matchAll(/@container\s+([a-zä-ü-]+)\s/g)].map((m) => m[1]));
+    for (const g of gefragt) {
+      assert.ok(erklaert.has(g), `@container ${g} asks a container nothing declares — the rule never fires`);
+    }
   });
 });

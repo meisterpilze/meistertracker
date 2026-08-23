@@ -8,6 +8,10 @@
 //   node scripts/measure-mobile.js --all         # no 40-line cap on the report
 //   node scripts/measure-mobile.js --strict      # exit 1 on anything unratcheted
 //   node scripts/measure-mobile.js --app         # with app.js running on real data
+//   node scripts/measure-mobile.js --app --width 1440 --pointer fine --census
+//                                                # the desk type census (npm run census)
+//   node scripts/measure-mobile.js --app --shots bilder/
+//                                                # a PNG per page at 320/390/768/860/1024/1440
 //
 // ⚠️ **This used to be hand-driven, and that is the change.** The old version
 // printed a snippet, told you to size a window to exactly 375px, and waited for
@@ -106,8 +110,38 @@ const QUICK = args.includes('--quick');
 const APP = args.includes('--app');
 const ONE_WIDTH = Number(flag('--width') || 0) || null;
 const ONE_POINTER = flag('--pointer');
+// The type census. test/desktop-baseline.json watches 30 selectors, and its own
+// comment says what that is worth: "a tripwire, not a proof". A change that
+// moves a font-size onto a class moves it for every element wearing the class,
+// and 30 selectors out of 3563 elements will usually miss it. The census counts
+// EVERY element on every page — not which element is what size, which churns on
+// every content change, but how many elements each size has. A component rule
+// quietly taking an element back is a count moving from one bucket to another,
+// and that the census sees.
+const CENSUS = args.includes('--census');
+const CENSUS_WRITE = args.includes('--census-write');
+// One width and one pointer, because the census is the DESK measurement: the
+// thing every breakpoint in darstellung/PLAN.md was derived from. 1440 is the
+// width test/desktop-baseline.json already uses, so the two instruments answer
+// about the same screen.
+const CENSUS_WIDTH = 1440;
+// Pictures, for the two things numbers cannot do: showing somebody what changed,
+// and catching a change that moves something without making it overflow. A
+// container query is exactly that kind of change -- containment can move an
+// absolutely positioned descendant to a different containing block, and nothing
+// in TYPE, TOUCH, FIELDS or OVERFLOW would say a word about it.
+const SHOTS = flag('--shots');
+const SHOT_WIDTHS = [320, 390, 768, 860, 1024, 1440];
+const CENSUS_FILE = path.join(ROOT, 'test', 'type-census.json');
+const zensus = {};
 
 const TYPE_FLOOR = floor();
+// Not a type size and not a token: iOS Safari's zoom threshold, a fixed count
+// of CSS pixels. A focused field under it makes the phone zoom the whole page
+// in, and there is no matching rule that zooms back out. Sixteen is the number
+// WebKit uses; nothing in this sheet may lower it, and nothing in this sheet
+// may make it depend on the reader's font setting either.
+const FELD_MIN = 16;
 // The Feld floor (--tap-min, 56px) is a gloved hand's number and is reported
 // rather than counted: §9 of MOBILE_REDESIGN.md put the Büro controls at 48
 // deliberately, and measuring everything against 56 reports 76 sidebar buttons
@@ -195,6 +229,18 @@ function helferQuelle() {
   window.__mess = {
     TOUCH:
       'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]',
+    FELD: 'input,select,textarea',
+    // iOS Safari zooms the page in when a focused field's text is under 16 CSS
+    // px, and it does not zoom back out — the way back is a pinch the user has
+    // to know about. It only does it for controls that take a keyboard or open
+    // a picker, so a checkbox at 13px is not this finding and counting it would
+    // bury the ones that are.
+    zoomtIOS: function (el) {
+      const t = el.tagName;
+      if (t === 'TEXTAREA' || t === 'SELECT') return true;
+      if (t !== 'INPUT') return false;
+      return !/^(button|submit|reset|checkbox|radio|file|range|color|image|hidden)$/i.test(el.type || 'text');
+    },
     where: function (el) {
       let p = el.tagName.toLowerCase();
       if (el.id) p += '#' + el.id;
@@ -235,7 +281,29 @@ function helferQuelle() {
     // nesting path and the caller used to ask it of that instead.
     outermost: function (rows) {
       return rows.filter((r) => !rows.some((o) => o.el !== r.el && o.el.contains(r.el))).map(({ el, ...rest }) => rest);
-    }
+    },
+    // How many fetches are still out. Clicking a sidebar entry marks the button
+    // `active` in the same turn, which is what the run used to wait for — but
+    // the page's CONTENT arrives from /api later, and measuring in between
+    // measures a page that is half there.
+    //
+    // Found by the census rather than by reading: two identical runs disagreed
+    // by 29 elements on Abholungen and 2 on Bestellungen, which is the exact
+    // shape of a number that measures nothing. Every finding this run has ever
+    // reported about those pages was taken from whichever half had arrived.
+    //
+    // A counter and not a sleep, for the reason the wait below already gives:
+    // a fixed pause is simultaneously too long 1100 times over and no guarantee
+    // once. app.js reaches the network only through fetch (checked: no
+    // XMLHttpRequest anywhere in it), so wrapping fetch sees all of it.
+    inflight: 0
+  };
+  const echtesFetch = window.fetch;
+  window.fetch = function () {
+    window.__mess.inflight++;
+    return echtesFetch.apply(this, arguments).finally(function () {
+      window.__mess.inflight--;
+    });
   };
 }
 
@@ -247,14 +315,17 @@ function helferQuelle() {
 // node: puppeteer serialises the function and evaluates it in the page. It may
 // not close over anything in this file, and it may only return plain data.
 /* global document, window, getComputedStyle */
-function measure(typeFloor, touchFloor) {
+function measure(typeFloor, touchFloor, FELD_MIN) {
   const reveal = document.createElement('style');
   reveal.textContent = '.page,.sp,.modal-bg,details>*{display:block !important}.modal-bg{position:static !important}';
   document.head.appendChild(reveal);
-  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
+  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
+  const feld = [];
   const over = [];
+  const sizes = {};
+  const bySize = {};
   let hidden = 0;
   let unfilled = 0;
   const all = document.querySelectorAll('body *');
@@ -267,8 +338,18 @@ function measure(typeFloor, touchFloor) {
       continue;
     }
     const fs2 = parseFloat(cs.fontSize);
+    sizes[fs2] = (sizes[fs2] || 0) + 1;
+    if (bySize[fs2] === undefined) bySize[fs2] = [];
+    if (bySize[fs2].length < 6) bySize[fs2].push(where(el));
     const txt = ownText(el);
     if (txt && fs2 < typeFloor) type.push({ at: where(el), px: fs2, text: txt.slice(0, 40) });
+    if (fs2 < FELD_MIN && el.matches(FELD) && zoomtIOS(el)) {
+      feld.push({
+        at: where(el),
+        px: fs2,
+        text: (el.getAttribute('placeholder') || el.name || el.id || '').slice(0, 40)
+      });
+    }
     const rect = el.getBoundingClientRect();
     if (el.matches(TOUCH) && awaitingText(el)) {
       unfilled++;
@@ -338,7 +419,10 @@ function measure(typeFloor, touchFloor) {
     viewport: window.innerWidth,
     type,
     touch,
+    feld,
     over: outermost(over),
+    sizes,
+    bySize,
     hidden,
     unfilled,
     scanned: all.length,
@@ -352,11 +436,14 @@ function measure(typeFloor, touchFloor) {
 // screens into one document and measure widths nobody gets. Here exactly one
 // page is open, because a nav entry was clicked, exactly as a user meets it.
 /* global document, window, getComputedStyle */
-function measureLive(typeFloor, touchFloor) {
-  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
+function measureLive(typeFloor, touchFloor, FELD_MIN) {
+  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
+  const feld = [];
   const over = [];
+  const sizes = {};
+  const bySize = {};
   const vw = document.documentElement.clientWidth;
   const all = document.querySelectorAll('body *');
   let visible = 0;
@@ -369,8 +456,18 @@ function measureLive(typeFloor, touchFloor) {
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) continue;
     const fs2 = parseFloat(cs.fontSize);
+    sizes[fs2] = (sizes[fs2] || 0) + 1;
+    if (bySize[fs2] === undefined) bySize[fs2] = [];
+    if (bySize[fs2].length < 6) bySize[fs2].push(where(el));
     const txt = ownText(el);
     if (txt && fs2 < typeFloor) type.push({ at: where(el), px: fs2, text: txt.slice(0, 40) });
+    if (fs2 < FELD_MIN && el.matches(FELD) && zoomtIOS(el)) {
+      feld.push({
+        at: where(el),
+        px: fs2,
+        text: (el.getAttribute('placeholder') || el.name || el.id || '').slice(0, 40)
+      });
+    }
     if (el.matches(TOUCH) && r.height > 0 && r.height < touchFloor) {
       touch.push({
         at: where(el),
@@ -386,7 +483,10 @@ function measureLive(typeFloor, touchFloor) {
     viewport: window.innerWidth,
     type,
     touch,
+    feld,
     over: outermost(over),
+    sizes,
+    bySize,
     hidden: all.length - visible,
     scanned: all.length,
     unfilled: 0,
@@ -769,11 +869,34 @@ async function main() {
               stop.open
             )
             .catch(() => {});
+          // …and then for the content the click went to fetch. Three
+          // consecutive animation frames with nothing in flight, the same shape
+          // as the resize settle below: one frame with the counter at zero can
+          // be the gap between two requests, and the render happens in the
+          // frame after the last response resolves.
+          await page
+            .waitForFunction(
+              () => {
+                const m = window.__mess;
+                m.ruhig = m.inflight === 0 ? (m.ruhig || 0) + 1 : 0;
+                return m.ruhig >= 3;
+              },
+              { polling: 'raf', timeout: 5000 }
+            )
+            .catch(() => {});
+          await page.evaluate(() => {
+            window.__mess.ruhig = 0;
+          });
         }
         // The HIGHER of the two floors, so the caller can split. The page used
         // to be told only point.tapFloor, so nothing between that and the Feld
         // floor was ever collected and the Feld report below was unreachable.
-        const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, Math.max(point.tapFloor, TOUCH_FELD));
+        const m = await page.evaluate(
+          APP ? measureLive : measure,
+          TYPE_FLOOR,
+          Math.max(point.tapFloor, TOUCH_FELD),
+          FELD_MIN
+        );
         // The largest any single measurement saw, not the last one. These were
         // plain assignments in the innermost loop, so the summary reported
         // whichever width and station happened to finish last as though it
@@ -805,6 +928,17 @@ async function main() {
           continue;
         }
         for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
+        for (const r of m.feld) rows.push({ kind: 'feld', pointer: point.name, width, ...r });
+        if ((CENSUS || CENSUS_WRITE) && width === CENSUS_WIDTH && point.name === 'fine') {
+          zensus[stop.name] = { sizes: m.sizes, bySize: m.bySize };
+        }
+        if (SHOTS && SHOT_WIDTHS.includes(width)) {
+          fs.mkdirSync(SHOTS, { recursive: true });
+          await page.screenshot({
+            path: path.join(SHOTS, `${String(width).padStart(4, '0')}-${point.name}-${stop.name}.png`),
+            fullPage: true
+          });
+        }
         for (const r of m.touch) {
           // Which of the two floors this one is under, decided per row and kept
           // in the grouping key below. Without it a 48px control (fine, under
@@ -897,7 +1031,7 @@ async function main() {
           await page.evaluate(() => {
             delete window.__ruhe;
           });
-          const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor);
+          const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor, FELD_MIN);
           const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`);
           if (opened === undefined) {
             // Belt and braces: SPRUNGZIELE puts every `to` in the band, but a
@@ -960,6 +1094,11 @@ async function main() {
   const used = ratchet(findings, thresholds.ratchet || [], here);
 
   const type = findings.filter((f) => f.kind === 'type' && f.pointer === 'coarse');
+  // Only under a coarse pointer, because that is the whole finding: a mouse
+  // cannot make iOS zoom. The same field at 13px on a desk is a density
+  // decision, and reporting it here would say a thousand times over that a
+  // Büro screen is broken when nothing about it is.
+  const feld = findings.filter((f) => f.kind === 'feld' && f.pointer === 'coarse');
   const typeFine = findings.filter((f) => f.kind === 'type' && f.pointer === 'fine');
   const over = findings.filter((f) => f.kind === 'over');
   const tapFloorOf = (f) => POINTERS.find((p) => p.name === f.pointer).tapFloor;
@@ -974,6 +1113,11 @@ async function main() {
   bad += report(
     `TOUCH: under the floor for its pointer (${POINTERS.map((p) => `${p.name} ${p.tapFloor}`).join(', ')})`,
     tooSmall,
+    BAND
+  );
+  bad += report(
+    `FIELDS: under ${FELD_MIN}px with a coarse pointer, so iOS zooms in on focus and does not come back`,
+    feld,
     BAND
   );
   bad += report('OVERFLOW: past the right edge, outside any sideways-scrolling box', over, BAND);
@@ -1043,7 +1187,81 @@ async function main() {
           (APP ? ` on ${stops} pages with real data.` : '.') +
           ` ${held} ratcheted with a reason and a package.`
   );
+  if (CENSUS || CENSUS_WRITE) bad += zensusBericht();
   process.exit(STRICT && bad ? 1 : 0);
+}
+
+// ── The type census ────────────────────────────────────────────────────────
+// Per page, how many elements are at each computed font-size, at 1440px with a
+// fine pointer. Not which element is what size: that list churns on every seed
+// row and every renamed class, and a fixture nobody can keep green stops being
+// read. A count moving between buckets is the finding — an element that a
+// component rule quietly took back after its inline size was removed shows up
+// as one fewer at 13 and one more at 14, on the page it happened.
+//
+// The example selectors travel with the file but are NOT compared, for the same
+// reason: they are there so a diff can be acted on without a second run.
+function zensusBericht() {
+  const seiten = Object.keys(zensus).sort();
+  if (!seiten.length) {
+    console.error(
+      `\n✗ census: nothing collected. It is taken at ${CENSUS_WIDTH}px with a fine pointer, ` +
+        `so the run has to include both — e.g. --app --width ${CENSUS_WIDTH} --pointer fine`
+    );
+    return 1;
+  }
+  const jetzt = {};
+  for (const s of seiten) jetzt[s] = zensus[s].sizes;
+  if (CENSUS_WRITE) {
+    fs.writeFileSync(
+      CENSUS_FILE,
+      JSON.stringify(
+        {
+          _readme:
+            `Computed font-size histogram per page at ${CENSUS_WIDTH}px with a fine pointer, with app.js ` +
+            'running on the seeded database. Regenerate with `node scripts/measure-mobile.js --app ' +
+            `--width ${CENSUS_WIDTH} --pointer fine --census-write\`, compare with --census. ` +
+            'A count moving from one size to another is the finding: it means an element changed size ' +
+            'on a desk, and every breakpoint in darstellung/PLAN.md was measured from rendered desk content.',
+          width: CENSUS_WIDTH,
+          pages: jetzt
+        },
+        null,
+        2
+      ) + '\n'
+    );
+    console.log(`\n✓ census written — ${seiten.length} pages, ${path.relative(ROOT, CENSUS_FILE)}`);
+    return 0;
+  }
+  if (!fs.existsSync(CENSUS_FILE)) {
+    console.error(
+      `\n✗ census: ${path.relative(ROOT, CENSUS_FILE)} does not exist. Write it first with --census-write.`
+    );
+    return 1;
+  }
+  const vorher = JSON.parse(fs.readFileSync(CENSUS_FILE, 'utf8')).pages || {};
+  const zeilen = [];
+  for (const seite of new Set([...Object.keys(vorher), ...seiten])) {
+    const a = vorher[seite] || {};
+    const b = jetzt[seite] || {};
+    for (const px of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort((x, y) => Number(x) - Number(y))) {
+      const von = a[px] || 0;
+      const nach = b[px] || 0;
+      if (von === nach) continue;
+      const bsp = (zensus[seite]?.bySize?.[px] || []).slice(0, 3).join(', ');
+      zeilen.push(`  ${seite}  ${px}px: ${von} → ${nach}${bsp ? `   (${bsp})` : ''}`);
+    }
+  }
+  if (!zeilen.length) {
+    const n = Object.values(jetzt).reduce((t, m) => t + Object.values(m).reduce((x, y) => x + y, 0), 0);
+    console.log(`\n✓ census unchanged — ${n} elements across ${seiten.length} pages sit at the same sizes`);
+    return 0;
+  }
+  console.error(`\n✗ census moved in ${zeilen.length} place(s) at ${CENSUS_WIDTH}px:\n`);
+  zeilen.forEach((z) => console.error(z));
+  console.error('\n  Every breakpoint in the plan was measured from rendered desk content. If this is intended,');
+  console.error('  say so in the commit and rewrite the fixture with --census-write.');
+  return zeilen.length;
 }
 
 // Every way out of this process, tidy or not, goes past aufraeumenSync.
