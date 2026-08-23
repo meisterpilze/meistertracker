@@ -1215,7 +1215,7 @@ window.LANG['en'] = {
   'scan.contamAria': 'Toggle contamination mode',
   'scanFb.location': 'Location: {loc} \u2192 now scan bags (location stays until you change it)',
   'scanFb.to': 'To: {loc} \u2192 now scan bags',
-  'scanFb.setAction': 'Set an action first \u2014 scan ADD, MOVE, REMOVE or HARVEST.',
+  'scanFb.setAction': 'Tap To to move bags \u2014 or scan ADD, MOVE, REMOVE or HARVEST.',
   'scanFb.scanLocFirst': 'Scan a location or rack first.',
   'scanFb.scanToFirst': 'Scan the destination location first.',
   'scanFb.logged': 'Logged: {action} {val}{to} [{n} this session]',
