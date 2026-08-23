@@ -18,7 +18,7 @@ const SRC = quelle();
 const hebe = (n) => _hf(n, SRC);
 
 function messen({ theme, datum, batches = [], scanLog = [], harvests = [], cultures = [], zones = {} }) {
-  const code = [hebe('_ymd'), hebe('rhythmMadeOn')].join('\n');
+  const code = [hebe('_ymd'), hebe('_rhythmMadeIndex'), hebe('rhythmMadeOn')].join('\n');
   return new Function(
     'batches',
     'scanLog',
@@ -30,6 +30,7 @@ function messen({ theme, datum, batches = [], scanLog = [], harvests = [], cultu
     `
     const toZone = (x) => x;
     const _grainKgOf = (b) => (b.qty || 0) * (b.bagKg || 1);
+    let _rhythmIndex = null;
     ${code}
     return rhythmMadeOn(datum, theme);
   `
@@ -81,13 +82,29 @@ describe('Was der Rhythmus an einem Tag zählt', () => {
     assert.equal(n, 17);
   });
 
-  it('zählt am Körnertag die Kilogramm, nicht die Gläser', () => {
+  it('zählt am Körnertag die Gläser, weil das Ziel eine Anzahl ist', () => {
+    // Das Ziel wird als Anzahl eingegeben — 'Wie viele am {date}?', und
+    // setRhythmTarget verlangt eine ganze Zahl. In Kilogramm gemessen war ein
+    // Ziel von 20 mit sieben 3-kg-Gläsern erfüllt und mit 0,5-kg-Gläsern nie.
     const n = messen({
       theme: 'grain',
       datum: TAG,
       batches: [{ created: TAG + 'T09:00:00', qty: 20, bagKg: 3, batchType: 'grain' }]
     });
-    assert.equal(n, 60, '20 Gläser zu 3 kg sind 60 kg');
+    assert.equal(n, 20, '20 Gläser sind 20, egal wie schwer sie sind');
+  });
+
+  it('zählt Körner weiter, nachdem sie verbraucht wurden', () => {
+    // Der Tag fragt, was ENTSTANDEN ist. _grainKgOf() gibt 0 zurück, sobald
+    // eine Charge archiviert ist — damit kam ein erfüllter Montag als
+    // Rückstand zurück, sobald die Gläser in Blöcke gingen, dauerhaft und ohne
+    // Knopf, der ihn hätte schließen können.
+    const n = messen({
+      theme: 'grain',
+      datum: TAG,
+      batches: [{ created: TAG + 'T09:00:00', qty: 20, bagKg: 3, batchType: 'grain', _status: 'DONE' }]
+    });
+    assert.equal(n, 20, 'verbraucht ist nicht ungeschehen');
   });
 
   it('zählt am Fruchtungstag die Beutel, die in eine Fruchtungszone gezogen sind', () => {
@@ -148,7 +165,13 @@ describe('Was der Rhythmus an einem Tag zählt', () => {
 
 describe('Was noch offen ist', () => {
   function offen({ heute, aufgaben, batches = [], ab = null }) {
-    const code = [hebe('_ymd'), hebe('rhythmMadeOn'), hebe('rhythmCountsFrom'), hebe('rhythmArrears')].join('\n');
+    const code = [
+      hebe('_ymd'),
+      hebe('_rhythmMadeIndex'),
+      hebe('rhythmMadeOn'),
+      hebe('rhythmCountsFrom'),
+      hebe('rhythmArrears')
+    ].join('\n');
     return new Function(
       'rhythmTasks',
       'batches',
@@ -158,6 +181,7 @@ describe('Was noch offen ist', () => {
       const scanLog = [], harvests = [], cultures = [], ZONE_BY_ID = {};
       const toZone = (x) => x;
       const _grainKgOf = (b) => (b.qty || 0) * (b.bagKg || 1);
+    let _rhythmIndex = null;
       ${code}
       return rhythmArrears(new Date(heute + 'T12:00:00'));
     `
