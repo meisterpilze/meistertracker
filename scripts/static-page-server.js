@@ -30,8 +30,21 @@ function build() {
 
 // Only the two files in `files` are reachable — the exact-name lookup below is
 // what rules out path traversal, so nothing else in the repo is exposed.
+// `onCapture` is optional. With one, the server waits for the page to POST a
+// measurement back and closes itself — that is the hand-driven mode, where a
+// human pastes a snippet into a browser. Without one, POSTs are answered and
+// ignored and the server stays up until the caller closes it, which is what a
+// scripted browser needs: it measures many times over many widths and there is
+// no single moment to close on.
+//
+// Pass port 0 for an ephemeral one and read server.address().port. A fixed port
+// is a collision waiting for the second terminal.
 function serve(files, onCapture, port) {
   const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && !onCapture) {
+      req.resume();
+      return res.writeHead(204).end();
+    }
     if (req.method === 'POST') {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));

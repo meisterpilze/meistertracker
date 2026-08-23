@@ -54,6 +54,15 @@ const ROOT_BLOCK = block(/^:root \{[\s\S]*?\n\}/m);
 // header and not an afterthought — see the assertion below.
 const DESKTOP_BLOCK = block(/@media \(min-width: 769px\) and \(hover: hover\), print \{[\s\S]*?\n\}/);
 
+/** Der Wert einer Marke in einem der beiden Blöcke. Stand als lokale Hilfe in
+ *  einem inneren `describe`; hochgezogen, weil die Prüfung auf rem und px sie
+ *  ebenfalls braucht und zwei Fassungen davon genau die stille Drift wären,
+ *  gegen die sie dort steht. */
+const valueIn = (blockText, token) => {
+  const m = blockText.match(new RegExp('\\n\\s*' + token + ':\\s*([^;]+);'));
+  return m && m[1].trim();
+};
+
 // Derived from the stylesheet, not restated here. Phase 2 adds a paired token
 // per component — the base layer holds 104 sub-floor sizes and every one needs
 // its own — and a hand-kept list is a list someone forgets to extend, which is
@@ -85,6 +94,54 @@ const PHASE_0_TOKENS = [
 ];
 
 describe('mobile token layer', () => {
+  // ⚠️ Package P1.5. The type marks are `rem` and the tap marks are `px`, and
+  // that split is the whole point rather than a formatting preference.
+  //
+  // A browser's own font size is the one accessibility setting people actually
+  // use, and until this conversion it reached nothing in this app: 189 sizes in
+  // absolute pixels, and the marks that were meant to be the single switch for
+  // them were pixels themselves. In rem they scale with it.
+  //
+  // A tap target must NOT. A finger is 10mm wide whatever size the type is set
+  // to, so 56px is a physical measurement and stays one. Writing it in rem
+  // would make the button grow with the text and the target no more reachable
+  // than before.
+  //
+  // Nothing caught the conversion when it happened: all 1471 tests passed with
+  // the marks changed under them, because every assertion here compares tokens
+  // to each other rather than to a value. This is the assertion that was
+  // missing.
+  const TYP_MARKEN = ['--fs-xs', '--fs-sm', '--fs-base', '--fs-meta', '--fs-micro', '--fs-tile'];
+  const TIPP_MARKEN = ['--tap', '--tap-sm', '--tap-min', '--tap-sm-min'];
+
+  it('writes the type marks in rem, so the browser setting reaches them', () => {
+    const falsch = TYP_MARKEN.filter((t) => !/^[\d.]+rem$/.test(valueIn(ROOT_BLOCK, t) || ''));
+    assert.deepEqual(
+      falsch,
+      [],
+      `these type marks are not relative: ${falsch.map((t) => `${t}: ${valueIn(ROOT_BLOCK, t)}`).join(', ')}` +
+        ' — in px a browser font-size setting reaches nothing in this app'
+    );
+  });
+
+  it('writes the tap marks in px, because a finger does not scale with the type', () => {
+    const falsch = TIPP_MARKEN.filter((t) => !/^\d+px$/.test(valueIn(ROOT_BLOCK, t) || ''));
+    assert.deepEqual(
+      falsch,
+      [],
+      `these tap marks are not absolute: ${falsch.map((t) => `${t}: ${valueIn(ROOT_BLOCK, t)}`).join(', ')}` +
+        ' — a target in rem grows with the text and stays just as hard to hit'
+    );
+  });
+
+  it('the desktop marks follow the same split', () => {
+    const typ = TYP_MARKEN.filter((t) => {
+      const v = valueIn(DESKTOP_BLOCK, t);
+      return v && !/^[\d.]+rem$/.test(v);
+    });
+    assert.deepEqual(typ, [], `desktop type marks not in rem: ${typ.join(', ')}`);
+  });
+
   it('finds the tokens (a derivation that matches nothing would pass everything)', () => {
     const lost = PHASE_0_TOKENS.filter((t) => !TOKENS.includes(t));
     assert.deepEqual(lost, [], `the :root scan no longer sees ${lost.length} of the tokens Phase 0 shipped`);
@@ -205,10 +262,6 @@ describe('the phone floors', () => {
   // floor everywhere: the ratchet in scripts/mobile-audit.js reads --fs-xs to
   // decide what counts as sub-floor, and the stylesheet enforces --fs-min. Two
   // numbers for one idea is a silent drift, so they are pinned to each other.
-  const valueIn = (blockText, token) => {
-    const m = blockText.match(new RegExp('\\n\\s*' + token + ':\\s*([^;]+);'));
-    return m && m[1].trim();
-  };
 
   it('floors the phone at exactly --fs-xs', () => {
     assert.equal(
@@ -268,11 +321,25 @@ describe('the phone floors', () => {
         valueIn(ROOT_BLOCK, pairToken),
         `${floorToken} and ${pairToken} disagree — two numbers for one touch floor`
       );
-      assert.equal(
-        valueIn(DESKTOP_BLOCK, floorToken),
-        '0px',
-        `the desktop value of ${floorToken} must be 0. It cannot be \`auto\` like ${pairToken}: max() with a ` +
-          'keyword is invalid CSS, the whole declaration is dropped, and the phone minimum goes with it'
+      // ⚠️ Two separate demands on this one value, and they used to be one.
+      // It must be a LENGTH, because `auto` inside max() is invalid CSS: the
+      // whole declaration is dropped and the phone minimum goes with it. And
+      // since package P1 it must be at least 24px, because that is WCAG 2.5.8
+      // Target Size (Minimum), level AA, and level AA knows nothing about
+      // input devices. It read `0px` before, which said "no floor at all on a
+      // desk" — the exact half of rule R1 the tracker was missing while the
+      // coarse half was already right.
+      const desk = valueIn(DESKTOP_BLOCK, floorToken);
+      assert.match(
+        desk,
+        /^\d+px$/,
+        `the desktop value of ${floorToken} must be a length. It cannot be \`auto\` like ${pairToken}: ` +
+          'max() with a keyword is invalid CSS, the whole declaration is dropped, and the phone ' +
+          'minimum goes with it'
+      );
+      assert.ok(
+        parseInt(desk, 10) >= 24,
+        `${floorToken} is ${desk} on a desk, under the 24px of WCAG 2.5.8 level AA (package P1)`
       );
     });
   }

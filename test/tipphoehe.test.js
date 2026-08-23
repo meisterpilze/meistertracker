@@ -86,14 +86,24 @@ describe('the touch floor', () => {
     );
   });
 
-  it('the token it reads is the phone value, and lets the desk go free', () => {
-    // --tap-sm is 48px on :root (the phone) and `auto` in the desktop override.
-    // If it ever became a fixed px in both, this rule would start setting a
-    // minimum height on every desktop button in the app.
+  it('the token it reads is the phone value, and the desk value is the AA floor', () => {
+    // --tap-sm is 48px on :root (the phone). It was `auto` in the desktop
+    // override, which meant no minimum at all on a desk — and that was half of
+    // rule R1 missing: the coarse side was right, because it hangs on
+    // `hover: hover` rather than on a width, but the fine side had no floor of
+    // its own. Package P1 gave it 24px, WCAG 2.5.8 Target Size (Minimum),
+    // level AA, which applies to every pointing device.
+    //
+    // What this test still guards is the direction it always guarded: the desk
+    // value must stay BELOW the phone value. If the two ever became the same
+    // number, the phone's generous target would silently become the desktop's.
     const root = CSS.slice(CSS.indexOf(':root {'), CSS.indexOf('\n}', CSS.indexOf(':root {')));
     assert.match(root, /--tap-sm:\s*48px/, '--tap-sm is no longer 48px on the phone');
     const desktop = CSS.slice(CSS.indexOf('min-width: 769px'));
-    assert.match(desktop.slice(0, 4000), /--tap-sm:\s*auto/, '--tap-sm no longer releases the constraint on a desk');
+    const m = desktop.slice(0, 6000).match(/--tap-sm:\s*(\d+)px/);
+    assert.ok(m, '--tap-sm is no longer a length on a desk — `auto` inside max() is invalid CSS');
+    assert.ok(Number(m[1]) >= 24, `--tap-sm is ${m[1]}px on a desk, under the 24px of WCAG 2.5.8 level AA`);
+    assert.ok(Number(m[1]) < 48, `--tap-sm is ${m[1]}px on a desk, the phone number — the desk is not a hand`);
   });
 
   it('no rule that lands on a button sets a smaller minimum', () => {
