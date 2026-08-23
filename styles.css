@@ -4528,6 +4528,16 @@ tr.ms-off .ms-prog {
   .dash-top-row #dash-batch-tasks-card {
     flex: 1 1 100% !important;
   }
+  /* Die Hinweise standen als einzige Karte in der zweiten Zeile und hatten
+     flex:1 — also zogen sie sich über die ganze Breite, egal wie kurz sie
+     waren. Der Kommentar darüber erklärt es: "harvest / alerts / split cards
+     flow onto the row below" — die anderen beiden sind seither weg, und die
+     übrige Karte erbte die ganze Zeile. Eine Warnung ist eine Zeile Text; sie
+     auf 1400px zu ziehen macht sie nicht dringlicher, nur schlechter lesbar. */
+  .dash-top-row #dash-alerts-card {
+    flex: 0 1 auto;
+    max-width: 640px;
+  }
 }
 
 /* ═══ TABLET ═══════════════════════════════════════════════════ */
@@ -4710,10 +4720,6 @@ tr.ms-off .ms-prog {
   .dash-top-row {
     flex-direction: column;
     align-items: stretch;
-  }
-  .dash-top-row #dash-alerts-card {
-    flex: 0 0 auto !important;
-    width: auto !important;
   }
   .rack-grid.rack-grid-5col {
     grid-template-columns: repeat(2, 1fr);
