@@ -4411,6 +4411,76 @@ tr.ms-off .ms-prog {
   margin-top: 3px;
 }
 
+/* Eine eigene Aufgabe in der Wochenspalte: Kästchen, Name, ein Tipp.
+
+   Randlos und ohne Fläche — das ist KEIN auf volle Breite gezogener Knopf,
+   sondern eine Zeile, die man antippen kann, genau wie die Mengenzahl zwei
+   Zeilen darüber (_rhythmTargetBtn) es schon ist. Wer hier eine Fläche und
+   einen Rahmen einzieht, macht daraus den breitgetretenen Knopf, den es in
+   diesem Blatt nirgends geben soll.
+
+   Die Breite braucht sie trotzdem: ohne sie kann der Name in einer 170px-Spalte
+   nicht mit Auslassungspunkten enden, und ein umgebrochener Aufgabenname
+   schiebt die sieben Spalten auf verschiedene Höhen. */
+.wk-chore {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: var(--tap-sm);
+  margin-bottom: 3px;
+  padding: 3px 3px 3px 5px;
+  border: 0;
+  border-left: 2px solid var(--c-purple-dark);
+  border-radius: 0 4px 4px 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-chore:hover {
+  background: var(--c-bg);
+}
+/* In em, nicht in Pixeln: das Kästchen wächst mit der Zeile, und der Haken
+   darin bleibt bei der Schriftgröße der Zeile statt bei einer eigenen. Eine
+   feste Zahl hier wäre eine Schriftgröße, an die der Boden der Handseite nicht
+   herankommt — genau das, was scripts/mobile-audit.js zählt. */
+.wk-chore-box {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--c-text-muted);
+  border-radius: 3px;
+  line-height: 1;
+  color: var(--c-surface);
+}
+.wk-chore.done .wk-chore-box {
+  background: var(--c-green-dark);
+  border-color: var(--c-green-dark);
+}
+.wk-chore-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-chore.done .wk-chore-name {
+  color: var(--c-text-muted);
+  text-decoration: line-through;
+}
+/* Versäumt: derselbe rote Streifen, den eine überfällige Zeile überall trägt. */
+.wk-chore.late {
+  border-left-color: var(--c-red-dark);
+}
+.wk-chore.late .wk-chore-name {
+  color: var(--c-red-dark);
+  font-weight: 600;
+}
+
 /* Die eigenen Aufgaben, unter der Wochensumme. Eine Zeile je Aufgabe: Name,
    Takt, und der Weg hinaus. Der Name darf schrumpfen, Takt und Knopf nicht —
    ein umgebrochener Takt neben einem abgeschnittenen Namen liest sich als

@@ -261,3 +261,33 @@ describe('Jede Zeilenart steht in der Tabelle', () => {
     }
   });
 });
+
+// ── Nur das Wesentliche ─────────────────────────────────────────────────────
+describe('Was eine Versorgungslücke sagt', () => {
+  it('trägt keine Herleitung mehr mit sich', () => {
+    // Hier stand: "keine Körner, nichts in der Inkubation — nach der Fruchtung
+    // (12) ist Schluss". Eine Herleitung dessen, was der Knopf daneben ohnehin
+    // verlangt, und in der Zeile, die man im Vorbeigehen liest, die längste von
+    // allen. Übrig bleibt: die Sorte, und was zu tun ist.
+    assert.doesNotMatch(hebeFunktion('buildSupplyTasks'), /detail:/, 'die Begründung ist zurück');
+  });
+
+  it('sagt trotzdem noch, dass es eilt', () => {
+    // Nicht in Worten, sondern im roten Streifen, den die Zeile ohnehin trägt.
+    // Ohne das wäre "kürzer" auch "sagt weniger".
+    const zweig = SRC.slice(SRC.indexOf('for (const s of buildSupplyTasks())'));
+    assert.match(zweig.slice(0, 700), /overdue: s\.supply === 'now'/);
+  });
+
+  it('öffnet das Körnerbrut-Formular mit der Sorte schon gewählt', () => {
+    // Sonst wäre der kurze Text nur eine Aufforderung, das Formular selbst zu
+    // suchen und die Sorte ein zweites Mal auszuwählen.
+    const h = SRC.slice(
+      SRC.indexOf("action === 'supply-make-grain'"),
+      SRC.indexOf("action === 'supply-make-grain'") + 800
+    );
+    assert.match(h, /_strainByKey\(el\.dataset\.sorte\)/);
+    assert.match(h, /msQuickLabor\(ms\.id\)/, 'das Laborformular öffnet ohne Sorte');
+    assert.match(h, /_msqPickType\('KB'\)/, 'es öffnet ohne die Körnerbrut vorgewählt');
+  });
+});
