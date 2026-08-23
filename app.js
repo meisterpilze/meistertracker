@@ -1066,7 +1066,6 @@ function go(page, btnId) {
   // The day's work is the top of Arbeitsgänge now, above the seven jobs that do
   // it — it was the Dashboard's Farm mode, which was two buttons and this row.
   if (page === 'work') {
-    renderDashAlerts();
     renderDashBatchTasks();
   }
   if (page === 'batch') {
@@ -1266,7 +1265,6 @@ function refresh() {
   if (!active) return;
   const id = active.id.replace('p-', '');
   if (id === 'dash') {
-    renderDashAlerts();
     renderDashBatchTasks();
   }
   if (id === 'batch') {
@@ -4790,41 +4788,32 @@ function printWorkList() {
 // due-today / overdue batches — those are already the "zu verschieben" chip and
 // the Chargen-Aufgaben list directly above, and repeating them as two more lines
 // said nothing new while burying the alerts that only appear here.
-function renderDashAlerts() {
-  const invAlerts = getInvAlerts().map((a) => ({ ...a, goPage: 'inv', goBtn: 'n-inv' }));
-  // Zone capacity warnings (≥90%)
-  const capAlerts = [];
-  zones.forEach((z) => {
-    if (!z.maxCapacity) return;
+function buildAlertTasks() {
+  const out = [];
+  const add = (a, rang) => out.push({ ...a, rang });
+  // Bestand zuerst. Leer werden dauert länger zu beheben als voll sein: Nachschub
+  // muss bestellt oder angesetzt werden, ein voller Raum wird beim nächsten Umzug
+  // von selbst leerer. Und die Liste zeigt sechs Zeilen, bevor sie zuklappt.
+  for (const a of getInvAlerts()) add({ ...a, goPage: 'inv', goBtn: 'n-inv' }, 0);
+  for (const a of getLabAlerts()) add({ ...a, goPage: 'lab', goBtn: 'n-lab' }, 0);
+  for (const z of zones) {
+    if (!z.maxCapacity) continue;
     let cnt = 0;
     if (z.racks && z.racks.length) z.racks.forEach((r) => (cnt += Object.keys(getRackBags(r.id)).length));
     else cnt = Object.keys(getZoneBags(z.id)).length;
     const pct = Math.round((cnt / z.maxCapacity) * 100);
     if (pct >= 90)
-      capAlerts.push({
-        text: zoneDisplayName(z.id) + ': ' + cnt + '/' + z.maxCapacity + ' bags (' + pct + '% full)',
-        urgent: pct >= 100,
-        goPage: 'zones',
-        goBtn: 'n-zones'
-      });
-  });
-  const labAlerts = getLabAlerts().map((a) => ({ ...a, goPage: 'lab', goBtn: 'n-lab' }));
-  const allAlerts = [...invAlerts, ...labAlerts, ...capAlerts];
-  const card = document.getElementById('dash-alerts-card');
-  const el = document.getElementById('dash-alerts');
-  if (!allAlerts.length) {
-    card.style.display = 'none';
-    return;
+      add(
+        {
+          text: zoneDisplayName(z.id) + ': ' + cnt + '/' + z.maxCapacity + ' (' + pct + '%)',
+          urgent: pct >= 100,
+          goPage: 'zones',
+          goBtn: 'n-zones'
+        },
+        1
+      );
   }
-  card.style.display = '';
-  el.innerHTML = allAlerts
-    .map((a) => {
-      const btn = a.attentionKey
-        ? `<button class="btn btn-sm fs-xs" data-action="go-attention" data-key="${esc(a.attentionKey)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? 'var(--c-red-strong)' : 'var(--c-amber-strong)'};color:#fff;border-color:transparent">${t('dash.view')}</button>`
-        : `<button class="btn btn-sm fs-xs" data-action="go-page" data-page="${esc(a.goPage)}" data-btn="${esc(a.goBtn)}" style="padding:2px 8px;white-space:nowrap;flex-shrink:0;background:${a.urgent ? 'var(--c-red-strong)' : 'var(--c-amber-strong)'};color:#fff;border-color:transparent">${t('dash.view')}</button>`;
-      return `<div class="fs-meta" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;margin-bottom:4px;background:${a.urgent ? '#fca5a5' : '#fed7aa'};border-left:4px solid ${a.urgent ? '#dc2626' : '#ea580c'};color:${a.urgent ? '#7f1d1d' : '#7c2d12'};font-weight:500"><div style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(a.text)}</div>${btn}</div>`;
-    })
-    .join('');
+  return out.sort((a, b) => a.rang - b.rang || Number(b.urgent) - Number(a.urgent));
 }
 // Split-batch detection: flag batches whose active bags straddle multiple
 // production stages ({spawn, incubation, fruiting}). Harvested, removed, and
@@ -5457,6 +5446,24 @@ function buildWeekPlan() {
     return top;
   };
 
+  // Ein niedriger Bestand ist Arbeit: er sagt "bestell nach" oder "setz an",
+  // genau wie eine Versorgungslücke. Als eigene Karte stand er neben der Liste,
+  // die alles andere zu tun hatte — das einzige auf dem Schirm, das zweimal
+  // gelesen werden musste, und beim Aufräumen der Nachbarkarten hatte es sich
+  // auch noch die ganze Zeilenbreite geerbt.
+  for (const a of buildAlertTasks()) {
+    put(0, {
+      kind: 'alert',
+      species: '',
+      label: a.text,
+      detail: '',
+      bags: 0,
+      zone: '',
+      overdue: !!a.urgent,
+      ready: true,
+      task: a
+    });
+  }
   const laborMin = buildLabMinTasks();
   const gebuendelt = laborMin.length > LABMIN_GROUP_AT;
   if (gebuendelt) {
@@ -5611,7 +5618,7 @@ function todayProgress(todayItems) {
   // denominator made a finished day read 5/8. They are work, but they are not
   // work this bar can measure.
   const countable = todayItems.filter(
-    (it) => it.kind !== 'supply' && it.kind !== 'labmin' && it.kind !== 'labgroup'
+    (it) => it.kind !== 'supply' && it.kind !== 'labmin' && it.kind !== 'labgroup' && it.kind !== 'alert'
   );
   return { done, total: done + countable.length };
 }
@@ -5904,9 +5911,19 @@ function _weekColBodyHtml(d, off, sel) {
 // What a row actually asks you to do, which is not the same as what it is. A
 // colonised grain jar and a rhythm target both mean "make blocks today", so
 // they belong together even though one is a batch and the other is a plan.
-const PLAN_CATS = ['create', 'move', 'harvest', 'other'];
-const PLAN_CAT_LABEL = { create: 'cat.create', move: 'cat.move', harvest: 'cat.harvest', other: 'rhythm.other' };
+// Die Reihenfolge hier ist die Reihenfolge auf dem Schirm; rank() unten
+// entscheidet nur, wer die sechs Zeilen überlebt. Beides muss stimmen, sonst
+// steht ein Hinweis zwar in der Liste, aber unter dem Rundgang.
+const PLAN_CATS = ['alert', 'create', 'move', 'harvest', 'other'];
+const PLAN_CAT_LABEL = {
+  alert: 'cat.alert',
+  create: 'cat.create',
+  move: 'cat.move',
+  harvest: 'cat.harvest',
+  other: 'rhythm.other'
+};
 const PLAN_CAT_COLOR = {
+  alert: 'var(--c-red-dark)',
   create: 'var(--c-accent)',
   move: 'var(--c-blue-dark, var(--c-accent))',
   harvest: 'var(--c-amber-dark)',
@@ -5916,6 +5933,7 @@ function planCategory(it) {
   // A supply gap is answered by making something, so it counts with the other
   // create work rather than falling into "other", where a row nobody
   // categorised goes to be ignored.
+  if (it.kind === 'alert') return 'alert';
   if (it.kind === 'supply' || it.kind === 'labmin' || it.kind === 'labgroup') return 'create';
   if (it.kind === 'grain') return 'create';
   if (it.kind === 'fruiting') return 'move';
@@ -6047,11 +6065,13 @@ function _weekDayBodyHtml(d, off, isToday) {
   // They are not stops on the walk; they are what to start before setting off.
   // So they go first, and the six-row cap below can no longer reach past them.
   const rank = (it) =>
-    it.kind === 'supply' || it.kind === 'labmin'
-      ? -1
-      : it.zone && order[it.zone] != null
-        ? order[it.zone]
-        : 999;
+    it.kind === 'alert'
+      ? -10 + ((it.task && it.task.rang) || 0)
+      : it.kind === 'supply' || it.kind === 'labmin'
+        ? -1
+        : it.zone && order[it.zone] != null
+          ? order[it.zone]
+          : 999;
   const items = [...d.items].sort((a, b) => rank(a) - rank(b));
   const openKey = 'day' + off;
   const full = !!_dashRoomOpen[openKey];
@@ -6324,6 +6344,15 @@ function _planBtn(it) {
   // so a display name resolved to null and every tap answered "diese Sorte steht
   // nicht in den Pilzsorten" — about a Sorte that must be in them, or the
   // row would not have been built at all.
+  if (it.kind === 'alert') {
+    const a = it.task || {};
+    const ziel = a.attentionKey
+      ? 'data-action="go-attention" data-key="' + esc(a.attentionKey) + '"'
+      : 'data-action="go-page" data-page="' + esc(a.goPage || '') + '" data-btn="' + esc(a.goBtn || '') + '"';
+    return (
+      '<button class="btn btn-sm fs-xs" ' + ziel + ' style="padding:3px 10px;flex-shrink:0">' + esc(t('dash.view')) + '</button>'
+    );
+  }
   if (it.kind === 'labgroup') {
     return (
       '<button class="btn btn-sm fs-xs" data-action="labgroup-toggle" style="padding:3px 10px;flex-shrink:0">' +
@@ -6972,7 +7001,7 @@ function setLabMin(type) {
     inventory.labThresholds[type] = parseDecimal(val) || 0;
     saveLabThresholds();
     renderDashLabStock();
-    renderDashAlerts();
+    renderDashBatchTasks();
     return;
   }
   const ziel = (mushroomStrains || []).filter((m) => m.imProgramm !== false);
@@ -7006,7 +7035,6 @@ function _saveStrainMins(sorten, field, wert) {
   renderStrains();
   renderDashLabStock();
   renderDashBatchTasks();
-  renderDashAlerts();
   let offen = sorten.length;
   let schlecht = 0;
   for (const [id, alt] of vorher) {
@@ -7022,7 +7050,6 @@ function _saveStrainMins(sorten, field, wert) {
       renderStrains();
       renderDashLabStock();
       renderDashBatchTasks();
-      renderDashAlerts();
     });
   }
 }
@@ -22625,6 +22652,16 @@ function initEventListeners() {
       bulkSectionToFruiting(el.dataset.bucket);
       return;
     }
+    // Zogen mit den Hinweisen aus der eigenen Karte hierher; ihr alter
+    // Zuhörer hängte an #dash-alerts, das es nicht mehr gibt.
+    if (action === 'go-attention') {
+      goToBatchesAttention(el.dataset.key);
+      return;
+    }
+    if (action === 'go-page') {
+      go(el.dataset.page, el.dataset.btn);
+      return;
+    }
     if (action === 'labgroup-toggle') {
       dashLabGroupOpen = !dashLabGroupOpen;
       renderDashBatchTasks();
@@ -22700,18 +22737,6 @@ function initEventListeners() {
     if (row) {
       this.classList.remove('open');
       goToBatch(row.dataset.wlBatch);
-    }
-  });
-  $('dash-alerts').addEventListener('click', function (e) {
-    const el = e.target.closest('[data-action]');
-    if (!el) return;
-    switch (el.dataset.action) {
-      case 'go-attention':
-        goToBatchesAttention(el.dataset.key);
-        break;
-      case 'go-page':
-        go(el.dataset.page, el.dataset.btn);
-        break;
     }
   });
   initDashCollapse();
