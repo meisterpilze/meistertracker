@@ -5,6 +5,14 @@
 // and a stand that measures those screens reports that the layout holds. It
 // held because there was nothing in it.
 //
+// 3. **Every name and address is invented.** This repository is public, and a
+//    real name beside a real street says where a particular person is on a
+//    particular day — that is not a measurement, it is a fact about
+//    somebody. The stand needs values that are LONG, not values that are true.
+//    The host, IP and token rules in leak-scan would pass such a fixture: an
+//    address is not a host, not an IP and not a token, so none of them looks.
+//    There is a separate rule for addresses.
+//
 // Two rules shape the fixture, and both are about width:
 //
 // 1. **The values are long on purpose.** A column is not too narrow for
