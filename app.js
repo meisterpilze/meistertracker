@@ -8311,7 +8311,6 @@ function sbGenId() {
 async function refreshSubstrateBatches(fromPayload) {
   const r = fromPayload || (await apiGet('/api/substrate-batches'));
   _sbList = Array.isArray(r) ? r : [];
-  renderSubstrateList();
   fillSubstrateSelect();
   renderSubstrateTab();
 }
@@ -8324,42 +8323,6 @@ function wkOpenMixes() {
   return (_sbList || []).filter((x) => x.status === 'open' && x.remainingKg > 0.0001);
 }
 
-function renderSubstrateList() {
-  const el = document.getElementById('sb-list');
-  if (!el) return;
-  const open = wkOpenMixes();
-  if (!open.length) {
-    el.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneOpen')) + '</div>';
-    return;
-  }
-  el.innerHTML =
-    '<table class="fs-meta" style="width:100%;border-collapse:collapse">' +
-    open
-      .map((s) => {
-        const pct = s.targetKg > 0 ? Math.max(0, Math.min(100, (s.remainingKg / s.targetKg) * 100)) : 0;
-        return (
-          '<tr style="border-top:1px solid var(--c-border)">' +
-          '<td style="padding:5px 8px 5px 0;font-family:monospace;font-weight:600">' +
-          esc(s.subId) +
-          '</td>' +
-          '<td style="padding:5px 8px 5px 0;color:var(--c-text-sec)">' +
-          esc(s.recipeLabel) +
-          '</td>' +
-          '<td style="padding:5px 8px 5px 0;white-space:nowrap">' +
-          s.remainingKg.toFixed(1) +
-          ' / ' +
-          s.targetKg.toFixed(0) +
-          ' kg</td>' +
-          '<td style="padding:5px 0;width:70px"><div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden">' +
-          '<div style="height:100%;border-radius:3px;background:var(--c-accent);width:' +
-          pct.toFixed(0) +
-          '%"></div></div></td>' +
-          '</tr>'
-        );
-      })
-      .join('') +
-    '</table>';
-}
 
 function fillSubstrateSelect() {
   const sel = document.getElementById('nb-substrate-batch');

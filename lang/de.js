@@ -256,8 +256,6 @@ window.LANG['de'] = {
   'sub.running': 'Ansatz wird angelegt…',
   'sub.done': '{id} angelegt — {kg} kg Substrat verfügbar.',
   'sub.failed': 'Fehlgeschlagen: {err}',
-  'sub.openMixes': 'Offene Ansätze',
-  'sub.noneOpen': 'Kein offener Ansatz. Oben einen anlegen.',
   'sub.fromMix': 'Aus Substrat-Ansatz',
   'sub.selectNone': '— kein Ansatz (Substrat einzeln buchen) —',
   'sub.mixComposition': 'Mischung des Ansatzes: {hw} % Pellets / {wb} % Kleie bei {rh} % Feuchte',
