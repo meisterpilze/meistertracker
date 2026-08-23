@@ -537,3 +537,64 @@ describe('the bridge, now that it is gone', () => {
     );
   });
 });
+
+// ── The type sizes themselves, not just the tokens ─────────────────────────
+// The tokens became rem in the commit before this one; these are the 177
+// declarations that were still writing their own px, and after them the
+// browser's font setting reaches the whole sheet rather than fourteen names.
+//
+// Worth stating what this does NOT prove: a rem value is not automatically the
+// right value. It proves the reader's setting is not thrown away, which is a
+// different and smaller claim than "the type scale is good".
+describe('the type sizes follow the reader, not the sheet', () => {
+  // @media print is a physical medium: 10px there is a tenth of an inch of
+  // paper, and a reader who set 20px in the browser would get a calendar that
+  // no longer fits the sheet. So it keeps px, deliberately, and the list of
+  // survivors below is what says so out loud.
+  const OHNE_DRUCK = (() => {
+    const { src } = maskedCss(CSS);
+    const p = src.indexOf('@media print');
+    if (p < 0) return src;
+    const open = src.indexOf('{', p);
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0)
+        return src.slice(0, p) + src.slice(p, i + 1).replace(/[^\n]/g, ' ') + src.slice(i + 1);
+    }
+    return src;
+  })();
+
+  const pxSizes = (text) =>
+    [...text.matchAll(/font-size\s*:\s*([^;}]+)/g)].map((m) => m[1].trim()).filter((v) => /\d(?:\.\d+)?px\b/.test(v));
+
+  it('writes no px font-size outside the print block, bar the anti-zoom rule', () => {
+    // 16px on a form control is not a type size, it is iOS Safari's zoom
+    // threshold — a fixed count of CSS pixels that does not move when the
+    // reader changes their font. It is the one honest px left.
+    const left = pxSizes(OHNE_DRUCK).filter((v) => v !== '16px !important');
+    assert.deepEqual(left, [], `${left.length} px font-size(s) are back: ${left.slice(0, 8).join(' · ')}`);
+  });
+
+  it('keeps the print block on px, because paper does not read a browser setting', () => {
+    const { src } = maskedCss(CSS);
+    const inPrint = pxSizes(src).length - pxSizes(OHNE_DRUCK).length;
+    assert.ok(inPrint >= 10, `only ${inPrint} px sizes left in @media print — did the block move or shrink?`);
+  });
+
+  it('lands every rem value back on the pixel it was converted from', () => {
+    // 13px is 0.8125rem, and 0.8125 × 16 is exactly 13. This is the guard on
+    // the conversion itself: a value that does not land on a size the sheet
+    // could have written means it was derived from a number that was never
+    // there, and the desktop moved by a fraction nobody asked for.
+    //
+    // Half pixels are allowed because six of them were already half pixels —
+    // 11.5px and 12.5px, the fractional sizes the :root comment calls out as
+    // "named where they are used". Allowing halves keeps those honest; allowing
+    // anything finer would let a 0.703125rem through and mean nothing.
+    const krumm = [...maskedCss(CSS).src.matchAll(/font-size\s*:\s*([^;}]+)/g)]
+      .flatMap((m) => [...m[1].matchAll(/(\d+(?:\.\d+)?)rem\b/g)].map((r) => Number(r[1])))
+      .filter((n) => Math.abs(n * 32 - Math.round(n * 32)) > 1e-9);
+    assert.deepEqual(krumm, [], `${krumm.length} rem value(s) land between pixels: ${krumm.join(', ')}`);
+  });
+});
