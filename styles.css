@@ -1996,28 +1996,25 @@ button {
   background: var(--c-primary-hover);
 }
 /* Die eine Handlung eines Abschnitts, über seinen Reitern.
-   Breit, höher und mit Symbol — nicht damit sie hübscher ist, sondern damit
-   sie nicht wie die Reiter darunter aussieht: die wechseln die Ansicht, dieser
-   Knopf öffnet einen Dialog, und als gleich große Pille in derselben Zeile war
-   das erst nach dem Tippen zu erkennen. Auf dem Telefon liegt sie so auch am
-   Daumen statt am Rand. */
-.btn-wide {
-  display: flex;
-  width: 100%;
-  justify-content: center;
+   Größer als ein gewöhnlicher Knopf durch Polsterung, Schrift und Symbol —
+   nicht durch Breite. Ein Knopf, der die Zeile ausfüllt, liest sich als Banner
+   und nicht als etwas zum Drücken, und volle Breite ist ohnehin keine Größe,
+   die jemand gewählt hat. Groß genug muss nur heißen: nicht zu verwechseln mit
+   den Reiter-Pillen darunter, die die Ansicht wechseln statt etwas anzulegen. */
+.btn-lead {
   gap: 8px;
-  padding: 11px 16px;
+  padding: 11px 20px;
   font-size: max(14px, var(--fs-min));
   font-weight: 600;
   margin-bottom: 10px;
 }
-@media (min-width: 769px) {
-  /* Am Schreibtisch wäre volle Breite ein sehr langer grüner Balken — groß
-     genug, um sich von den Reitern zu unterscheiden, reicht hier vollauf. */
-  .btn-wide {
-    width: auto;
-    min-width: 260px;
-  }
+/* Ein Formular ist so breit wie seine Felder, nicht so breit wie das Fenster.
+   Die beiden Karten, die das hier tragen, standen bis vor kurzem nebeneinander
+   in einem Zwei-Spalten-Raster und waren für dessen halbe Breite gebaut; als
+   das Raster wegfiel, erbten sie die ganze Zeile — vier kurze Felder über
+   1400px. Dieselbe Sache wie beim Knopf darüber und bei der Hinweiskarte davor. */
+.form-card {
+  max-width: 640px;
 }
 .btn-r {
   background: #fff5f5;

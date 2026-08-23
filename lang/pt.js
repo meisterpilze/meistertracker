@@ -944,7 +944,7 @@ window.LANG['pt'] = {
   'sub.recipe': 'Receita',
   'sub.targetKg': 'kg de substrato pronto',
   'sub.notes': 'Nota',
-  'sub.create': 'Criar preparação',
+  'sub.create': 'Novo substrato',
   'sub.pickBoth': 'Escolha a receita e a quantidade.',
   'sub.noRecipe': 'Esta espécie ainda não tem receita completa — faltam a humidade alvo e a proporção de gesso.',
   'sub.dryMix': 'Mistura seca',
