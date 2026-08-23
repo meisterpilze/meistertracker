@@ -255,9 +255,10 @@ describe('Die Vorgabezahl steht genau einmal da', () => {
   });
 
   it('lässt sie auf dem Telefon stehen', () => {
-    // Unter 769px zeigen sechs von sieben Tagen nur ihren Kopf (.wk-b wird
-    // ausgeblendet). Ohne die Zahl dort waere der Wochenüberblick auf dem Gerät,
-    // auf dem die App meistens läuft, eine Reihe blosser Themen.
+    // Unter 769px zeigt jeder der sieben Tage nur seinen Kopf (.wk-b wird
+    // ausgeblendet, der Arbeitszettel steht darunter). Ohne die Zahl dort waere
+    // der Wochenüberblick auf dem Gerät, auf dem die App meistens läuft, eine
+    // Reihe blosser Themen.
     assert.doesNotMatch(CSS, /@media \(max-width: 768px\)[\s\S]{0,400}\.wk-h-t \{\s*display: none;/);
     assert.match(
       CSS,
@@ -266,9 +267,74 @@ describe('Die Vorgabezahl steht genau einmal da', () => {
     );
   });
 
+  it('steht mit dem Arbeitszettel unter der Woche, nicht in einer Spalte', () => {
+    // Eine Spalte ist ein Siebtel der Karte, rund 170px. Der ganze Zettel stand
+    // darin: "Black..." statt der Sorte, "0,0 von 10,0" über drei Zeilen, und
+    // ein Knopf breiter als die Spalte, die ihn hielt. Auf dem Telefon fiel es
+    // nicht auf, weil die Spalte dort über alle sieben ging — zwei Layouts, von
+    // denen eines nie jemand angesehen hat.
+    const fn = hebeFunktion('renderDashBatchTasks', SRC);
+    assert.match(fn, /<div class="wk-open">/, 'der Tag hat keinen eigenen Platz');
+    assert.match(fn, /_weekDayBodyHtml\(week\[sel\], sel, sel === 0\)/);
+    assert.match(CSS, /\.wk-open \{[^}]*grid-column: 1 \/ -1;/, 'er nimmt nicht die ganze Breite');
+    assert.doesNotMatch(CSS, /\.wk-b\.sel \{\s*display: block;/, 'die Spalte klappt wieder selbst auf');
+  });
+
+  it('lässt die Spalten reine Übersicht sein', () => {
+    // Zweimal derselbe Tag übereinander wäre nur länger.
+    const fn = hebeFunktion('_weekColBodyHtml', SRC);
+    assert.match(fn, /_weekColPreviewHtml\(d\)/);
+    assert.doesNotMatch(fn, /_weekDayBodyHtml/, 'der Zettel steckt wieder in der Spalte');
+  });
+
   it('lässt die Fusszeile nicht leer zusammenfallen', () => {
     // Ist die Zahl ausgeblendet und der Tag hat kein Thema, bleibt die Zeile
     // sonst ohne Inhalt und die sieben Spalten bekommen verschiedene Höhen.
     assert.match(hebeFunktion('_weekHeadHtml', SRC), /\(short \? esc\(short\) : '&nbsp;'\)/);
+  });
+});
+
+// ── Woche oder Tag ──────────────────────────────────────────────────────────
+// Sieben Spalten sind eine Übersicht und ein Kompromiss: jede ist ein Siebtel
+// breit, und was darin steht, muss klein sein. Wer den Tag arbeitet, braucht
+// die Übersicht gerade nicht — dann fällt sie weg und der Tag bekommt die ganze
+// Karte. Kein "besseres" von beiden: am Montagmorgen will man die Woche sehen,
+// um halb vier will man wissen, was noch offen ist.
+describe('Woche oder Tag', () => {
+  it('merkt sich die Wahl über das Neuladen hinweg', () => {
+    // Eine Gewohnheit, keine Einstellung, die man täglich neu trifft.
+    assert.match(SRC, /localStorage\.getItem\('mp-dash-view'\)/);
+    assert.match(hebeFunktion('setDashView', SRC), /localStorage\.setItem\('mp-dash-view'/);
+  });
+
+  it('lässt in der Tagesansicht den Wochenstreifen weg', () => {
+    const fn = hebeFunktion('renderDashBatchTasks', SRC);
+    assert.match(fn, /nurTag\s*\r?\n?\s*\?\s*_dayNavHtml\(week, sel\)/);
+  });
+
+  it('gibt dem Tag dann einen anderen Weg zum nächsten', () => {
+    // Ohne den Streifen gäbe es sonst gar keinen — man säße auf einem Tag fest.
+    const fn = hebeFunktion('_dayNavHtml', SRC);
+    assert.match(fn, /data-action="dash-day"/);
+    assert.match(fn, /sel <= 0/, 'der Pfeil vor dem ersten Tag zeigt ins Leere');
+    assert.match(fn, /sel >= 6/, 'und der hinter dem letzten auch');
+  });
+
+  it('steckt den gewonnenen Platz in die Schrift', () => {
+    // Der ganze Sinn der Tagesansicht.
+    assert.match(CSS, /\.wk\.day-only \.wk-open \.fs-sm\.fs-sm \{\s*font-size: var\(--fs-base\)/);
+    assert.match(CSS, /\.wk\.day-only \.wk-open \.fs-xs\.fs-xs \{\s*font-size: var\(--fs-sm\)/);
+  });
+
+  it('lässt den Umschalter auch auf einer leeren Woche stehen', () => {
+    // Sonst fände man aus einer leeren Tagesansicht nicht zurück zur Woche.
+    const fn = hebeFunktion('renderDashBatchTasks', SRC);
+    const i = fn.indexOf('dash.noUrgent');
+    assert.ok(i > 0, 'der leere Zweig ist fort');
+    assert.match(fn.slice(Math.max(0, i - 400), i), /_dashViewToggleHtml/);
+  });
+
+  it('gibt den Umschaltknöpfen eine Tippfläche', () => {
+    assert.match(CSS, /\.wk-view-btn \{[^}]*min-height: var\(--tap-sm\);/);
   });
 });
