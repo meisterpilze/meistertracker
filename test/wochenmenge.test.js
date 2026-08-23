@@ -283,7 +283,7 @@ describe('Die Vorgabezahl steht genau einmal da', () => {
   it('lässt die Spalten reine Übersicht sein', () => {
     // Zweimal derselbe Tag übereinander wäre nur länger.
     const fn = hebeFunktion('_weekColBodyHtml', SRC);
-    assert.match(fn, /_weekColPreviewHtml\(d\)/);
+    assert.match(fn, /_weekColPreviewHtml\(d, sel\)/);
     assert.doesNotMatch(fn, /_weekDayBodyHtml/, 'der Zettel steckt wieder in der Spalte');
   });
 
@@ -363,5 +363,35 @@ describe('Was in einer Spalte gezählt steht', () => {
     const chips = fn.indexOf('_choreChipHtml(c)');
     const knopf = fn.indexOf('wk-counts');
     assert.ok(chips > 0 && knopf > chips, 'die Aufgaben stehen im Zählknopf');
+  });
+});
+
+describe('Der Tag, der schon offen ist', () => {
+  it('bekommt keinen Knopf, den zu drücken nichts täte', () => {
+    // Der offene Tag steht ausführlich unter dem Streifen. Seine Zählung dort
+    // anzutippen hiess, ihn ein zweites Mal zu öffnen — ein Neuaufbau, der
+    // exakt dasselbe zeichnete. Wieder ein Feld, das gedrückt wird und nichts
+    // tut, nur diesmal, weil es schon getan war.
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    assert.match(fn, /offen\s*\r?\n?\s*\?\s*'<div class="wk-counts fs-xs is-open">/);
+    assert.match(
+      hebeFunktion('_weekColBodyHtml', SRC),
+      /_weekColPreviewHtml\(d, sel\)/,
+      'die Vorschau erfährt gar nicht, ob ihr Tag offen ist'
+    );
+  });
+
+  it('sieht dann auch nicht mehr wie ein Knopf aus', () => {
+    // Ein Zeiger und ein Aufleuchten unter der Maus versprechen sonst etwas,
+    // das bereits geschehen ist.
+    assert.match(CSS, /\.wk-counts\.is-open \{\s*cursor: default;/);
+    assert.match(CSS, /\.wk-counts\.is-open:hover \{\s*background: none;/);
+  });
+
+  it('behält seine Zählung trotzdem', () => {
+    // Ohne sie wäre die Spalte des gearbeiteten Tages die einzige leere.
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    assert.match(fn, /if \(zeilen\) \{/);
+    assert.doesNotMatch(fn, /if \(offen\) return html;/, 'die offene Spalte fällt leer aus');
   });
 });

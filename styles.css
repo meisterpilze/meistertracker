@@ -2654,6 +2654,15 @@ tr:hover td {
 .wk-counts:hover {
   background: var(--c-bg);
 }
+/* Der Tag, der schon offen ist: dieselbe Zählung, aber nichts zu drücken. Ein
+   Zeiger und ein Aufleuchten unter der Maus versprechen sonst etwas, das
+   bereits geschehen ist. */
+.wk-counts.is-open {
+  cursor: default;
+}
+.wk-counts.is-open:hover {
+  background: none;
+}
 .wk-count {
   display: flex;
   align-items: baseline;
