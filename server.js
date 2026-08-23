@@ -10705,6 +10705,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Lab Thresholds --
+  if (req.method === 'POST' && req.url === '/api/week-goal') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const saved = db.updateWeekGoal(database, data.weekBagGoal, data.bagCountFrom);
+        log('info', 'Week goal updated', { actor: req.authUser.username });
+        broadcastSSE(res);
+        jsonOk(res, saved);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/lab-thresholds') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {

@@ -3885,6 +3885,36 @@ tr:hover td {
   margin-right: 6px;
   flex: none;
 }
+/* Eine Woche je Zeile: Nummer, Zeitraum, Balken, Zahl gegen Ziel, Ampel.
+   Dieselben Bausteine wie die Sorten- und Labor-Kacheln — .sbar für den Balken,
+   .sup für die Ampel — damit "geschafft" hier aussieht wie "Bestand reicht"
+   dort und nicht wie eine neue Sprache. */
+.goal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--c-border-light);
+  font-size: max(11px, var(--fs-min));
+}
+.goal-wk {
+  font-weight: 600;
+  flex: none;
+  min-width: 48px;
+}
+.goal-span {
+  color: var(--c-text-muted);
+  flex: none;
+  min-width: 92px;
+}
+.goal-bar {
+  flex: 1;
+  min-width: 40px;
+}
+.goal-n {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
 .lab-rows {
   display: flex;
   flex-direction: column;
