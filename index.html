@@ -451,7 +451,17 @@
          list stays defined in one place instead of seven hardcoded selects. -->
     <div class="modal-bg" id="m-rhythm" role="dialog" aria-modal="true" aria-labelledby="rhythm-title" hidden>
       <div class="modal">
-        <h3 id="rhythm-title" data-i18n="rhythm.title">Wochenrhythmus</h3>
+        <!-- Das X oben, weil der Weg hinaus sonst unten liegt: sieben Wochentage
+             mit Menge, Sorte und Notiz sind höher als ein Telefonschirm, und um
+             abzubrechen musste man erst durch das ganze Fenster scrollen. -->
+        <div class="wkf-head">
+          <h3 id="rhythm-title" data-i18n="rhythm.title">Wochenrhythmus</h3>
+          <button id="rhythm-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
         <p class="fs-meta" id="rhythm-hint" style="color: var(--c-text-muted); margin: 0 0 10px"></p>
         <div id="rhythm-rows"></div>
         <!-- Die Wochenmenge. Gedacht wird in "70 die Woche", eingetragen werden
