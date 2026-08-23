@@ -4175,9 +4175,18 @@ tr:hover td {
 .ms-prog input {
   width: auto;
   margin: 0;
-  /* Coarse pointers get a real target; the row is tapped in a grow room. */
-  min-width: 20px;
-  min-height: 20px;
+  /* Der Schalter ist die Tippfläche, nicht das Label darum: Das Label ist
+     `inline-flex` und genau so hoch wie sein Inhalt, also hilft es nicht.
+     20 px stand hier mit dem Kommentar „coarse pointers get a real target" —
+     das war 20, und die Marken sind 24 (Maus, WCAG 2.5.8 AA) und 44 (Finger).
+     Gemessen vom Messstand über das ganze Band auf beiden Achsen; der
+     Kommentar hat eine Absicht beschrieben und keine Zahl geprüft.
+
+     `--tap-sm-min` und nicht `--tap-min`: Das ist die 48er-Marke für Chrom,
+     das auf jedem Bildschirm mitfährt, nicht die 56er für eine Feld-Fläche.
+     Am Rechner sind es 24 px, in der Hand 48. */
+  min-width: max(20px, var(--tap-sm-min));
+  min-height: max(20px, var(--tap-sm-min));
 }
 tr.ms-off td {
   opacity: 0.6;
