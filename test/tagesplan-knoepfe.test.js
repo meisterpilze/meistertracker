@@ -193,11 +193,71 @@ describe('Der Bestand an Körnerbrut', () => {
 // schob sie ans Ende — hinter eine Klappe, die zu ist, an genau den vollen Tagen,
 // an denen sie zählen. Sie sind keine Stationen des Rundgangs, sondern das, was
 // davor anzufangen ist.
-describe('Wo die abgeleiteten Zeilen im Tag stehen', () => {
-  it('sortiert sie vor die Zonen, nicht hinter alles', () => {
-    const src = SRC.slice(SRC.indexOf('function _weekDayBodyHtml'));
-    const rank = src.slice(src.indexOf('const rank ='), src.indexOf('const openKey'));
-    assert.match(rank, /kind === 'supply' \|\| it\.kind === 'labmin'/, 'die beiden Arten müssen benannt sein');
-    assert.match(rank, /\?\s*-1/, 'und vor jede Zone sortieren, sonst schneidet DASH_DAY_CAP sie weg');
+// Kennt die Tabelle jede Zeilenart, die der Tagesplan wirklich erzeugt?
+//
+// Das ist die eigentliche Lehre aus diesem Umbau. Es gab vier Leitern ueber
+// dieselben Arten — die Reihenfolge auf dem Schirm, die ueber die Klappe, der
+// Nenner des Fortschrittsbalkens, der Knopf — und eine neue Art musste in alle
+// vier. 'labgroup' kam in drei an. In rank() nicht, fiel damit auf 999 und
+// wurde als Erstes von der Sechs-Zeilen-Klappe verdeckt: die Zusammenfassung,
+// die eigens dagegen erfunden war. Kein Test, kein Fehler, nichts.
+//
+// Statt vier Leitern gibt es eine Tabelle. Dieser Test liest die Arten aus dem
+// Erzeuger und haelt sie dagegen, damit eine neue Art nicht still danebenfaellt.
+describe('Jede Zeilenart steht in der Tabelle', () => {
+  const tabelle = () => new Function(hebeKonstante('PLAN_KINDS') + String.fromCharCode(10) + 'return PLAN_KINDS;')();
+
+  // Was buildWeekPlan() tatsaechlich in den Tag legt.
+  function erzeugteArten() {
+    const fn = SRC.slice(SRC.indexOf('function buildWeekPlan'));
+    const rumpf = fn.slice(0, fn.indexOf(String.fromCharCode(10) + '}'));
+    const arten = new Set([...rumpf.matchAll(/kind: '([a-z]+)'/g)].map((m) => m[1]));
+    // Eine Zeile waehlt ihre Art zur Laufzeit: inoculate -> grain, sonst fruiting.
+    for (const m of rumpf.matchAll(/kind: [^,]*\?\s*'([a-z]+)'\s*:\s*'([a-z]+)'/g)) {
+      arten.add(m[1]);
+      arten.add(m[2]);
+    }
+    return [...arten].sort();
+  }
+
+  it('kennt jede Art, die der Erzeuger in den Tag legt', () => {
+    const bekannt = tabelle();
+    const fehlend = erzeugteArten().filter((a) => !bekannt[a]);
+    assert.deepEqual(fehlend, [], 'diese Arten fallen durch jede Abfrage und schweigen dabei');
+  });
+
+  it('fuehrt keine Art, die niemand mehr erzeugt', () => {
+    // Andersherum genauso: eine Zeile fuer etwas, das es nicht gibt, liest sich
+    // beim naechsten Mal wie eine Zusage.
+    const erzeugt = erzeugteArten();
+    const tot = Object.keys(tabelle()).filter((a) => !erzeugt.includes(a));
+    assert.deepEqual(tot, [], 'diese Arten stehen in der Tabelle und werden nie gebaut');
+  });
+
+  it('gibt jeder Art alle vier Angaben', () => {
+    // Eine fehlende Spalte ist derselbe stille Ausfall wie eine fehlende Zeile.
+    for (const [art, e] of Object.entries(tabelle())) {
+      assert.ok(typeof e.cat === 'string' && e.cat, art + ': keine Kategorie');
+      assert.ok(e.rank === null || typeof e.rank === 'number', art + ': kein Rang');
+      assert.equal(typeof e.counts, 'boolean', art + ': zaehlt-mit fehlt');
+      assert.equal(typeof e.btn, 'string', art + ': kein Knopf');
+    }
+  });
+
+  it('sortiert alles Abgeleitete vor den Rundgang und zaehlt es nicht mit', () => {
+    // Die zwei Eigenschaften haengen zusammen: eine Zeile, die sich nicht
+    // abhaken laesst, gehoert nicht in den Nenner — und weil sie keine Zone
+    // hat, braucht sie einen eigenen Rang, sonst frisst die Klappe sie.
+    for (const [art, e] of Object.entries(tabelle())) {
+      if (e.counts) continue;
+      assert.ok(e.rank != null && e.rank < 0, art + ': abgeleitet, aber ohne eigenen Rang vor dem Rundgang');
+    }
+  });
+
+  it('nennt nur Kategorien, die der Tag auch zeichnet', () => {
+    const cats = new Function(hebeKonstante('PLAN_CATS') + String.fromCharCode(10) + 'return PLAN_CATS;')();
+    for (const [art, e] of Object.entries(tabelle())) {
+      assert.ok(cats.includes(e.cat), art + ': Kategorie ' + e.cat + ' steht in keiner PLAN_CATS');
+    }
   });
 });

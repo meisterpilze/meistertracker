@@ -5439,14 +5439,53 @@ function rhythmCountsFrom() {
 function rhythmArrears(today) {
   const cut = _ymd(today);
   const ab = rhythmCountsFrom();
-  return rhythmTasks
+  const geplant = rhythmTasks
     .filter((x) => x.date < cut && x.targetQty && (!ab || x.date >= ab))
-    .map((x) => {
-      const done = rhythmMadeOn(x.date, x.theme);
-      return Object.assign({}, x, { doneQty: done, outstanding: x.targetQty - done });
-    })
-    .filter((x) => x.outstanding > 0)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (!geplant.length) return [];
+
+  // Ein Tag wird von der Arbeit bezahlt, die an ihm ODER SPÄTER getan wurde.
+  //
+  // Vorher zählte jeder Tag nur, was an genau diesem Datum entstand. Der Plan
+  // sagt "montags 36 Substrat", gemacht wird es am Donnerstag — also stand der
+  // Montag auf 36 offen, während in derselben Woche 70 Blöcke entstanden waren,
+  // und blieb dort. Genau die Dauerwarnung, gegen die alles hier geschrieben
+  // ist, nur eine Ebene höher: erst wurde das Melden abgeschafft, und dann
+  // half das Zählen nicht, weil es am falschen Tag suchte.
+  //
+  // Ein Tag ist eine Vorgabe, kein Termin. Also ein laufendes Konto je Thema:
+  // Produktion zahlt die älteste offene Vorgabe zuerst, und was übrig bleibt,
+  // steht für die nächste bereit. Wer am Donnerstag 70 macht, hat den Montag
+  // erledigt, und niemand muss das irgendwo eintragen.
+  //
+  // Nur vorwärts: Arbeit von vor einer Vorgabe zahlt sie nicht. Sonst hätte
+  // eine gute Vorwoche eine schlechte Woche im Voraus entschuldigt.
+  const idx = _rhythmMadeIndex();
+  const rest = new Map(geplant.map((t) => [t.date, t.targetQty]));
+  const themen = {};
+  for (const t of geplant) (themen[t.theme] = themen[t.theme] || []).push(t);
+
+  for (const [theme, liste] of Object.entries(themen)) {
+    const tage = [...new Set([...liste.map((t) => t.date), ...idx.keys()])]
+      .filter((d) => d >= liste[0].date && d < cut)
+      .sort();
+    let guthaben = 0;
+    let i = 0;
+    for (const d of tage) {
+      guthaben += (idx.get(d) || {})[theme] || 0;
+      while (i < liste.length && liste[i].date <= d && guthaben > 0) {
+        const offen = rest.get(liste[i].date);
+        const zahlung = Math.min(offen, guthaben);
+        rest.set(liste[i].date, offen - zahlung);
+        guthaben -= zahlung;
+        if (rest.get(liste[i].date) <= 0) i++;
+      }
+    }
+  }
+
+  return geplant
+    .map((t) => Object.assign({}, t, { doneQty: t.targetQty - rest.get(t.date), outstanding: rest.get(t.date) }))
+    .filter((t) => t.outstanding > 0);
 }
 // The recipe behind the plan, for the day that is actually open. Empty when no
 // Sorte is chosen or that Sorte carries no substrate recipe.
@@ -5839,9 +5878,11 @@ function todayProgress(todayItems) {
   // the stock changes, never by being ticked, and counting them in the
   // denominator made a finished day read 5/8. They are work, but they are not
   // work this bar can measure.
-  const countable = todayItems.filter(
-    (it) => it.kind !== 'supply' && it.kind !== 'labmin' && it.kind !== 'labgroup' && it.kind !== 'alert'
-  );
+  // Abgeleitete Zeilen zählen nicht mit — welche das sind, sagt PLAN_KINDS.
+  const countable = todayItems.filter((it) => {
+    const k = planKind(it);
+    return k ? k.counts : true;
+  });
   return { done, total: done + countable.length };
 }
 // The editor works on a draft rather than straight off the DOM. Changing a
@@ -6171,16 +6212,46 @@ const PLAN_CAT_COLOR = {
   harvest: 'var(--c-amber-dark)',
   other: 'var(--c-text-muted)'
 };
+// Was eine Zeilenart ist, an einer Stelle.
+//
+// Es gab vier Leitern über dieselben neun Arten: planCategory() für die
+// Reihenfolge auf dem Schirm, rank() für die über die Klappe, todayProgress()
+// für den Nenner des Fortschrittsbalkens und _planBtn() für den Knopf. Eine
+// neue Art hieß: vier Stellen ändern, und jede vergessene schweigt.
+//
+// Genau das ist passiert. 'labgroup' kam in drei der vier an und nicht in
+// rank(), fiel damit auf 999 und wurde als Erstes von der Sechs-Zeilen-Klappe
+// verdeckt — die Zusammenfassung, die eigens dafür erfunden war, dass die
+// Klappe den Rundgang nicht frisst. Nichts hat gemeckert.
+//
+// Eine Zeile je Art, vier Spalten:
+//
+//   cat     wohin auf dem Schirm (PLAN_CATS gibt die Reihenfolge)
+//   rank    wer die Klappe überlebt; kleiner ist weiter vorn, null heißt
+//           "nach dem Rundgang einsortieren, nach Zone"
+//   counts  zählt im Fortschrittsbalken mit
+//   btn     welcher Knopf rechts steht ('' = der allgemeine "Ansehen")
+//
+// counts:false für alles Abgeleitete: solche Zeilen verschwinden, wenn sich der
+// Bestand ändert, nie durch Abhaken. Sie in den Nenner zu nehmen hieße, einen
+// fertigen Tag als 5/8 zu zeigen.
+const PLAN_KINDS = {
+  alert: { cat: 'alert', rank: -10, counts: false, btn: 'alert' },
+  supply: { cat: 'create', rank: -1, counts: false, btn: 'supply' },
+  labmin: { cat: 'create', rank: -1, counts: false, btn: 'labmin' },
+  labgroup: { cat: 'create', rank: -1, counts: false, btn: 'labgroup' },
+  grain: { cat: 'create', rank: null, counts: true, btn: 'task' },
+  fruiting: { cat: 'move', rank: null, counts: true, btn: 'task' },
+  harvest: { cat: 'harvest', rank: null, counts: true, btn: 'harvest' },
+  manual: { cat: 'other', rank: null, counts: true, btn: 'manual' },
+  left: { cat: 'other', rank: null, counts: true, btn: '' }
+};
+function planKind(it) {
+  return (it && PLAN_KINDS[it.kind]) || null;
+}
 function planCategory(it) {
-  // A supply gap is answered by making something, so it counts with the other
-  // create work rather than falling into "other", where a row nobody
-  // categorised goes to be ignored.
-  if (it.kind === 'alert') return 'alert';
-  if (it.kind === 'supply' || it.kind === 'labmin' || it.kind === 'labgroup') return 'create';
-  if (it.kind === 'grain') return 'create';
-  if (it.kind === 'fruiting') return 'move';
-  if (it.kind === 'harvest') return 'harvest';
-  return 'other';
+  const k = planKind(it);
+  return k ? k.cat : 'other';
 }
 function countByCategory(items) {
   const c = {};
@@ -6306,18 +6377,14 @@ function _weekDayBodyHtml(d, off, isToday) {
   // that is collapsed by default, on exactly the busy days they matter most.
   // They are not stops on the walk; they are what to start before setting off.
   // So they go first, and the six-row cap below can no longer reach past them.
-  const rank = (it) =>
-    it.kind === 'alert'
-      ? -10 + ((it.task && it.task.rang) || 0)
-      : // 'labgroup' vertritt die labmin-Zeilen und muss dorthin, wo sie
-        // stünden. Ohne diesen Zweig fiel es auf 999 und wurde als Erstes von
-        // der Sechs-Zeilen-Klappe verdeckt — die Zusammenfassung, die genau
-        // dafür erfunden wurde, dass die Klappe den Rundgang nicht frisst.
-        it.kind === 'supply' || it.kind === 'labmin' || it.kind === 'labgroup'
-        ? -1
-        : it.zone && order[it.zone] != null
-          ? order[it.zone]
-          : 999;
+  // Aus PLAN_KINDS, nicht aus einer eigenen Leiter. Eine Art mit rank null
+  // sortiert sich nach dem Rundgang ein, also nach ihrer Zone; die Hinweise
+  // tragen noch ihren eigenen Rang, damit Bestand vor Kapazität steht.
+  const rank = (it) => {
+    const k = planKind(it);
+    if (k && k.rank != null) return k.rank + (it.kind === 'alert' ? (it.task && it.task.rang) || 0 : 0);
+    return it.zone && order[it.zone] != null ? order[it.zone] : 999;
+  };
   const items = [...d.items].sort((a, b) => rank(a) - rank(b));
   const openKey = 'day' + off;
   const full = !!_dashRoomOpen[openKey];

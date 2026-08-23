@@ -219,6 +219,59 @@ describe('Was noch offen ist', () => {
     assert.equal(r[0].outstanding, 16, '36 gewollt, 20 gemacht');
   });
 
+  it('schließt einen Montag mit Arbeit, die erst am Donnerstag getan wurde', () => {
+    // Die Lage dieses Betriebs, genau so: montags 36 Substrat geplant, gemacht
+    // wurden 38 am Donnerstag und 32 am Freitag. Vorher blieb der Montag auf
+    // "noch 36 offen" stehen, während in derselben Woche 70 Blöcke entstanden
+    // — der Plan sagt einen Tag, gearbeitet wird, wenn es passt.
+    const r = offen({
+      heute: '2026-08-23',
+      aufgaben: [{ date: '2026-08-17', weekday: 1, theme: 'substrate', targetQty: 36 }],
+      batches: [
+        { created: '2026-08-20T08:04:00', qty: 38, batchType: 'block' },
+        { created: '2026-08-21T08:06:00', qty: 32, batchType: 'block' }
+      ]
+    });
+    assert.deepEqual(r, [], 'am Donnerstag gemacht ist gemacht');
+  });
+
+  it('bezahlt die älteste Vorgabe zuerst und reicht den Rest weiter', () => {
+    // Zwei Montage zu 36, dazwischen nichts, dann 70 an einem Tag: der erste
+    // ist ganz bezahlt, der zweite bis auf zwei.
+    const r = offen({
+      heute: '2026-08-23',
+      aufgaben: [
+        { date: '2026-08-10', weekday: 1, theme: 'substrate', targetQty: 36 },
+        { date: '2026-08-17', weekday: 1, theme: 'substrate', targetQty: 36 }
+      ],
+      batches: [{ created: '2026-08-20T08:04:00', qty: 70, batchType: 'block' }]
+    });
+    assert.equal(r.length, 1);
+    assert.equal(r[0].date, '2026-08-17');
+    assert.equal(r[0].outstanding, 2, '72 geplant, 70 gemacht');
+  });
+
+  it('lässt Arbeit von VOR einer Vorgabe sie nicht bezahlen', () => {
+    // Sonst entschuldigte eine gute Vorwoche eine schlechte Woche im Voraus.
+    const r = offen({
+      heute: '2026-08-23',
+      aufgaben: [{ date: '2026-08-17', weekday: 1, theme: 'substrate', targetQty: 36 }],
+      batches: [{ created: '2026-08-14T08:00:00', qty: 90, batchType: 'block' }]
+    });
+    assert.equal(r.length, 1, 'der Freitag davor zählt nicht für den Montag danach');
+    assert.equal(r[0].outstanding, 36);
+  });
+
+  it('hält die Themen auseinander', () => {
+    // Körner bezahlen keinen Substrattag.
+    const r = offen({
+      heute: '2026-08-23',
+      aufgaben: [{ date: '2026-08-17', weekday: 1, theme: 'substrate', targetQty: 36 }],
+      batches: [{ created: '2026-08-20T08:00:00', qty: 90, batchType: 'grain' }]
+    });
+    assert.equal(r[0].outstanding, 36);
+  });
+
   it('lässt alles vor dem Startdatum aus', () => {
     // Der 10.08. liegt vor der Inbetriebnahme. Daran ist nichts nachzuholen,
     // und eine Zeile, die das jeden Tag verlangt, ist nur Lärm.
