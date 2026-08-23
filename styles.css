@@ -1611,6 +1611,17 @@ summary.fs-meta {
   display: flex;
   align-items: center;
 }
+/* The two steps at the top of the ladder, added on 2026-08-23 for the inline
+   sizes in app.js. 13px and 15px are the two commonest numbers there by a long
+   way -- 26 and 8 of the 44 -- and both are already a mark's desktop value, so
+   the class changes nothing on a desk and gives the phone the 15 and 17 the
+   token layer decided on. */
+.fs-sm.fs-sm {
+  font-size: var(--fs-sm);
+}
+.fs-base.fs-base {
+  font-size: var(--fs-base);
+}
 .fs-meta.fs-meta {
   font-size: var(--fs-meta);
 }

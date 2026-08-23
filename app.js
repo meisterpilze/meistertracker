@@ -1532,7 +1532,7 @@ function renderOrdersMapping() {
             .map(
               (it) =>
                 `<div class="oh-maprow">${_ohChannel(it.channel)}` +
-                `<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
+                `<div style="flex:1;min-width:0"><div class="fs-sm" style="font-weight:600">${esc(it.title || it.channelSku || it.listingId || '—')}</div>` +
                 `<div class="muted fs-xs" style="font-family:monospace">${esc(it.channelSku || it.listingId || '')} · ${it.qty || 0}×</div></div>` +
                 `<select class="oh-mapsel fs-meta" data-channel="${esc(it.channel)}" data-sku="${esc(it.channelSku || '')}" data-listing="${esc(it.listingId || '')}" data-title="${esc(it.title || '')}" style="width:auto">` +
                 `<option value="">— ${esc(t('orders.choose'))} —</option>${opts}</select>` +
@@ -4920,15 +4920,15 @@ function renderWorkList() {
           .map(
             (it) =>
               `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px 8px 14px;border-bottom:0.5px solid var(--c-border)">` +
-              `<span style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.zoneName)}</span>` +
-              `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
+              `<span class="fs-sm" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.zoneName)}</span>` +
+              `<span class="fs-floor" style="--fs-own:0.875rem;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
               `</div>`
           )
           .join('');
         return (
           `<div data-wl-batch="${esc(g.batchId)}" style="margin-bottom:14px;cursor:pointer">` +
           `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 4px;border-bottom:2px solid var(--c-border)">` +
-          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:monospace;font-size:13px;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span class="fs-meta" style="color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
+          `<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="fs-sm" style="font-family:monospace;font-weight:700">${esc(g.batchId)}</span>${g.sub ? `<span class="fs-meta" style="color:var(--c-text-sec)"> · ${esc(g.sub)}</span>` : ''}</span>` +
           `<span class="fs-meta" style="color:var(--c-text-muted);white-space:nowrap">${g.bags} ${bags}</span></div>` +
           zoneRows +
           `</div>`
@@ -4938,15 +4938,15 @@ function renderWorkList() {
         .map(
           (it) =>
             `<div data-wl-batch="${esc(it.batchId)}" style="display:flex;align-items:center;gap:10px;padding:10px 6px;border-bottom:0.5px solid var(--c-border);cursor:pointer">` +
-            `<span style="font-family:monospace;font-size:13px;font-weight:600">${esc(it.batchId)}</span>` +
+            `<span class="fs-sm" style="font-family:monospace;font-weight:600">${esc(it.batchId)}</span>` +
             `<span class="fs-meta" style="flex:1;min-width:0;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</span>` +
-            `<span style="font-size:14px;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
+            `<span class="fs-floor" style="--fs-own:0.875rem;font-weight:600;white-space:nowrap">${it.count} ${bags}</span>` +
             `</div>`
         )
         .join('');
       return (
         '<div style="margin-bottom:14px">' +
-        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span style="font-size:13px;font-weight:700">${esc(g.name)}</span><span class="fs-meta" style="color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px;border-bottom:2px solid var(--c-border)"><span class="fs-sm" style="font-weight:700">${esc(g.name)}</span><span class="fs-meta" style="color:var(--c-text-muted)">${g.bags} ${bags}</span></div>` +
         batchRows +
         '</div>'
       );
@@ -4970,6 +4970,10 @@ function printWorkList() {
         `<tr><td class="c">&#9744;</td><td>${esc(it.zoneName)}</td><td class="m">${esc(it.batchId)}</td><td>${esc(it.species)}${it.strain ? ' · ' + esc(it.strain) : ''}</td><td class="n">${it.count}</td></tr>`
     )
     .join('');
+  // px-auf-papier: a whole print document of its own, opened in a new window
+  // and sent to a printer. Its sizes are physical -- 13px in that table is an
+  // eighth of an inch of paper -- and a reader's browser font setting has no
+  // business changing how many rows fit on a sheet.
   const html =
     '<!doctype html><html><head><meta charset="utf-8"><title>' +
     esc(d.title) +
@@ -5910,7 +5914,7 @@ function _renderRhythmRows() {
           '" style="width:100%;padding:4px" /></div>';
     return (
       '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
-      '<span style="width:38px;flex-shrink:0;font-size:13px">' +
+      '<span class="fs-sm" style="width:38px;flex-shrink:0">' +
       esc(t('rhythm.day.' + d)) +
       '</span><select data-rhythm-day="' +
       d +
@@ -6025,7 +6029,7 @@ function renderDashBatchTasks() {
   const hasRhythm = Object.keys(weekRhythm).length > 0;
   if (!anyWork && !hasRhythm) {
     el.innerHTML =
-      '<div class="empty" style="padding:12px;text-align:center;color:var(--c-text-muted);font-size:13px">' +
+      '<div class="empty fs-sm" style="padding:12px;text-align:center;color:var(--c-text-muted)">' +
       esc(t('dash.noUrgent')) +
       '</div>' +
       _rhythmEditLink();
@@ -6099,7 +6103,7 @@ function _weekHeadHtml(d, off, sel) {
     '</span>' +
     // The date, never conditional and never a placeholder — it is the one thing
     // a day column always has.
-    '<span style="display:block;font-size:13px;font-weight:700;letter-spacing:-0.3px;color:' +
+    '<span class="fs-sm" style="display:block;font-weight:700;letter-spacing:-0.3px;color:' +
     (isToday || sel ? 'var(--c-green-dark)' : 'var(--c-text)') +
     '">' +
     d.date.getDate() +
@@ -7557,29 +7561,32 @@ function renderZoneCheck() {
       const on = _zcFound.has(bagId);
       return (
         `<div data-zc-bag="${esc(bagId)}" style="display:flex;align-items:center;gap:10px;padding:11px 8px;border-bottom:0.5px solid var(--c-border);cursor:pointer;${on ? 'opacity:.5' : ''}">` +
-        `<span style="width:22px;height:22px;flex:none;border-radius:6px;border:2px solid ${on ? 'var(--c-primary,#16a34a)' : 'var(--c-border)'};background:${on ? 'var(--c-primary,#16a34a)' : 'transparent'};color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700">${on ? '✓' : ''}</span>` +
-        `<span style="font-family:monospace;font-size:13px;font-weight:600;${on ? 'text-decoration:line-through' : ''}">${esc(bagId)}</span>` +
+        `<span class="fs-floor" style="width:22px;height:22px;flex:none;border-radius:6px;border:2px solid ${on ? 'var(--c-primary,#16a34a)' : 'var(--c-border)'};background:${on ? 'var(--c-primary,#16a34a)' : 'transparent'};color:#fff;display:grid;place-items:center;--fs-own:0.875rem;font-weight:700">${on ? '✓' : ''}</span>` +
+        `<span class="fs-sm" style="font-family:monospace;font-weight:600;${on ? 'text-decoration:line-through' : ''}">${esc(bagId)}</span>` +
         `<span class="fs-meta" style="flex:1;min-width:0;color:var(--c-text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.batchId || '')}</span>` +
         `</div>`
       );
     })
     .join('');
   const missing = expected.length - _zcFound.size;
+  // The size lives on a class at each use rather than in this string: an
+  // inline font-size beats every rule in the sheet, and the scan button next
+  // to these wants the step above.
   const btn =
-    'flex:1;min-width:130px;padding:11px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--c-border)';
+    'flex:1;min-width:130px;padding:11px;border-radius:10px;font-weight:600;cursor:pointer;border:1px solid var(--c-border)';
   // Scanning is the primary way to work through a zone; tapping rows is the
   // fallback for a bag whose label won't read.
-  const scanBtn = `<button type="button" data-zc-act="scan" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;font-size:15px;padding:13px">📷 ${esc(t('zoneCheck.scanBtn'))}</button>`;
+  const scanBtn = `<button type="button" data-zc-act="scan" class="fs-base" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;padding:13px">📷 ${esc(t('zoneCheck.scanBtn'))}</button>`;
   const missingBtns =
     _zcMode === 'culture'
-      ? `<button type="button" data-zc-act="used" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>`
-      : `<button type="button" data-zc-act="move" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
-        `<button type="button" data-zc-act="remove" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
+      ? `<button type="button" data-zc-act="used" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>`
+      : `<button type="button" data-zc-act="move" class="fs-sm" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
+        `<button type="button" data-zc-act="remove" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
   document.getElementById('zc-foot').innerHTML =
     scanBtn +
     (missing
       ? missingBtns
-      : `<div style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`);
+      : `<div class="fs-sm" style="flex:1;text-align:center;padding:10px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`);
 }
 // A culture scanned during a lab check is physically on the shelf: tick it off,
 // and if the records had already written it off (aufgebraucht/kontaminiert),
@@ -7931,7 +7938,7 @@ function inocRender(prefix) {
     chips.innerHTML = _inoc
       .map(
         (x) =>
-          `<span class="fs-xs" style="display:inline-flex;align-items:center;gap:5px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(x.id)}<button type="button" data-action="inoc-drop" data-id="${esc(x.id)}" style="border:0;background:none;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
+          `<span class="fs-xs" style="display:inline-flex;align-items:center;gap:5px;font-family:monospace;background:var(--c-bg);border:1px solid var(--c-border);border-radius:5px;padding:2px 4px 2px 7px">${esc(x.id)}<button type="button" data-action="inoc-drop" data-id="${esc(x.id)}" class="fs-sm" style="border:0;background:none;cursor:pointer;line-height:1;padding:0 3px;color:var(--c-text-muted)">✕</button></span>`
       )
       .join('');
   const sel = document.getElementById(prefix + '-inoc-pick');
@@ -8469,7 +8476,7 @@ async function sbPreview() {
   const mm = Math.floor(_secs / 60);
   const ss = String(_secs % 60).padStart(2, '0');
   out.innerHTML =
-    '<table style="font-size:13px;border-collapse:collapse">' +
+    '<table class="fs-sm" style="border-collapse:collapse">' +
     row(t('sub.dryMix'), m.dryKg, 'kg') +
     row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
     row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
@@ -8817,7 +8824,7 @@ async function openSubstrateInfo(subId) {
     '<div class="fs-meta" style="font-weight:600;margin-bottom:4px">' +
     esc(t('sub.howMade')) +
     '</div>' +
-    '<table style="font-size:13px;border-collapse:collapse;margin-bottom:10px">' +
+    '<table class="fs-sm" style="border-collapse:collapse;margin-bottom:10px">' +
     line(t('sub.targetKg'), kg(s.targetKg, 0)) +
     line(t('sub.blend'), c.hardwoodPct + ' / ' + c.wheatbranPct + (c.cornPct ? ' / ' + c.cornPct : '') + ' %') +
     line(t('sub.dryMix'), kg(s.dryKg)) +
@@ -8865,7 +8872,7 @@ async function openSubstrateInfo(subId) {
       '</table>';
   }
   html +=
-    '<div style="margin-top:10px;font-size:13px;font-weight:600">' +
+    '<div class="fs-sm" style="margin-top:10px;font-weight:600">' +
     esc(t('sub.leftNow', { kg: s.remainingKg.toFixed(1), of: s.targetKg.toFixed(0) })) +
     '</div>';
   if (s.notes) html += '<div class="fs-meta" style="margin-top:6px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
@@ -9222,8 +9229,9 @@ function _openZonePicker(title, onPick, opts) {
     _recents.forEach((loc) => {
       const row = document.createElement('button');
       row.type = 'button';
+      row.className = 'fs-sm';
       row.style.cssText =
-        'display:block;width:100%;text-align:left;background:var(--c-bg);border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;margin-bottom:2px;border-left:3px solid ' +
+        'display:block;width:100%;text-align:left;background:var(--c-bg);border:0;padding:8px 10px;font:inherit;cursor:pointer;font-weight:600;border-radius:6px;margin-bottom:2px;border-left:3px solid ' +
         ((ZONE_BY_ID[toZone(loc)] && ZONE_BY_ID[toZone(loc)].color) || '#888');
       row.textContent = '★ ' + zoneDisplayName(loc);
       row.addEventListener('click', () => pick(loc));
@@ -9242,8 +9250,9 @@ function _openZonePicker(title, onPick, opts) {
     zones.forEach((z) => {
       const zRow = document.createElement('button');
       zRow.type = 'button';
+      zRow.className = 'fs-sm';
       zRow.style.cssText =
-        'display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;font:inherit;cursor:pointer;font-size:13px;font-weight:600;border-radius:6px;border-left:3px solid ' +
+        'display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;font:inherit;cursor:pointer;font-weight:600;border-radius:6px;border-left:3px solid ' +
         (z.color || '#888');
       zRow.textContent = z.name || z.id;
       zRow.addEventListener('mouseenter', () => {
@@ -10009,7 +10018,7 @@ function renderHarvests() {
       ]
         .map(
           ([l, v]) =>
-            `<div class="met"><div class="met-l">${l}</div><div class="met-v" style="font-size:16px;color:var(--c-amber-dark)">${v}</div></div>`
+            `<div class="met"><div class="met-l">${l}</div><div class="met-v fs-floor" style="--fs-own:1rem;color:var(--c-amber-dark)">${v}</div></div>`
         )
         .join('')
     : '';
@@ -10108,7 +10117,7 @@ function renderHarvests() {
     .map((id) => {
       const d = byBatch[id],
         pct = Math.round((d.total / max) * 100);
-      return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span class="fs-meta" style="font-weight:500">${spDot(d.species)}${esc(id)}</span><span style="font-size:13px;font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div class="fs-micro" style="color:var(--c-text-muted);margin-top:2px">${Object.entries(
+      return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span class="fs-meta" style="font-weight:500">${spDot(d.species)}${esc(id)}</span><span class="fs-sm" style="font-weight:600;color:var(--c-amber-dark)">${d.total}g</span></div><div class="harvest-bar"><div class="harvest-bar-fill" style="width:${pct}%"></div></div><div class="fs-micro" style="color:var(--c-text-muted);margin-top:2px">${Object.entries(
         d.flushes
       )
         .map(([f, g]) => `Flush ${f}: ${g}g`)
@@ -10657,7 +10666,7 @@ function paintDuckdnsBanner(banner, s) {
   const green = () => tone('--c-primary-light', '--c-green-border', '--c-green-dark');
 
   const head = '<strong>' + esc(s.domain) + '</strong>' + (s.lastIp ? ' &rarr; ' + esc(s.lastIp) : '');
-  const note = (msg) => '<div style="margin-top:4px;font-size:13px">' + msg + '</div>';
+  const note = (msg) => '<div class="fs-sm" style="margin-top:4px">' + msg + '</div>';
   const since = s.lastIpUpdate
     ? ' <span style="color:var(--c-text-muted)">(' + esc(fmtDtTime(s.lastIpUpdate)) + ')</span>'
     : '';
@@ -10817,13 +10826,13 @@ function renderHarvestPackSizes(chosen) {
       return (
         '<span style="display:flex;align-items:center;gap:2px">' +
         feld +
-        '<button type="button" class="hf-pack-del" data-size="' +
+        '<button type="button" class="hf-pack-del fs-base" data-size="' +
         g +
         '" title="' +
         esc(weg) +
         '" aria-label="' +
         esc(weg) +
-        '" style="background:none;border:0;padding:0 2px;cursor:pointer;font-size:15px;line-height:1;color:var(--c-text-muted)">×</button>' +
+        '" style="background:none;border:0;padding:0 2px;cursor:pointer;line-height:1;color:var(--c-text-muted)">×</button>' +
         '</span>'
       );
     })
@@ -11613,7 +11622,7 @@ function renderCameraStats(s) {
   const cell = (label, value) =>
     `<div class="card" style="padding:10px;margin:0">
       <div class="fs-xs" style="color:var(--c-text-muted)">${esc(label)}</div>
-      <div style="font-size:18px;font-weight:600;color:var(--c-text)">${esc(String(value))}</div>
+      <div class="fs-floor" style="--fs-own:1.125rem;font-weight:600;color:var(--c-text)">${esc(String(value))}</div>
     </div>`;
   el.innerHTML =
     cell(t('cam.statCameras'), s.enabledCameras + ' / ' + s.cameras) +
@@ -11629,7 +11638,7 @@ function renderCameraList(list) {
   if (!el) return;
   if (!list.length) {
     el.innerHTML =
-      '<div style="font-size:13px;color:var(--c-text-muted);padding:8px 0">' + esc(t('cam.noCameras')) + '</div>';
+      '<div class="fs-sm" style="color:var(--c-text-muted);padding:8px 0">' + esc(t('cam.noCameras')) + '</div>';
     return;
   }
   const rows = list
@@ -11725,7 +11734,7 @@ function renderCameraFlags(flags) {
   const el = document.getElementById('cam-flags');
   if (!el) return;
   if (!flags || ((!flags.harvest || !flags.harvest.length) && (!flags.fruiting || !flags.fruiting.length))) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
+    el.innerHTML = '<div class="fs-sm" style="color:var(--c-text-muted)">' + esc(t('cam.noOpenFlags')) + '</div>';
     return;
   }
   const row = (kind, f) => {
@@ -12588,7 +12597,7 @@ function renderInvStock() {
         <div class="fs-meta" style="font-weight:600;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</div>
         ${low ? `<span class="fs-micro" style="background:var(--c-red-light);color:var(--c-red-dark);padding:2px 7px;border-radius:99px;font-weight:600">${t('inv.lowStock')}</span>` : ''}
       </div>
-      <div style="font-size:26px;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span style="font-size:14px;font-weight:400;color:var(--c-text-muted)">kg</span></div>
+      <div class="fs-floor" style="--fs-own:1.625rem;font-weight:700;color:var(--c-text);margin-bottom:2px">${stock.toFixed(1)} <span class="fs-floor" style="--fs-own:0.875rem;font-weight:400;color:var(--c-text-muted)">kg</span></div>
       <div style="height:5px;border-radius:3px;background:rgba(0,0,0,.08);overflow:hidden;margin-bottom:8px">
         <div style="height:100%;border-radius:3px;background:${low ? 'var(--c-red)' : MAT_COLORS[mat]};width:${pct}%;transition:width .3s"></div>
       </div>
@@ -12658,7 +12667,7 @@ function renderThresholds() {
         )
         .join('')}
       <div><label class="fs-xs">${t('inv.grainBagWeight')}</label>
-        <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" style="font-size:13px;padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
+        <input type="text" inputmode="decimal" value="${esc(c.grainBagKg)}" class="fs-sm" style="padding:5px 8px" onchange="updateAvgComp('grainBagKg',this.value)" /></div>
     </div>
     <div class="fs-xs" style="margin-top:8px;color:var(--c-text-muted);line-height:1.7">
       <div>${esc(
@@ -12959,7 +12968,7 @@ function renderSuppliers() {
   const el = document.getElementById('suppliers-list');
   if (!el) return;
   if (!suppliers.length) {
-    el.innerHTML = `<p style="color:var(--c-text-muted);font-size:13px">${t('inv.noSuppliers')}</p>`;
+    el.innerHTML = `<p class="fs-sm" style="color:var(--c-text-muted)">${t('inv.noSuppliers')}</p>`;
     return;
   }
   const grouped = {};
@@ -13062,7 +13071,7 @@ function renderPickupLocations() {
     });
   }
   if (!pickupLocations.length) {
-    el.innerHTML = `<p style="color:var(--c-text-muted);font-size:13px">${t('pickupLoc.none')}</p>`;
+    el.innerHTML = `<p class="fs-sm" style="color:var(--c-text-muted)">${t('pickupLoc.none')}</p>`;
     return;
   }
   el.innerHTML = `<div style="overflow-x:auto"><table>
@@ -13813,6 +13822,9 @@ async function printQrSheet(items, title) {
   const sheet = document.getElementById('ref-print-sheet');
   sheet.innerHTML = '';
   const hdr = document.createElement('div');
+  // px-auf-papier: this is a printed sheet, and 15px there is a sixth of an
+  // inch of paper. A rem would follow the reader's browser setting and change
+  // how much fits on the page, which is not what a browser setting is for.
   hdr.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
   hdr.textContent = 'QR Codes: ' + title;
   sheet.appendChild(hdr);
@@ -15479,10 +15491,10 @@ function openBagInfo(bagId, batchId, batch) {
   const lastByBag = buildLastScanByBag();
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div class="met"><div class="met-l">${t('batch.species')}</div><div style="font-size:15px;font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
-      <div class="met"><div class="met-l">${t('batch.strain')}</div><div style="font-size:15px;font-weight:600">${(b.strainText || '').trim() ? esc(b.strainText.trim()) : !b.strainId && b.strain ? esc(b.strain) : '\u2014'}</div></div>
-      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div style="font-size:15px;font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
-      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div style="font-size:15px;font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
+      <div class="met"><div class="met-l">${t('batch.species')}</div><div class="fs-base" style="font-weight:600">${spDot(b.species)}${esc(b.species)}</div></div>
+      <div class="met"><div class="met-l">${t('batch.strain')}</div><div class="fs-base" style="font-weight:600">${(b.strainText || '').trim() ? esc(b.strainText.trim()) : !b.strainId && b.strain ? esc(b.strain) : '\u2014'}</div></div>
+      <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div class="fs-base" style="font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
+      <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div class="fs-base" style="font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
     <div class="fs-xs" style="font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
@@ -15536,30 +15548,34 @@ function renderBiActions() {
   const role = cur.loc && ZONE_BY_ID[toZone(cur.loc)] ? ZONE_BY_ID[toZone(cur.loc)].role : null;
   const nBags = (b.bags || []).length;
   const hasFruiting = !!_fruitingDest();
+  // Same as `btn` above: the size is a class at each use. It has to be, because
+  // the three buttons built from this string are not all the same size -- the
+  // two primary ones are 17px and the contamination one is 15px, and an inline
+  // font-size here would silently win over both.
   const big =
-    'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-size:17px;font-weight:600;margin-bottom:8px;cursor:pointer';
+    'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-weight:600;margin-bottom:8px;cursor:pointer';
   let html = '';
   if (nBags > 1) {
-    const seg = 'flex:1;text-align:center;padding:10px;font-size:13px;cursor:pointer;border:0';
+    const seg = 'flex:1;text-align:center;padding:10px;cursor:pointer;border:0';
     html +=
       '<div style="display:flex;border:1px solid var(--c-border);border-radius:10px;overflow:hidden;margin-bottom:10px">' +
-      `<button type="button" data-bi="scope-single" style="${seg};${!biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeSingle'))}</button>` +
-      `<button type="button" data-bi="scope-batch" style="${seg};border-left:1px solid var(--c-border);${biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeBatch', { n: nBags }))}</button>` +
+      `<button type="button" data-bi="scope-single" class="fs-sm" style="${seg};${!biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeSingle'))}</button>` +
+      `<button type="button" data-bi="scope-batch" class="fs-sm" style="${seg};border-left:1px solid var(--c-border);${biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeBatch', { n: nBags }))}</button>` +
       '</div>';
   }
   if (!cur.removed && (role === 'incubation' || role === 'spawn') && hasFruiting) {
-    html += `<button type="button" data-bi="fruchtung" style="${big};background:var(--c-primary);color:#fff">→ ${esc(t('dash.toFruiting'))}</button>`;
+    html += `<button type="button" data-bi="fruchtung" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-primary);color:#fff">→ ${esc(t('dash.toFruiting'))}</button>`;
   } else if (!cur.removed && role === 'fruiting') {
-    html += `<button type="button" data-bi="harvest" style="${big};background:var(--c-amber-dark);color:#fff">✂ ${esc(t('bagInfo.harvest'))}</button>`;
+    html += `<button type="button" data-bi="harvest" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-amber-dark);color:#fff">✂ ${esc(t('bagInfo.harvest'))}</button>`;
   }
   const sec =
-    'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;font-size:15px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
+    'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
   html +=
     '<div style="display:flex;gap:8px;margin-bottom:8px">' +
-    `<button type="button" data-bi="move" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
-    `<button type="button" data-bi="remove" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
+    `<button type="button" data-bi="move" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
+    `<button type="button" data-bi="remove" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
     '</div>';
-  html += `<button type="button" data-bi="contam" style="${big};font-size:15px;padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('bagInfo.reportContam'))}</button>`;
+  html += `<button type="button" data-bi="contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('bagInfo.reportContam'))}</button>`;
   el.innerHTML = html;
 }
 // Move the scanned bag (or whole batch, per the toggle) to dest, then drop the
@@ -16147,7 +16163,7 @@ async function renderContamReports() {
       // glyph when the report has no photos at all (rare — usually 1+).
       const thumbHtml = r.first_photo_uuid
         ? `<img src="/api/contamination-reports/${r.id}/photos/${esc(r.first_photo_uuid)}?thumb=1" alt="" loading="lazy">`
-        : `<div style="font-size:18px">—</div>`;
+        : `<div class="fs-floor" style="--fs-own:1.125rem">—</div>`;
       const target = r.bag_id
         ? `<span class="contam-list-bag">${esc(r.bag_id)}</span><span class="contam-list-batch">${esc(r.batch_id || '')}</span>`
         : `<span class="contam-list-bag">${esc(r.batch_id || '—')}</span>`;
@@ -16333,7 +16349,7 @@ function renderBagSelect() {
     btn.disabled = disabled;
     btn.title = disabled ? (isRemoved ? t('bagInfo.removed') : t('bagInfo.notPlaced')) : loc;
     btn.innerHTML =
-      '<div style="font-size:14px;font-weight:700;font-family:monospace">' +
+      '<div class="fs-floor" style="--fs-own:0.875rem;font-weight:700;font-family:monospace">' +
       esc(bagNum) +
       '</div>' +
       '<div class="fs-micro" style="margin-top:2px;opacity:0.85">' +
@@ -17323,6 +17339,9 @@ async function printRef() {
   sheet.innerHTML = '';
   const useQR = document.getElementById('ref-qr').checked;
   const title = document.createElement('div');
+  // px-auf-papier: this is a printed sheet, and 15px there is a sixth of an
+  // inch of paper. A rem would follow the reader's browser setting and change
+  // how much fits on the page, which is not what a browser setting is for.
   title.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
   title.textContent = 'Reference ' + (useQR ? 'QR Codes' : 'Barcodes');
   sheet.appendChild(title);
@@ -19291,6 +19310,8 @@ function printCalendarTaskList(range) {
     bodyHtml += '</div>';
   });
 
+  // px-auf-papier: the calendar task list, laid out for a printed page by
+  // .cal-print-* in styles.css, whose sizes are px for the same reason.
   sheet.innerHTML =
     '<div class="cal-print-page cal-print-tasklist">' +
     '<div class="cal-print-header">' +
@@ -20288,7 +20309,7 @@ function openEventDetail(ev) {
       esc(t('calDetail.changeDate')) +
       '</label> <input type="date" id="cal-detail-batch-date" value="' +
       curDate +
-      '" style="margin-left:8px;font-size:13px;padding:4px 8px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);color:var(--c-text)">';
+      '" class="fs-sm" style="margin-left:8px;padding:4px 8px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-bg);color:var(--c-text)">';
     assignEl._currentBatchId = ev.id;
     descEl.textContent = b ? b.species + (b.strain ? ' (' + b.strain + ')' : '') : '';
     descEl.style.display = '';
