@@ -29,6 +29,7 @@ const {
   subFloorSizes,
   blocks,
   MAX_WIDTH_BLOCK,
+  MEDIA_BLOCK,
   maskedCss,
   maskedSource
 } = require('../scripts/mobile-size-scan.js');
@@ -532,9 +533,39 @@ describe('the bridge, now that it is gone', () => {
   it('keeps form controls at 16px, which is what stops iOS zooming the page', () => {
     assert.match(
       CSS,
-      /input,\s*\n\s*select,\s*\n\s*textarea \{\s*\n\s*font-size: 16px !important;/,
+      /input,\s*\n\s*select,\s*\n\s*textarea \{\s*\n\s*font-size: max\(1rem, 16px\) !important;/,
       'the anti-zoom rule lost its !important or its shape — a phone now zooms when a field is focused'
     );
+  });
+
+  // And the half that took twice as long to notice as the rule itself: which
+  // axis it hangs on. Until 2026-08-23 it sat in `@media (max-width: 768px)`,
+  // so a tablet in landscape — 1024px wide, still a finger — lost it, and 26
+  // fields on nine pages went back to 13 and 14px from exactly 769px up.
+  //
+  // Read as text rather than measured because measure-mobile.js only sweeps
+  // widths the band contains and pointers the emulator can set: it proves the
+  // fields are 16px today, not that the rule cannot be moved back onto a width
+  // tomorrow. This is the assertion that says which axis it belongs to.
+  it('hangs the anti-zoom rule on the pointer, never on a width', () => {
+    const { src } = maskedCss(CSS);
+    const at = src.indexOf('font-size: max(1rem, 16px) !important');
+    assert.ok(at > 0, 'the anti-zoom rule is gone');
+    // Every @media whose body contains it. blocks() yields the body, so the
+    // header is the text between the last `@media` before it and its brace.
+    const umgebend = [...blocks(src, MEDIA_BLOCK)].filter((b) => b.start < at && at < b.end);
+    assert.ok(umgebend.length > 0, 'the anti-zoom rule sits in no media block at all — it now applies to a mouse too');
+    const bedingungen = umgebend.map((b) => src.slice(src.lastIndexOf('@media', b.start), b.start - 1).trim());
+    for (const c of bedingungen) {
+      assert.ok(
+        !/width/.test(c),
+        `the anti-zoom rule is back inside a width query (${c.trim()}) — a landscape tablet loses it again`
+      );
+      assert.ok(
+        /any-pointer:\s*coarse/.test(c),
+        `the anti-zoom rule asks ${c.trim()}, not any-pointer: coarse — a touchscreen laptop reports pointer: fine`
+      );
+    }
   });
 });
 
@@ -569,10 +600,11 @@ describe('the type sizes follow the reader, not the sheet', () => {
     [...text.matchAll(/font-size\s*:\s*([^;}]+)/g)].map((m) => m[1].trim()).filter((v) => /\d(?:\.\d+)?px\b/.test(v));
 
   it('writes no px font-size outside the print block, bar the anti-zoom rule', () => {
-    // 16px on a form control is not a type size, it is iOS Safari's zoom
-    // threshold — a fixed count of CSS pixels that does not move when the
-    // reader changes their font. It is the one honest px left.
-    const left = pxSizes(OHNE_DRUCK).filter((v) => v !== '16px !important');
+    // The 16px inside `max(1rem, 16px)` on a form control is not a type size,
+    // it is iOS Safari's zoom threshold — a fixed count of CSS pixels that does
+    // not move when the reader changes their font. The 1rem beside it is the
+    // reader's setting, free to grow. It is the one honest px left.
+    const left = pxSizes(OHNE_DRUCK).filter((v) => v !== 'max(1rem, 16px) !important');
     assert.deepEqual(left, [], `${left.length} px font-size(s) are back: ${left.slice(0, 8).join(' · ')}`);
   });
 
