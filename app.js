@@ -5690,8 +5690,12 @@ function buildSupplyTasks() {
       name: r.name,
       supply: r.supply,
       // What to make, in the order the chain runs: no grain means grain first.
-      taskAction: r.grain === 0 ? 'make-grain' : 'make-blocks',
-      detail: t(r.supply === 'now' ? 'todo.supplyNow' : 'todo.supplyNoSpawn', { n: r.fruiting })
+      taskAction: r.grain === 0 ? 'make-grain' : 'make-blocks'
+      // Ohne Begruendung. Hier stand "keine Koerner, nichts in der Inkubation --
+      // nach der Fruchtung (12) ist Schluss": eine Herleitung dessen, was der
+      // Knopf daneben ohnehin verlangt, und in der Zeile, die man im Vorbeigehen
+      // liest, die laengste Zeile von allen. Wer die Sorte kennt, weiss das; und
+      // dass es eilt, sagt der rote Streifen, den supply === 'now' schon setzt.
     });
   }
   // Worst first, and stable, so the row does not jump about between renders.
@@ -6475,12 +6479,13 @@ function _weekColBodyHtml(d, off, sel) {
 // Die Reihenfolge hier ist die Reihenfolge auf dem Schirm; rank() unten
 // entscheidet nur, wer die sechs Zeilen überlebt. Beides muss stimmen, sonst
 // steht ein Hinweis zwar in der Liste, aber unter dem Rundgang.
-const PLAN_CATS = ['alert', 'create', 'move', 'harvest', 'other'];
+const PLAN_CATS = ['alert', 'create', 'move', 'harvest', 'chore', 'other'];
 const PLAN_CAT_LABEL = {
   alert: 'cat.alert',
   create: 'cat.create',
   move: 'cat.move',
   harvest: 'cat.harvest',
+  chore: 'recur.cat',
   other: 'rhythm.other'
 };
 const PLAN_CAT_COLOR = {
@@ -6488,6 +6493,7 @@ const PLAN_CAT_COLOR = {
   create: 'var(--c-accent)',
   move: 'var(--c-blue-dark, var(--c-accent))',
   harvest: 'var(--c-amber-dark)',
+  chore: 'var(--c-purple-dark)',
   other: 'var(--c-text-muted)'
 };
 // Was eine Zeilenart ist, an einer Stelle.
@@ -6522,12 +6528,20 @@ const PLAN_KINDS = {
   fruiting: { cat: 'move', rank: null, counts: true, btn: 'task' },
   harvest: { cat: 'harvest', rank: null, counts: true, btn: 'harvest' },
   manual: { cat: 'other', rank: null, counts: true, btn: 'manual' },
-  // Eine eigene Aufgabe der Anlage. rank 50, damit sie die Sechs-Zeilen-Klappe
-  // ueberlebt: sie hat keine Zone, faellt sonst auf 999 und waere als Erstes
-  // verdeckt -- an einem Putztag ist sie aber das, was ansteht.
+  // Eine eigene Aufgabe der Anlage.
+  //
+  // Eigene Kategorie, nicht 'other': "Sonstiges" ist kein Name fuer "Growrooms
+  // putzen", und ueber einer Zeile, die man abhaken soll, stand genau das.
+  //
+  // rank -0.5 -- vor dem Rundgang, hinter den abgeleiteten Zeilen. Sie hat
+  // keine Zone, fiele sonst auf 999 und waere als Erstes von der
+  // Sechs-Zeilen-Klappe verdeckt. Sie ist aber die einzige Zeile des Tages, an
+  // die nichts anderes erinnert: eine Charge fehlt spaeter im Bestand, ein
+  // ungeputzter Raum faellt niemandem auf.
+  //
   // counts:true, denn sie ist Arbeit, die abgehakt wird; todayProgress() zaehlt
   // den Haken auf der Gegenseite mit, sonst wuechse nur der Nenner.
-  chore: { cat: 'other', rank: 50, counts: true, btn: 'chore' },
+  chore: { cat: 'chore', rank: -0.5, counts: true, btn: 'chore' },
   left: { cat: 'other', rank: null, counts: true, btn: '' }
 };
 function planKind(it) {
@@ -6565,6 +6579,32 @@ function _rhythmTargetBtn(date, target, label) {
     ' <span aria-hidden="true" style="color:var(--c-text-muted);font-weight:400">✎</span></button>'
   );
 }
+// Eine eigene Aufgabe in der schmalen Wochenspalte: Haken, Name, fertig.
+//
+// Der ganze Chip ist der Knopf. Ein getrennter Haken daneben brauchte in 170px
+// Breite Platz, den der Name dann nicht mehr haette -- und es gibt hier ohnehin
+// nur eine Sache zu tun.
+function _choreChipHtml(it) {
+  const k = it.task || {};
+  return (
+    '<button type="button" class="wk-chore' +
+    (k.done ? ' done' : '') +
+    (it.overdue ? ' late' : '') +
+    '" data-action="chore-done" data-task="' +
+    esc(String(k.id)) +
+    '" data-date="' +
+    esc(k.date || '') +
+    '" data-done="' +
+    (k.done ? '1' : '0') +
+    '" title="' +
+    esc(it.label + ' · ' + (it.detail || '')) +
+    '"><span class="wk-chore-box" aria-hidden="true">' +
+    (k.done ? '&#10003;' : '') +
+    '</span><span class="wk-chore-name">' +
+    esc(it.label) +
+    '</span></button>'
+  );
+}
 function _weekColPreviewHtml(d) {
   const task = rhythmTaskOn(d.date);
   let html = '';
@@ -6589,12 +6629,26 @@ function _weekColPreviewHtml(d) {
   if (!d.items.length && !html) {
     return '<div class="fs-micro" style="padding:3px 2px;color:var(--c-text-muted)">' + esc(t('rhythm.nothing')) + '</div>';
   }
-  const counts = countByCategory(d.items);
-  const overdue = d.items.filter((i) => i.overdue).length;
+  // Eigene Aufgaben stehen mit Namen da, nicht als Zahl in einer Kategorie.
+  //
+  // Die Zaehlung ist richtig fuer Chargen und Umzuege: vier abgeschnittene
+  // Chargennummern sagen in 170px weniger als "3 Umziehen". Bei einer eigenen
+  // Aufgabe ist es umgekehrt -- ihr Name IST die ganze Auskunft, und "1
+  // Sonstiges" sagt gar nichts. Es sind wenige, sie passen.
+  //
+  // Und anklickbar, weil der Haken der ganze Umgang mit dieser Zeile ist. Der
+  // Satz "keine Knoepfe, die Spalte ist zum Lesen" gilt fuer eine Charge, die
+  // man erst ansehen muss; hier waere der Umweg ueber den geoeffneten Tag ein
+  // Umweg um einen einzigen Tipp herum.
+  const aufgaben = d.items.filter((it) => it.kind === 'chore');
+  for (const c of aufgaben) html += _choreChipHtml(c);
+  const rest = d.items.filter((it) => it.kind !== 'chore');
+  const counts = countByCategory(rest);
+  const overdue = rest.filter((i) => i.overdue).length;
   for (const cat of PLAN_CATS) {
     if (!counts[cat]) continue;
     html +=
-      '<div class="fs-micro" style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
+      '<div class="fs-xs" style="display:flex;align-items:baseline;gap:5px;padding:2px;border-left:2px solid ' +
       PLAN_CAT_COLOR[cat] +
       ';margin-bottom:2px">' +
       '<span style="font-weight:700;flex-shrink:0">' +
@@ -6682,7 +6736,7 @@ function _weekDayBodyHtml(d, off, isToday) {
     if (cat !== lastCat) {
       lastCat = cat;
       html +=
-        '<div class="fs-floor" style="--fs-own:10.5px;display:flex;align-items:baseline;gap:5px;font-weight:600;color:var(--c-text-sec);margin:7px 0 2px">' +
+        '<div class="fs-floor" style="--fs-own:12px;display:flex;align-items:baseline;gap:5px;font-weight:600;color:var(--c-text-sec);margin:7px 0 2px">' +
         '<span style="width:6px;height:6px;border-radius:50%;background:' +
         PLAN_CAT_COLOR[cat] +
         ';flex-shrink:0"></span>' +
@@ -6738,7 +6792,7 @@ function _rhythmTaskRowHtml(task, outstanding) {
     // The amount is the thing that changes week to week, so it is the thing you
     // can tap. Editing it here changes this date only — the recurring rhythm is
     // the usual amount, and one busy Monday must not rewrite every Monday after.
-    '<div class="fs-meta" style="flex:1;min-width:0">' +
+    '<div class="fs-sm" style="flex:1;min-width:0">' +
     _rhythmTargetBtn(task.date, target, label) +
     '<div class="fs-xs" style="color:' +
     (late ? 'var(--c-red-dark)' : 'var(--c-text-muted)') +
@@ -6933,7 +6987,11 @@ function _dashPlanRowHtml(it, withRoom) {
     (it.overdue ? ' urgent' : '') +
     '" style="display:flex;align-items:center;gap:8px;padding:4px 0">' +
     '<div style="flex:1;min-width:0">' +
-    '<div class="fs-meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    // fs-sm, nicht fs-meta. Das ist der Satz, der sagt, was zu tun ist; er
+    // stand auf 12px am Rechner, zwischen einem 11px-Zusatz und einer
+    // 10px-Ueberschrift, und war damit die kleinste Schrift auf dem Schirm fuer
+    // die wichtigste Zeile darauf.
+    '<div class="fs-sm" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
     esc(it.label) +
     '</div>' +
     (meta ? '<div class="fs-xs" style="color:var(--c-text-muted)">' + esc(meta) + '</div>' : '') +
