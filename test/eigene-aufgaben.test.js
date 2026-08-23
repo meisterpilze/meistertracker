@@ -283,10 +283,17 @@ describe('Wer was darf', () => {
 describe('Wie eine eigene Aufgabe im Tagesplan steht', () => {
   it('steht in PLAN_KINDS und überlebt die Klappe', () => {
     const kinds = hebeKonstante('PLAN_KINDS', SRC);
-    assert.match(kinds, /chore: \{ cat: 'other', rank: 50, counts: true, btn: 'chore' \}/);
-    // rank 50, weil eine eigene Aufgabe keine Zone hat: ohne eigenen Rang fiele
-    // sie auf 999 und wäre als Erstes von der Sechs-Zeilen-Klappe verdeckt — an
-    // einem Putztag ist sie aber genau das, was ansteht.
+    assert.match(kinds, /chore: \{ cat: 'chore', rank: -0\.5, counts: true, btn: 'chore' \}/);
+    // Eigene Kategorie, nicht 'other': "Sonstiges" ist kein Name fuer "Growrooms
+    // putzen", und genau das stand ueber der Zeile, die man abhaken soll.
+    //
+    // rank -0.5, weil eine eigene Aufgabe keine Zone hat: ohne eigenen Rang
+    // fiele sie auf 999 und waere als Erstes von der Sechs-Zeilen-Klappe
+    // verdeckt. Sie ist aber die einzige Zeile des Tages, an die nichts anderes
+    // erinnert -- eine fehlende Charge faellt spaeter im Bestand auf, ein
+    // ungeputzter Raum niemandem.
+    const cats = new Function(hebeKonstante('PLAN_CATS', SRC) + String.fromCharCode(10) + 'return PLAN_CATS;')();
+    assert.ok(cats.includes('chore'), 'die Kategorie steht in keiner PLAN_CATS');
   });
 
   it('zählt den Haken im Fortschritt mit, nicht nur im Nenner', () => {
@@ -307,6 +314,43 @@ describe('Wie eine eigene Aufgabe im Tagesplan steht', () => {
       /confirm/i,
       'eine Rückfrage ist teurer als der Fehler'
     );
+  });
+
+  it('steht in der Wochenspalte mit Namen, nicht als Zahl in einer Kategorie', () => {
+    // "1 Sonstiges" sagt über "Growrooms putzen" gar nichts, und genau das
+    // stand da. Die Zählung ist richtig für vier abgeschnittene Chargennummern
+    // in 170px; bei einer benannten Aufgabe ist der Name die ganze Auskunft.
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    assert.match(fn, /_choreChipHtml\(c\)/, 'die Aufgabe steht nicht mit Namen da');
+    assert.match(fn, /countByCategory\(rest\)/, 'sie wird zusätzlich noch mitgezählt');
+  });
+
+  it('lässt sich aus der Wochenspalte heraus abhaken', () => {
+    // Der Umweg über den geöffneten Tag wäre ein Umweg um einen einzigen Tipp.
+    const chip = hebeFunktion('_choreChipHtml', SRC);
+    assert.match(chip, /data-action="chore-done"/);
+    assert.match(chip, /wk-chore-name/);
+  });
+
+  it('ist dabei eine antippbare Zeile, kein breitgetretener Knopf', () => {
+    // Randlos und ohne Fläche, wie die Mengenzahl zwei Zeilen darüber.
+    assert.match(CSS, /\.wk-chore \{[^}]*border: 0;/);
+    assert.match(CSS, /\.wk-chore \{[^}]*background: none;/);
+  });
+
+  it('trägt den versäumten Termin auf heute, mit seinem eigenen Datum', () => {
+    // "Wenn Montag nicht geputzt wird, muss es Dienstag noch dastehen, bis es
+    // abgehakt ist" — und zwar als Dienstagszeile, die sagt, von wann sie ist.
+    const fn = hebeFunktion('buildWeekPlan', SRC);
+    const zweig = fn.slice(fn.indexOf('recurringArrears('));
+    assert.match(zweig, /put\(0, \{/, 'der versäumte Termin landet nicht auf heute');
+    assert.match(zweig, /recur\.missedFrom/, 'er sagt nicht, von wann er offen ist');
+    assert.match(zweig, /overdue: true/, 'er sieht aus wie ein Termin, der noch Zeit hat');
+  });
+
+  it('zeigt einen versäumten Termin rot, wie jede überfällige Zeile', () => {
+    assert.match(hebeFunktion('_choreChipHtml', SRC), /it\.overdue \? ' late' : ''/);
+    assert.match(CSS, /\.wk-chore\.late \{[^}]*border-left-color: var\(--c-red-dark\)/);
   });
 
   it('setzt den Anker auf den nächsten Termin, nicht auf heute', () => {
