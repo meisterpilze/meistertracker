@@ -8896,7 +8896,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       try {
         const out = { ok: true };
-        out.targetQty = db.setRhythmTarget(database, body.date, body.targetQty);
+        // followsRhythm sagt, dass der Tag jetzt wieder der Vorlage folgt statt
+        // eine eigene Zahl zu tragen. Der Client muss das wissen, sonst behielte
+        // er eine Zeile, die es serverseitig nicht mehr gibt.
+        const gesetzt = db.setRhythmTarget(database, body.date, body.targetQty);
+        out.targetQty = gesetzt.targetQty;
+        out.followsRhythm = gesetzt.followsRhythm;
         broadcastSSE(res);
         jsonOk(res, out);
       } catch (err) {

@@ -1968,6 +1968,52 @@ describe('db – rhythm tasks carry forward', () => {
     assert.equal(row.doneQty, 0);
   });
 
+  // ── der Weg zurück zur Vorlage ────────────────────────────────────────────
+  // Ohne ihn koppelt der erste Griff in den Kalender einen Tag für immer und
+  // unsichtbar vom Rhythmus ab: die Vorlage später zu ändern geht an ihm
+  // wortlos vorbei, und die beiden sehen aus wie getrennte Systeme.
+  it('takes a future day back onto the rhythm when its amount matches again', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const soon = ymd(daysAgo(-3));
+    db.setRhythmTarget(d, soon, 60);
+    assert.ok(
+      tasks().some((x) => x.date === soon),
+      'the exception was never stored'
+    );
+    const back = db.setRhythmTarget(d, soon, 45);
+    assert.equal(back.followsRhythm, true);
+    assert.equal(back.targetQty, 45);
+    // Keine eigene Zeile mehr heisst: der Tag wird wieder aus week_rhythm
+    // gelesen — samt jeder späteren Änderung daran.
+    assert.ok(!tasks().some((x) => x.date === soon), 'the day kept its own row and stays cut off from the template');
+    everyDay(50);
+    assert.equal(db.readAll(d).weekRhythm[new Date(soon + 'T00:00:00').getDay()].targetQty, 50);
+    assert.ok(!tasks().some((x) => x.date === soon), 'the day was pinned to 45 after all');
+  });
+
+  it('keeps a past snapshot even when its amount matches the template', () => {
+    // Ein vergangener Tag ist die Aufnahme dessen, was verlangt war. Eine
+    // Vorlagenänderung von heute darf ihn nicht rückwirkend umschreiben.
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(1));
+    const r = db.setRhythmTarget(d, day, 45);
+    assert.equal(r.followsRhythm, false);
+    assert.equal(tasks().find((x) => x.date === day).targetQty, 45, 'the past day lost its snapshot');
+  });
+
+  it('decides "future" by the day it is told about, not by the wall clock', () => {
+    everyDay(45);
+    db.ensureRhythmTasks(d);
+    const day = ymd(daysAgo(-3));
+    db.setRhythmTarget(d, day, 60);
+    // Von einem Standpunkt nach diesem Tag aus ist er Vergangenheit.
+    const r = db.setRhythmTarget(d, day, 45, daysAgo(-9));
+    assert.equal(r.followsRhythm, false);
+    assert.equal(tasks().find((x) => x.date === day).targetQty, 45);
+  });
+
   it('treats zero as clearing the day rather than as a job for nothing', () => {
     everyDay(45);
     db.ensureRhythmTasks(d);

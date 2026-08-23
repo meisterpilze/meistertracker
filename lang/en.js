@@ -522,6 +522,12 @@ window.LANG['en'] = {
   'rhythm.setQty': '+ Amount',
   'rhythm.targetEdit': 'Change the amount for this day',
   'rhythm.targetPrompt': 'How many on {date}? (changes this day only, not the weekly rhythm)',
+  'rhythm.targetPromptTpl':
+    'The weekly rhythm asks for {n} {theme} on this weekday. How many on {date}? (the same number = follows the rhythm again)',
+  'rhythm.targetFollows': 'This day follows the weekly rhythm again',
+  'rhythm.weekTotal': 'Week total:',
+  'rhythm.weekTotalNone': 'no amounts set yet',
+  'rhythm.weekTotalHint': 'Sum of the days above. Change a single week in the calendar — that leaves the rhythm alone.',
   'rhythm.targetSaved': 'Amount saved for this day',
   'rhythm.targetBad': 'Please enter a whole number of 0 or more',
   'rhythm.startSet': 'Count from',

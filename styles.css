@@ -2622,6 +2622,17 @@ tr:hover td {
     grid-column: 1 / -1;
   }
 }
+/* Die Vorgabezahl eines Tages, im Kopf. Sie steht auch im Spaltenkörper, und
+   dort ist sie bearbeitbar — also gehört sie oben nur dorthin, wo der Körper
+   nicht zu sehen ist. Über 768px sind alle sieben Körper offen, und dieselbe
+   Zahl zweimal übereinander war genau das, was die Woche doppelt aussehen
+   liess; darunter zeigen sechs von sieben Tagen nur ihren Kopf, und ohne sie
+   waere der Wochenüberblick auf dem Telefon eine Reihe blosser Themen. */
+@media (min-width: 769px) {
+  .wk-h-t {
+    display: none;
+  }
+}
 .todo-row {
   display: flex;
   align-items: flex-start;
@@ -4375,6 +4386,29 @@ tr.ms-off .ms-prog {
   gap: 10px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+/* Die Wochensumme im Rhythmus-Fenster.
+   Sie klebt am unteren Rand, weil sie die Antwort auf die Frage ist, die man
+   beim Tippen hat ("bin ich bei 70?"). Sieben Wochentage mit Menge, Sorte und
+   Notiz sind auf einem Telefon höher als der Schirm, und eine Summe unter
+   diesen sieben Zeilen ist genau dann nicht zu sehen, wenn man sie braucht.
+   .modal scrollt selbst (overflow-y: auto), also ist es dessen Scrollbereich,
+   an dem hier geklebt wird; unten angekommen löst sie sich und die letzten
+   Zeilen des Fensters schieben sich normal darüber. */
+.rhythm-total {
+  position: sticky;
+  bottom: 0;
+  margin-top: 10px;
+  padding: 8px 0 2px;
+  background: var(--c-surface);
+  border-top: 0.5px solid var(--c-border);
+}
+.rhythm-total-sum {
+  font-weight: 600;
+}
+.rhythm-total-hint {
+  color: var(--c-text-muted);
+  margin-top: 3px;
 }
 
 /* ═══ SUCHE ════════════════════════════════════════════════════════════════
