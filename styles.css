@@ -2610,16 +2610,102 @@ tr:hover td {
 .wk-b.sel {
   background: var(--c-bg);
 }
-/* Below this the seven columns are too narrow to hold a task list, so the grid
-   keeps its header strip and only the chosen day opens, spanning every column.
-   768px matches the breakpoint the rest of the dashboard already uses. */
+/* Der Arbeitszettel des gewählten Tages, über die ganze Breite.
+
+   Er stand in der Spalte des Tages, und eine Spalte ist ein Siebtel der Karte.
+   Auf dem Telefon fiel das nicht auf, weil dort nur diese eine Spalte sichtbar
+   ist und über alle sieben geht; am Rechner wurde derselbe Zettel in 170px
+   gepresst — „Black..." statt der Sorte, „0,0 von 10,0" über drei Zeilen, und
+   ein Knopf breiter als seine Spalte.
+
+   Oben die Woche auf einen Blick, darunter der Tag, an dem gearbeitet wird. An
+   jedem Schirm dieselbe Anordnung, statt zweier Layouts, von denen eines nie
+   angesehen wurde. */
+.wk-open {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border);
+}
+
+/* Woche oder Tag. Sieben Spalten sind eine Übersicht und ein Kompromiss: jede
+   ist ein Siebtel breit, und was darin steht, muss klein sein. Wer den Tag
+   arbeitet, braucht die Übersicht gerade nicht — dann fällt sie weg und der Tag
+   bekommt die ganze Karte samt größerer Schrift. */
+.wk-view {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.wk-view-btn {
+  min-height: var(--tap-sm);
+  padding: 4px 12px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text-sec);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.wk-view-btn:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.wk-view-btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-left-width: 0;
+}
+.wk-view-btn.sel {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #fff;
+}
+/* Ohne den Streifen braucht der Tag einen anderen Weg zum nächsten. */
+.wk.day-only {
+  display: block;
+}
+.wk.day-only .wk-open {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.wk-daynav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wk-daynav-t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  text-align: center;
+}
+.wk-daynav-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+}
+/* Der ganze Sinn der Tagesansicht: der Platz, den die sechs anderen Spalten
+   nicht mehr brauchen, geht in die Schrift. Zwei Klassen tief, weil .fs-sm sich
+   selbst verdoppelt (.fs-sm.fs-sm) und sonst gewänne. */
+.wk.day-only .wk-open .fs-sm.fs-sm {
+  font-size: var(--fs-base);
+}
+.wk.day-only .wk-open .fs-xs.fs-xs {
+  font-size: var(--fs-sm);
+}
+/* Unter dieser Breite sind die sieben Spalten zu schmal für irgendeinen Inhalt,
+   also bleibt vom Raster der Kopfstreifen — der Tag darunter steht ohnehin
+   schon über alle sieben. 768px ist die Marke, die das Dashboard sonst auch
+   benutzt. */
 @media (max-width: 768px) {
   .wk-b {
     display: none;
-  }
-  .wk-b.sel {
-    display: block;
-    grid-column: 1 / -1;
   }
 }
 /* Die Vorgabezahl eines Tages, im Kopf. Sie steht auch im Spaltenkörper, und
