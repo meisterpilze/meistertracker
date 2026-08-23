@@ -1980,6 +1980,41 @@ textarea {
   min-height: 64px;
   line-height: 1.5;
 }
+
+/* The anti-zoom floor, and it moved axis on 2026-08-23 rather than moving
+   value. iOS Safari zooms the whole page in when a focused field's text is
+   under 16 CSS px and never zooms back out; the way back is a pinch the user
+   has to know about.
+
+   It used to live inside `@media (max-width: 768px)`, which is rule R1 broken
+   in the plainest way there is: a WIDTH deciding a TOUCH behaviour. A tablet
+   in landscape is 1024px wide and still has a finger, so from 769px up the
+   rule stopped applying and 26 fields across nine pages went back to 13 and
+   14px — measured, not argued: measure-mobile.js --app reported every one of
+   them starting at exactly 769px.
+
+   `any-pointer` and not `pointer`, for the same reason the shop's axis rules
+   use it: a touchscreen laptop reports `pointer: fine`, because its PRIMARY
+   pointer is the trackpad, and `any-pointer: coarse` alongside. It is the
+   device most likely to be carried into a growing room, and `pointer: coarse`
+   is exactly the spelling that misses it.
+
+   max() and not a flat 16px, because the two halves say different things.
+   `1rem` is the reader's own setting and must be allowed to grow; 16px is
+   WebKit's threshold and must never shrink below it, whatever the reader set.
+   A flat 16px would throw a reader who chose 20px back down to 16.
+
+   !important because .fs-meta is (0,2,0) against this selector's (0,0,3), and
+   .fs-meta is what the compact filter and search fields wear since the inline
+   sizes were cleaned up. Without it Safari gets a 13px field to zoom into on
+   exactly the pages that were tidied. */
+@media (any-pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 16px) !important;
+  }
+}
 input:focus,
 select:focus,
 textarea:focus {
@@ -4668,25 +4703,6 @@ tr.ms-off .ms-prog {
   }
   .sb-is-collapsed .content-wrap {
     margin-left: 0;
-  }
-  /* Prevent iOS Safari input auto-zoom (triggers when font-size < 16px).
-     !important is still required, for a different reason than when this was
-     written: the inline style="font-size:12px" it used to fight is gone from
-     every compact filter and search field, but the .fs-meta class that replaced
-     it is (0,2,0) and this selector is (0,0,3). Drop the !important and Safari
-     gets a 13px field to zoom into on the pages that were just cleaned up. */
-  /* And it is the one font-size in this sheet that stays px, because 16 here
-     is not a type size at all: it is iOS Safari's zoom threshold, a fixed
-     number of CSS pixels. `1rem` would follow the reader's browser setting,
-     and a reader who set 14px would get the zoom straight back. */
-  /* And it is the one font-size in this sheet that stays px, because 16 here
-     is not a type size at all: it is iOS Safari's zoom threshold, a fixed
-     number of CSS pixels. `1rem` would follow the reader's browser setting,
-     and a reader who set 14px would get the zoom straight back. */
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
   }
   /* Constrain inline-sized inputs so they can't overflow narrow viewports */
   input[style*='width:'],

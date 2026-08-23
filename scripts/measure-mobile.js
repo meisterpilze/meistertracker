@@ -108,6 +108,12 @@ const ONE_WIDTH = Number(flag('--width') || 0) || null;
 const ONE_POINTER = flag('--pointer');
 
 const TYPE_FLOOR = floor();
+// Not a type size and not a token: iOS Safari's zoom threshold, a fixed count
+// of CSS pixels. A focused field under it makes the phone zoom the whole page
+// in, and there is no matching rule that zooms back out. Sixteen is the number
+// WebKit uses; nothing in this sheet may lower it, and nothing in this sheet
+// may make it depend on the reader's font setting either.
+const FELD_MIN = 16;
 // The Feld floor (--tap-min, 56px) is a gloved hand's number and is reported
 // rather than counted: §9 of MOBILE_REDESIGN.md put the Büro controls at 48
 // deliberately, and measuring everything against 56 reports 76 sidebar buttons
@@ -195,6 +201,18 @@ function helferQuelle() {
   window.__mess = {
     TOUCH:
       'button,.btn,input,select,textarea,summary,[role="button"],.stab,.sb-btn,.chip,.bottom-nav-btn,a[onclick],[onclick]',
+    FELD: 'input,select,textarea',
+    // iOS Safari zooms the page in when a focused field's text is under 16 CSS
+    // px, and it does not zoom back out — the way back is a pinch the user has
+    // to know about. It only does it for controls that take a keyboard or open
+    // a picker, so a checkbox at 13px is not this finding and counting it would
+    // bury the ones that are.
+    zoomtIOS: function (el) {
+      const t = el.tagName;
+      if (t === 'TEXTAREA' || t === 'SELECT') return true;
+      if (t !== 'INPUT') return false;
+      return !/^(button|submit|reset|checkbox|radio|file|range|color|image|hidden)$/i.test(el.type || 'text');
+    },
     where: function (el) {
       let p = el.tagName.toLowerCase();
       if (el.id) p += '#' + el.id;
@@ -247,13 +265,14 @@ function helferQuelle() {
 // node: puppeteer serialises the function and evaluates it in the page. It may
 // not close over anything in this file, and it may only return plain data.
 /* global document, window, getComputedStyle */
-function measure(typeFloor, touchFloor) {
+function measure(typeFloor, touchFloor, FELD_MIN) {
   const reveal = document.createElement('style');
   reveal.textContent = '.page,.sp,.modal-bg,details>*{display:block !important}.modal-bg{position:static !important}';
   document.head.appendChild(reveal);
-  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
+  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
+  const feld = [];
   const over = [];
   let hidden = 0;
   let unfilled = 0;
@@ -269,6 +288,13 @@ function measure(typeFloor, touchFloor) {
     const fs2 = parseFloat(cs.fontSize);
     const txt = ownText(el);
     if (txt && fs2 < typeFloor) type.push({ at: where(el), px: fs2, text: txt.slice(0, 40) });
+    if (fs2 < FELD_MIN && el.matches(FELD) && zoomtIOS(el)) {
+      feld.push({
+        at: where(el),
+        px: fs2,
+        text: (el.getAttribute('placeholder') || el.name || el.id || '').slice(0, 40)
+      });
+    }
     const rect = el.getBoundingClientRect();
     if (el.matches(TOUCH) && awaitingText(el)) {
       unfilled++;
@@ -338,6 +364,7 @@ function measure(typeFloor, touchFloor) {
     viewport: window.innerWidth,
     type,
     touch,
+    feld,
     over: outermost(over),
     hidden,
     unfilled,
@@ -352,10 +379,11 @@ function measure(typeFloor, touchFloor) {
 // screens into one document and measure widths nobody gets. Here exactly one
 // page is open, because a nav entry was clicked, exactly as a user meets it.
 /* global document, window, getComputedStyle */
-function measureLive(typeFloor, touchFloor) {
-  const { TOUCH, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
+function measureLive(typeFloor, touchFloor, FELD_MIN) {
+  const { TOUCH, FELD, zoomtIOS, where, ownText, scrolls, awaitingText, outermost } = window.__mess;
   const type = [];
   const touch = [];
+  const feld = [];
   const over = [];
   const vw = document.documentElement.clientWidth;
   const all = document.querySelectorAll('body *');
@@ -371,6 +399,13 @@ function measureLive(typeFloor, touchFloor) {
     const fs2 = parseFloat(cs.fontSize);
     const txt = ownText(el);
     if (txt && fs2 < typeFloor) type.push({ at: where(el), px: fs2, text: txt.slice(0, 40) });
+    if (fs2 < FELD_MIN && el.matches(FELD) && zoomtIOS(el)) {
+      feld.push({
+        at: where(el),
+        px: fs2,
+        text: (el.getAttribute('placeholder') || el.name || el.id || '').slice(0, 40)
+      });
+    }
     if (el.matches(TOUCH) && r.height > 0 && r.height < touchFloor) {
       touch.push({
         at: where(el),
@@ -386,6 +421,7 @@ function measureLive(typeFloor, touchFloor) {
     viewport: window.innerWidth,
     type,
     touch,
+    feld,
     over: outermost(over),
     hidden: all.length - visible,
     scanned: all.length,
@@ -773,7 +809,12 @@ async function main() {
         // The HIGHER of the two floors, so the caller can split. The page used
         // to be told only point.tapFloor, so nothing between that and the Feld
         // floor was ever collected and the Feld report below was unreachable.
-        const m = await page.evaluate(APP ? measureLive : measure, TYPE_FLOOR, Math.max(point.tapFloor, TOUCH_FELD));
+        const m = await page.evaluate(
+          APP ? measureLive : measure,
+          TYPE_FLOOR,
+          Math.max(point.tapFloor, TOUCH_FELD),
+          FELD_MIN
+        );
         // The largest any single measurement saw, not the last one. These were
         // plain assignments in the innermost loop, so the summary reported
         // whichever width and station happened to finish last as though it
@@ -805,6 +846,7 @@ async function main() {
           continue;
         }
         for (const r of m.type) rows.push({ kind: 'type', pointer: point.name, width, ...r });
+        for (const r of m.feld) rows.push({ kind: 'feld', pointer: point.name, width, ...r });
         for (const r of m.touch) {
           // Which of the two floors this one is under, decided per row and kept
           // in the grouping key below. Without it a 48px control (fine, under
@@ -897,7 +939,7 @@ async function main() {
           await page.evaluate(() => {
             delete window.__ruhe;
           });
-          const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor);
+          const m = await page.evaluate(measureLive, TYPE_FLOOR, point.tapFloor, FELD_MIN);
           const opened = geoeffnet.get(`${point.name}|${stop.name}|${jump.to}`);
           if (opened === undefined) {
             // Belt and braces: SPRUNGZIELE puts every `to` in the band, but a
@@ -960,6 +1002,11 @@ async function main() {
   const used = ratchet(findings, thresholds.ratchet || [], here);
 
   const type = findings.filter((f) => f.kind === 'type' && f.pointer === 'coarse');
+  // Only under a coarse pointer, because that is the whole finding: a mouse
+  // cannot make iOS zoom. The same field at 13px on a desk is a density
+  // decision, and reporting it here would say a thousand times over that a
+  // Büro screen is broken when nothing about it is.
+  const feld = findings.filter((f) => f.kind === 'feld' && f.pointer === 'coarse');
   const typeFine = findings.filter((f) => f.kind === 'type' && f.pointer === 'fine');
   const over = findings.filter((f) => f.kind === 'over');
   const tapFloorOf = (f) => POINTERS.find((p) => p.name === f.pointer).tapFloor;
@@ -974,6 +1021,11 @@ async function main() {
   bad += report(
     `TOUCH: under the floor for its pointer (${POINTERS.map((p) => `${p.name} ${p.tapFloor}`).join(', ')})`,
     tooSmall,
+    BAND
+  );
+  bad += report(
+    `FIELDS: under ${FELD_MIN}px with a coarse pointer, so iOS zooms in on focus and does not come back`,
+    feld,
     BAND
   );
   bad += report('OVERFLOW: past the right edge, outside any sideways-scrolling box', over, BAND);
