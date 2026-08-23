@@ -5286,6 +5286,12 @@ function toggleDashRoom(key) {
 // weekday number — a stored weekday would silently point at a different day
 // after midnight, and 0 always means "today" no matter when it is read.
 let _dashDayOffset = 0;
+let _dashDayOnly = localStorage.getItem('mp-dash-view') === 'day';
+function setDashView(nurTag) {
+  _dashDayOnly = !!nurTag;
+  localStorage.setItem('mp-dash-view', _dashDayOnly ? 'day' : 'week');
+  renderDashBatchTasks();
+}
 function setDashDay(off) {
   const n = Number(off);
   if (!Number.isInteger(n) || n < 0 || n > 6) return;
@@ -6358,6 +6364,7 @@ function renderDashBatchTasks() {
   const hasRhythm = Object.keys(weekRhythm).length > 0;
   if (!anyWork && !hasRhythm) {
     el.innerHTML =
+      _dashViewToggleHtml(_dashDayOnly) +
       '<div class="empty fs-sm" style="padding:12px;text-align:center;color:var(--c-text-muted)">' +
       esc(t('dash.noUrgent')) +
       '</div>' +
@@ -6365,16 +6372,83 @@ function renderDashBatchTasks() {
     return;
   }
   const sel = _dashDayOffset >= 0 && _dashDayOffset < 7 ? _dashDayOffset : 0;
-  // Every day renders its own work, every time. On a wide screen all seven
-  // columns are readable at once, which is the point of showing a week; on a
-  // phone the CSS keeps the header strip and opens only the chosen day. One
-  // render, two layouts — the alternative was emitting the open day twice.
+  // Drei Reihen: die Woche, und darunter der Tag.
+  //
+  // Der Arbeitszettel des gewaehlten Tages stand in dessen Spalte -- und eine
+  // Spalte ist ein Siebtel der Karte, also rund 170px. Auf dem Telefon fiel das
+  // nicht auf, weil die Spalte dort ueber die ganze Breite geht; am Rechner
+  // wurde derselbe Zettel in 170px gepresst. Ergebnis: "Black..." statt der
+  // Sorte, "0,0 von 10,0" ueber drei Zeilen und ein Knopf, der breiter war als
+  // die Spalte, die ihn hielt.
+  //
+  // Der Streifen oben ist die Woche auf einen Blick. Der Tag, an dem gearbeitet
+  // wird, braucht die ganze Breite und bekommt sie darunter -- an jedem Schirm
+  // dieselbe Anordnung, statt zweier Layouts, von denen eines nie geprueft war.
+  const nurTag = _dashDayOnly;
   el.innerHTML =
-    '<div class="wk">' +
-    week.map((d, i) => _weekHeadHtml(d, i, i === sel)).join('') +
-    week.map((d, i) => _weekColBodyHtml(d, i, i === sel)).join('') +
-    '</div>' +
+    _dashViewToggleHtml(nurTag) +
+    '<div class="wk' +
+    (nurTag ? ' day-only' : '') +
+    '">' +
+    (nurTag
+      ? _dayNavHtml(week, sel)
+      : week.map((d, i) => _weekHeadHtml(d, i, i === sel)).join('') +
+        week.map((d, i) => _weekColBodyHtml(d, i, i === sel)).join('')) +
+    '<div class="wk-open">' +
+    _weekDayBodyHtml(week[sel], sel, sel === 0) +
+    '</div></div>' +
     _rhythmEditLink();
+}
+// Woche oder Tag.
+//
+// Sieben Spalten sind eine Uebersicht und ein Kompromiss: jede einzelne ist ein
+// Siebtel breit, und was darin steht, muss klein sein. Wer den Tag arbeitet,
+// braucht die Uebersicht gerade nicht -- also gibt es sie auf Wunsch nicht, und
+// der Tag bekommt die ganze Karte samt groesserer Schrift.
+//
+// Kein "besseres" von beiden. Am Montagmorgen will man die Woche sehen, um halb
+// vier will man wissen, was noch offen ist.
+function _dashViewToggleHtml(nurTag) {
+  const knopf = (tag, label) =>
+    '<button type="button" class="wk-view-btn' +
+    (nurTag === tag ? ' sel' : '') +
+    '" data-action="dash-view" data-day="' +
+    (tag ? '1' : '0') +
+    '" aria-pressed="' +
+    (nurTag === tag) +
+    '">' +
+    esc(t(label)) +
+    '</button>';
+  return '<div class="wk-view">' + knopf(false, 'dash.viewWeek') + knopf(true, 'dash.viewDay') + '</div>';
+}
+// Ohne den Streifen braucht der Tag einen anderen Weg zum naechsten Tag.
+function _dayNavHtml(week, sel) {
+  const d = week[sel];
+  const th = themeFor(d.weekday);
+  const titel =
+    t('rhythm.day.' + d.weekday) +
+    ', ' +
+    d.date.toLocaleDateString(loc(), { day: 'numeric', month: 'long' }) +
+    (th.theme && th.theme !== 'free' ? ' · ' + weekThemeLabel(th.theme) : '');
+  const pfeil = (ziel, zeichen, label, aus) =>
+    '<button type="button" class="btn btn-sm wk-daynav-btn" data-action="dash-day" data-off="' +
+    ziel +
+    '"' +
+    (aus ? ' disabled' : '') +
+    ' aria-label="' +
+    esc(t(label)) +
+    '">' +
+    zeichen +
+    '</button>';
+  return (
+    '<div class="wk-daynav">' +
+    pfeil(sel - 1, '&#8249;', 'dash.dayPrev', sel <= 0) +
+    '<span class="wk-daynav-t fs-sm">' +
+    esc(titel) +
+    '</span>' +
+    pfeil(sel + 1, '&#8250;', 'dash.dayNext', sel >= 6) +
+    '</div>'
+  );
 }
 function _weekHeadHtml(d, off, sel) {
   const isToday = off === 0;
@@ -6459,18 +6533,13 @@ function _weekHeadHtml(d, off, sel) {
 // One column's work. Narrow by design — on a wide screen this is a seventh of
 // the card, so rows are stripped to the batch and its count, with the detail
 // on the open day only.
+// Eine Spalte der Wochenuebersicht. Immer die Vorschau, auch fuer den
+// gewaehlten Tag: was der Tag verlangt, steht ausfuehrlich darunter in
+// .wk-open, und zweimal dasselbe nebeneinander waere nur laenger. Die Toenung
+// sagt weiterhin, welcher Tag offen ist.
 function _weekColBodyHtml(d, off, sel) {
   return (
-    '<div class="wk-b' +
-    (sel ? ' sel' : '') +
-    '" style="--col:' +
-    (off + 1) +
-    '">' +
-    // The chosen day gets the full run sheet — rooms, buttons, progress. The
-    // other six get a preview: a seventh of the card is not enough width for an
-    // action button, and a truncated one is worse than none.
-    (sel ? _weekDayBodyHtml(d, off, off === 0) : _weekColPreviewHtml(d)) +
-    '</div>'
+    '<div class="wk-b' + (sel ? ' sel' : '') + '" style="--col:' + (off + 1) + '">' + _weekColPreviewHtml(d) + '</div>'
   );
 }
 // What a row actually asks you to do, which is not the same as what it is. A
@@ -23500,6 +23569,10 @@ function initEventListeners() {
     }
     if (action === 'dash-day') {
       setDashDay(el.dataset.off);
+      return;
+    }
+    if (action === 'dash-view') {
+      setDashView(el.dataset.day === '1');
       return;
     }
     if (action === 'bulk-fruiting') {
