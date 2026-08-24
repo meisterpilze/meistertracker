@@ -69,10 +69,63 @@ describe('START.bat does not pretend the kill worked', () => {
   });
 
   it('names the cause and both fixes, since the error alone explains nothing', () => {
-    const held = BAT.slice(BAT.indexOf('if defined PORT_HOLDER'), BAT.indexOf('if defined PORT_HOLDER') + 2200);
+    // Vom ersten PORT_HOLDER-Zweig bis zum Abbruch, nicht 2200 Zeichen ab dort:
+    // eine Zeile Kommentar mehr schob den Abschnitt aus dem Fenster, und der
+    // Test schlug fehl, ohne dass sich am Verhalten etwas geändert hätte.
+    const von = BAT.indexOf('if defined PORT_HOLDER');
+    const held = BAT.slice(von, BAT.indexOf('exit /b 1', von));
+    assert.ok(held.length > 0, 'der Abbruchzweig ist fort');
     assert.match(held, /install-autostart\.ps1/, 'the permanent fix is not named');
     assert.match(held, /Stop-Process -Id/, 'the immediate fix is not named');
     assert.match(held, /Administrator/, 'it does not say the fix needs elevation');
+  });
+
+  it('asks the scheduler before it gives up', () => {
+    // taskkill braucht ein Handle auf den Prozess, und die Boot-Instanz läuft in
+    // ihrer eigenen S4U-Anmeldesitzung — ein gewöhnliches Fenster konnte nicht
+    // einmal ihre Kommandozeile lesen. Der Scheduler ist derselbe Weg von der
+    // anderen Seite: er läuft als SYSTEM, ihm gehört die Aufgabe, und sie zu
+    // beenden darf ihr Besitzer ohne Handle und ohne Erhöhung verlangen.
+    //
+    // Ohne diesen Schritt war der erste START.bat-Lauf nach JEDEM Neustart ein
+    // Gang in eine Administrator-Sitzung.
+    const step5 = BAT.slice(BAT.indexOf('[5/5]'));
+    const kill = step5.indexOf('taskkill /PID');
+    const sched = step5.indexOf('schtasks /end');
+    const fehler = step5.indexOf('ERROR: port');
+    assert.ok(sched !== -1, 'START.bat fragt den Scheduler gar nicht');
+    assert.ok(kill < sched, 'der Scheduler wird vor taskkill gefragt');
+    assert.ok(sched < fehler, 'der Scheduler wird erst nach der Fehlermeldung gefragt');
+    // Und danach noch einmal nachsehen, statt es anzunehmen — derselbe Grund,
+    // aus dem taskkill nachgeprüft wird.
+    const nach = step5.slice(sched, fehler);
+    assert.match(nach, /set "PORT_HOLDER="/, 'nach dem Scheduler liest niemand den Port neu');
+  });
+
+  it('behauptet den RunLevel nicht, sondern schlägt ihn nach', () => {
+    // Die alte Fassung nannte RunLevel Highest als Ursache und schickte den
+    // Leser zum Neuregistrieren — auf einer Maschine, wo die Aufgabe längst
+    // Limited war. Der Gang in die erhöhte Sitzung änderte nichts, und der Port
+    // blieb belegt.
+    const von = BAT.indexOf('ERROR: port');
+    const held = BAT.slice(von, BAT.indexOf('exit /b 1', von));
+    assert.ok(held.length > 0, 'der Abbruchzweig ist fort');
+    assert.match(BAT, /Get-ScheduledTask[^\n]*Principal\.RunLevel/, 'der RunLevel wird nirgends nachgesehen');
+    assert.match(held, /if \/i "!TASK_LEVEL!"=="Highest"/, 'die Highest-Erklärung hängt an keiner Bedingung');
+    // Der Zweig für alles andere muss sagen, dass Neuregistrieren nicht hilft.
+    const sonst = held.slice(held.indexOf(') else ('));
+    assert.match(sonst, /would change nothing/, 'der Nicht-Highest-Fall schickt weiter ins Leere');
+  });
+
+  it('nennt die Aufgabe so, wie der Installer sie registriert', () => {
+    // Ein Tippfehler hier macht das schtasks /end oben zu einem stillen Nichts.
+    const m = PS1.match(/\$TaskName\s*=\s*'([^']+)'/);
+    assert.ok(m, 'install-autostart.ps1 setzt keinen $TaskName mehr');
+    assert.match(
+      BAT,
+      new RegExp('set "AUTOSTART_TASK=' + m[1] + '"'),
+      'START.bat kennt die Aufgabe unter einem anderen Namen als der Installer'
+    );
   });
 
   it('leaves worktree runs alone — they never touch the production port', () => {
