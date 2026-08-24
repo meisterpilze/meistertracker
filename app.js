@@ -2936,14 +2936,21 @@ const SUPPLY_RANK = { now: 0, nospawn: 1, low: 2, ok: 3, off: 4 };
 // Standardwert der Serverseite.
 function _grainKgOf(b) {
   const platz = placementByBag();
+  // Wenn niemand sagt, wie schwer ein Glas ist, gilt dasselbe Ersatzmass wie
+  // beim Auslesen: db.js setzt fuer bagWeights `r.bag_kg || 3`. Hier stand 0,
+  // und damit meldete eine Charge ohne Gewichtsangabe null Kilogramm ueber
+  // einem vollen Regal -- genau die "Koerner fehlen"-Meldung, gegen die diese
+  // Funktion zweimal umgeschrieben wurde. Zwei Wege durch dieselbe Zahl
+  // muessen dasselbe Ersatzmass nehmen, sonst widersprechen sie sich.
+  const ERSATZ_KG = 3;
   const glasKg = (bag) => {
     const w = b.bagWeights && b.bagWeights[bag];
     if (Number.isFinite(w)) return w;
-    return Number.isFinite(b.bagKg) ? b.bagKg : 0;
+    return Number.isFinite(b.bagKg) ? b.bagKg : ERSATZ_KG;
   };
   const glaeser = b.bags && b.bags.length ? b.bags : null;
   // Ohne Glasliste bleibt nur die Angabe der Charge selbst.
-  if (!glaeser) return (b.qty || 0) * (Number.isFinite(b.bagKg) ? b.bagKg : 0);
+  if (!glaeser) return (b.qty || 0) * (Number.isFinite(b.bagKg) ? b.bagKg : ERSATZ_KG);
   let kg = 0;
   for (const bag of glaeser) {
     const letzter = platz.get(String(bag).toUpperCase());
@@ -5327,8 +5334,16 @@ const WEEK_THEMES = ['substrate', 'grain', 'free'];
 // Weekdays in the order a working week reads, not the order getDay() numbers
 // them — Monday first, Sunday last, while the stored keys stay 0 = Sunday.
 const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0];
+// Ein Thema, das die Auswahl nicht mehr kennt, darf trotzdem nicht als
+// Rohschluessel auf dem Schirm landen. Migration 81 laesst aufgezeichnete Tage
+// bewusst stehen, wie sie waren -- eine Aufnahme der Vergangenheit anzufassen,
+// weil sich ein Menue geaendert hat, waere die Umkehrung von allem, was hier
+// gilt. Also bleiben die drei alten Beschriftungen erhalten, und alles, wofuer
+// es gar keine gibt, liest "ohne Thema" statt "rhythm.theme.irgendwas".
+const WEEK_THEME_LABELS = [...WEEK_THEMES, 'fruiting', 'harvest', 'lab'];
 function weekThemeLabel(theme) {
-  return theme ? t('rhythm.theme.' + theme) : t('rhythm.theme.none');
+  if (!theme || !WEEK_THEME_LABELS.includes(theme)) return t('rhythm.theme.none');
+  return t('rhythm.theme.' + theme);
 }
 // Which theme a given weekday carries, or '' if the farm has not said.
 // The whole entry for a weekday: {theme, targetQty, strainId, note}. A day the
@@ -5496,12 +5511,27 @@ const RECURRING_LOOKBACK_DAYS = 14;
 // nicht rueckwirkend seit Januar gefehlt.
 function recurringArrears(today) {
   const out = [];
+  const heute = _ymd(today);
   for (const x of recurringTasks || []) {
     if (!x || !x.active) continue;
+    // Faellt die Aufgabe heute ohnehin an, steht sie schon in der Liste des
+    // Tages. Den versaeumten Termin daneben zu setzen hiesse: zwei Zeilen mit
+    // zwei Haken fuer einmal Putzen -- und wer einmal putzt, ist wieder
+    // aktuell. Genau der Satz, den der Absatz oben behauptet.
+    if (recurringDueOn(x.anchor, x.everyWeeks, heute)) continue;
     const takt = 7 * (Number(x.everyWeeks) || 1);
     const weit = Math.max(RECURRING_LOOKBACK_DAYS, takt);
     for (let back = 1; back <= weit; back++) {
-      const d = _ymd(new Date(today.getTime() - back * 864e5));
+      // addDays(), nicht minus 864e5. Ein Tag ist nicht immer 24 Stunden: in
+      // der Nacht der Umstellung sind es 23 oder 25, und der Rueckwaertsgang
+      // in festen Millisekunden ueberspringt dann ein Kalenderdatum ganz.
+      // Gemessen fuer Europe/Berlin: von Mo 30.03.2026 aus liefert er
+      // 28.03., 27.03., ... -- der 29.03. kommt nie vor, und ein an diesem
+      // Sonntag versaeumter Termin war damit unsichtbar, dauerhaft.
+      //
+      // recurringDueOn() rechnet aus genau diesem Grund in UTC. Der Aufrufer
+      // tat es nicht, und das ist die Haelfte, die der Test nicht ansah.
+      const d = _ymd(addDays(today, -back));
       if (d < x.anchor) break;
       if (!recurringDueOn(x.anchor, x.everyWeeks, d)) continue;
       // Der erste Treffer rueckwaerts IST der juengste Termin. Ob er offen ist
@@ -5598,10 +5628,19 @@ function rhythmMixText(weekday) {
 // each day takes the activity most concentrated on it, and a day that holds no
 // meaningful share of anything is offered as free rather than mislabelled.
 function suggestWeekRhythm() {
-  const KINDS = ['substrate', 'grain', 'fruiting'];
+  // Nur Themen, die WEEK_THEMES auch kennt.
+  //
+  // 'fruiting' stand hier noch, nachdem es aus der Auswahl geflogen war. Zwei
+  // Folgen, beide still: der Wochenkopf zeichnete den Rohschluessel
+  // "rhythm.theme.fruiting", weil t() bei fehlender Uebersetzung den Schluessel
+  // selbst zurueckgibt -- und im Editor fand das <select> keine passende
+  // Option, waehlte die erste ('substrate'), und _rhythmSyncFromForm() las beim
+  // Speichern genau diese zurueck. Wer den Vorschlag ungeprueft bestaetigte,
+  // speicherte einen Substrattag, ohne etwas geaendert zu haben.
+  const KINDS = ['substrate', 'grain'];
   const byDay = {};
-  const totals = { substrate: 0, grain: 0, fruiting: 0 };
-  for (let d = 0; d < 7; d++) byDay[d] = { substrate: 0, grain: 0, fruiting: 0 };
+  const totals = { substrate: 0, grain: 0 };
+  for (let d = 0; d < 7; d++) byDay[d] = { substrate: 0, grain: 0 };
   const typeOf = {};
   for (const b of batches) typeOf[b.batchId] = b.batchType;
   for (const e of scanLog) {
@@ -5611,10 +5650,6 @@ function suggestWeekRhythm() {
     const d = dt.getDay();
     let kind = null;
     if (e.action === 'ADD') kind = typeOf[e.batch] === 'grain' ? 'grain' : 'substrate';
-    else if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
-      const z = ZONE_BY_ID[toZone(e.to)];
-      if (z && z.role === 'fruiting') kind = 'fruiting';
-    }
     if (!kind) continue;
     byDay[d][kind]++;
     totals[kind]++;
@@ -5785,7 +5820,11 @@ function buildWeekPlan() {
   const lastByBag = buildLastScanByBag();
   const days = [];
   for (let off = 0; off < 7; off++) {
-    const date = new Date(midnight.getTime() + off * 864e5);
+    // Auch hier addDays(): mit festen 864e5 fielen im Oktober zwei Spalten auf
+    // dasselbe Datum (25.10. zweimal) und der Montag darauf verschwand. Seit
+    // die eigenen Aufgaben an _ymd(days[i].date) haengen, ist der Schluessel
+    // tragend: zwei Spalten zeichneten denselben Haken.
+    const date = addDays(midnight, off);
     days.push({ offset: off, date, weekday: date.getDay(), theme: themeOf(date.getDay()), items: [] });
   }
   const put = (off, item) => days[Math.max(0, Math.min(6, off))].items.push(item);
@@ -6004,17 +6043,24 @@ function todayProgress(todayItems) {
     if (!isNaN(dt) && dt >= midnight) done++;
   }
   for (const mt of manualTasks) if (mt && mt.done && mt.dueDate) done++;
-  // Eine abgehakte eigene Aufgabe ist erledigte Arbeit wie jede andere. Ohne
-  // diese Zeile wuechse durch PLAN_KINDS.chore.counts nur der Nenner, und ein
-  // fertiger Tag laese 7/8 -- derselbe Fehler, gegen den der Absatz darunter
-  // geschrieben ist, nur von der anderen Seite.
-  for (const it of todayItems) if (it && it.kind === 'chore' && it.done) done++;
+  // Eine abgehakte eigene Aufgabe ist erledigte Arbeit wie jede andere.
+  for (const it of todayItems) if (it && it.done) done++;
   // Supply and lab-floor rows are derived from stock levels: they clear when
   // the stock changes, never by being ticked, and counting them in the
   // denominator made a finished day read 5/8. They are work, but they are not
   // work this bar can measure.
   // Abgeleitete Zeilen zählen nicht mit — welche das sind, sagt PLAN_KINDS.
+  //
+  // Und Erledigtes auch nicht. total ist done + countable, also zaehlte eine
+  // abgehakte Aufgabe zweimal: einmal oben im Zaehler und einmal hier im
+  // Nenner. Ein fertiger Tag las 4/5 und konnte nie 100% erreichen -- derselbe
+  // Fehler wie bei den abgeleiteten Zeilen, nur von der anderen Seite.
+  //
+  // Genau das tut die Liste fuer manuelle Aufgaben schon an der Quelle
+  // (`if (!mt || mt.done || !mt.dueDate) continue`); die eigenen Aufgaben
+  // muessen in der Liste bleiben, weil man den Haken auch zuruecknehmen darf.
   const countable = todayItems.filter((it) => {
+    if (it && it.done) return false;
     const k = planKind(it);
     return k ? k.counts : true;
   });
@@ -6238,7 +6284,11 @@ function addOwnTask() {
   const heute = new Date();
   heute.setHours(0, 0, 0, 0);
   const vor = (wd - heute.getDay() + 7) % 7;
-  const anchor = _ymd(new Date(heute.getTime() + vor * 864e5));
+  // addDays(): mit festen 864e5 landete eine am Sa 24.10.2026 angelegte
+  // Montagsaufgabe auf dem 25.10. -- einem Sonntag -- und lief von da an jeden
+  // Sonntag, denn recurringDueOn() liest den Wochentag aus dem Anker. Es gibt
+  // keinen Weg, das nachtraeglich zu korrigieren ausser loeschen und neu.
+  const anchor = _ymd(addDays(heute, vor));
   apiPost('/api/recurring-task', { name, everyWeeks: every, anchor }).then((res) => {
     if (!res || res.error) {
       toast((res && res.error) || t('recur.saveFailed'), 'err');
@@ -6723,9 +6773,16 @@ function _weekColPreviewHtml(d, offen) {
       '<div style="padding:3px 2px;border-left:2px solid var(--c-accent);margin-bottom:3px">' +
       _rhythmTargetBtn(task.date, task.targetQty, task.targetQty + (ms ? '× ' + ms.name : '')) +
       '</div>';
-  } else if (themeFor(d.weekday).theme && themeFor(d.weekday).theme !== 'free') {
+  } else if (rhythmOf(d.weekday) && rhythmOf(d.weekday).theme && rhythmOf(d.weekday).theme !== 'free') {
     // A themed day with no amount yet still needs a way in, or the first number
     // can only ever be set through the recurring editor.
+    //
+    // rhythmOf(), nicht themeFor(): themeFor() faellt auf den GESCHAETZTEN
+    // Rhythmus zurueck, solange nichts gespeichert ist. Der Knopf erschien also
+    // auf einer frischen Anlage, und der Dialog dahinter las rhythmOf() -- fand
+    // nichts, sperrte das Planfeld mit der Begruendung "nur Admins aendern das"
+    // (einem Admin gegenueber), und das Speichern endete in "No rhythm on".
+    // Ein Knopf gehoert nur dorthin, wo er auch etwas bewirkt.
     html +=
       '<div style="padding:3px 2px;margin-bottom:3px">' +
       _rhythmTargetBtn(_ymd(d.date), 0, t('rhythm.setQty')) +
@@ -7020,25 +7077,20 @@ function closeDayQty() {
   if (m) m.classList.remove('open');
   _dayQty = null;
 }
-// Den ganzen Wochenrhythmus zurückschreiben, mit einer geänderten Menge. Die
-// Route nimmt die Woche als Ganzes; aus den sechs unveränderten Tagen wird
-// dabei genau das, was sie vorher waren.
+// Die Menge eines Wochentags ändern — und nur die.
+//
+// Vorher baute das hier die ganze Woche aus `weekRhythm` neu zusammen und
+// schickte sie an eine Route, die die Tabelle leert und neu füllt. Die sechs
+// unberührten Tage kamen dabei aus dem Abbild, das dieser Browser zuletzt
+// gesehen hatte: hatte inzwischen jemand anderes den Donnerstag geändert, war
+// diese Änderung nach dem Speichern eines Montags fort. Ein Fenster, das eine
+// einzige Zahl zeigt, schrieb sieben Tage.
 function _saveWeekdayPlan(weekday, qty) {
-  const map = {};
-  for (const d of WEEK_DAYS) {
-    const e = rhythmOf(d) || {};
-    map[d] =
-      !e.theme || e.theme === 'free'
-        ? { theme: 'free' }
-        : {
-            theme: e.theme,
-            targetQty: d === weekday ? qty || null : e.targetQty,
-            strainId: e.strainId,
-            note: e.note
-          };
-  }
-  return apiPut('/api/week-rhythm', { rhythm: map }).then((res) => {
-    if (res && !res.error) weekRhythm = map;
+  return apiPost('/api/week-rhythm-day', { weekday, targetQty: qty }).then((res) => {
+    if (res && !res.error) {
+      const e = rhythmOf(weekday);
+      if (e) weekRhythm[weekday] = Object.assign({}, e, { targetQty: qty || null });
+    }
     return res;
   });
 }
@@ -7048,6 +7100,20 @@ function saveDayQty() {
   const date = _dayQty.date;
   const weekday = _dayQty.weekday;
   const planGeaendert = _dayQty.darfPlan && plan !== _dayQty.plan;
+  // Beide Zahlen prüfen, bevor irgendetwas geschrieben wird.
+  //
+  // Es sind zwei abhängige Schreibvorgänge: erst die Regel, dann die Ausnahme.
+  // Scheiterte der zweite an einer Zahl, die der Server ablehnt, war der erste
+  // längst gespeichert — der Wochenplan für jeden künftigen Montag stand auf
+  // dem neuen Wert, die Meldung sprach nur vom Tag, und nichts sagte, dass die
+  // Regel sich geändert hatte. Die Grenzen sind dieselben, die der Server
+  // zieht, also lässt sich das hier entscheiden, bevor etwas passiert.
+  for (const n of [plan, gesamt]) {
+    if (!Number.isInteger(n) || n < 0 || n > 100000) {
+      setFb('err', t('dayqty.bad'));
+      return;
+    }
+  }
   // Erst die Regel, dann die Ausnahme. Der Server prüft die Ausnahme gegen die
   // Vorlage, und das muss die neue sein — sonst bliebe ein Tag als Ausnahme
   // stehen, der der eben gesetzten Regel exakt entspricht.
@@ -7058,7 +7124,10 @@ function saveDayQty() {
     }
     apiPost('/api/rhythm-task', { date, targetQty: gesamt }).then((r) => {
       if (r && r.error) {
-        toast(r.error, 'err');
+        // Ist die Regel schon geschrieben, muss die Meldung das sagen. Sonst
+        // liest sich ein halb gelungener Speichervorgang wie ein misslungener.
+        toast(planGeaendert ? t('dayqty.planOnly', { err: r.error }) : r.error, 'err');
+        if (planGeaendert) renderDashBatchTasks();
         return;
       }
       // Der Tag folgt wieder der Vorlage: der Server hat die eigene Zeile
@@ -9718,7 +9787,11 @@ function placementByBag() {
 function buildLastPlacementByBag() {
   const m = new Map();
   for (const e of scanLog) {
-    if (e.action !== 'ADD' && e.action !== 'MOVE' && e.action !== 'REMOVE') continue;
+    // MOVE_BATCH gehoert dazu. Ohne sie blieb der Umzug einer ganzen Charge
+    // unsichtbar: wer sie ueber die Sammelaktion in die Kontamination schob,
+    // liess jedes Glas mit seiner letzten Einzelplatzierung stehen, und
+    // _grainKgOf() zaehlte die Kilogramm weiter mit.
+    if (e.action !== 'ADD' && e.action !== 'MOVE' && e.action !== 'MOVE_BATCH' && e.action !== 'REMOVE') continue;
     const k = (e.bag || '').toUpperCase();
     if (k) m.set(k, e);
   }
