@@ -226,19 +226,31 @@ if not defined TIMESTAMP set "TIMESTAMP=backup"
 if exist "meistertracker.db" (
     set "BACKUP_FILE=backups\meistertracker_!TIMESTAMP!.db"
     set "BACKUP_OK=0"
-    REM Prefer sqlite3 .backup for a WAL-consistent snapshot. Git for Windows
-    REM ships sqlite3 in PATH; fall back to a raw file copy if unavailable.
-    where sqlite3 >nul 2>&1
+    REM node runs the server, so it is always here. The sqlite3 CLI is not:
+    REM Git for Windows does not ship it, so the raw-copy branch below was not
+    REM a fallback at all, it was the path that always ran. And `copy` takes
+    REM meistertracker.db alone: in WAL mode that file is only as current as the
+    REM last checkpoint, so every snapshot silently dropped whatever was still
+    REM sitting in meistertracker.db-wal.
+    node "scripts\backup-db.js" "meistertracker.db" "!BACKUP_FILE!" >nul 2>&1
     if !errorlevel! equ 0 (
-        sqlite3 meistertracker.db ".backup '!BACKUP_FILE!'" >nul 2>&1
+        echo  -^> meistertracker.db backed up ^(WAL-consistent^).
+        set "BACKUP_OK=1"
+    )
+    if "!BACKUP_OK!"=="0" (
+        where sqlite3 >nul 2>&1
         if !errorlevel! equ 0 (
-            echo  -^> meistertracker.db backed up ^(WAL-consistent via sqlite3^).
-            set "BACKUP_OK=1"
+            sqlite3 meistertracker.db ".backup '!BACKUP_FILE!'" >nul 2>&1
+            if !errorlevel! equ 0 (
+                echo  -^> meistertracker.db backed up ^(WAL-consistent via sqlite3^).
+                set "BACKUP_OK=1"
+            )
         )
     )
     if "!BACKUP_OK!"=="0" (
         copy /y "meistertracker.db" "!BACKUP_FILE!" >nul
-        echo  -^> meistertracker.db backed up ^(file copy^).
+        echo  -^> WARNING: raw file copy only. Anything still in meistertracker.db-wal
+        echo     is NOT in this snapshot. Check that scripts\backup-db.js is present.
     )
 ) else (
     echo  -^> No meistertracker.db found, skipping backup.
