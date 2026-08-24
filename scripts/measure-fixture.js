@@ -53,6 +53,15 @@ const ZONES = [
 
 // No Date.now() surprises to explain later: the caller passes a base so the
 // same fixture can be rebuilt to the same shape.
+//
+// ⚠️ Freezing the DATA was only half of it, and the other half went unnoticed
+// until 24.08. The app renders against the browser's clock, so a fixture pinned
+// to one morning slides past the overdue boundary a day at a time: three lines
+// of the Arbeitsgänge census had moved by then, and the census is meant to be
+// the thing that does not move. measure-mobile.js now offsets the page's clock
+// to this same instant, which is why it needs the number by name.
+const BASIS = Date.parse('2026-08-21T08:00:00Z');
+
 function iso(base, daysFromNow) {
   return new Date(base + daysFromNow * 86400000).toISOString();
 }
@@ -72,7 +81,7 @@ const BATCHES = [
  * `base` is a millisecond timestamp; everything dated is derived from it, so a
  * rebuilt fixture has the same shape rather than drifting with the clock.
  */
-function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
+function seed(database, base = BASIS) {
   // A Sorte carries name, Kürzel and description and nothing else — the species
   // lives on the batch. The pair `Name (KÜRZEL)` is the key the shop matches a
   // release against, spelled exactly, so the fixture spells it that way
@@ -201,4 +210,4 @@ function seed(database, base = Date.parse('2026-08-21T08:00:00Z')) {
   return { strainIds, batches: BATCHES.map((b) => b.id) };
 }
 
-module.exports = { seed, STRAINS, ZONES, BATCHES };
+module.exports = { seed, BASIS, STRAINS, ZONES, BATCHES };

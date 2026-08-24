@@ -12,6 +12,8 @@
 //                                                # the desk type census (npm run census)
 //   node scripts/measure-mobile.js --app --shots bilder/
 //                                                # a PNG per page at 320/390/768/860/1024/1440
+//   node scripts/measure-mobile.js --app --tage 3
+//                                                # the same data read three days later
 //
 // ⚠️ **This used to be hand-driven, and that is the change.** The old version
 // printed a snippet, told you to size a window to exactly 375px, and waited for
@@ -95,6 +97,7 @@ const os = require('os');
 const path = require('path');
 const { build, serve } = require('./static-page-server.js');
 const { ROOT, floor, tapFloor, breakpoints, widthBand, uncovered, POINTERS } = require('./mobile-size-scan.js');
+const { BASIS: FIXTURE_BASIS } = require('./measure-fixture.js');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const THRESHOLDS = path.join(__dirname, 'mobile-thresholds.json');
@@ -130,6 +133,11 @@ const CENSUS_WIDTH = 1440;
 // container query is exactly that kind of change -- containment can move an
 // absolutely positioned descendant to a different containing block, and nothing
 // in TYPE, TOUCH, FIELDS or OVERFLOW would say a word about it.
+// The page's clock, in days from the fixture's own morning. Normally 0, which
+// is the whole point: the data is frozen and so is the clock it is read
+// against. --tage 3 moves the clock forward without touching the data, which is
+// how the drift below was proven rather than argued.
+const TAGE = Number(flag('--tage') || 0) || 0;
 const SHOTS = flag('--shots');
 const SHOT_WIDTHS = [320, 390, 768, 860, 1024, 1440];
 const CENSUS_FILE = path.join(ROOT, 'test', 'type-census.json');
@@ -214,6 +222,36 @@ function gate() {
   } else {
     console.log('✓ COVERAGE: every breakpoint measured at G-1, G, G+1');
   }
+}
+
+// ── The page's clock ───────────────────────────────────────────────────────
+// The fixture pins its data to one morning on purpose and says so. What nobody
+// pinned is the clock the app reads that data against, and half a freeze is not
+// a freeze: on 24.08. three lines of the Arbeitsgänge census had moved, by the
+// same amounts on two different builds, because tasks seeded as "due tomorrow"
+// on 21.08. had become overdue in the meantime. A number that wanders between
+// two runs on different days measures nothing, and the census exists to be the
+// number that does not wander.
+//
+// Offset, not frozen. Time still passes inside the page, so anything that waits
+// on it still finishes; it just starts where the data starts. A run lasts two
+// minutes and a boundary is a day wide, so every run sees the same morning.
+//
+// Only under --app. Without it every script is stripped and nothing asks.
+function uhrQuelle(basis) {
+  const Echt = Date;
+  const versatz = basis - Echt.now();
+  const jetzt = () => Echt.now() + versatz;
+  class Uhr extends Echt {
+    constructor(...a) {
+      if (a.length === 0) super(jetzt());
+      else super(...a);
+    }
+    static now() {
+      return jetzt();
+    }
+  }
+  window.Date = Uhr;
 }
 
 // ── The helpers both measurements use, written once ────────────────────────
@@ -790,6 +828,7 @@ async function main() {
   for (const point of POINTS) {
     const page = await browser.newPage();
     await page.evaluateOnNewDocument(helferQuelle);
+    if (APP) await page.evaluateOnNewDocument(uhrQuelle, FIXTURE_BASIS + TAGE * 86400000);
     if (cookie) {
       // The session cookie is HttpOnly and, over plain http, plainly named
       // `session` (server.js:1210 picks __Host-session only under https).
