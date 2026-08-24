@@ -6232,6 +6232,40 @@ tr.ms-off .ms-prog {
   text-align: left;
   border-bottom: 1px solid var(--c-border);
 }
+/* Die Spalten legen sich an ihren Inhalt. `table { width: 100% }` verteilt den
+   Rest gleichmäßig über die Spalten, und bei einer Zeile stand „probe" dadurch
+   in einer Spalte von 254 px. Im Kartenmodus gewinnt `.t-cards { width: 100% }`
+   weiter, weil es weiter unten im Blatt steht. */
+.us-tab {
+  width: auto;
+}
+/* ⚠️ **Ein Ankreuzfeld ist kein Textfeld.** Die globale Regel für `input`
+   (styles.css:2095) gibt jedem Feld `width: 100%`, `padding: 9px 12px` und
+   `min-height: 64px`, und ein Ankreuzfeld erbt das mit: in dieser Tabelle
+   202 x 64 px, gezeichnet wird ein Häkchen von 13 px. Das ist der graue Klotz
+   auf der Karte und die Lücke zwischen den Zeilen.
+   Gemessen hat es nichts, und das ist der Teil, der hier stehen muss: Die
+   TOUCH-Prüfung sucht Flächen, die zu KLEIN sind. Zu groß ist keine Kategorie.
+   Die Größe folgt der Eingabeachse und nicht der Breite (Regel R1):
+   `--tap-sm-min` ist 48 px in der Hand und 24 px am Schreibtisch, und 24 px ist
+   WCAG 2.5.8 Stufe AA. Damit bleibt die Fläche über beiden Böden, statt wie
+   ein nacktes Ankreuzfeld mit 13 px darunter zu fallen. */
+.us-tab input[type='checkbox'] {
+  width: max(24px, var(--tap-sm-min));
+  height: max(24px, var(--tap-sm-min));
+  min-height: 0;
+  /* ⚠️ Polsterung macht die Fläche NICHT größer als das Kästchen, und das ist
+     gemessen: Ein Ankreuzfeld mit `appearance: auto` malt sein Häkchen über den
+     Polsterkasten, nicht in den Inhaltskasten. 48 px Fläche mit 12 px Polsterung
+     sind ein 48 px großes Kästchen, kein 24 px großes in einer großen Fläche.
+     Wer es kleiner gezeichnet haben will, muss entweder die Fläche unter den
+     Boden schrumpfen (44 px in der Hand, WCAG 2.5.5) oder das Kästchen selbst
+     zeichnen. Beides ist eine Entscheidung und keine Regel. */
+  padding: 0;
+  margin: 0;
+  accent-color: var(--c-primary);
+  cursor: pointer;
+}
 /* zwilling: kartenmodus */
 @media (max-width: 768px) {
   /* ── Tables as cards ────────────────────────────────────────
