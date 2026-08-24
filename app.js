@@ -19685,11 +19685,17 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table class="t-cards" role="table" style="width:100%;border-collapse:collapse"><thead role="rowgroup"><tr role="row"><th role="columnheader" style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th role="columnheader" style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th role="columnheader" style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th role="columnheader" style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th><th role="columnheader" style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th role="columnheader" style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody role="rowgroup">' +
+      '<table class="t-cards us-tab" role="table"><thead role="rowgroup"><tr role="row">' +
+      '<th role="columnheader">Username</th>' +
+      '<th role="columnheader">Role</th>' +
+      '<th role="columnheader" title="Darf Labels kaufen + Versanddaten sehen">Versand</th>' +
+      '<th role="columnheader" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th>' +
+      '<th role="columnheader">Created</th>' +
+      '<th role="columnheader"></th></tr></thead><tbody role="rowgroup">' +
       users
         .map(
           (u) =>
-            `<tr><td data-mlabel="Username" style="padding:6px">${esc(u.username)}</td><td data-mlabel="Role" style="padding:6px">${esc(u.role)}</td><td data-mlabel="Versand" style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td data-mlabel="Freigabe" style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td data-mlabel="Created" style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td class="us-actions" style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td data-mlabel="Username">${esc(u.username)}</td><td data-mlabel="Role">${esc(u.role)}</td><td data-mlabel="Versand">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td data-mlabel="Freigabe">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td data-mlabel="Created">${u.created ? fmtDt(u.created) : ''}</td><td class="us-actions">${u.username !== currentUser.username ? `<button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';

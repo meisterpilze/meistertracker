@@ -6217,6 +6217,21 @@ tr.ms-off .ms-prog {
   }
 }
 
+/* Die Benutzertabelle unter System wird in app.js gebaut, und ihre Zellen
+   trugen ihre Polsterung INLINE. Inline schlägt jede Regel im Blatt, auch die
+   92px Rinne des Kartenmodus: Beschriftung und Wert lagen übereinander,
+   „ROLE" quer durch „admin". Gemessen hat das nichts, weil nichts überlief und
+   nichts zu klein war — es stand nur falsch, und gesehen hat es erst ein Bild.
+   Darum steht die Polsterung hier, mit einer Spezifität (0,1,1), die der
+   Kartenmodus (0,3,3) überbieten kann. */
+.us-tab th,
+.us-tab td {
+  padding: 6px;
+}
+.us-tab th {
+  text-align: left;
+  border-bottom: 1px solid var(--c-border);
+}
 /* zwilling: kartenmodus */
 @media (max-width: 768px) {
   /* ── Tables as cards ────────────────────────────────────────

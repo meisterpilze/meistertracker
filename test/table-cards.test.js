@@ -85,6 +85,32 @@ describe('the cards a table becomes on a phone', () => {
     );
   });
 
+  // Inline beats every rule in the stylesheet, including the one that makes the
+  // card readable. This one cost a picture to find.
+  it('leaves the gutter alone: no labelled cell sets its own padding-left', () => {
+    // The card lays a labelled cell out as `padding-left: 92px` plus an
+    // absolutely positioned ::before in that space. A cell carrying
+    // style="padding:6px" wins, so the value starts at 6px and the label is
+    // printed underneath it: "ROLE" straight through "admin". Nothing
+    // measures that. Nothing overflows, nothing is too small, every floor
+    // holds -- it just stands wrong, and only looking at it says so.
+    const schuldig = [];
+    for (const row of ROW_TEMPLATES) {
+      for (const cell of row.split('<td').slice(1)) {
+        const attrs = cell.slice(0, cell.indexOf('>'));
+        if (!attrs.includes('data-mlabel')) continue;
+        const stil = attrs.match(/style="([^"]*)"/);
+        if (stil && /padding(-left)?\s*:/.test(stil[1])) schuldig.push(attrs.trim().slice(0, 70));
+      }
+    }
+    assert.deepEqual(
+      schuldig,
+      [],
+      `${schuldig.length} labelled cell(s) set their own padding inline, which overrides the card's ` +
+        `gutter and prints the label under the value: ${schuldig.join(' | ')}`
+    );
+  });
+
   // The roster is written down rather than derived, and deliberately: adding
   // .t-cards to a table whose renderer emits no data-mlabel produces a stack
   // of unlabelled values — strictly worse than the scrolling table it
