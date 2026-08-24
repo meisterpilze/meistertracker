@@ -35,12 +35,11 @@ function tmpDb() {
 }
 
 // Die Browser-Fassung, mit einem gestellten Aufgabenbestand.
+//
+// Sie rechnet keine Termine mehr aus: `due` kommt fertig vom Server, und
+// deshalb hebt dieser Harness auch keine Datumsarithmetik mehr.
 function browser(tasks) {
   const code =
-    hebe([[/^const RECURRING_LOOKBACK_DAYS = \d+;$/m, 'RECURRING_LOOKBACK_DAYS']], SRC) +
-    '\n' +
-    hebeFunktion('addDays', SRC) +
-    '\n' +
     hebeFunktion('_ymd', SRC) +
     '\n' +
     hebeFunktion('recurringDueOn', SRC) +
@@ -54,72 +53,58 @@ function browser(tasks) {
   return new Function('recurringTasks', code)(tasks);
 }
 
+// So, wie der Server sie liefert: mit ausgerechneten Terminen.
 const putzen = (extra) =>
   Object.assign(
-    { id: 1, name: 'Growrooms putzen', everyWeeks: 2, anchor: '2026-08-24', active: true, done: [] },
+    {
+      id: 1,
+      name: 'Growrooms putzen',
+      everyWeeks: 2,
+      anchor: '2026-08-24',
+      active: true,
+      done: [],
+      due: ['2026-08-24', '2026-09-07', '2026-09-21', '2026-10-05']
+    },
     extra
   );
 
 describe('Wann eine eigene Aufgabe fällt', () => {
-  const { recurringDueOn } = browser([]);
+  // Ausgerechnet wird das auf dem Server, in UTC, weil eine Woche dort immer
+  // 7 x 864e5 ist. Der Browser bekommt die fertige Liste — vorher stand
+  // dieselbe Regel ein zweites Mal in app.js, und ein Test hielt die beiden
+  // Fassungen über 480 Daten gegeneinander. Eine Naht, die nur hält, solange
+  // jemand an sie denkt, und die gegen einen Unterschied in dem, was die
+  // Zwillinge AUFRUFEN, ohnehin blind war.
+  const zwischen = (anchor, takt, von, bis) => db.recurringDueBetween(anchor, takt, von, bis);
 
   it('fällt am Anker und dann im eingestellten Takt', () => {
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-08-24'), true, 'der Anker selbst ist ein Termin');
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-09-07'), true);
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-09-21'), true);
+    assert.deepEqual(zwischen('2026-08-24', 2, '2026-08-24', '2026-09-21'), ['2026-08-24', '2026-09-07', '2026-09-21']);
   });
 
   it('fällt in der Woche dazwischen nicht', () => {
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-08-31'), false);
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-09-14'), false);
-  });
-
-  it('fällt an keinem anderen Wochentag', () => {
-    // Der Wochentag steckt im Anker. Ein zweites Feld dafür wäre eine zweite
-    // Wahrheit, die ihm widersprechen könnte.
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-08-25'), false);
-    assert.equal(recurringDueOn('2026-08-24', 1, '2026-08-25'), false);
+    assert.deepEqual(zwischen('2026-08-24', 2, '2026-08-25', '2026-09-06'), []);
   });
 
   it('fällt vor dem Anker nie', () => {
     // Eine heute angelegte Aufgabe hat nicht rückwirkend seit Januar gefehlt.
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-08-10'), false);
-    assert.equal(recurringDueOn('2026-08-24', 2, '2026-08-23'), false);
+    assert.deepEqual(zwischen('2026-08-24', 2, '2026-01-01', '2026-08-23'), []);
   });
 
-  it('stolpert nicht über die Zeitumstellung', () => {
-    // Ende Oktober hat eine Woche 169 Stunden. In Ortszeit gerechnet wären das
-    // 7,04 Tage, und der Termin fiele aus.
-    assert.equal(recurringDueOn('2026-10-19', 1, '2026-10-26'), true, 'die Woche der Umstellung');
-    assert.equal(recurringDueOn('2026-10-19', 2, '2026-11-02'), true);
-    assert.equal(recurringDueOn('2026-03-23', 1, '2026-03-30'), true, 'und die im Frühjahr');
+  it('nimmt keinen unsinnigen Takt und keinen unsinnigen Anker', () => {
+    assert.deepEqual(zwischen('2026-08-24', 0, '2026-08-01', '2026-12-01'), []);
+    assert.deepEqual(zwischen('2026-08-24', 1.5, '2026-08-01', '2026-12-01'), []);
+    assert.deepEqual(zwischen('', 2, '2026-08-01', '2026-12-01'), []);
+    assert.deepEqual(zwischen('Montag', 2, '2026-08-01', '2026-12-01'), []);
   });
 
-  it('sagt dasselbe wie der Server', () => {
-    // Zwei Fassungen derselben Regel: der Server prüft, der Browser zeichnet.
-    // Gingen sie auseinander, böte die App einen Haken an, den der Server
-    // ablehnt — oder verschwiege einen Termin, den er kennt.
-    const serverDue = new Function(hebeFunktion('recurringDueOn', DB) + '\nreturn recurringDueOn;')();
-    const start = Date.UTC(2026, 7, 1);
-    let geprueft = 0;
-    for (const takt of [1, 2, 3, 4]) {
-      for (let i = 0; i < 120; i++) {
-        const tag = new Date(start + i * 864e5).toISOString().slice(0, 10);
-        assert.equal(
-          recurringDueOn('2026-08-24', takt, tag),
-          serverDue('2026-08-24', takt, tag),
-          'Browser und Server uneinig über ' + tag + ' bei Takt ' + takt
-        );
-        geprueft++;
-      }
-    }
-    assert.equal(geprueft, 480, 'der Vergleich hat gar nicht stattgefunden');
-  });
-
-  it('nimmt keinen unsinnigen Takt', () => {
-    assert.equal(recurringDueOn('2026-08-24', 0, '2026-08-24'), false);
-    assert.equal(recurringDueOn('2026-08-24', 1.5, '2026-08-24'), false);
-    assert.equal(recurringDueOn('', 2, '2026-08-24'), false);
+  it('lässt den Browser gar nicht erst rechnen', () => {
+    // recurringDueOn() schlägt im Browser nur noch nach, statt zu rechnen. Die
+    // beiden Zwillinge waren der Grund für diesen Umbau; kehrt einer zurück,
+    // fällt es hier auf.
+    const fn = hebeFunktion('recurringDueOn', SRC);
+    assert.match(fn, /task\.due\.indexOf\(dateKey\)/);
+    assert.doesNotMatch(fn, /Date\.parse|864e5/, 'der Browser rechnet wieder selbst Termine aus');
+    assert.doesNotMatch(hebeFunktion('recurringArrears', SRC), /864e5/, 'der Rückwärtsgang ist zurück');
   });
 });
 
@@ -168,15 +153,23 @@ describe('Versäumte Termine', () => {
     assert.equal(offen[0].date, '2026-09-07', 'nachgetragen wurde ' + offen[0].date);
   });
 
+  it('meldet nichts, solange kein Termin vergangen ist', () => {
+    const { recurringArrears } = browser([putzen()]);
+    assert.deepEqual(recurringArrears(heute('2026-08-20')), []);
+  });
+
   it('geht nie hinter den Anker zurück', () => {
-    const { recurringArrears } = browser([putzen({ anchor: '2026-08-24' })]);
+    const { recurringArrears } = browser([putzen()]);
     assert.deepEqual(recurringArrears(heute('2026-08-24')), [], 'der Anker selbst ist noch nicht versäumt');
   });
 
   it('findet auch bei langem Takt den letzten Termin', () => {
     // Zwölf Wochen liegen weit ausserhalb der vierzehn Tage, die der Rhythmus
-    // zurückschaut; die Rückschau muss mit dem Takt mitwachsen.
-    const { recurringArrears } = browser([putzen({ everyWeeks: 12, anchor: '2026-05-04' })]);
+    // zurückschaut; der Zeitraum, den der Server liefert, muss mit dem Takt
+    // mitwachsen — sonst fehlt der Termin in `due` und der Rückstand mit ihm.
+    const { recurringArrears } = browser([
+      putzen({ everyWeeks: 12, anchor: '2026-05-04', due: ['2026-05-04', '2026-07-27', '2026-10-19'] })
+    ]);
     assert.deepEqual(
       recurringArrears(heute('2026-08-20')).map((x) => x.date),
       ['2026-07-27']
@@ -333,8 +326,8 @@ describe('Wie eine eigene Aufgabe im Tagesplan steht', () => {
   });
 
   it('bietet einen Haken an und einen Weg zurück', () => {
-    const fn = hebeFunktion('_planBtn', SRC);
-    const zweig = fn.slice(fn.indexOf("it.kind === 'chore'"));
+    const fn = hebeKonstante('PLAN_BTNS', SRC);
+    const zweig = fn.slice(fn.indexOf('chore:'));
     assert.match(zweig, /data-action="chore-done"/);
     assert.match(zweig, /recur\.undo/, 'ein Fehltipp lässt sich nicht zurücknehmen');
     assert.doesNotMatch(
@@ -384,9 +377,12 @@ describe('Wie eine eigene Aufgabe im Tagesplan steht', () => {
   it('setzt den Anker auf den nächsten Termin, nicht auf heute', () => {
     // Sonst hinge der Wochentag davon ab, an welchem Tag jemand die Aufgabe
     // angelegt hat.
-    const fn = hebeFunktion('addOwnTask', SRC);
-    assert.match(fn, /\(wd - heute\.getDay\(\) \+ 7\) % 7/);
-    assert.match(fn, /everyWeeks: every/);
+    const fn = hebeFunktion('_ownAnchorFor', SRC);
+    assert.match(fn, /\(Number\(weekday\) - heute\.getDay\(\) \+ 7\) % 7/);
+    assert.match(fn, /addDays\(/, 'wieder in festen Millisekunden gerechnet');
+    // Anlegen und Bearbeiten gehen durch dieselbe Stelle — sonst rechnet die
+    // eine Hälfte den Anker anders als die andere.
+    assert.match(hebeFunktion('_ownRead', SRC), /_ownAnchorFor\(wd\)/);
   });
 });
 
@@ -437,10 +433,6 @@ describe('Auf dem Telefon', () => {
 describe('Was der Server liefert, reicht dem Browser', () => {
   function durchgereicht(d, now) {
     const code =
-      hebe([[/^const RECURRING_LOOKBACK_DAYS = \d+;$/m, 'RECURRING_LOOKBACK_DAYS']], SRC) +
-      '\n' +
-      hebeFunktion('addDays', SRC) +
-      '\n' +
       hebeFunktion('_ymd', SRC) +
       '\n' +
       hebeFunktion('recurringDueOn', SRC) +
@@ -522,7 +514,15 @@ describe('Was der Server liefert, reicht dem Browser', () => {
     // Den versäumten Termin daneben zu setzen hiess: zwei Zeilen mit zwei
     // Haken für einmal Putzen — und wer einmal putzt, ist wieder aktuell.
     const { recurringArrears } = browser([
-      { id: 1, name: 'Putzen', everyWeeks: 1, anchor: '2026-08-10', active: true, done: [] }
+      {
+        id: 1,
+        name: 'Putzen',
+        everyWeeks: 1,
+        anchor: '2026-08-10',
+        active: true,
+        done: [],
+        due: ['2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31']
+      }
     ]);
     assert.deepEqual(recurringArrears(new Date('2026-08-24T00:00:00')), [], 'heute fällig UND als versäumt gemeldet');
     // An einem Tag, an dem sie nicht fällt, bleibt der Rückstand stehen.
@@ -530,5 +530,53 @@ describe('Was der Server liefert, reicht dem Browser', () => {
       recurringArrears(new Date('2026-08-25T00:00:00')).map((x) => x.date),
       ['2026-08-24']
     );
+  });
+});
+
+// ── Ändern statt wegwerfen ──────────────────────────────────────────────────
+describe('Eine eigene Aufgabe lässt sich ändern', () => {
+  it('bietet Bearbeiten, Pausieren und Entfernen an', () => {
+    // Vorher war Löschen die einzige Änderung: ein Vertipper im Namen oder der
+    // falsche Wochentag liessen sich nur durch Neuanlegen beheben, und Löschen
+    // nimmt die ganze Haken-Historie mit.
+    const fn = hebeFunktion('_renderRhythmOwn', SRC);
+    for (const a of ['own-edit', 'own-pause', 'own-del', 'own-save', 'own-cancel']) {
+      assert.match(fn, new RegExp('data-action="' + a + '"'), a + ' fehlt');
+    }
+  });
+
+  it('fragt vor dem Entfernen nach, und nennt die Haken beim Namen', () => {
+    // Beim Abhaken selbst ist eine Rückfrage teurer als der Fehler — ein
+    // zweiter Tipp nimmt ihn zurück. Hier gibt es keinen zweiten Tipp.
+    const fn = hebeFunktion('delOwnTask', SRC);
+    assert.match(fn, /await askConfirm\(/, 'Löschen fragt nicht nach');
+    assert.match(fn, /recur\.removeWithTicks/, 'die Rückfrage verschweigt, was mit verloren geht');
+  });
+
+  it('legt eine Aufgabe still, ohne sie zu löschen', () => {
+    // Der übliche Fall ist "gerade nicht", nicht "nie wieder".
+    const fn = hebeFunktion('pauseOwnTask', SRC);
+    assert.match(fn, /active: !x\.active/);
+    assert.doesNotMatch(fn, /apiDelete/);
+  });
+
+  it('schickt beim Bearbeiten die id mit, sonst legt es eine zweite an', () => {
+    assert.match(hebeFunktion('saveOwnTask', SRC), /id: Number\(id\)/);
+    assert.match(hebeFunktion('addOwnTask', SRC), /_ownRead\(''\)/);
+    assert.match(hebeFunktion('saveOwnTask', SRC), /_ownRead\('-edit'\)/);
+  });
+
+  it('nimmt beim Bearbeiten den Aktiv-Zustand mit', () => {
+    // Ohne das machte jedes Umbenennen eine pausierte Aufgabe wieder aktiv:
+    // saveRecurringTask nimmt `active !== false` als true.
+    assert.match(hebeFunktion('saveOwnTask', SRC), /active: alt \? alt\.active : true/);
+  });
+
+  it('zeigt eine eigene Aufgabe auch auf dem Telefon an', () => {
+    // Unter 769px ist der Spaltenkörper ausgeblendet, und der benannte Chip mit
+    // seinem Haken steckt dort drin. Die Zahl im Kopf bewegte sich zwar, sagte
+    // aber nicht, dass etwas Eigenes dahintersteht.
+    assert.match(hebeFunktion('_weekHeadHtml', SRC), /it\.kind === 'chore'.*wk-h-own/s);
+    assert.match(CSS, /\.wk-h-own \{[^}]*background: var\(--c-purple-dark\)/);
   });
 });

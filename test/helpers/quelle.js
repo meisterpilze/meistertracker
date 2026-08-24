@@ -46,7 +46,10 @@ function hebe(teile, src) {
 // Klammerklasse. Sie stehen jetzt einmal hier.
 function hebeFunktion(name, src) {
   const s = src === undefined ? quelle() : src;
-  const m = s.match(new RegExp('^function ' + name + '\\([\\s\\S]*?\\r?\\n\\}', 'm'));
+  // `async` mit: ohne das Präfix meldete der Helfer eine Funktion als
+  // verschwunden, sobald sie ein await bekam — und die Fehlermeldung sagte dann
+  // "der Test muss mitgeführt werden", was in die Irre führt.
+  const m = s.match(new RegExp('^(?:async )?function ' + name + '\\([\\s\\S]*?\\r?\\n\\}', 'm'));
   assert.ok(m, name + '() nicht in der Quelle gefunden — der Test muss mitgeführt werden');
   return m[0];
 }

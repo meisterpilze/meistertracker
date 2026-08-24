@@ -2605,6 +2605,21 @@ tr:hover td {
 .wk-h {
   border-right: 1px solid transparent;
 }
+/* Ein Punkt im Spaltenkopf, wenn an diesem Tag eine eigene Aufgabe fällt.
+
+   Unter 769px ist der Spaltenkörper ausgeblendet, also sieht man von sechs der
+   sieben Tage nur den Kopf — und die benannte Aufgabe mit ihrem Haken steckt im
+   Körper. Die Zahl in der Fußzeile bewegte sich zwar, sagte aber nicht, dass
+   etwas Eigenes dahintersteckt. Ein Punkt passt in 43px und tut es. */
+.wk-h-own {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: var(--c-purple-dark);
+  vertical-align: middle;
+}
 /* The selected day is the one you are working from, so it gets a tinted
    channel down the whole column rather than only a marked header. */
 .wk-b.sel {
@@ -4674,6 +4689,32 @@ tr.ms-off .ms-prog {
   color: var(--c-text-muted);
   flex-shrink: 0;
 }
+/* Eine Aufgabe in Bearbeitung: dieselben drei Felder wie beim Anlegen, also
+   dieselbe Umbruchregel. */
+.rhythm-own-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 0.5px solid var(--c-border);
+  border-bottom: 0.5px solid var(--c-border);
+}
+.rhythm-own-edit input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.rhythm-own-edit select {
+  flex: 1 1 96px;
+  min-width: 0;
+}
+.rhythm-own-edit .btn {
+  flex: 0 0 auto;
+}
+/* Pausiert: bleibt lesbar, aber nicht mehr im Vordergrund. */
+.rhythm-own-row.ruht .rhythm-own-name {
+  color: var(--c-text-muted);
+}
+
 /* Auf dem Telefon umbrechen statt vier Felder in eine 300px-Zeile zu quetschen:
    der Name nimmt die volle Breite, Takt und Wochentag teilen sich die nächste. */
 .rhythm-own-add {
