@@ -7118,6 +7118,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Der Kommentar am Ansatz. Eigene Route wie die Messung nebenan: er wird
+  // nachgetragen, wenn etwas aufgefallen ist, und nicht beim Anlegen mitgeschickt.
+  const subNoteMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/notes$/);
+  if (req.method === 'POST' && subNoteMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vlen = validateLengths(data || {}, { notes: 500 });
+      if (vlen) {
+        jsonErr(res, 400, vlen);
+        return;
+      }
+      try {
+        const r = db.setSubstrateNotes(database, decodeURIComponent(subNoteMatch[1]), data ? data.notes : '');
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   // Die nachgemessene Feuchte. Eigene Route statt eines Feldes im Ansatz-POST:
   // gemessen wird nach dem Mischen, oft von jemand anderem und manchmal erst am
   // nächsten Tag, und der Ansatz selbst ist zu dem Zeitpunkt längst gebucht.

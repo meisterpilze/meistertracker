@@ -131,4 +131,36 @@ describe('gemessene Ist-Feuchte am Ansatz', () => {
     const s = db.listSubstrateBatches(d).find((x) => x.subId === 'RH-2');
     assert.equal(s.actualRhPct, 60);
   });
+  it('traegt einen Kommentar nach und gibt ihn wieder her', () => {
+    db.setSubstrateNotes(d, 'RH-2', '  Pellets waren feuchter als sonst  ');
+    // Getrimmt, weil ein Leerzeichen am Ende keine Information ist.
+    assert.equal(db.getSubstrateBatch(d, 'RH-2').notes, 'Pellets waren feuchter als sonst');
+  });
+
+  it('leert den Kommentar wieder', () => {
+    db.setSubstrateNotes(d, 'RH-2', '');
+    assert.equal(db.getSubstrateBatch(d, 'RH-2').notes, '');
+  });
+
+  it('nimmt keinen Roman an', () => {
+    assert.throws(() => db.setSubstrateNotes(d, 'RH-2', 'x'.repeat(501)), /500 Zeichen/);
+  });
+
+  it('meldet einen unbekannten Ansatz auch beim Kommentar', () => {
+    assert.equal(db.setSubstrateNotes(d, 'GIBTSNICHT', 'hallo'), null);
+  });
+
+  it('laesst den Verwerf-Stempel stehen, bis jemand ihn sichtbar ersetzt', () => {
+    // notes traegt beides: den Kommentar und den Stempel des Verwerfens. Die
+    // Oberflaeche legt den bestehenden Text zum Bearbeiten vor, damit der
+    // Stempel nicht unbemerkt verschwindet - hier wird nur gepinnt, dass das
+    // Verwerfen ihn ueberhaupt hineinschreibt und ein Kommentar ihn nicht
+    // hinter dem Ruecken des Benutzers loescht.
+    db.createSubstrateBatch(d, { subId: 'RH-3', recipeStrainId: bo, targetKg: 20 }, uid);
+    db.setSubstrateNotes(d, 'RH-3', 'vor dem Verwerfen');
+    db.writeOffSubstrateBatch(d, 'RH-3', 'kontaminiert', uid);
+    const after = db.getSubstrateBatch(d, 'RH-3').notes;
+    assert.match(after, /vor dem Verwerfen/);
+    assert.match(after, /kontaminiert/);
+  });
 });

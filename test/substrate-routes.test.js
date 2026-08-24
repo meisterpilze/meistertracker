@@ -34,6 +34,7 @@ describe('substrate route shapes', () => {
   const detail = liftPattern('subGetMatch = req.url.match', 'detail route');
   const writeOff = liftPattern('subOffMatch = req.url.match', 'write-off route');
   const moisture = liftPattern('subRhMatch = req.url.match', 'measured-moisture route');
+  const notes = liftPattern('subNoteMatch = req.url.match', 'comment route');
   const del = liftPattern('subDelMatch = req.url.match', 'delete route');
 
   it('answers the collection only at the collection URL', () => {
@@ -64,6 +65,16 @@ describe('substrate route shapes', () => {
     assert.equal(writeOff.test('/api/substrate-batches/SUB-01/moisture'), false);
     assert.equal(detail.test('/api/substrate-batches/SUB-01/moisture'), false);
     assert.equal(list.test('/api/substrate-batches/SUB-01/moisture'), false);
+  });
+
+  it('matches the comment only with the action on the end', () => {
+    assert.equal('/api/substrate-batches/SUB-01/notes'.match(notes)[1], 'SUB-01');
+    assert.equal(notes.test('/api/substrate-batches/SUB-01'), false);
+    // Drei Aktionen am selben Ansatz; keine darf fuer eine andere antworten.
+    assert.equal(notes.test('/api/substrate-batches/SUB-01/moisture'), false);
+    assert.equal(notes.test('/api/substrate-batches/SUB-01/write-off'), false);
+    assert.equal(moisture.test('/api/substrate-batches/SUB-01/notes'), false);
+    assert.equal(detail.test('/api/substrate-batches/SUB-01/notes'), false);
   });
 
   it('matches a delete by id', () => {

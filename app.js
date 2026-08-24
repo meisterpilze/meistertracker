@@ -9681,6 +9681,14 @@ function _subRhCell(s) {
 // falschen Ansatz landete, und er braucht keinen zweiten Knopf, der danebensteht
 // und nur an dem einen Tag gebraucht wird, an dem jemand sich vertippt hat.
 function measureSubstrateRh(s) {
+  // Erst die Ansatz-Karte zu, dann den Prompt auf - dieselbe Reihenfolge wie bei
+  // Loeschen und Verwerfen nebenan, und hier ist sie nicht Geschmackssache: beide
+  // Dialoge sind .modal-bg auf z-index 200, #m-confirm hebt sich per eigener Regel
+  // auf 210 und liegt deshalb oben, #m-prompt hat keine solche Regel. Bei gleichem
+  // z-index gewinnt, was spaeter im DOM steht, und #m-subinfo steht 680 Zeilen
+  // hinter #m-prompt. Der Prompt ging also auf und lag unsichtbar hinter der
+  // Karte - von aussen sieht das aus wie ein Knopf, der nichts tut.
+  closeSubstrateInfo();
   prompt2(
     t('sub.rhPrompt', { id: s.subId }),
     s.moisturePct.toFixed(1),
@@ -9703,6 +9711,35 @@ function measureSubstrateRh(s) {
       openSubstrateInfo(s.subId);
     },
     { inputmode: 'decimal', value: s.actualRhPct == null ? '' : String(s.actualRhPct) }
+  );
+}
+
+// Der Kommentar wird nachgetragen, nicht beim Anlegen getippt: er entsteht, wenn
+// jemandem drei Tage spaeter etwas auffaellt.
+//
+// Der bestehende Text wird vorgelegt statt eines leeren Feldes. Das Verwerfen
+// haengt seinen Stempel an dasselbe Feld, und der soll beim Bearbeiten sichtbar
+// sein, statt unbemerkt ueberschrieben zu werden.
+//
+// closeSubstrateInfo() zuerst, aus demselben Grund wie bei der Messung: #m-prompt
+// und #m-subinfo teilen sich z-index 200, und der spaetere im DOM gewinnt.
+function editSubstrateComment(s) {
+  closeSubstrateInfo();
+  prompt2(
+    t('sub.commentPrompt', { id: s.subId }),
+    t('sub.commentPlaceholder'),
+    async (v) => {
+      const text = (v || '').trim();
+      const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(s.subId) + '/notes', { notes: text });
+      if (!r || r.error) {
+        toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+        return;
+      }
+      toast(text === '' ? t('sub.commentCleared') : t('sub.commentSaved'));
+      await refreshSubstrateBatches();
+      openSubstrateInfo(s.subId);
+    },
+    { value: s.notes || '' }
   );
 }
 
@@ -9800,7 +9837,18 @@ async function openSubstrateInfo(subId) {
     '<div class="fs-sm" style="margin-top:10px;font-weight:600">' +
     esc(t('sub.leftNow', { kg: s.remainingKg.toFixed(1), of: s.targetKg.toFixed(0) })) +
     '</div>';
-  if (s.notes) html += '<div class="fs-meta" style="margin-top:6px;color:var(--c-text-sec)">' + esc(s.notes) + '</div>';
+  // Die Zeile steht immer da, auch leer. Ein Kommentarfeld, das erst erscheint,
+  // wenn schon etwas drinsteht, sieht aus wie keins - und der Knopf darunter
+  // waere dann der einzige Hinweis darauf, dass es ihn ueberhaupt gibt.
+  html +=
+    '<div class="fs-meta" style="margin-top:10px">' +
+    '<span style="color:var(--c-text-sec)">' +
+    esc(t('sub.comment')) +
+    ': </span>' +
+    (s.notes
+      ? esc(s.notes)
+      : '<span style="color:var(--c-text-muted)">' + esc(t('sub.commentNone')) + '</span>') +
+    '</div>';
   body.innerHTML = html;
   // Two different mistakes need two different answers, and offering both at once
   // invites the wrong one. Nothing made from it yet: it can be removed cleanly,
@@ -9819,6 +9867,7 @@ async function openSubstrateInfo(subId) {
   // bei einem verworfenen Ansatz noch erlaubt — warum er verworfen wurde, ist
   // genau die Frage, auf die eine gemessene Feuchte antwortet.
   act(s.actualRhPct == null ? t('sub.rhAdd') : t('sub.rhEdit'), 'btn-p', () => measureSubstrateRh(s));
+  act(s.notes ? t('sub.commentEdit') : t('sub.commentAdd'), 'btn-p', () => editSubstrateComment(s));
   if (!s.drawn.length) {
     act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
   } else if (s.status === 'open' && s.remainingKg > 0.0001) {
