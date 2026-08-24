@@ -87,6 +87,10 @@ REM or to match a fork's branding. Must match the value server.js reads
 REM from PM2_PROCESS_NAME.
 if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze"
 if not defined PORT set "PORT=3000"
+REM Der Name der Boot-Aufgabe. Muss zu $TaskName in install-autostart.ps1
+REM passen: Schritt 5 bittet den Scheduler unter diesem Namen, die Aufgabe zu
+REM beenden, wenn taskkill an ihrer Instanz scheitert.
+if not defined AUTOSTART_TASK set "AUTOSTART_TASK=MeisterTracker"
 set "NEED_PATH_REFRESH=0"
 
 REM ============================================================
@@ -285,22 +289,56 @@ REM prints "connect EPERM //./pipe/rpc.sock" followed by a Node stack trace.
 REM That reads as the application crashing. It is not — it is this script having
 REM failed to stop the previous instance two steps earlier, and the server it
 REM could not replace carries on serving whatever code it started with.
+REM When taskkill is refused, ask the Task Scheduler before giving up.
+REM
+REM taskkill needs a handle on the process. The boot instance runs in its own
+REM S4U logon session, and an ordinary window could not even read its command
+REM line, let alone terminate it. The scheduler is a different route to the same
+REM end: it runs as SYSTEM, it owns the task it started, and stopping a task is
+REM something its owner may ask for without a handle and without elevation.
+REM
+REM This is what turned a boot-day into an administrator errand. The first run
+REM of START.bat after every restart hit the refusal, and the advice underneath
+REM sent the operator into an elevated shell to fix something that was not
+REM broken.
 if not "%WORKTREE_MODE%"=="1" (
     set "PORT_HOLDER="
     for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do set "PORT_HOLDER=%%P"
     if defined PORT_HOLDER (
+        echo  -^> Kill refused; asking the scheduler to stop "%AUTOSTART_TASK%"...
+        schtasks /end /tn "%AUTOSTART_TASK%" >nul 2>&1
+        REM Two seconds for the tree to go down. ping, because timeout fails
+        REM when stdin is redirected, which it is when this runs from a shortcut.
+        ping -n 3 127.0.0.1 >nul 2>&1
+        set "PORT_HOLDER="
+        for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do set "PORT_HOLDER=%%P"
+        if not defined PORT_HOLDER echo  -^> Scheduler stopped it; port %PORT% is free.
+    )
+    if defined PORT_HOLDER (
+        REM Ask the task what it actually is, instead of asserting it. The old
+        REM text named RunLevel Highest as the cause and sent the reader to
+        REM re-register the task -- on a machine where it was already Limited,
+        REM so the elevated trip changed nothing and the port stayed held.
+        set "TASK_LEVEL="
+        for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "(Get-ScheduledTask -TaskName '%AUTOSTART_TASK%' -ErrorAction SilentlyContinue).Principal.RunLevel" 2^>nul`) do set "TASK_LEVEL=%%L"
         echo.
-        echo  ERROR: port %PORT% is still held by PID !PORT_HOLDER! - the kill was refused.
+        echo  ERROR: port %PORT% is still held by PID !PORT_HOLDER!.
+        echo  Neither taskkill nor the scheduler could stop it.
         echo.
-        echo  This is the boot task's instance. The "MeisterTracker" scheduled task
-        echo  starts the server before anyone logs in; if it was registered with
-        echo  RunLevel Highest, that instance runs elevated. An ordinary window can
-        echo  neither stop it nor reach its pm2 daemon, so nothing below would work.
-        echo.
-        echo  Fix it once, in an Administrator PowerShell:
-        echo      powershell -ExecutionPolicy Bypass -File "%~dp0install-autostart.ps1"
-        echo  That re-registers the task unelevated, at the same level as this
-        echo  script, and the two stop fighting over the port for good.
+        if /i "!TASK_LEVEL!"=="Highest" (
+            echo  The "%AUTOSTART_TASK%" task is registered with RunLevel Highest, so its
+            echo  instance runs elevated. An ordinary window can neither stop it nor
+            echo  reach its pm2 daemon.
+            echo.
+            echo  Fix it once, in an Administrator PowerShell:
+            echo      powershell -ExecutionPolicy Bypass -File "%~dp0install-autostart.ps1"
+            echo  That re-registers the task unelevated, and the two stop fighting
+            echo  over the port for good.
+        ) else (
+            echo  The "%AUTOSTART_TASK%" task runs at RunLevel !TASK_LEVEL!, so elevation is
+            echo  not the cause and re-registering it would change nothing.
+            echo  Something else is holding the port - check what PID !PORT_HOLDER! is.
+        )
         echo.
         echo  To get running right now, in an Administrator PowerShell:
         echo      Stop-Process -Id !PORT_HOLDER! -Force
