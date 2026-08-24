@@ -51,6 +51,22 @@
 // dialogs. It removes the database again afterwards and refuses to start if one
 // it did not create is already there.
 //
+// ⚠️ **A sub-tab is a station too, and until 24.08. two thirds of them were
+// never opened.** measureLive() measures what is visible, and what is visible
+// on a page is one sub-tab: the one it opens on. Twelve pages carry 33
+// sub-tabs. Twelve were measured. The System page alone has thirteen and only
+// "Server" ever stood in a number, so every "0 open findings" this stand
+// printed covered a third of the app and read like the whole of it. The first
+// run with all 39 stations found a settings table 41px past the right edge at
+// 390px, on a surface no previous run had ever laid eyes on.
+//
+// The cost is real and is the price of the number meaning what it says: about
+// five times the measurements. Two things keep it from being five times the
+// clock. A station whose page is already open does not click it again -- which
+// is also a correctness fix, because the Admin button in the footer is a
+// TOGGLE and the second press walks back out -- and the stations are ordered so
+// a page is entered once and its tabs walked in place.
+//
 // ZOOMED OUT and AFTER A JUMP are two findings, and keeping them apart is
 // the difference between a number and a wrong number. The first run of this
 // mode conflated them and claimed the dashboard renders at 53% on a phone; it
@@ -221,6 +237,83 @@ function gate() {
     );
   } else {
     console.log('✓ COVERAGE: every breakpoint measured at G-1, G, G+1');
+  }
+}
+
+// Three consecutive animation frames with nothing in flight. One frame with
+// the counter at zero can be the gap between two requests, and the render
+// happens in the frame after the last response resolves. Stood inline at the
+// station click until it was needed a second time.
+async function ruhe(page) {
+  await page
+    .waitForFunction(
+      () => {
+        const m = window.__mess;
+        m.ruhig = m.inflight === 0 ? (m.ruhig || 0) + 1 : 0;
+        return m.ruhig >= 3;
+      },
+      { polling: 'raf', timeout: 5000 }
+    )
+    .catch(() => {});
+  await page.evaluate(() => {
+    window.__mess.ruhig = 0;
+  });
+}
+
+// Open a station: its page, and then the sub-tab it stands for.
+//
+// Escape first, because a station may have left a panel or drawer open and the
+// next page would be measured underneath it.
+//
+// Then wait for the thing we asked for rather than for a guess at how long it
+// takes: app.js marks the clicked button `active` in the same turn it shows the
+// page. The blind sleeps this replaces were simultaneously too long on a fast
+// render (60ms x 93 widths x 39 stations x 2 pointers is a quarter of an hour
+// of nothing) and no guarantee at all on a slow one, which is where the
+// intermittent "Cannot read properties of null" in the jump pass came from.
+//
+// And afterwards for the content the click went to fetch, via ruhe().
+//
+// Stood twice, in the width loop and in the jump pass. The sub-tab would have
+// made it a third thing to keep in step.
+async function oeffnen(page, stop) {
+  if (!stop.open) return;
+  await page.keyboard.press('Escape');
+  for (const id of [stop.open, stop.tab]) {
+    if (!id) continue;
+    // ⚠️ **Nur klicken, wenn wir nicht schon da sind, und das ist keine
+    // Sparmaßnahme.** Der Admin-Knopf im Fuß ist ein UMSCHALTER: Er führt
+    // hinein und wieder hinaus. Seit die dreizehn System-Untertabs eigene
+    // Stationen sind, klickt der Lauf ihn dreizehnmal hintereinander an, und
+    // jeder zweite Druck ging wieder heraus. Die Wartezeit lief dann in ihre
+    // fünf Sekunden, und gemessen wurde die Seite, die vorher offen war, unter
+    // dem Namen der Systemseite. Das ist genau der Fehler, gegen den diese
+    // Datei an drei anderen Stellen gewappnet ist.
+    const noetig = await page.evaluate((i) => {
+      const b = document.getElementById(i);
+      if (!b) return false;
+      if (b.classList.contains('stab')) return !b.classList.contains('active');
+      const seite = b.dataset.page ? document.getElementById('p-' + b.dataset.page) : null;
+      return !(seite && seite.classList.contains('active'));
+    }, id);
+    if (!noetig) continue;
+    await page.evaluate((i) => document.getElementById(i)?.click(), id);
+    // Auf die SEITE warten, nicht auf den Knopf: der Fußknopf trägt kein
+    // `active`, wenn eine andere Liste die Auswahl führt.
+    await page
+      .waitForFunction(
+        (i) => {
+          const b = document.getElementById(i);
+          if (!b) return true;
+          if (b.classList.contains('stab')) return b.classList.contains('active');
+          const seite = b.dataset.page ? document.getElementById('p-' + b.dataset.page) : null;
+          return seite ? seite.classList.contains('active') : b.classList.contains('active');
+        },
+        { timeout: 5000 },
+        id
+      )
+      .catch(() => {});
+    await ruhe(page);
   }
 }
 
@@ -869,7 +962,42 @@ async function main() {
       const ids = await page.evaluate(() =>
         [...document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn')].filter((b) => b.id).map((b) => b.id)
       );
-      stations = ids.map((id) => ({ name: id, open: id }));
+      // ⚠️ **Ein Untertab ist eine Oberfläche, und zwei Drittel davon hat
+      // dieser Stand nie gesehen.** measureLive() misst, was sichtbar ist, und
+      // sichtbar ist je Seite genau EIN Untertab: der, auf dem sie aufmacht.
+      // Zwölf Seiten tragen 39 Untertabs. Gemessen wurden zwölf. Die
+      // Systemseite allein hat dreizehn, und nur "Server" stand je in einer
+      // Zahl. Jedes "0 offene Befunde" dieses Standes galt für ein Drittel der
+      // Anwendung und las sich wie das Ganze.
+      //
+      // Gefunden am 24.08. beim Vergleich jeder data-mlabel mit ihrer Spalte:
+      // Sechs der zwölf Kartentabellen hatten keine Zeile, mit der man
+      // vergleichen könnte. Sie lagen alle in einem Untertab.
+      //
+      // Also ist ein Untertab jetzt eine Station wie eine Seite. Der Name der
+      // Voreinstellung bleibt die Seite selbst, damit der Zensus über den
+      // Umbau hinweg vergleichbar bleibt.
+      stations = [];
+      for (const id of ids) {
+        await page.evaluate((i) => document.getElementById(i)?.click(), id);
+        await ruhe(page);
+        const { tabs, offen } = await page.evaluate(() => {
+          const seite = document.querySelector('.page.active');
+          if (!seite) return { tabs: [], offen: null };
+          const alle = [...seite.querySelectorAll('.stab')].filter((b) => b.id);
+          const aktiv = alle.find((b) => b.classList.contains('active'));
+          return { tabs: alle.map((b) => b.id), offen: aktiv ? aktiv.id : null };
+        });
+        if (!tabs.length) {
+          stations.push({ name: id, open: id, tab: null });
+          continue;
+        }
+        const voreinstellung = offen && tabs.includes(offen) ? offen : tabs[0];
+        stations.push({ name: id, open: id, tab: voreinstellung });
+        for (const tab of tabs) {
+          if (tab !== voreinstellung) stations.push({ name: `${id}/${tab}`, open: id, tab });
+        }
+      }
     }
     stops = stations.length;
 
@@ -891,44 +1019,7 @@ async function main() {
     for (const width of BAND) {
       await page.setViewport({ width, height: 900, deviceScaleFactor: 1, isMobile: coarse, hasTouch: coarse });
       for (const stop of stations) {
-        if (stop.open) {
-          // Escape first: a station may have left a panel or drawer open, and
-          // the next page would then be measured underneath it.
-          await page.keyboard.press('Escape');
-          await page.evaluate((id) => document.getElementById(id).click(), stop.open);
-          // Wait for the thing we asked for, not for a guess at how long it
-          // takes. app.js:1036 marks the clicked sidebar button `active` in the
-          // same turn it shows the page. The blind sleeps this replaces were
-          // simultaneously too long on a fast render (60ms x 94 widths x 12
-          // stations x 2 pointers is over two minutes of nothing) and no
-          // guarantee at all on a slow one, which is where the intermittent
-          // "Cannot read properties of null" in the jump pass came from.
-          await page
-            .waitForFunction(
-              (id) => document.getElementById(id)?.classList.contains('active'),
-              { timeout: 5000 },
-              stop.open
-            )
-            .catch(() => {});
-          // …and then for the content the click went to fetch. Three
-          // consecutive animation frames with nothing in flight, the same shape
-          // as the resize settle below: one frame with the counter at zero can
-          // be the gap between two requests, and the render happens in the
-          // frame after the last response resolves.
-          await page
-            .waitForFunction(
-              () => {
-                const m = window.__mess;
-                m.ruhig = m.inflight === 0 ? (m.ruhig || 0) + 1 : 0;
-                return m.ruhig >= 3;
-              },
-              { polling: 'raf', timeout: 5000 }
-            )
-            .catch(() => {});
-          await page.evaluate(() => {
-            window.__mess.ruhig = 0;
-          });
-        }
+        await oeffnen(page, stop);
         // The HIGHER of the two floors, so the caller can split. The page used
         // to be told only point.tapFloor, so nothing between that and the Feld
         // floor was ever collected and the Feld report below was unreachable.
@@ -1026,15 +1117,7 @@ async function main() {
             isMobile: coarse,
             hasTouch: coarse
           });
-          await page.keyboard.press('Escape');
-          await page.evaluate((id) => document.getElementById(id).click(), stop.open);
-          await page
-            .waitForFunction(
-              (id) => document.getElementById(id)?.classList.contains('active'),
-              { timeout: 5000 },
-              stop.open
-            )
-            .catch(() => {});
+          await oeffnen(page, stop);
           await page.setViewport({
             width: jump.to,
             height: 900,
