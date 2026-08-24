@@ -91,7 +91,9 @@ describe('the cards a table becomes on a phone', () => {
   // replaced. Landing a sixth means editing this line, which is where the
   // reason is.
   it('is applied only to tables whose rows carry labels', () => {
-    const marked = [...HTML.matchAll(/<table id="([^"]+)" class="t-cards">/g)].map((m) => m[1]).sort();
+    // Nicht auf `>` festgenagelt: seit T7 steht hinter der Klasse noch
+    // role="table". Was hier geprüft wird, ist die Liste, nicht die Schreibweise.
+    const marked = [...HTML.matchAll(/<table id="([^"]+)" class="t-cards"[^>]*>/g)].map((m) => m[1]).sort();
     assert.deepEqual(marked, [
       't-batches',
       't-catalog',
@@ -112,7 +114,7 @@ describe('the cards a table becomes on a phone', () => {
   it('covers the table that was missed for having no block of its own', () => {
     assert.match(
       HTML,
-      /<table id="t-grain" class="t-cards">/,
+      /<table id="t-grain" class="t-cards"[^>]*>/,
       '#t-grain is filled by batchRowHtml(), the same function that fills #t-batches, so every one of its ' +
         'cells already carries a data-mlabel — it scrolled sideways only because nobody wrote it an id block'
     );

@@ -23159,6 +23159,53 @@ loadData();
 connectSSE();
 setInterval(pollSync, 30000);
 
+// ── The roles the card mode takes away (finding T7) ────────────────────────
+// Below the card breakpoint every table element gets `display: block`, and a
+// browser drops a table's implicit roles the moment its display stops being a
+// table one. What a screen reader hears after that is not a table with rows and
+// columns but a run of paragraphs: no "row 3 of 12", no column association, no
+// way to move by cell. Twelve tables do it, and nothing put the roles back.
+//
+// The shop already fixed the same thing the same way, by hand, 44 times in the
+// three files whose CSS builds cards. The tracker cannot: only the header of
+// each table stands in index.html, the rows are built in a dozen render
+// functions as template literals, and a role written into forty of those
+// literals is forty chances to forget one.
+//
+// So the header carries its roles in the markup and the rows get theirs here.
+// The roles are correct at every width -- they are the implicit roles anyway
+// while the table is a table -- so nothing has to know where the breakpoint is.
+//
+// Direct children only. A cell may hold a table of its own, and its rows are
+// that table's rows, not this one's.
+function stampRowRoles(tbody) {
+  for (const tr of tbody.children) {
+    if (tr.tagName !== 'TR') continue;
+    tr.setAttribute('role', 'row');
+    for (const zelle of tr.children) {
+      if (zelle.tagName === 'TD') zelle.setAttribute('role', 'cell');
+      else if (zelle.tagName === 'TH') zelle.setAttribute('role', 'rowheader');
+    }
+  }
+}
+
+// One observer per table body rather than one call per render: the twelve
+// bodies are filled from a dozen places, several of them more than once, and a
+// thirteenth place added tomorrow would silently render a table nobody can read
+// by row. childList only, so stamping an attribute cannot re-trigger it.
+function watchCardTables() {
+  for (const tbody of document.querySelectorAll('.t-cards > tbody')) {
+    stampRowRoles(tbody);
+    new MutationObserver(() => stampRowRoles(tbody)).observe(tbody, { childList: true });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', watchCardTables, { once: true });
+} else {
+  watchCardTables();
+}
+
 // Register service worker for PWA / offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
