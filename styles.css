@@ -6239,33 +6239,81 @@ tr.ms-off .ms-prog {
 .us-tab {
   width: auto;
 }
-/* ⚠️ **Ein Ankreuzfeld ist kein Textfeld.** Die globale Regel für `input`
-   (styles.css:2095) gibt jedem Feld `width: 100%`, `padding: 9px 12px` und
-   `min-height: 64px`, und ein Ankreuzfeld erbt das mit: in dieser Tabelle
-   202 x 64 px, gezeichnet wird ein Häkchen von 13 px. Das ist der graue Klotz
-   auf der Karte und die Lücke zwischen den Zeilen.
-   Gemessen hat es nichts, und das ist der Teil, der hier stehen muss: Die
-   TOUCH-Prüfung sucht Flächen, die zu KLEIN sind. Zu groß ist keine Kategorie.
-   Die Größe folgt der Eingabeachse und nicht der Breite (Regel R1):
-   `--tap-sm-min` ist 48 px in der Hand und 24 px am Schreibtisch, und 24 px ist
-   WCAG 2.5.8 Stufe AA. Damit bleibt die Fläche über beiden Böden, statt wie
-   ein nacktes Ankreuzfeld mit 13 px darunter zu fallen. */
+/* ⚠️ **Ein Ankreuzfeld ist kein Textfeld** — und für diese zwei Spalten auch
+   nicht die richtige Form. Die globale Regel (styles.css:2095) gibt jedem
+   `input` `width: 100%`, `padding: 9px 12px` und `min-height: 64px`, und ein
+   Ankreuzfeld erbt jedes Wort davon: hier 202 x 64 px um ein Häkchen von 13 px.
+   Siehe Befund T8, der auch sagt, warum kein Messlauf das je gemeldet hat: Die
+   TOUCH-Prüfung sucht Flächen, die zu KLEIN sind, zu groß ist keine Kategorie.
+
+   Ein Ankreuzfeld auf Fingergröße zu ziehen behebt das nicht, es macht einen
+   größeren Klotz: `appearance: auto` malt über den Polsterkasten, also ist die
+   Trefferfläche IMMER genau so groß wie das gezeichnete Kästchen. Wer 44 px
+   treffen will, sieht 44 px. Gemessen, nicht vermutet.
+
+   Julian hat sich am 24.08. den Schalter ausgesucht. Er ist weiterhin ein
+   echtes `input[type=checkbox]` — Tastatur, `:checked`, der bestehende
+   Klick-Auswerter in app.js bleiben, wie sie sind — nur gezeichnet wird er
+   selbst. Und selbst gezeichnet lassen sich Fläche und Bild trennen, was ein
+   natives Kästchen nicht kann:
+
+   Der Kasten ist `max(28px, --tap-sm-min)` hoch, also 48 px in der Hand und
+   28 px am Schreibtisch (Regel R1: die Eingabeachse entscheidet, nicht die
+   Breite). Die Pille darin ist immer 28 px hoch. Den Unterschied tragen
+   durchsichtige Ränder, und `background-clip: padding-box` sorgt dafür, dass
+   die Farbe nur im Polsterkasten liegt. Die Fläche hält damit die 44 px des
+   Fingerbodens (WCAG 2.5.5) und die 24 px der Maus (2.5.8, Stufe AA), ohne
+   dass das Bild mitwächst.
+
+   Der Knopf ist ein zweiter Hintergrund und keine `::before`. Ein `input` ist
+   ein ersetztes Element; dass Chrome dort Pseudoelemente zeichnet, sobald
+   `appearance: none` gesetzt ist, gilt für WebKit nicht verlässlich, und
+   Julian arbeitet in Safari. Ein Farbverlauf ist überall ein Hintergrund. Er
+   wandert über `background-position`, das lässt sich weich schalten. */
 .us-tab input[type='checkbox'] {
-  width: max(24px, var(--tap-sm-min));
-  height: max(24px, var(--tap-sm-min));
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 50px;
+  height: max(28px, var(--tap-sm-min));
   min-height: 0;
-  /* ⚠️ Polsterung macht die Fläche NICHT größer als das Kästchen, und das ist
-     gemessen: Ein Ankreuzfeld mit `appearance: auto` malt sein Häkchen über den
-     Polsterkasten, nicht in den Inhaltskasten. 48 px Fläche mit 12 px Polsterung
-     sind ein 48 px großes Kästchen, kein 24 px großes in einer großen Fläche.
-     Wer es kleiner gezeichnet haben will, muss entweder die Fläche unter den
-     Boden schrumpfen (44 px in der Hand, WCAG 2.5.5) oder das Kästchen selbst
-     zeichnen. Beides ist eine Entscheidung und keine Regel. */
   padding: 0;
   margin: 0;
-  accent-color: var(--c-primary);
+  border: 0 solid transparent;
+  border-top-width: calc((max(28px, var(--tap-sm-min)) - 28px) / 2);
+  border-bottom-width: calc((max(28px, var(--tap-sm-min)) - 28px) / 2);
+  border-radius: 999px;
+  background-color: var(--c-border);
+  background-image: radial-gradient(circle 11px at 14px 50%, #fff 98%, rgba(255, 255, 255, 0) 100%);
+  background-repeat: no-repeat;
+  background-clip: padding-box;
+  background-position: 0 0;
   cursor: pointer;
 }
+.us-tab input[type='checkbox']:checked {
+  background-color: var(--c-primary);
+  background-position: 22px 0;
+}
+/* Ein Schalter, der ohne Bewegung umspringt, sagt nicht, dass er geschaltet
+   hat. Mit Bewegungsempfindlichkeit springt er trotzdem, das ist die Regel. */
+@media (prefers-reduced-motion: no-preference) {
+  .us-tab input[type='checkbox'] {
+    transition:
+      background-color 0.15s,
+      background-position 0.15s;
+  }
+}
+/* Admins dürfen immer, das Feld ist gesperrt. Gesperrt heißt hier gedämpft und
+   nicht ausgegraut: der Zustand ist WAHR und soll ablesbar bleiben. */
+.us-tab input[type='checkbox']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.us-tab input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
 /* zwilling: kartenmodus */
 @media (max-width: 768px) {
   /* ── Tables as cards ────────────────────────────────────────
