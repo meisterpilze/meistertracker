@@ -2513,10 +2513,17 @@ document.getElementById('m-confirm3').addEventListener('click', (e) => {
   if (e.target.id === 'm-confirm3') closeConfirm3();
 });
 let promptCb = null;
-function prompt2(title, placeholder, cb) {
+// opts.inputmode gets set on every open, never only when asked for: a phone that
+// was handed a decimal keypad once would keep it at the next prompt that wants
+// letters, and the leak would be invisible on a desktop. opts.value pre-fills,
+// which is what correcting a number wants — retyping it to change one digit is
+// how the wrong digit survives.
+function prompt2(title, placeholder, cb, opts) {
+  const o = opts || {};
   document.getElementById('m-pr-title').textContent = title;
   const inp = document.getElementById('m-pr-input');
-  inp.value = '';
+  inp.value = o.value == null ? '' : String(o.value);
+  inp.setAttribute('inputmode', o.inputmode || 'text');
   inp.placeholder = placeholder || '';
   promptCb = cb;
   document.getElementById('m-prompt').classList.add('open');
@@ -9645,6 +9652,60 @@ function _sbDrawnCount(subId) {
   return _sbCounts.get(subId) || '—';
 }
 
+// Die gemessene Feuchte, und daneben ausgerechnet, wie weit sie vom Rezept
+// abliegt. Die Abweichung ist der Grund, aus dem überhaupt nachgemessen wird —
+// sie erst im Kopf bilden zu lassen, hiesse die Antwort neben die Frage zu legen
+// und den letzten Schritt dem Leser zu überlassen.
+function _subRhCell(s) {
+  if (s.actualRhPct == null) {
+    return '<span style="font-weight:400;color:var(--c-text-muted)">' + esc(t('sub.rhNotMeasured')) + '</span>';
+  }
+  const diff = s.actualRhPct - s.moisturePct;
+  const cell = esc(s.actualRhPct.toFixed(1)) + ' %';
+  // Unter 0,05 rundet die Anzeige auf (0.0) und eine Klammer, die "keine
+  // Abweichung" sagt, ist lauter als keine Klammer.
+  if (Math.abs(diff) < 0.05) return cell;
+  return (
+    cell +
+    ' <span style="font-weight:400;color:var(--c-text-sec)">(' +
+    (diff > 0 ? '+' : '−') +
+    esc(Math.abs(diff).toFixed(1)) +
+    ')</span>'
+  );
+}
+
+// Gemessen wird nach dem Mischen, nicht beim Anlegen: da ist der Ansatz längst
+// gebucht, und die Zahl kommt aus dem Messgerät statt aus dem Rezept.
+//
+// Ein leeres Feld löscht die Messung. Das ist der Weg zurück, wenn sie am
+// falschen Ansatz landete, und er braucht keinen zweiten Knopf, der danebensteht
+// und nur an dem einen Tag gebraucht wird, an dem jemand sich vertippt hat.
+function measureSubstrateRh(s) {
+  prompt2(
+    t('sub.rhPrompt', { id: s.subId }),
+    s.moisturePct.toFixed(1),
+    async (v) => {
+      // Komma wie auf der Tastatur, Punkt wie in der Zahl: 62,5 ist das, was
+      // hier jemand tippt, und Number() macht daraus sonst NaN.
+      const raw = (v || '').replace(',', '.').trim();
+      const payload = { actualRhPct: raw === '' ? null : Number(raw) };
+      if (raw !== '' && !Number.isFinite(payload.actualRhPct)) {
+        toast(t('sub.rhNaN'), 'err');
+        return;
+      }
+      const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(s.subId) + '/moisture', payload);
+      if (!r || r.error) {
+        toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+        return;
+      }
+      toast(raw === '' ? t('sub.rhCleared') : t('sub.rhSaved', { pct: payload.actualRhPct.toFixed(1) }));
+      await refreshSubstrateBatches();
+      openSubstrateInfo(s.subId);
+    },
+    { inputmode: 'decimal', value: s.actualRhPct == null ? '' : String(s.actualRhPct) }
+  );
+}
+
 async function openSubstrateInfo(subId) {
   const body = document.getElementById('si-body');
   const acts = document.getElementById('si-actions');
@@ -9682,7 +9743,23 @@ async function openSubstrateInfo(subId) {
     line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
     line(t('sub.water'), s.waterL.toFixed(1) + ' L') +
     line(t('sub.moisture'), s.moisturePct.toFixed(1) + ' %') +
+    line(t('sub.moistureActual'), _subRhCell(s)) +
     '</table>';
+  // Wer gemessen hat und wann, unter die Tabelle statt in die Zeile: in der
+  // Zeile stünde es neben der Zahl und läse sich wie ein Teil von ihr.
+  if (s.actualRhPct != null && s.actualRhAt) {
+    // Ohne Namen die kürzere Zeile, statt eines Fragezeichens an der Stelle, an
+    // der ein Name stünde: eine Messung aus einer Sitzung ohne Benutzer ist
+    // vollständig, sie hat nur niemanden.
+    html +=
+      '<div class="fs-meta" style="margin-top:-6px;margin-bottom:10px;color:var(--c-text-muted)">' +
+      esc(
+        s.actualRhBy
+          ? t('sub.rhMeasuredBy', { when: fmtDt(s.actualRhAt), who: s.actualRhBy })
+          : t('sub.rhMeasuredAt', { when: fmtDt(s.actualRhAt) })
+      ) +
+      '</div>';
+  }
   // What the shelf actually gave up, read from the ledger rather than recomputed.
   // A mix made while stock was short booked less than the recipe asked for, and
   // that gap is exactly what somebody looking at a bad batch needs to see.
@@ -9737,6 +9814,11 @@ async function openSubstrateInfo(subId) {
     b.onclick = fn;
     acts.appendChild(b);
   };
+  // Vor den roten: Nachmessen ist die Handlung, die bei fast jedem Ansatz
+  // vorkommt, und die beiden darunter sind die seltenen und endgültigen. Auch
+  // bei einem verworfenen Ansatz noch erlaubt — warum er verworfen wurde, ist
+  // genau die Frage, auf die eine gemessene Feuchte antwortet.
+  act(s.actualRhPct == null ? t('sub.rhAdd') : t('sub.rhEdit'), 'btn-p', () => measureSubstrateRh(s));
   if (!s.drawn.length) {
     act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
   } else if (s.status === 'open' && s.remainingKg > 0.0001) {

@@ -2406,6 +2406,34 @@ const MIGRATIONS = [
       // allem, was an dieser Stelle gilt.
       db.exec("UPDATE week_rhythm SET theme = 'free', target_qty = NULL WHERE theme IN ('fruiting', 'harvest', 'lab')");
     }
+  },
+  {
+    version: 82,
+    description: 'Gemessene Ist-Feuchte am Substrat-Ansatz, getrennt vom Rezeptwert',
+    fn(db) {
+      // Die Karte des Ansatzes zeigte eine Zeile "Ist-Feuchte" und darin den
+      // Wert, den computeMixBatch aus dem Rezept gerechnet hatte. Das ist die
+      // Soll-Feuchte: was der Ansatz treffen sollte, nicht was er getroffen hat.
+      // Wer nach dem Mischen nachmisst, hatte für das Ergebnis keinen Platz und
+      // fand seine eigene Messung dem Namen nach schon dort stehen.
+      //
+      // NULL heisst "noch nicht gemessen", und das ist nicht dasselbe wie 0 %.
+      // Ein DEFAULT 0 wie bei den Nachbarspalten würde jeden Ansatz, den es
+      // heute schon gibt, als knochentrocken gemessen ausweisen. Nur eine Zahl,
+      // die jemand eingetragen hat, ist eine Messung.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('substrate_batches') WHERE name='actual_rh_pct'")
+        .get();
+      if (!has.c) {
+        db.exec('ALTER TABLE substrate_batches ADD COLUMN actual_rh_pct REAL');
+        // Zeitpunkt und Person gehören zur Messung. Eine Zahl allein lässt
+        // offen, ob sie von direkt nach dem Mischen stammt oder von drei Tagen
+        // später, und beim Korrigieren wäre nicht mehr zu sehen, dass sie
+        // korrigiert wurde.
+        db.exec('ALTER TABLE substrate_batches ADD COLUMN actual_rh_at TEXT');
+        db.exec('ALTER TABLE substrate_batches ADD COLUMN actual_rh_by TEXT');
+      }
+    }
   }
 ];
 
@@ -4084,7 +4112,13 @@ function _mapSubstrateRow(r) {
     cornKg: r.corn_kg,
     gypsumKg: r.gypsum_kg,
     waterL: r.water_l,
+    // moisturePct kommt aus dem Rezept — was der Ansatz treffen sollte.
+    // actualRhPct ist, was jemand nachgemessen hat, und bleibt null, solange
+    // niemand gemessen hat. Die beiden werden nie ineinander gerechnet.
     moisturePct: r.moisture_pct,
+    actualRhPct: r.actual_rh_pct == null ? null : r.actual_rh_pct,
+    actualRhAt: r.actual_rh_at || null,
+    actualRhBy: r.actual_rh_by || null,
     notes: r.notes || '',
     created: r.created,
     status: r.status
@@ -4157,6 +4191,43 @@ function writeOffSubstrateBatch(db, subId, note, userId) {
     db.exec('ROLLBACK');
     throw e;
   }
+}
+
+// Was beim Nachmessen herauskam.
+//
+// Getrennt von moisture_pct, das aus dem Rezept stammt und dort auch bleibt: der
+// Ansatz ist gemischt, und was er treffen sollte, ändert sich nicht rückwirkend
+// dadurch, dass er es nicht getroffen hat. Beide Zahlen nebeneinander sind die
+// Auskunft — eine allein wäre nur wieder die halbe.
+//
+// Ein zweiter Aufruf überschreibt den Wert, statt eine Messreihe anzulegen: wer
+// sich vertippt, will die Zahl korrigieren, und eine Historie von Tippfehlern
+// beantwortet keine Frage, die jemand stellt. null löscht die Messung wieder.
+function setSubstrateMoisture(db, subId, pct, userId) {
+  const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+
+  let value = null;
+  if (pct !== null && pct !== undefined && pct !== '') {
+    const n = Number(pct);
+    if (!Number.isFinite(n)) throw new Error('Ist-Feuchte muss eine Zahl sein');
+    // Weit genug für jede reale Messung, eng genug, dass 650 statt 65 als das
+    // durchfällt, was es ist. Ein Prozentsatz ausserhalb 0..100 ist kein
+    // Messwert, sondern ein Tippfehler.
+    if (n < 0 || n > 100) throw new Error('Ist-Feuchte muss zwischen 0 und 100 % liegen');
+    value = Math.round(n * 10) / 10;
+  }
+
+  const who =
+    value === null || !userId ? null : (db.prepare('SELECT username FROM users WHERE id=?').get(userId) || {}).username;
+  db.prepare('UPDATE substrate_batches SET actual_rh_pct=?, actual_rh_at=?, actual_rh_by=? WHERE sub_id=?').run(
+    value,
+    value === null ? null : new Date().toISOString(),
+    who || null,
+    subId
+  );
+  incrementDataVersion(db);
+  return { subId, actualRhPct: value };
 }
 
 function listSubstrateBatches(db, opts) {
@@ -10158,6 +10229,7 @@ module.exports = {
   createSubstrateBatch,
   listSubstrateBatches,
   getSubstrateBatch,
+  setSubstrateMoisture,
   writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,

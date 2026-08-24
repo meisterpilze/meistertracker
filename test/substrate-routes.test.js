@@ -33,6 +33,7 @@ describe('substrate route shapes', () => {
   const list = liftPattern('/^\\/api\\/substrate-batches(\\?|$)/', 'list route');
   const detail = liftPattern('subGetMatch = req.url.match', 'detail route');
   const writeOff = liftPattern('subOffMatch = req.url.match', 'write-off route');
+  const moisture = liftPattern('subRhMatch = req.url.match', 'measured-moisture route');
   const del = liftPattern('subDelMatch = req.url.match', 'delete route');
 
   it('answers the collection only at the collection URL', () => {
@@ -53,6 +54,16 @@ describe('substrate route shapes', () => {
   it('matches a write-off only with the action on the end', () => {
     assert.equal('/api/substrate-batches/SUB-01/write-off'.match(writeOff)[1], 'SUB-01');
     assert.equal(writeOff.test('/api/substrate-batches/SUB-01'), false);
+  });
+
+  it('matches the measured moisture only with the action on the end', () => {
+    assert.equal('/api/substrate-batches/SUB-01/moisture'.match(moisture)[1], 'SUB-01');
+    assert.equal(moisture.test('/api/substrate-batches/SUB-01'), false);
+    // The two per-mix actions are neighbours; neither may answer for the other.
+    assert.equal(moisture.test('/api/substrate-batches/SUB-01/write-off'), false);
+    assert.equal(writeOff.test('/api/substrate-batches/SUB-01/moisture'), false);
+    assert.equal(detail.test('/api/substrate-batches/SUB-01/moisture'), false);
+    assert.equal(list.test('/api/substrate-batches/SUB-01/moisture'), false);
   });
 
   it('matches a delete by id', () => {
