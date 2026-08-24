@@ -14,7 +14,7 @@
 // genau die Lücke, durch die es gefallen ist.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebeFunktion: _hf, hebeKonstante: _hk } = require('./helpers/quelle');
+const { quelle, hebe: _hebe, hebeFunktion: _hf, hebeKonstante: _hk } = require('./helpers/quelle');
 
 const SRC = quelle();
 const hebeFunktion = (n) => _hf(n, SRC);
@@ -27,11 +27,17 @@ const SORTEN = [
 
 // Baut den Knopf und löst das data-sorte wieder auf, wie der Handler es tut.
 function rundlauf(it, sorten = SORTEN) {
+  // _planBtn ist kein Zweigbaum mehr, sondern ein Nachschlag in PLAN_BTNS über
+  // PLAN_KINDS.btn — also muss der Rundlauf die Tabelle mitheben.
   const code = [
     hebeFunktion('_spKey'),
     hebeFunktion('_strainKeys'),
     hebeFunktion('_strainByKey'),
     hebeFunktion('sorteKey'),
+    _hebe([[/^const _labRows = .*$/m, '_labRows']], SRC),
+    hebeKonstante('PLAN_KINDS'),
+    hebeFunktion('planKind'),
+    hebeKonstante('PLAN_BTNS'),
     hebeFunktion('_planBtn')
   ].join('\n');
   return new Function(
@@ -42,6 +48,7 @@ function rundlauf(it, sorten = SORTEN) {
     const t = (k) => k;
     const getLabLabel = (x) => 'label:' + x;
     const dashTaskBtn = () => '';
+    const dashLabGroupOpen = false;
     ${code}
     const html = _planBtn(it);
     const m = /data-sorte="([^"]*)"/.exec(html);
@@ -318,5 +325,78 @@ describe('Labor und Chargen sind zwei Arbeiten', () => {
     assert.ok(cats.indexOf('lab') < cats.indexOf('create'), 'die Chargen stünden vor dem Labor');
     assert.ok(cats.indexOf('create') < cats.indexOf('move'), 'umgezogen würde vor dem Ansetzen');
     assert.ok(cats.indexOf('move') < cats.indexOf('harvest'));
+  });
+});
+
+// ── Die Tabelle ist die Tabelle ─────────────────────────────────────────────
+describe('PLAN_KINDS wird auch gelesen', () => {
+  const tabelle = () => new Function(hebeKonstante('PLAN_KINDS') + String.fromCharCode(10) + 'return PLAN_KINDS;')();
+  const bauer = () =>
+    new Function(
+      'esc',
+      't',
+      'getLabLabel',
+      'dashTaskBtn',
+      'dashLabGroupOpen',
+      hebeKonstante('PLAN_BTNS') + String.fromCharCode(10) + 'return Object.keys(PLAN_BTNS);'
+    )(String, String, String, () => '', false);
+
+  it('baut den Knopf aus der Spalte btn statt aus einer Leiter', () => {
+    // Die Spalte behauptete seit ihrer Einführung, die vierte der vier
+    // parallelen Leitern zu ersetzen. Gelesen hat sie niemand: _planBtn
+    // verzweigte weiter selbst, und eine neue Art mit gesetztem btn bekam still
+    // den allgemeinen „Ansehen"-Knopf. Eine Attrappe, die autoritativ aussah.
+    const fn = hebeFunktion('_planBtn');
+    assert.doesNotMatch(fn, /it\.kind ===/, 'die Leiter ist zurück');
+    assert.match(fn, /PLAN_BTNS\[/, 'die Tabelle wird nicht befragt');
+  });
+
+  it('hat zu jeder Art einen Bauer und zu jedem Bauer eine Art', () => {
+    const kinds = tabelle();
+    const btns = bauer();
+    for (const [art, e] of Object.entries(kinds)) {
+      assert.ok(btns.includes(e.btn), art + ': btn "' + e.btn + '" hat keinen Bauer in PLAN_BTNS');
+    }
+    for (const b of btns) {
+      assert.ok(
+        Object.values(kinds).some((e) => e.btn === b),
+        'der Bauer "' + b + '" gehört zu keiner Art — tote Zeichnung'
+      );
+    }
+  });
+
+  it('trägt das Gewicht in der Tabelle, nicht an der Zeile', () => {
+    // Als Feld auf dem Eintrag hätte die nächste zusammenfassende Art still
+    // wieder „1 Labor" statt 38 gezählt: planWeight nahm 1 für alles, was das
+    // Feld vergass, und kein Test hätte das gesehen.
+    const kinds = tabelle();
+    assert.equal(typeof kinds.labgroup.weight, 'function', 'labgroup sagt nicht mehr, für wie viele es steht');
+    assert.equal(typeof kinds.labgroup.late, 'function');
+    for (const [art, e] of Object.entries(kinds)) {
+      if (e.weight !== undefined) assert.equal(typeof e.weight, 'function', art + ': weight ist keine Funktion');
+      if (e.late !== undefined) assert.equal(typeof e.late, 'function', art + ': late ist keine Funktion');
+    }
+    assert.doesNotMatch(hebeFunktion('buildWeekPlan'), /overdueWeight:/, 'die Zeile trägt es wieder selbst');
+  });
+
+  it('rechnet das Gewicht aus den Zeilen, die die Zusammenfassung vertritt', () => {
+    const code = [
+      _hebe([[/^const _labRows = .*$/m, '_labRows']], SRC),
+      hebeKonstante('PLAN_KINDS'),
+      hebeFunktion('planKind'),
+      hebeFunktion('planWeight'),
+      hebeFunktion('planOverdue')
+    ].join(String.fromCharCode(10));
+    const mit = (offen) =>
+      new Function('dashLabGroupOpen', code + String.fromCharCode(10) + 'return { planWeight, planOverdue };')(offen);
+    const rows = Array.from({ length: 38 }, (_, i) => ({ empty: i < 12 }));
+    const zeile = { kind: 'labgroup', overdue: true, task: { rows } };
+    const zu = mit(false);
+    assert.equal(zu.planWeight(zeile), 38, 'zugeklappt steht sie für 38');
+    assert.equal(zu.planOverdue(zeile), 12, 'und für die 12 leeren davon');
+    const auf = mit(true);
+    assert.equal(auf.planWeight(zeile), 0, 'aufgeklappt stehen die 38 selbst daneben');
+    assert.equal(auf.planOverdue(zeile), 0);
+    assert.equal(zu.planWeight({ kind: 'harvest' }), 1, 'alles andere zählt als eins');
   });
 });

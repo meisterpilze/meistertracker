@@ -6,16 +6,18 @@
 // falsch, jede nur an ein bis zwei Tagen im Jahr, und keine wäre je durch eine
 // Fehlermeldung aufgefallen:
 //
-//   – der Rückwärtsgang der Rückstände übersprang den Umstellungstag im
-//     Frühjahr ganz, ein an ihm versäumter Termin war damit unsichtbar;
+//   – die Terminreihe übersprang den Umstellungstag im Frühjahr ganz, ein an
+//     ihm versäumter Termin war damit unsichtbar;
 //   – der Wochenstreifen zeigte im Herbst denselben Sonntag zweimal und
 //     verschwieg den Montag danach;
 //   – der Anker einer neu angelegten Aufgabe landete einen Tag zu früh, also
 //     auf dem falschen Wochentag — und da der Anker den Wochentag BESTIMMT,
 //     lief die Aufgabe von da an dauerhaft am falschen Tag.
 //
-// recurringDueOn() rechnet aus genau diesem Grund in UTC. Seine Aufrufer taten
-// es nicht, und das war die Hälfte, die kein Test angesehen hat.
+// Zwei Rechenarten, zwei Regeln. Termine liegen auf Kalendertagen im Abstand
+// ganzer Wochen: die rechnet der Server in UTC, wo eine Woche immer 7 x 864e5
+// ist. Der Wochenstreifen und der Anker sind Ortszeit — dort zählt der
+// Kalender, also addDays() und nicht Millisekunden.
 //
 // Die Zeitzone wird hier gesetzt, nicht geraten: `node --test` gibt jeder Datei
 // einen eigenen Prozess, also bleibt das auf diese Datei beschränkt.
@@ -23,26 +25,13 @@ process.env.TZ = 'Europe/Berlin';
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebe, hebeFunktion } = require('./helpers/quelle');
+const { quelle, hebeFunktion } = require('./helpers/quelle');
+const db = require('../db.js');
 
 const SRC = quelle('app.js');
 
-function werkzeug(tasks) {
-  const code =
-    hebe([[/^const RECURRING_LOOKBACK_DAYS = \d+;$/m, 'RECURRING_LOOKBACK_DAYS']], SRC) +
-    '\n' +
-    hebeFunktion('addDays', SRC) +
-    '\n' +
-    hebeFunktion('_ymd', SRC) +
-    '\n' +
-    hebeFunktion('recurringDueOn', SRC) +
-    '\n' +
-    hebeFunktion('recurringDoneOn', SRC) +
-    '\n' +
-    hebeFunktion('recurringArrears', SRC) +
-    '\nreturn { recurringArrears, addDays, _ymd };';
-  return new Function('recurringTasks', code)(tasks || []);
-}
+const werkzeug = () =>
+  new Function(hebeFunktion('addDays', SRC) + '\n' + hebeFunktion('_ymd', SRC) + '\nreturn { addDays, _ymd };')();
 
 const TAG = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const mitternacht = (s) => {
@@ -51,31 +40,35 @@ const mitternacht = (s) => {
   return d;
 };
 
-describe('Die Umstellung im Frühjahr', () => {
-  // 2026-03-29 ist die Nacht mit 23 Stunden.
-  it('lässt den Umstellungstag im Rückwärtsgang nicht aus', () => {
-    const { addDays, _ymd } = werkzeug();
-    const von = mitternacht('2026-03-30');
-    const reihe = [1, 2, 3].map((b) => _ymd(addDays(von, -b)));
-    assert.deepEqual(reihe, ['2026-03-29', '2026-03-28', '2026-03-27']);
+describe('Die Terminreihe über eine Umstellung', () => {
+  it('lässt den Umstellungstag im Frühjahr nicht aus', () => {
+    // 2026-03-29 ist die Nacht mit 23 Stunden. Ein wöchentlicher Sonntagstermin
+    // fiel hier heraus, und weil Rückstände nur den jüngsten Termin ansehen,
+    // war das an ihm Versäumte für immer unsichtbar.
+    assert.deepEqual(db.recurringDueBetween('2026-03-08', 1, '2026-03-20', '2026-04-05'), [
+      '2026-03-22',
+      '2026-03-29',
+      '2026-04-05'
+    ]);
   });
 
-  it('meldet einen an ihm versäumten Termin', () => {
-    // Vorher lief der Rückwärtsgang an ihm vorbei, fand den bereits abgehakten
-    // Sonntag davor und brach ab — der wirklich versäumte Tag verschwand, und
-    // zwar für immer, weil Rückstände nur den jüngsten Termin ansehen.
-    const { recurringArrears } = werkzeug([
-      { id: 1, name: 'Putzen', everyWeeks: 1, anchor: '2026-03-01', active: true, done: ['2026-03-22'] }
-    ]);
-    assert.deepEqual(
-      recurringArrears(mitternacht('2026-03-30')).map((x) => x.date),
-      ['2026-03-29']
-    );
+  it('lässt den Umstellungstag im Herbst nicht doppelt vorkommen', () => {
+    // 2026-10-25 ist die Nacht mit 25 Stunden.
+    const reihe = db.recurringDueBetween('2026-10-04', 1, '2026-10-10', '2026-11-08');
+    assert.deepEqual(reihe, ['2026-10-11', '2026-10-18', '2026-10-25', '2026-11-01', '2026-11-08']);
+    assert.equal(new Set(reihe).size, reihe.length, 'ein Datum kommt zweimal vor');
+  });
+
+  it('hält den Wochentag über beide Umstellungen', () => {
+    const reihe = db.recurringDueBetween('2026-01-05', 1, '2026-01-05', '2026-12-28');
+    assert.equal(reihe.length, 52);
+    for (const d of reihe) {
+      assert.equal(new Date(d + 'T00:00:00Z').getUTCDay(), 1, d + ' ist kein Montag mehr');
+    }
   });
 });
 
-describe('Die Umstellung im Herbst', () => {
-  // 2026-10-25 ist die Nacht mit 25 Stunden.
+describe('Was der Browser in Ortszeit rechnet', () => {
   it('gibt der Woche sieben verschiedene Tage', () => {
     const { addDays, _ymd } = werkzeug();
     const von = mitternacht('2026-10-20');
