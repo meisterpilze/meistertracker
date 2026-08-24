@@ -211,12 +211,20 @@ describe('Die Menge eines Tages', () => {
     assert.match(hebeFunktion('saveDayQty', SRC), /_dayQty\.darfPlan && plan !== _dayQty\.plan/);
   });
 
-  it('lässt die sechs anderen Wochentage in Ruhe', () => {
-    // Die Route nimmt die Woche als Ganzes; nur der bearbeitete Tag darf sich
-    // ändern, sonst löscht ein Griff in einen Montag die Mengen der übrigen.
+  it('schreibt einen Tag und nicht die ganze Woche', () => {
+    // Vorher baute das hier die sieben Tage aus dem zuletzt gesehenen Abbild
+    // neu zusammen und schickte sie an eine Route, die die Tabelle leert und
+    // neu füllt: hatte inzwischen jemand anderes den Donnerstag geändert, war
+    // das nach dem Speichern eines Montags fort.
     const fn = hebeFunktion('_saveWeekdayPlan', SRC);
-    assert.match(fn, /d === weekday \? qty \|\| null : e\.targetQty/);
-    assert.match(fn, /theme: e\.theme/, 'die Themen der anderen Tage gehen verloren');
+    assert.match(fn, /apiPost\('\/api\/week-rhythm-day', \{ weekday, targetQty: qty \}\)/);
+    assert.doesNotMatch(fn, /WEEK_DAYS/, 'die ganze Woche wird wieder zusammengebaut');
+    assert.doesNotMatch(fn, /apiPut/, 'die Woche-als-Ganzes-Route ist zurück');
+    // Und der Server nimmt sie auch nur von einem Admin an.
+    const SERVER = quelle('server.js');
+    const i = SERVER.indexOf("req.url === '/api/week-rhythm-day'");
+    assert.ok(i > 0, 'die Route für einen einzelnen Tag fehlt');
+    assert.match(SERVER.slice(i, i + 400), /requireAdmin/);
   });
 
   it('hat beide Felder samt Beschriftung und Summe im Fenster', () => {
@@ -232,10 +240,10 @@ describe('Die Menge eines Tages', () => {
     assert.match(CSS, /\.dayqty-in:disabled \{[^}]*cursor: not-allowed;/);
   });
 
-  it('gibt den Feldern eine Tippfläche, die auf dem Telefon zu treffen ist', () => {
-    // Die allgemeine input-Regel setzt keine Mindesthöhe; 9px Polsterung
-    // ergeben rund 36px, und getippt wird hier meistens mit dem Daumen.
-    assert.match(CSS, /\.dayqty-in \{[^}]*min-height: var\(--tap-sm\);/);
+  it('lässt dem Feld die allgemeine Höhe von 64px', () => {
+    // Siehe test/eigene-aufgaben.test.js: eine eigene min-height wäre hier
+    // eine Verkleinerung, keine Vergrößerung.
+    assert.doesNotMatch(CSS, /\.dayqty-in \{[^}]*min-height:/);
   });
 });
 
@@ -449,5 +457,69 @@ describe('Was eine Spalte zählt', () => {
   it('nennt im Spaltenkopf dieselbe Zahl', () => {
     // Sonst stünde oben "1" und zwei Zeilen darunter "38".
     assert.match(hebeFunktion('_weekHeadHtml', SRC), /d\.items\.reduce\(\(k, it\) => k \+ planWeight\(it\), 0\)/);
+  });
+});
+
+// ── Ein Thema, das es nicht mehr gibt ───────────────────────────────────────
+describe('Themen, die aus der Auswahl geflogen sind', () => {
+  it('schlägt nichts vor, was der Editor nicht halten kann', () => {
+    // suggestWeekRhythm() lieferte weiter 'fruiting', nachdem WEEK_THEMES auf
+    // drei Einträge gekürzt war. Das <select> fand dann keine passende Option,
+    // wählte die erste, und _rhythmSyncFromForm() las beim Speichern genau
+    // diese zurück: wer den Vorschlag ungeprüft bestätigte, speicherte einen
+    // Substrattag, ohne etwas geändert zu haben.
+    const themen = new Function(hebeKonstante('WEEK_THEMES', SRC) + String.fromCharCode(10) + 'return WEEK_THEMES;')();
+    const fn = hebeFunktion('suggestWeekRhythm', SRC);
+    const m = fn.match(/const KINDS = \[([^\]]*)\]/);
+    assert.ok(m, 'KINDS steht nicht mehr in suggestWeekRhythm');
+    const kinds = [...m[1].matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
+    assert.ok(kinds.length > 0, 'KINDS ist leer');
+    for (const k of kinds) {
+      assert.ok(themen.includes(k), 'der Vorschlag kennt "' + k + '", die Auswahl nicht');
+    }
+  });
+
+  it('beschriftet ein aufgezeichnetes Alt-Thema statt den Rohschlüssel zu zeigen', () => {
+    // Migration 81 lässt rhythm_task bewusst stehen, wie es war. t() gibt bei
+    // fehlender Übersetzung den Schlüssel selbst zurück, also stand nach dem
+    // Löschen der Labels "12 · rhythm.theme.harvest" auf dem Schirm.
+    const code =
+      hebeKonstante('WEEK_THEMES', SRC) +
+      String.fromCharCode(10) +
+      hebeKonstante('WEEK_THEME_LABELS', SRC) +
+      String.fromCharCode(10) +
+      hebeFunktion('weekThemeLabel', SRC) +
+      String.fromCharCode(10) +
+      'return weekThemeLabel;';
+    const label = new Function('t', code)((k) => k);
+    for (const alt of ['fruiting', 'harvest', 'lab']) {
+      assert.equal(label(alt), 'rhythm.theme.' + alt, alt + ' hat keine Beschriftung mehr');
+    }
+    assert.equal(label('quatsch'), 'rhythm.theme.none', 'ein unbekanntes Thema zeigt seinen Rohschlüssel');
+    assert.equal(label(''), 'rhythm.theme.none');
+  });
+
+  it('hat die drei Alt-Beschriftungen in allen drei Sprachen', () => {
+    for (const datei of ['lang/de.js', 'lang/en.js', 'lang/pt.js']) {
+      const s = quelle(datei);
+      for (const alt of ['fruiting', 'harvest', 'lab']) {
+        assert.match(s, new RegExp("'rhythm\.theme\." + alt + "':"), alt + ' fehlt in ' + datei);
+      }
+    }
+  });
+
+  it('bietet "+ Menge" nur an, wo der Dialog auch etwas ausrichten kann', () => {
+    // themeFor() fällt auf den GESCHÄTZTEN Rhythmus zurück, solange nichts
+    // gespeichert ist. Der Knopf erschien also auf einer frischen Anlage, und
+    // der Dialog dahinter las rhythmOf(), fand nichts, sperrte das Planfeld mit
+    // "nur Admins ändern das" — gegenüber einem Admin — und das Speichern
+    // endete in "No rhythm on".
+    const fn = hebeFunktion('_weekColPreviewHtml', SRC);
+    // Die Bedingung des Zweigs, nicht ein Byte-Fenster davor: eine Zeile
+    // Kommentar mehr oder weniger darf diesen Test nicht bewegen.
+    const zweig = fn.split(String.fromCharCode(10)).find((z) => z.includes('} else if') && z.includes('free'));
+    assert.ok(zweig, 'der Zweig für "+ Menge" ist fort');
+    assert.match(zweig, /rhythmOf\(d\.weekday\)/, 'der Knopf hängt wieder am geschätzten Thema');
+    assert.doesNotMatch(zweig, /themeFor\(/, 'themeFor() entscheidet wieder über den Knopf');
   });
 });

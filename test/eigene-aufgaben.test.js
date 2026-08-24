@@ -39,6 +39,8 @@ function browser(tasks) {
   const code =
     hebe([[/^const RECURRING_LOOKBACK_DAYS = \d+;$/m, 'RECURRING_LOOKBACK_DAYS']], SRC) +
     '\n' +
+    hebeFunktion('addDays', SRC) +
+    '\n' +
     hebeFunktion('_ymd', SRC) +
     '\n' +
     hebeFunktion('recurringDueOn', SRC) +
@@ -296,12 +298,38 @@ describe('Wie eine eigene Aufgabe im Tagesplan steht', () => {
     assert.ok(cats.includes('chore'), 'die Kategorie steht in keiner PLAN_CATS');
   });
 
-  it('zählt den Haken im Fortschritt mit, nicht nur im Nenner', () => {
-    // counts:true lässt den Nenner wachsen. Ohne die Gegenseite läse ein
-    // fertiger Tag 7/8 — derselbe Fehler, den die abgeleiteten Zeilen schon
-    // einmal verursacht haben, nur von der anderen Seite.
-    const fn = hebeFunktion('todayProgress', SRC);
-    assert.match(fn, /it\.kind === 'chore' && it\.done.*done\+\+/s);
+  it('zählt einen abgehakten Termin genau einmal', () => {
+    // Zweimal war der Fehler: counts:true liess den Nenner wachsen, und die
+    // Gegenzeile addierte den Haken im Zaehler — total ist done + countable,
+    // also stand ein erledigter Termin auf beiden Seiten und der Balken kam nie
+    // auf 100%. Vorher wurde hier nur die Zeile `done++` im Quelltext gesucht,
+    // was zu genau dieser falschen Zahl passte.
+    const fortschritt = (items) => {
+      const code = [
+        hebeKonstante('PLAN_KINDS', SRC),
+        hebeFunktion('planKind', SRC),
+        hebeFunktion('todayProgress', SRC)
+      ].join('\n');
+      return new Function(
+        'todayItems',
+        'scanLog',
+        'harvests',
+        'manualTasks',
+        'ZONE_BY_ID',
+        'toZone',
+        code + '\nreturn todayProgress(todayItems);'
+      )(items, [], [], [], {}, (x) => x);
+    };
+    assert.deepEqual(fortschritt([{ kind: 'chore', done: false }]), { done: 0, total: 1 }, 'offen');
+    assert.deepEqual(fortschritt([{ kind: 'chore', done: true }]), { done: 1, total: 1 }, 'erledigt muss 1/1 sein');
+    assert.deepEqual(
+      fortschritt([
+        { kind: 'chore', done: true },
+        { kind: 'chore', done: false }
+      ]),
+      { done: 1, total: 2 },
+      'einer von zweien'
+    );
   });
 
   it('bietet einen Haken an und einen Weg zurück', () => {
@@ -370,13 +398,137 @@ describe('Auf dem Telefon', () => {
     assert.match(CSS, /\.rhythm-own-add input \{[^}]*flex: 1 1 100%;/, 'der Name teilt sich die Zeile');
   });
 
-  it('gibt den Feldern eine Tippfläche', () => {
-    assert.match(CSS, /\.rhythm-own-add input \{[^}]*min-height: var\(--tap-sm\);/);
-    assert.match(CSS, /\.rhythm-own-add select \{[^}]*min-height: var\(--tap-sm\);/);
+  it('unterbietet die allgemeine Feldhöhe nicht', () => {
+    // Hier stand `min-height: var(--tap-sm)` als vermeintlich größere
+    // Tippfläche. Die allgemeine input-Regel setzt aber schon 64px, und eine
+    // Klasse schlägt den Elementselektor — die Zeile machte die Felder also
+    // KLEINER, auf 48px am Telefon und rund 39px am Rechner.
+    assert.match(
+      CSS,
+      /^input,\s*\r?\nselect,\s*\r?\ntextarea \{[^}]*min-height: 64px;/m,
+      'die allgemeine Höhe ist fort'
+    );
+    for (const regel of ['\\.rhythm-own-add input', '\\.rhythm-own-add select', '\\.dayqty-in']) {
+      assert.doesNotMatch(
+        CSS,
+        new RegExp(regel + ' \\{[^}]*min-height:'),
+        regel + ' setzt wieder eine eigene Mindesthöhe und unterbietet damit die 64px'
+      );
+    }
   });
 
   it('hat einen Platz im Rhythmus-Fenster', () => {
     assert.match(HTML, /id="rhythm-own"/);
     assert.match(hebeFunktion('_renderRhythmOwn', SRC), /getElementById\('rhythm-own'\)/);
+  });
+});
+
+// ── Die Naht zwischen Server und Browser ────────────────────────────────────
+// Jeder Test oben stellt entweder den Server oder den Browser — und der
+// schlimmste Fehler dieser Funktion lag genau dazwischen: der Server lieferte
+// 60 Tage Haken, der Browser suchte bis zu 84 Tage zurück. Ein Termin, der
+// abgehakt WAR, kam ohne seinen Haken an und stand als versäumt da; nochmal
+// abzuhaken half nicht, weil der Haken auf demselben Datum landete, das
+// weiterhin ausserhalb des Fensters lag. Eine rote Zeile, die sich nicht
+// wegdrücken liess.
+//
+// Diese Tests bauen die Aufgabe durch die echten db-Funktionen, reichen genau
+// das an den Browser weiter, was listRecurringTasks liefert, und fragen ihn.
+describe('Was der Server liefert, reicht dem Browser', () => {
+  function durchgereicht(d, now) {
+    const code =
+      hebe([[/^const RECURRING_LOOKBACK_DAYS = \d+;$/m, 'RECURRING_LOOKBACK_DAYS']], SRC) +
+      '\n' +
+      hebeFunktion('addDays', SRC) +
+      '\n' +
+      hebeFunktion('_ymd', SRC) +
+      '\n' +
+      hebeFunktion('recurringDueOn', SRC) +
+      '\n' +
+      hebeFunktion('recurringDoneOn', SRC) +
+      '\n' +
+      hebeFunktion('recurringArrears', SRC) +
+      '\nreturn recurringArrears;';
+    return new Function('recurringTasks', code)(db.listRecurringTasks(d, now));
+  }
+
+  for (const wochen of [1, 4, 8, 12, 26, 52]) {
+    it('behält den Haken einer ' + wochen + '-Wochen-Aufgabe bis zum nächsten Termin', () => {
+      const { db: d, path: p } = tmpDb();
+      try {
+        // Der letzte Termin liegt einen vollen Takt zurück und wurde erledigt.
+        const heute = new Date('2026-08-23T00:00:00');
+        const anker = new Date(heute);
+        anker.setDate(anker.getDate() - 7 * wochen);
+        // Ortszeit, nicht toISOString(): das rechnet nach UTC um und liefert
+        // östlich von Greenwich den Vortag — derselbe Fehler eine Ebene höher,
+        // und er hätte diesen Test grün-falsch gemacht.
+        const p2 = (n) => String(n).padStart(2, '0');
+        const ymd = (x) => x.getFullYear() + '-' + p2(x.getMonth() + 1) + '-' + p2(x.getDate());
+        const id = db.saveRecurringTask(d, { name: 'Filter wechseln', everyWeeks: wochen, anchor: ymd(anker) });
+        db.setRecurringDone(d, id, ymd(anker), true, 'jonas');
+        const offen = durchgereicht(d, heute)(heute);
+        assert.deepEqual(
+          offen.map((x) => x.date),
+          [],
+          'erledigt, aber der Browser meldet es als versäumt: ' + JSON.stringify(offen.map((x) => x.date))
+        );
+      } finally {
+        d.close();
+        fs.unlinkSync(p);
+      }
+    });
+  }
+
+  it('meldet einen wirklich versäumten Termin weiterhin', () => {
+    // Die Gegenprobe: ohne sie könnte das Fenster alles verschlucken und die
+    // Tests oben wären trotzdem grün.
+    const { db: d, path: p } = tmpDb();
+    try {
+      // Anker 30.05., alle 12 Wochen: der Termin fiel am 22.08. und wurde
+      // nicht abgehakt. Heute ist der 23.08., also kein Termin — sonst stünde
+      // die Aufgabe ohnehin schon in der Tagesliste und der Rückstand entfiele.
+      const heute = new Date('2026-08-23T00:00:00');
+      db.saveRecurringTask(d, { name: 'Filter wechseln', everyWeeks: 12, anchor: '2026-05-30' });
+      assert.deepEqual(
+        durchgereicht(d, heute)(heute).map((x) => x.date),
+        ['2026-08-22']
+      );
+    } finally {
+      d.close();
+      fs.unlinkSync(p);
+    }
+  });
+
+  it('lässt einen Haken auch nach einem Ankerwechsel wieder entfernen', () => {
+    // Die Fälligkeitsprüfung stand vor beiden Zweigen, also war eine Zeile
+    // unlöschbar, sobald Takt oder Anker verschoben worden waren — und tauchte
+    // als "schon erledigt" wieder auf, wenn jemand den Anker zurücksetzte.
+    const { db: d, path: p } = tmpDb();
+    try {
+      const id = db.saveRecurringTask(d, { name: 'Putzen', everyWeeks: 2, anchor: '2026-08-24' });
+      db.setRecurringDone(d, id, '2026-08-24', true, 'a');
+      db.saveRecurringTask(d, { id, name: 'Putzen', everyWeeks: 3, anchor: '2026-08-25' });
+      db.setRecurringDone(d, id, '2026-08-24', false, 'a');
+      assert.deepEqual(db.listRecurringTasks(d, new Date('2026-08-26'))[0].done, []);
+    } finally {
+      d.close();
+      fs.unlinkSync(p);
+    }
+  });
+
+  it('zeigt einen heute fälligen Termin einmal, nicht zweimal', () => {
+    // Fällt die Aufgabe heute ohnehin an, steht sie schon in der Tagesliste.
+    // Den versäumten Termin daneben zu setzen hiess: zwei Zeilen mit zwei
+    // Haken für einmal Putzen — und wer einmal putzt, ist wieder aktuell.
+    const { recurringArrears } = browser([
+      { id: 1, name: 'Putzen', everyWeeks: 1, anchor: '2026-08-10', active: true, done: [] }
+    ]);
+    assert.deepEqual(recurringArrears(new Date('2026-08-24T00:00:00')), [], 'heute fällig UND als versäumt gemeldet');
+    // An einem Tag, an dem sie nicht fällt, bleibt der Rückstand stehen.
+    assert.deepEqual(
+      recurringArrears(new Date('2026-08-25T00:00:00')).map((x) => x.date),
+      ['2026-08-24']
+    );
   });
 });

@@ -7140,6 +7140,7 @@ function setWeekRhythm(db, map) {
       'INSERT INTO week_rhythm(weekday, theme, target_qty, strain_id, note) VALUES(?, ?, ?, ?, ?)'
     );
     for (const r of rows) ins.run(r[0], r[1], r[2], r[3], r[4]);
+    pruneMatchingExceptions(db, rows);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -7149,6 +7150,56 @@ function setWeekRhythm(db, map) {
   return rows.length;
 }
 
+// Kuenftige Ausnahmen aufloesen, die der neuen Vorlage gleichen.
+//
+// setRhythmTarget() tut das schon fuer seinen eigenen Weg: dieselbe Zahl wie
+// die Vorlage ist keine Ausnahme, sondern das Ende einer. Nur galt das bis
+// hierher in eine Richtung. Hebt ein Admin die Vorlage von 36 auf 72, waehrend
+// ein kuenftiger Montag als Ausnahme auf 72 steht, bleibt diese Ausnahme
+// liegen -- unsichtbar, denn sie zeigt dieselbe Zahl. Senkt jemand die Vorlage
+// spaeter zurueck, steht dieser eine Montag weiter auf 72, und niemand kann
+// sehen, warum. Genau der Zustand, den setRhythmTarget's Kommentar fuer
+// beendet erklaert, nur durch die andere Tuer erreicht.
+//
+// Nur die Zukunft. Ein vergangener Tag ist die Aufnahme dessen, was verlangt
+// war, und die darf eine heutige Vorlagenaenderung nicht umschreiben.
+function pruneMatchingExceptions(db, rows) {
+  const heute = _ymd(new Date());
+  const weg = db.prepare('DELETE FROM rhythm_task WHERE date = ?');
+  for (const [weekday, theme, qty] of rows) {
+    if (!theme || theme === 'free' || qty == null) continue;
+    for (const r of db
+      .prepare('SELECT date, target_qty FROM rhythm_task WHERE weekday = ? AND date > ?')
+      .all(weekday, heute)) {
+      if (r.target_qty === qty) weg.run(r.date);
+    }
+  }
+}
+// Eine Menge an EINEM Wochentag aendern, ohne die uebrigen sechs anzufassen.
+//
+// Der Tagesdialog schrieb bisher die ganze Woche zurueck, zusammengesetzt aus
+// dem, was dieser Browser zuletzt gesehen hatte. Aendert ein zweiter Admin in
+// der Zwischenzeit den Donnerstag, macht das Speichern eines Montags diese
+// Aenderung stillschweigend rueckgaengig -- ein verlorenes Update, ausgeloest
+// von einem Fenster, das eine einzige Zahl zeigt. Wer einen Tag bearbeitet,
+// soll einen Tag schreiben.
+function setWeekRhythmDay(db, weekday, targetQty) {
+  const day = Number(weekday);
+  if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error('Not a weekday: ' + weekday);
+  let qty = null;
+  if (targetQty !== null && targetQty !== undefined && targetQty !== '') {
+    const n = Number(targetQty);
+    if (!Number.isInteger(n) || n < 0) throw new Error('Target must be a whole number of 0 or more');
+    if (n > 100000) throw new Error('Target is implausibly large');
+    qty = n === 0 ? null : n;
+  }
+  const row = db.prepare('SELECT theme FROM week_rhythm WHERE weekday = ?').get(day);
+  if (!row || !row.theme || row.theme === 'free') throw new Error('No rhythm on weekday ' + day);
+  db.prepare('UPDATE week_rhythm SET target_qty = ? WHERE weekday = ?').run(qty, day);
+  pruneMatchingExceptions(db, [[day, row.theme, qty]]);
+  incrementDataVersion(db);
+  return qty;
+}
 // How far back a missed day is still chased. Two weeks is long enough that a
 // holiday does not quietly erase the work, and short enough that switching the
 // rhythm on does not immediately invent a month of debt.
@@ -7299,7 +7350,22 @@ function recurringDueOn(anchor, everyWeeks, date) {
 const RECURRING_DONE_WINDOW_DAYS = 60;
 function listRecurringTasks(db, now) {
   const heute = now ? new Date(now) : new Date();
-  const seit = _ymd(new Date(heute.getTime() - RECURRING_DONE_WINDOW_DAYS * 864e5));
+  // Das Fenster muss mindestens so weit reichen wie der Browser zurueckschaut.
+  //
+  // Sechzig Tage waren eine Zahl aus der Luft, und der Rueckstandsrechner sucht
+  // bis 7 x everyWeeks Tage zurueck -- bei den zwoelf Wochen, die das Menue
+  // anbietet, also 84. Ein Termin, der abgehakt WAR, kam damit ohne seinen
+  // Haken beim Browser an und stand dort wieder als versaeumt. Nochmal
+  // abzuhaken half nicht: der Haken landete auf demselben Datum, das weiterhin
+  // ausserhalb des Fensters lag. Eine rote Zeile, die sich nicht wegdruecken
+  // liess -- genau die Dauerwarnung, gegen die diese Datei ueberall schreibt.
+  //
+  // Also nicht raten, sondern nachsehen, wie weit der laengste Takt reicht.
+  const laengster = db.prepare('SELECT MAX(every_weeks) AS n FROM recurring_task').get();
+  const noetig = 7 * ((laengster && laengster.n) || 1) + 7;
+  const anfang = new Date(heute);
+  anfang.setDate(anfang.getDate() - Math.max(RECURRING_DONE_WINDOW_DAYS, noetig));
+  const seit = _ymd(anfang);
   const haken = new Map();
   for (const r of db.prepare('SELECT task_id, date FROM recurring_done WHERE date >= ?').all(seit)) {
     if (!haken.has(r.task_id)) haken.set(r.task_id, []);
@@ -7370,10 +7436,17 @@ function setRecurringDone(db, taskId, date, done, who) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
   const t = db.prepare('SELECT every_weeks, anchor FROM recurring_task WHERE id = ?').get(id);
   if (!t) throw new Error('No such task: ' + id);
-  if (!recurringDueOn(t.anchor, t.every_weeks, date)) throw new Error('Not a due date for this task: ' + date);
   if (done === false) {
+    // Wegnehmen ohne Faelligkeitspruefung.
+    //
+    // Die Pruefung stand vor beiden Zweigen, also liess sich ein Haken nicht
+    // mehr entfernen, sobald Takt oder Anker verschoben worden waren: das
+    // Datum war dann kein Termin mehr, und die Zeile lag unloeschbar in der
+    // Tabelle. Aufraeumen darf nie an derselben Bedingung haengen wie
+    // Anlegen -- sonst ist genau das nicht aufraeumbar, was nicht mehr passt.
     db.prepare('DELETE FROM recurring_done WHERE task_id = ? AND date = ?').run(id, date);
   } else {
+    if (!recurringDueOn(t.anchor, t.every_weeks, date)) throw new Error('Not a due date for this task: ' + date);
     db.prepare('INSERT OR REPLACE INTO recurring_done(task_id, date, done, who) VALUES(?, ?, ?, ?)').run(
       id,
       date,
@@ -10141,6 +10214,7 @@ module.exports = {
   renameZoneName,
   setZoneCapacity,
   setWeekRhythm,
+  setWeekRhythmDay,
   WEEK_THEMES,
   ensureRhythmTasks,
   setRhythmTarget,

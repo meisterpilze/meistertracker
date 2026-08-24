@@ -2694,9 +2694,11 @@ tr:hover td {
    ist ein Siebtel breit, und was darin steht, muss klein sein. Wer den Tag
    arbeitet, braucht die Übersicht gerade nicht — dann fällt sie weg und der Tag
    bekommt die ganze Karte samt größerer Schrift. */
+/* Kein gap: die beiden Knöpfe stoßen aneinander, und der rechte spart sich
+   seinen linken Rand. Mit 2px Abstand DAZWISCHEN fehlte dem rechten Knopf eine
+   Kante — er las sich als offener Kasten, nicht als zweites Segment. */
 .wk-view {
   display: flex;
-  gap: 2px;
   margin-bottom: 8px;
 }
 .wk-view-btn {
@@ -2748,7 +2750,16 @@ tr:hover td {
 }
 .wk-daynav-btn {
   flex: 0 0 auto;
+  justify-content: center;
   padding: 4px 12px;
+}
+/* Am ersten und am letzten Tag ist ein Pfeil aus. .btn setzt Farbe und Fläche
+   als Autorenregeln und schlägt damit das Ausgrauen des Browsers, also sah der
+   tote Pfeil aus wie der lebende daneben — wieder ein Feld, das gedrückt wird
+   und nichts tut. Es gab im ganzen Blatt genau eine :disabled-Regel. */
+.wk-daynav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 /* Der ganze Sinn der Tagesansicht: der Platz, den die sechs anderen Spalten
    nicht mehr brauchen, geht in die Schrift. Zwei Klassen tief, weil .fs-sm sich
@@ -4671,15 +4682,15 @@ tr.ms-off .ms-prog {
   gap: 6px;
   margin-top: 8px;
 }
+/* Auch hier keine eigene Mindesthöhe: die allgemeine input-Regel hat schon
+   64px, und eine Klasse davor hätte sie verkleinert. */
 .rhythm-own-add input {
   flex: 1 1 100%;
   min-width: 0;
-  min-height: var(--tap-sm);
 }
 .rhythm-own-add select {
   flex: 1 1 96px;
   min-width: 0;
-  min-height: var(--tap-sm);
 }
 .rhythm-own-add .btn {
   flex: 0 0 auto;
@@ -4711,14 +4722,15 @@ tr.ms-off .ms-prog {
 .dayqty-hint {
   color: var(--c-text-muted);
 }
-/* --tap-sm wie bei jedem anderen Bedienelement unbekannter Wichtigkeit. Die
-   allgemeine input-Regel setzt keine Mindesthöhe, und 9px Polsterung ergeben
-   rund 36px — auf dem Telefon, wo diese App meistens läuft, ist das unter der
-   Marke. Auf dem Schreibtisch ist --tap-sm auto, dort ändert sich nichts. */
+/* Keine eigene Mindesthöhe. Hier stand `min-height: var(--tap-sm)` mit der
+   Begründung, die allgemeine input-Regel setze keine — sie setzt aber
+   `min-height: 64px` (ganz oben in diesem Blatt), und eine Klasse schlägt den
+   Elementselektor. Die Zeile, die als größere Tippfläche gedacht war, machte
+   das Feld also von 64px auf 48px am Telefon und rund 39px am Rechner: die
+   genaue Umkehrung ihrer eigenen Absicht. Ohne sie gilt wieder die 64. */
 .dayqty-in {
   width: 84px;
   flex-shrink: 0;
-  min-height: var(--tap-sm);
   padding: 8px;
   border: 1px solid var(--c-border);
   border-radius: 6px;
