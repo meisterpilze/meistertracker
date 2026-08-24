@@ -7118,6 +7118,39 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Die nachgemessene Feuchte. Eigene Route statt eines Feldes im Ansatz-POST:
+  // gemessen wird nach dem Mischen, oft von jemand anderem und manchmal erst am
+  // nächsten Tag, und der Ansatz selbst ist zu dem Zeitpunkt längst gebucht.
+  const subRhMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/moisture$/);
+  if (req.method === 'POST' && subRhMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const userId = req.authUser ? req.authUser.user_id : null;
+        // Ein fehlendes Feld löscht die Messung — das ist der Weg zurück, wenn
+        // sie an den falschen Ansatz geriet. Die Grenzen prüft die DB-Schicht,
+        // damit sie für jeden Aufrufer gelten und nicht nur für diesen.
+        const r = db.setSubstrateMoisture(
+          database,
+          decodeURIComponent(subRhMatch[1]),
+          data && 'actualRhPct' in data ? data.actualRhPct : null,
+          userId
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/substrate-batches/preview') {
     jsonBody(req, res, (e, data) => {
       if (e) {

@@ -4559,6 +4559,18 @@ tr.ms-off .ms-prog {
   justify-content: flex-end;
   margin-top: 16px;
 }
+/* Die Knopfreihe unter dem Ansatz-Fenster.
+   Sie kam mit einem Knopf aus und brauchte deshalb nie eine Regel. Seit die
+   Ist-Feuchte danebensteht, sind es zwei, und .btn ist inline-flex: appendChild
+   setzt keinen Textknoten dazwischen, also stossen sie ohne Abstand aneinander
+   und werden auf dem Telefon zu einem Ziel, bei dem der Daumen den falschen
+   Treffer nicht bemerkt. Umbruch statt Quetschen, damit der zweite Knopf auf
+   einem schmalen Schirm eine Zeile tiefer geht, statt den ersten zu stauchen. */
+#si-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 /* Die Wochensumme im Rhythmus-Fenster.
    Sie klebt am unteren Rand, weil sie die Antwort auf die Frage ist, die man
    beim Tippen hat ("bin ich bei 70?"). Sieben Wochentage mit Menge, Sorte und
