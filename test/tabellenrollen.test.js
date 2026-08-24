@@ -107,7 +107,7 @@ describe('die Verdrahtung', () => {
     // Zwölf Rümpfe werden aus einem Dutzend Stellen gefüllt, mehrere davon
     // mehrfach. Ein Aufruf je Stelle ist ein Aufruf, den die dreizehnte Stelle
     // vergisst.
-    assert.match(app, /document\.querySelectorAll\('\.t-cards > tbody'\)/);
+    assert.match(app, /\(bereich \|\| document\)\.querySelectorAll\('\.t-cards > tbody'\)/);
     assert.match(
       app,
       /new MutationObserver\(\(\) => stampRowRoles\(tbody\)\)\.observe\(tbody, \{ childList: true \}\)/
@@ -118,6 +118,16 @@ describe('die Verdrahtung', () => {
     const auf = app.match(/\.observe\(tbody, \{[^}]*\}\)/);
     assert.ok(auf);
     assert.doesNotMatch(auf[0], /attributes/);
+  });
+
+  it('kennt auch eine Tabelle, die es beim Aufbau der Seite noch nicht gab', () => {
+    // Die Benutzertabelle unter System wird bei jedem Rendern neu gebaut, also
+    // hat der Beobachter aus dem Seitenaufbau ihren Rumpf nie gesehen. Sie
+    // meldet sich selbst an, und der WeakSet verhindert, dass daraus mit jedem
+    // Rendern ein Beobachter mehr wird.
+    assert.match(app, /watchCardTables\(tbl\);/);
+    assert.match(app, /const kartenBeobachtet = new WeakSet\(\)/);
+    assert.match(app, /if \(kartenBeobachtet\.has\(tbody\)\) continue;/);
   });
 
   it('läuft auch dann an, wenn app.js erst nach dem Aufbau der Seite drankommt', () => {
