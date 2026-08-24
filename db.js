@@ -4230,6 +4230,29 @@ function setSubstrateMoisture(db, subId, pct, userId) {
   return { subId, actualRhPct: value };
 }
 
+// Der Kommentar am Ansatz.
+//
+// Schreibt in dasselbe notes-Feld, das beim Anlegen gefuellt wird. Ein zweites
+// Textfeld daneben waere eine zweite Wahrheit, und niemand wuesste mehr, in
+// welches von beiden er schaut.
+//
+// Das Verwerfen haengt seinen Stempel an genau dieses Feld an. Deshalb legt die
+// Oberflaeche den bestehenden Text zum Bearbeiten vor, statt ein leeres Feld zu
+// zeigen: was der Stempel festhaelt - wer wieviel weggeworfen hat - steht dann
+// sichtbar da und kann nicht still ueberschrieben werden, ohne dass es jemand
+// gesehen hat.
+function setSubstrateNotes(db, subId, text) {
+  const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const clean = text == null ? '' : String(text).trim();
+  // Dieselbe Grenze wie beim Verwerf-Vermerk nebenan, damit ein Feld nicht zwei
+  // Laengen hat, je nachdem wer hineinschreibt.
+  if (clean.length > 500) throw new Error('Kommentar darf hoechstens 500 Zeichen haben');
+  db.prepare('UPDATE substrate_batches SET notes=? WHERE sub_id=?').run(clean, subId);
+  incrementDataVersion(db);
+  return { subId, notes: clean };
+}
+
 function listSubstrateBatches(db, opts) {
   const o = opts || {};
   const where = o.openOnly ? " WHERE status='open' AND remaining_kg > 0.0001" : '';
@@ -10230,6 +10253,7 @@ module.exports = {
   listSubstrateBatches,
   getSubstrateBatch,
   setSubstrateMoisture,
+  setSubstrateNotes,
   writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,
