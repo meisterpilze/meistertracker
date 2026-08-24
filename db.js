@@ -7347,41 +7347,72 @@ function recurringDueOn(anchor, everyWeeks, date) {
 // Die Haken der letzten Wochen, nicht alle. Der Plan schaut sieben Tage vor und
 // vierzehn zurück; was davor liegt, müsste die App bei jedem Laden mitschleppen,
 // ohne es je anzusehen.
-const RECURRING_DONE_WINDOW_DAYS = 60;
+// Wie weit ein versaeumter Termin nachgetragen wird, und wie weit der
+// Wochenstreifen nach vorn schaut. Beides gehoert hierher, weil hier auch die
+// Termine berechnet werden -- der Browser bekommt sie fertig.
+const RECURRING_ARREARS_DAYS = 14;
+const RECURRING_AHEAD_DAYS = 6;
+
+// Alle Termine einer Aufgabe in einem Zeitraum.
+//
+// In UTC gerechnet: eine Woche ist hier 7 x 864e5, und das stimmt nur, solange
+// keine Zeitzone dazwischenfunkt. Ende Maerz hat eine Ortszeitwoche 167
+// Stunden, Ende Oktober 169.
+function recurringDueBetween(anchor, everyWeeks, von, bis) {
+  const out = [];
+  const n = Number(everyWeeks);
+  if (!anchor || !Number.isInteger(n) || n < 1) return out;
+  const takt = 7 * n * 864e5;
+  const a = Date.parse(anchor + 'T00:00:00Z');
+  const v = Date.parse(von + 'T00:00:00Z');
+  const b = Date.parse(bis + 'T00:00:00Z');
+  if (isNaN(a) || isNaN(v) || isNaN(b)) return out;
+  let ms = a;
+  // Vor dem Anker faellt nichts an -- eine heute angelegte Aufgabe hat nicht
+  // rueckwirkend seit Januar gefehlt.
+  if (ms < v) ms += Math.ceil((v - ms) / takt) * takt;
+  for (; ms <= b; ms += takt) out.push(new Date(ms).toISOString().slice(0, 10));
+  return out;
+}
+
 function listRecurringTasks(db, now) {
   const heute = now ? new Date(now) : new Date();
-  // Das Fenster muss mindestens so weit reichen wie der Browser zurueckschaut.
+  const zeilen = db
+    .prepare('SELECT id, name, every_weeks, anchor, active, created FROM recurring_task ORDER BY id')
+    .all();
+  // Der Zeitraum richtet sich nach dem laengsten Takt, nicht nach einer Zahl
+  // aus der Luft.
   //
-  // Sechzig Tage waren eine Zahl aus der Luft, und der Rueckstandsrechner sucht
-  // bis 7 x everyWeeks Tage zurueck -- bei den zwoelf Wochen, die das Menue
-  // anbietet, also 84. Ein Termin, der abgehakt WAR, kam damit ohne seinen
-  // Haken beim Browser an und stand dort wieder als versaeumt. Nochmal
-  // abzuhaken half nicht: der Haken landete auf demselben Datum, das weiterhin
-  // ausserhalb des Fensters lag. Eine rote Zeile, die sich nicht wegdruecken
-  // liess -- genau die Dauerwarnung, gegen die diese Datei ueberall schreibt.
-  //
-  // Also nicht raten, sondern nachsehen, wie weit der laengste Takt reicht.
-  const laengster = db.prepare('SELECT MAX(every_weeks) AS n FROM recurring_task').get();
-  const noetig = 7 * ((laengster && laengster.n) || 1) + 7;
-  const anfang = new Date(heute);
-  anfang.setDate(anfang.getDate() - Math.max(RECURRING_DONE_WINDOW_DAYS, noetig));
-  const seit = _ymd(anfang);
+  // Hier standen sechzig Tage, waehrend der Browser bis 7 x everyWeeks Tage
+  // zurueckschaute -- bei den zwoelf Wochen, die das Menue anbietet, also 84.
+  // Ein Termin, der abgehakt WAR, kam ohne seinen Haken an und stand wieder als
+  // versaeumt da; nochmal abzuhaken half nicht, weil der Haken auf demselben
+  // Datum landete, das weiterhin ausserhalb lag.
+  const zurueck = zeilen.reduce((m, r) => Math.max(m, 7 * (r.every_weeks || 1)), RECURRING_ARREARS_DAYS);
+  const vonD = new Date(heute);
+  vonD.setDate(vonD.getDate() - zurueck);
+  const bisD = new Date(heute);
+  bisD.setDate(bisD.getDate() + RECURRING_AHEAD_DAYS);
+  const von = _ymd(vonD);
+  const bis = _ymd(bisD);
   const haken = new Map();
-  for (const r of db.prepare('SELECT task_id, date FROM recurring_done WHERE date >= ?').all(seit)) {
+  for (const r of db.prepare('SELECT task_id, date FROM recurring_done WHERE date >= ?').all(von)) {
     if (!haken.has(r.task_id)) haken.set(r.task_id, []);
     haken.get(r.task_id).push(r.date);
   }
-  return db
-    .prepare('SELECT id, name, every_weeks, anchor, active, created FROM recurring_task ORDER BY id')
-    .all()
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      everyWeeks: r.every_weeks,
-      anchor: r.anchor,
-      active: r.active === 1,
-      done: (haken.get(r.id) || []).sort()
-    }));
+  return zeilen.map((r) => ({
+    id: r.id,
+    name: r.name,
+    everyWeeks: r.every_weeks,
+    anchor: r.anchor,
+    active: r.active === 1,
+    done: (haken.get(r.id) || []).sort(),
+    // Die Termine fertig ausgerechnet. Vorher rechnete der Browser sie mit
+    // einer zweiten Fassung derselben Regel noch einmal aus, und ein Test hielt
+    // die beiden Fassungen gegeneinander -- eine Naht, die nur so lange haelt,
+    // wie jemand daran denkt. Jetzt gibt es die Regel einmal.
+    due: recurringDueBetween(r.anchor, r.every_weeks, von, bis)
+  }));
 }
 
 function saveRecurringTask(db, t) {
@@ -10219,6 +10250,7 @@ module.exports = {
   ensureRhythmTasks,
   setRhythmTarget,
   recurringDueOn,
+  recurringDueBetween,
   listRecurringTasks,
   saveRecurringTask,
   deleteRecurringTask,

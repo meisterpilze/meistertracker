@@ -16,7 +16,7 @@
 // Diese Datei hält fest, was die beiden Ebenen zusammenhält.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
+const { quelle, hebe, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
 
 const SRC = quelle('app.js');
 const CSS = quelle('styles.css');
@@ -406,8 +406,11 @@ describe('Der Tag, der schon offen ist', () => {
 
 // ── Gezählt wird Arbeit, nicht Zeilen ───────────────────────────────────────
 describe('Was eine Spalte zählt', () => {
-  function zaehle(items) {
+  // weight/late stehen in PLAN_KINDS, nicht an der Zeile — also braucht der
+  // Harness die Tabelle und den Zustand der Klappe.
+  function zaehle(items, aufgeklappt) {
     const code = [
+      hebe([[/^const _labRows = .*$/m, '_labRows']], SRC),
       hebeKonstante('PLAN_KINDS', SRC),
       hebeFunktion('planKind', SRC),
       hebeFunktion('planCategory', SRC),
@@ -417,15 +420,18 @@ describe('Was eine Spalte zählt', () => {
     ].join('\n');
     return new Function(
       'items',
+      'dashLabGroupOpen',
       code + '\nreturn { counts: countByCategory(items), overdue: items.reduce((n, i) => n + planOverdue(i), 0) };'
-    )(items);
+    )(items, !!aufgeklappt);
   }
+  // 38 Untergrenzen, 12 davon ganz leer.
+  const laborZeilen = Array.from({ length: 38 }, (_, i) => ({ empty: i < 12 }));
 
   it('zählt die Arbeit, nicht die Zeilen', () => {
     // Die Labor-Zusammenfassung ist EINE Zeile für 38 Posten. Sie zählte als 1,
     // und beim Aufklappen wurden daraus 38 — die Zahl sagte, wie viel gerade
     // gezeichnet ist, statt wie viel ansteht.
-    const r = zaehle([{ kind: 'labgroup', weight: 38, overdueWeight: 12 }]);
+    const r = zaehle([{ kind: 'labgroup', overdue: true, task: { rows: laborZeilen } }], false);
     assert.equal(r.counts.lab, 38, 'die Spalte sagt weiterhin 1');
     assert.equal(r.overdue, 12, 'und eine überfällige Zeile machte 38 überfällige Posten zu einem');
   });
@@ -433,10 +439,10 @@ describe('Was eine Spalte zählt', () => {
   it('zählt aufgeklappt nicht doppelt', () => {
     // Dann steht die Zusammenfassung neben den 38 Einzelzeilen, und beide zu
     // zählen ergäbe 76.
-    const auf = [{ kind: 'labgroup', weight: 0, overdueWeight: 0 }].concat(
+    const auf = [{ kind: 'labgroup', overdue: true, task: { rows: laborZeilen } }].concat(
       Array.from({ length: 38 }, (_, i) => ({ kind: 'labmin', overdue: i < 12 }))
     );
-    const r = zaehle(auf);
+    const r = zaehle(auf, true);
     assert.equal(r.counts.lab, 38);
     assert.equal(r.overdue, 12);
   });
@@ -448,15 +454,20 @@ describe('Was eine Spalte zählt', () => {
     assert.equal(r.overdue, 1);
   });
 
-  it('holt das Gewicht der Zusammenfassung aus ihrer Zeilenzahl', () => {
-    const fn = hebeFunktion('buildWeekPlan', SRC);
-    assert.match(fn, /weight: dashLabGroupOpen \? 0 : laborMin\.length/);
-    assert.match(fn, /overdueWeight: dashLabGroupOpen \? 0 : laborMin\.filter\(\(l\) => l\.empty\)\.length/);
+  it('holt das Gewicht aus den Zeilen, die die Zusammenfassung ohnehin trägt', () => {
+    // Als Feld auf dem Eintrag hätte die nächste zusammenfassende Art still
+    // wieder 1 statt 38 gezählt. Jetzt steht es in PLAN_KINDS und rechnet sich
+    // aus task.rows aus — es gibt nichts mehr, das man vergessen könnte.
+    assert.doesNotMatch(hebeFunktion('buildWeekPlan', SRC), /weight:|overdueWeight:/);
+    assert.match(
+      hebeKonstante('PLAN_KINDS', SRC),
+      /weight: \(it\) => \(dashLabGroupOpen \? 0 : _labRows\(it\)\.length\)/
+    );
   });
 
   it('nennt im Spaltenkopf dieselbe Zahl', () => {
     // Sonst stünde oben "1" und zwei Zeilen darunter "38".
-    assert.match(hebeFunktion('_weekHeadHtml', SRC), /d\.items\.reduce\(\(k, it\) => k \+ planWeight\(it\), 0\)/);
+    assert.match(hebeFunktion('_weekHeadHtml', SRC), /planWeight\(it\)/, 'der Kopf zählt wieder Zeilen');
   });
 });
 

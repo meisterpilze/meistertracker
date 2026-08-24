@@ -2534,6 +2534,10 @@ document.getElementById('m-pr-cancel').onclick = closePrompt;
 document.getElementById('m-prompt').addEventListener('click', (e) => {
   if (e.target.id === 'm-prompt') closePrompt();
 });
+// Derselbe Weg hinaus wie beim Vorgaenger: ein Klick neben das Fenster.
+document.getElementById('m-dayqty').addEventListener('click', (e) => {
+  if (e.target.id === 'm-dayqty') closeDayQty();
+});
 document.getElementById('m-pr-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -4106,7 +4110,6 @@ async function takeKpiSnapshot() {
   }
 }
 
-
 function exportOverviewCSV() {
   const nowDate = new Date();
   const now = Date.now();
@@ -5478,17 +5481,15 @@ function rhythmCountsFrom() {
 // etwas zu zaehlen gibt, und hinter einem geputzten Raum steht nichts, woraus
 // sich das ableiten liesse. Ein Haken ist hier die einzige Quelle, die es gibt.
 
-// Zwilling von recurringDueOn() in db.js: der Server prueft, der Browser
-// zeichnet, und beide muessen dasselbe sagen. In UTC gerechnet, damit die
-// Sommerzeit aus sieben Tagen nicht 6,96 macht.
-function recurringDueOn(anchor, everyWeeks, dateKey) {
-  if (!anchor || !dateKey || dateKey < anchor) return false;
-  const n = Number(everyWeeks);
-  if (!Number.isInteger(n) || n < 1) return false;
-  const a = Date.parse(anchor + 'T00:00:00Z');
-  const d = Date.parse(dateKey + 'T00:00:00Z');
-  if (isNaN(a) || isNaN(d)) return false;
-  return Math.round((d - a) / 864e5) % (7 * n) === 0;
+// Wann eine Aufgabe faellt, rechnet der Server aus: listRecurringTasks() legt
+// die Termine des Zeitraums als `due` bei. Hier stand dieselbe Regel ein
+// zweites Mal, und ein Test hielt die beiden Fassungen ueber 480 Daten
+// gegeneinander -- eine Naht, die nur haelt, solange jemand an sie denkt, und
+// die gegen einen Unterschied in dem, was die Zwillinge AUFRUFEN, ohnehin
+// blind war. Jetzt gibt es die Regel einmal, und zwar dort, wo sie auch
+// beim Abhaken geprueft wird.
+function recurringDueOn(task, dateKey) {
+  return !!(task && task.due && task.due.indexOf(dateKey) >= 0);
 }
 function recurringDoneOn(task, dateKey) {
   return !!(task && task.done && task.done.indexOf(dateKey) >= 0);
@@ -5496,10 +5497,9 @@ function recurringDoneOn(task, dateKey) {
 // Was an einem Tag faellt, mit dem Stand des Hakens.
 function recurringOn(dateKey) {
   return (recurringTasks || [])
-    .filter((x) => x && x.active && recurringDueOn(x.anchor, x.everyWeeks, dateKey))
+    .filter((x) => x && x.active && recurringDueOn(x, dateKey))
     .map((x) => ({ task: x, done: recurringDoneOn(x, dateKey) }));
 }
-const RECURRING_LOOKBACK_DAYS = 14;
 // Versaeumte Termine -- je Aufgabe hoechstens einer, naemlich der juengste.
 //
 // Wer zweimal nicht geputzt hat, putzt einmal und ist wieder aktuell. Drei
@@ -5507,38 +5507,24 @@ const RECURRING_LOOKBACK_DAYS = 14;
 // kann und die deshalb keiner mehr liest: genau die Dauerwarnung, gegen die an
 // dieser Stelle ueberall geschrieben ist.
 //
-// Und nie weiter zurueck als bis zum anchor: eine heute angelegte Aufgabe hat
-// nicht rueckwirkend seit Januar gefehlt.
+// Faellt die Aufgabe heute ohnehin an, steht sie schon in der Tagesliste. Den
+// versaeumten Termin daneben zu setzen hiesse: zwei Zeilen mit zwei Haken fuer
+// einmal Putzen.
+//
+// Kein Rueckwaertsgang mehr ueber Kalendertage: `due` kommt fertig vom Server
+// und reicht so weit zurueck, wie der laengste Takt es verlangt. Der alte
+// Gang in festen 864e5 Millisekunden uebersprang im Fruehjahr den Tag der
+// Zeitumstellung -- ein an ihm versaeumter Termin war damit unsichtbar.
 function recurringArrears(today) {
-  const out = [];
   const heute = _ymd(today);
+  const out = [];
   for (const x of recurringTasks || []) {
-    if (!x || !x.active) continue;
-    // Faellt die Aufgabe heute ohnehin an, steht sie schon in der Liste des
-    // Tages. Den versaeumten Termin daneben zu setzen hiesse: zwei Zeilen mit
-    // zwei Haken fuer einmal Putzen -- und wer einmal putzt, ist wieder
-    // aktuell. Genau der Satz, den der Absatz oben behauptet.
-    if (recurringDueOn(x.anchor, x.everyWeeks, heute)) continue;
-    const takt = 7 * (Number(x.everyWeeks) || 1);
-    const weit = Math.max(RECURRING_LOOKBACK_DAYS, takt);
-    for (let back = 1; back <= weit; back++) {
-      // addDays(), nicht minus 864e5. Ein Tag ist nicht immer 24 Stunden: in
-      // der Nacht der Umstellung sind es 23 oder 25, und der Rueckwaertsgang
-      // in festen Millisekunden ueberspringt dann ein Kalenderdatum ganz.
-      // Gemessen fuer Europe/Berlin: von Mo 30.03.2026 aus liefert er
-      // 28.03., 27.03., ... -- der 29.03. kommt nie vor, und ein an diesem
-      // Sonntag versaeumter Termin war damit unsichtbar, dauerhaft.
-      //
-      // recurringDueOn() rechnet aus genau diesem Grund in UTC. Der Aufrufer
-      // tat es nicht, und das ist die Haelfte, die der Test nicht ansah.
-      const d = _ymd(addDays(today, -back));
-      if (d < x.anchor) break;
-      if (!recurringDueOn(x.anchor, x.everyWeeks, d)) continue;
-      // Der erste Treffer rueckwaerts IST der juengste Termin. Ob er offen ist
-      // oder nicht, danach wird nicht weiter gesucht.
-      if (!recurringDoneOn(x, d)) out.push({ task: x, date: d });
-      break;
-    }
+    if (!x || !x.active || !x.due || !x.due.length) continue;
+    if (x.due.indexOf(heute) >= 0) continue;
+    const vergangen = x.due.filter((d) => d < heute);
+    if (!vergangen.length) continue;
+    const letzter = vergangen[vergangen.length - 1];
+    if (!recurringDoneOn(x, letzter)) out.push({ task: x, date: letzter });
   }
   return out;
 }
@@ -5901,14 +5887,8 @@ function buildWeekPlan() {
       zone: '',
       overdue: laborMin.some((l) => l.empty),
       ready: true,
-      // Diese eine Zeile steht fuer 38. Ohne das zaehlte die Wochenspalte
-      // "1 Labor" und beim Aufklappen wurden daraus 38 -- eine Zahl, die sagte,
-      // wie viele Zeilen gerade gezeichnet sind, statt wie viel Arbeit ansteht.
-      //
-      // Aufgeklappt null, denn dann stehen die 38 selbst daneben und wuerden
-      // sonst doppelt gezaehlt.
-      weight: dashLabGroupOpen ? 0 : laborMin.length,
-      overdueWeight: dashLabGroupOpen ? 0 : laborMin.filter((l) => l.empty).length,
+      // Wie viele Zeilen diese eine vertritt, sagt PLAN_KINDS.labgroup.weight --
+      // ausgerechnet aus task.rows, die ohnehin hier stehen.
       task: { rows: laborMin }
     });
   }
@@ -6215,6 +6195,7 @@ function openRhythmEditor() {
   }
   if (hint) hint.textContent = saved ? '' : t('rhythm.suggested');
   _renderRhythmRows();
+  _ownEdit = null;
   _renderRhythmOwn();
   // .modal-bg is display:none and only .modal-bg.open is display:flex, so
   // clearing the hidden attribute alone leaves the dialog invisible.
@@ -6229,6 +6210,35 @@ function openRhythmEditor() {
 // /api/recurring-task (Admin) und /api/recurring-done (jeder) zieht. Ein Feld
 // anzubieten, dessen Speichern mit 403 zurueckkommt, waere schlimmer als keins.
 const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12];
+// Welche Aufgabe gerade bearbeitet wird, oder null.
+let _ownEdit = null;
+// Die drei Felder einer Aufgabe, einmal geschrieben: die Zeile zum Anlegen und
+// die zum Bearbeiten sind dieselben drei Fragen.
+function _ownFieldsHtml(suffix, wert) {
+  const w = wert || {};
+  const wd = w.anchor ? new Date(w.anchor + 'T00:00:00').getDay() : new Date().getDay();
+  return (
+    '<input type="text" id="own-name' +
+    suffix +
+    '" maxlength="80" value="' +
+    esc(w.name || '') +
+    '" placeholder="' +
+    esc(t('recur.namePh')) +
+    '" /><select id="own-every' +
+    suffix +
+    '">' +
+    RECUR_EVERY_CHOICES.map(
+      (n) => '<option value="' + n + '"' + (Number(w.everyWeeks) === n ? ' selected' : '') + '>' + esc(recurEveryLabel(n)) + '</option>'
+    ).join('') +
+    '</select><select id="own-day' +
+    suffix +
+    '">' +
+    WEEK_DAYS.map(
+      (d) => '<option value="' + d + '"' + (d === wd ? ' selected' : '') + '>' + esc(t('rhythm.day.' + d)) + '</option>'
+    ).join('') +
+    '</select>'
+  );
+}
 function _renderRhythmOwn() {
   const el = document.getElementById('rhythm-own');
   if (!el) return;
@@ -6236,19 +6246,53 @@ function _renderRhythmOwn() {
   el.hidden = !admin;
   if (!admin) return;
   const zeilen = (recurringTasks || [])
-    .map(
-      (x) =>
-        '<div class="rhythm-own-row">' +
-        '<span class="rhythm-own-name">' +
+    .map((x) => {
+      // In Bearbeitung: dieselben drei Felder wie beim Anlegen, plus Speichern
+      // und Abbrechen. Vorher gab es das gar nicht -- ein Vertipper im Namen
+      // oder der falsche Wochentag liessen sich nur durch Loeschen und
+      // Neuanlegen beheben, und Loeschen nimmt die ganze Haken-Historie mit.
+      if (_ownEdit === x.id) {
+        return (
+          '<div class="rhythm-own-edit" data-id="' +
+          esc(String(x.id)) +
+          '">' +
+          _ownFieldsHtml('-edit', x) +
+          '<button type="button" class="btn btn-sm btn-p" data-action="own-save" data-id="' +
+          esc(String(x.id)) +
+          '">' +
+          esc(t('common.save')) +
+          '</button><button type="button" class="btn btn-sm" data-action="own-cancel">' +
+          esc(t('common.cancel')) +
+          '</button></div>'
+        );
+      }
+      return (
+        '<div class="rhythm-own-row' +
+        (x.active ? '' : ' ruht') +
+        '"><span class="rhythm-own-name">' +
         esc(x.name) +
         '</span><span class="fs-xs rhythm-own-when">' +
-        esc(recurEveryLabel(x.everyWeeks) + ' · ' + t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay())) +
-        '</span><button type="button" class="btn btn-sm fs-xs" data-action="own-del" data-id="' +
+        esc(
+          recurEveryLabel(x.everyWeeks) +
+            ' · ' +
+            t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay()) +
+            (x.active ? '' : ' · ' + t('recur.paused'))
+        ) +
+        '</span><button type="button" class="btn btn-sm fs-xs" data-action="own-edit" data-id="' +
+        esc(String(x.id)) +
+        '">' +
+        esc(t('recur.edit')) +
+        '</button><button type="button" class="btn btn-sm fs-xs" data-action="own-pause" data-id="' +
+        esc(String(x.id)) +
+        '">' +
+        esc(t(x.active ? 'recur.pause' : 'recur.resume')) +
+        '</button><button type="button" class="btn btn-sm fs-xs" data-action="own-del" data-id="' +
         esc(String(x.id)) +
         '">' +
         esc(t('recur.remove')) +
         '</button></div>'
-    )
+      );
+    })
     .join('');
   el.innerHTML =
     '<div class="fs-sm rhythm-own-head">' +
@@ -6258,60 +6302,97 @@ function _renderRhythmOwn() {
     '</div>' +
     (zeilen || '<div class="fs-xs rhythm-own-hint">' + esc(t('recur.none')) + '</div>') +
     '<div class="rhythm-own-add">' +
-    '<input type="text" id="own-name" maxlength="80" placeholder="' +
-    esc(t('recur.namePh')) +
-    '" />' +
-    '<select id="own-every">' +
-    RECUR_EVERY_CHOICES.map((n) => '<option value="' + n + '">' + esc(recurEveryLabel(n)) + '</option>').join('') +
-    '</select><select id="own-day">' +
-    WEEK_DAYS.map((d) => '<option value="' + d + '">' + esc(t('rhythm.day.' + d)) + '</option>').join('') +
-    '</select><button type="button" class="btn btn-sm btn-p" data-action="own-add">' +
+    _ownFieldsHtml('', null) +
+    '<button type="button" class="btn btn-sm btn-p" data-action="own-add">' +
     esc(t('recur.add')) +
     '</button></div>';
 }
-function addOwnTask() {
-  const feld = document.getElementById('own-name');
-  const name = ((feld && feld.value) || '').trim();
-  if (!name) {
-    setFb('err', t('recur.needName'));
-    return;
-  }
-  const every = Number(document.getElementById('own-every').value) || 1;
-  const wd = Number(document.getElementById('own-day').value);
-  // Der anchor ist der naechste Termin dieses Wochentags, heute eingeschlossen.
-  // Damit ist er zugleich Wochentag und Phase des Takts -- und eine heute
-  // angelegte Aufgabe hat nicht rueckwirkend seit Januar gefehlt.
+// Der Anker zu einem gewaehlten Wochentag: der naechste solche Tag, heute
+// eingeschlossen. Damit ist er zugleich Wochentag und Phase des Takts -- und
+// eine heute angelegte Aufgabe hat nicht rueckwirkend gefehlt.
+//
+// addDays() und nicht plus 864e5: mit festen Millisekunden landete eine am
+// Samstag vor der Umstellung angelegte Montagsaufgabe auf einem Sonntag.
+function _ownAnchorFor(weekday) {
   const heute = new Date();
   heute.setHours(0, 0, 0, 0);
-  const vor = (wd - heute.getDay() + 7) % 7;
-  // addDays(): mit festen 864e5 landete eine am Sa 24.10.2026 angelegte
-  // Montagsaufgabe auf dem 25.10. -- einem Sonntag -- und lief von da an jeden
-  // Sonntag, denn recurringDueOn() liest den Wochentag aus dem Anker. Es gibt
-  // keinen Weg, das nachtraeglich zu korrigieren ausser loeschen und neu.
-  const anchor = _ymd(addDays(heute, vor));
-  apiPost('/api/recurring-task', { name, everyWeeks: every, anchor }).then((res) => {
+  return _ymd(addDays(heute, (Number(weekday) - heute.getDay() + 7) % 7));
+}
+// Die drei Felder auslesen. suffix trennt die Zeile zum Anlegen von der zum
+// Bearbeiten, die gleichzeitig im DOM stehen koennen.
+function _ownRead(suffix) {
+  const feld = (id) => document.getElementById(id + suffix);
+  const name = ((feld('own-name') || {}).value || '').trim();
+  const every = Number((feld('own-every') || {}).value) || 1;
+  const wd = Number((feld('own-day') || {}).value);
+  return { name, everyWeeks: every, anchor: _ownAnchorFor(wd) };
+}
+function _ownSpeichern(daten, fertig) {
+  apiPost('/api/recurring-task', daten).then((res) => {
     if (!res || res.error) {
       toast((res && res.error) || t('recur.saveFailed'), 'err');
       return;
     }
-    recurringTasks.push({ id: res.id, name, everyWeeks: every, anchor, active: true, done: [] });
+    fertig(res);
     _renderRhythmOwn();
     renderDashBatchTasks();
-    setFb('ok', t('recur.added', { name }));
   });
 }
-function delOwnTask(id) {
+function addOwnTask() {
+  const daten = _ownRead('');
+  if (!daten.name) {
+    setFb('err', t('recur.needName'));
+    return;
+  }
+  _ownSpeichern(daten, (res) => {
+    recurringTasks.push(Object.assign({ id: res.id, active: true, done: [], due: [] }, daten));
+    setFb('ok', t('recur.added', { name: daten.name }));
+  });
+}
+function saveOwnTask(id) {
+  const daten = _ownRead('-edit');
+  if (!daten.name) {
+    setFb('err', t('recur.needName'));
+    return;
+  }
+  const alt = (recurringTasks || []).find((x) => String(x.id) === String(id));
+  _ownSpeichern(Object.assign({ id: Number(id), active: alt ? alt.active : true }, daten), () => {
+    if (alt) Object.assign(alt, daten);
+    _ownEdit = null;
+    setFb('ok', t('recur.saved'));
+  });
+}
+// Stilllegen statt loeschen: die Aufgabe verschwindet aus dem Plan, ihre
+// Termine und Haken bleiben. Der uebliche Fall ist "gerade nicht", nicht "nie
+// wieder", und nur fuer den zweiten gibt es Loeschen.
+function pauseOwnTask(id) {
+  const x = (recurringTasks || []).find((y) => String(y.id) === String(id));
+  if (!x) return;
+  _ownSpeichern({ id: Number(id), name: x.name, everyWeeks: x.everyWeeks, anchor: x.anchor, active: !x.active }, () => {
+    x.active = !x.active;
+  });
+}
+async function delOwnTask(id) {
+  const x = (recurringTasks || []).find((y) => String(y.id) === String(id));
+  const n = x && x.done ? x.done.length : 0;
+  // Nachfragen, weil es die Haken mitnimmt und nichts es zurueckholt. Beim
+  // Abhaken selbst ist eine Rueckfrage teurer als der Fehler -- ein zweiter
+  // Tipp nimmt sie zurueck. Hier gibt es keinen zweiten Tipp.
+  const frage = n ? t('recur.removeWithTicks', { name: (x && x.name) || '', n }) : t('recur.removeAsk', { name: (x && x.name) || '' });
+  if (!(await askConfirm(t('recur.remove'), frage, t('recur.remove')))) return;
   apiDelete('/api/recurring-task/' + encodeURIComponent(id)).then((res) => {
     if (res && res.error) {
       toast(res.error, 'err');
       return;
     }
-    const i = (recurringTasks || []).findIndex((x) => String(x.id) === String(id));
+    const i = (recurringTasks || []).findIndex((y) => String(y.id) === String(id));
     if (i >= 0) recurringTasks.splice(i, 1);
+    if (_ownEdit === Number(id)) _ownEdit = null;
     _renderRhythmOwn();
     renderDashBatchTasks();
   });
 }
+
 // Ein Tipp hakt ab, der naechste nimmt es zurueck. Der Server laesst den Haken
 // nur auf einem Datum zu, an dem die Aufgabe wirklich faellt.
 function setChoreDone(id, date, done) {
@@ -6543,10 +6624,17 @@ function _weekHeadHtml(d, off, sel) {
   //
   // Nur für die Vorgabezahl. Wo n die Anzahl der Arbeitszeilen ist, wiederholt
   // der Körper sie nirgends, und sie bleibt auf jedem Schirm stehen.
+  // Ein Punkt, wenn an diesem Tag eine eigene Aufgabe faellt.
+  //
+  // Unter 769px ist der Spaltenkoerper ausgeblendet, und die benannte Aufgabe
+  // mit ihrem Haken steckt dort drin. Von sechs der sieben Tage sah man also
+  // nur den Kopf, dessen Zahl sich zwar bewegte, aber nicht verriet, dass
+  // etwas Eigenes dahintersteht. Getippt wird auf dem Telefon.
+  const eigene = d.items.some((it) => it && it.kind === 'chore') ? '<span class="wk-h-own"></span>' : '';
   const foot =
-    task && task.targetQty
+    (task && task.targetQty
       ? '<span class="wk-h-t">' + nHtml + (short ? ' · ' : '') + '</span>' + (short ? esc(short) : '&nbsp;')
-      : [nHtml, short ? esc(short) : ''].filter(Boolean).join(' · ');
+      : [nHtml, short ? esc(short) : ''].filter(Boolean).join(' · ')) + eigene;
   return (
     '<button type="button" role="tab" data-action="dash-day" data-off="' +
     off +
@@ -6658,11 +6746,31 @@ const PLAN_CAT_COLOR = {
 // counts:false für alles Abgeleitete: solche Zeilen verschwinden, wenn sich der
 // Bestand ändert, nie durch Abhaken. Sie in den Nenner zu nehmen hieße, einen
 // fertigen Tag als 5/8 zu zeigen.
+// Die Zeilen einer Zusammenfassung. Sie stehen in task.rows, und wie viele es
+// sind, ist die einzige Zahl, die sie ueber sich selbst hinaus vertritt.
+const _labRows = (it) => (it && it.task && it.task.rows) || [];
 const PLAN_KINDS = {
   alert: { cat: 'alert', rank: -10, counts: false, btn: 'alert' },
   supply: { cat: 'create', rank: -1, counts: false, btn: 'supply' },
   labmin: { cat: 'lab', rank: -1, counts: false, btn: 'labmin' },
-  labgroup: { cat: 'lab', rank: -1, counts: false, btn: 'labgroup' },
+  // weight/late stehen hier und nicht an der Zeile.
+  //
+  // Sie lagen als Felder auf dem Eintrag, den buildWeekPlan() schreibt, und
+  // planWeight() nahm 1 fuer alles, was sie vergass. Die naechste
+  // zusammenfassende Art haette damit still wieder "1 Labor" statt 38 gezaehlt
+  // -- derselbe Fehler, denselben Weg. In der Tabelle prueft ihn der Test mit,
+  // der ohnehin jede Art gegen jede Spalte haelt.
+  //
+  // Aufgeklappt null: dann stehen die Einzelzeilen selbst daneben, und beides
+  // zu zaehlen ergaebe das Doppelte.
+  labgroup: {
+    cat: 'lab',
+    rank: -1,
+    counts: false,
+    btn: 'labgroup',
+    weight: (it) => (dashLabGroupOpen ? 0 : _labRows(it).length),
+    late: (it) => (dashLabGroupOpen ? 0 : _labRows(it).filter((l) => l.empty).length)
+  },
   grain: { cat: 'create', rank: null, counts: true, btn: 'task' },
   fruiting: { cat: 'move', rank: null, counts: true, btn: 'task' },
   harvest: { cat: 'harvest', rank: null, counts: true, btn: 'harvest' },
@@ -6694,13 +6802,19 @@ function planCategory(it) {
 // die Labor-Zusammenfassung vertritt viele, und dann muss die Zahl daneben ihre
 // und nicht ihre eigene sein.
 function planWeight(it) {
-  return it && Number.isFinite(it.weight) ? it.weight : 1;
+  const k = planKind(it);
+  const n = k && k.weight ? k.weight(it) : 1;
+  return Number.isFinite(n) ? n : 1;
 }
 // Und wie viele davon zu spaet sind. Bei der Zusammenfassung sind das nicht
 // alle, nur weil eine es ist.
 function planOverdue(it) {
   if (!it) return 0;
-  if (Number.isFinite(it.overdueWeight)) return it.overdueWeight;
+  const k = planKind(it);
+  if (k && k.late) {
+    const n = k.late(it);
+    return Number.isFinite(n) ? n : 0;
+  }
   return it.overdue ? planWeight(it) : 0;
 }
 // Gezaehlt wird Arbeit, nicht Zeilen. Der Unterschied ist genau die
@@ -7287,14 +7401,18 @@ function _bulkPillHtml(movable) {
 // than a new one invented for this card. Batch work goes through dashTaskBtn so
 // its guards travel with it; a harvest opens the batch where the flush is
 // logged; a manual task toggles done.
-function _planBtn(it) {
-  const id = esc(it.batchId || '');
-  // Both buttons carry the Sorte's KEY, never its name. The handler resolves it
-  // with _strainByKey(), which matches 'id:3' and 'n:shiitake' and nothing else,
-  // so a display name resolved to null and every tap answered "diese Sorte steht
-  // nicht in den Pilzsorten" — about a Sorte that must be in them, or the
-  // row would not have been built at all.
-  if (it.kind === 'alert') {
+// Der Knopf einer Zeile, aus der Tabelle statt aus einer Leiter.
+//
+// PLAN_KINDS traegt eine Spalte `btn`, und die Erklaerung darueber behauptet
+// seit ihrer Einfuehrung, sie ersetze die vierte der vier parallelen Leitern.
+// Sie tat es nicht: nichts las sie je, _planBtn() verzweigte weiter selbst
+// ueber it.kind, und eine neue Art mit gesetztem btn bekam still den
+// allgemeinen "Ansehen"-Knopf. Eine Attrappe, die autoritativ aussah.
+//
+// Jetzt ist sie ein Schluessel in diese Tabelle. Wer eine Art hinzufuegt und
+// den Bauer vergisst, faellt im Test auf, der beide Seiten gegeneinander haelt.
+const PLAN_BTNS = {
+  alert: (it) => {
     const a = it.task || {};
     const ziel = a.attentionKey
       ? 'data-action="go-attention" data-key="' + esc(a.attentionKey) + '"'
@@ -7302,10 +7420,10 @@ function _planBtn(it) {
     return (
       '<button class="btn btn-sm fs-xs" ' + ziel + ' style="padding:3px 10px;flex-shrink:0">' + esc(t('dash.view')) + '</button>'
     );
-  }
-  if (it.kind === 'chore') {
-    // Ein Tipp, und ein zweiter nimmt ihn zurueck. Keine Rueckfrage: die
-    // Bestaetigung waere teurer als der Fehler, den sie verhindert.
+  },
+  // Ein Tipp, und ein zweiter nimmt ihn zurueck. Keine Rueckfrage: die
+  // Bestaetigung waere teurer als der Fehler, den sie verhindert.
+  chore: (it) => {
     const k = it.task || {};
     return (
       '<button class="btn btn-sm fs-xs' +
@@ -7313,34 +7431,30 @@ function _planBtn(it) {
       '" data-action="chore-done" data-task="' +
       esc(String(k.id)) +
       '" data-date="' +
-      esc(k.date) +
+      esc(k.date || '') +
       '" data-done="' +
       (k.done ? '1' : '0') +
       '" style="padding:3px 10px;flex-shrink:0">' +
       esc(t(k.done ? 'recur.undo' : 'recur.tick')) +
       '</button>'
     );
-  }
-  if (it.kind === 'labgroup') {
-    return (
-      '<button class="btn btn-sm fs-xs" data-action="labgroup-toggle" style="padding:3px 10px;flex-shrink:0">' +
-      esc(t(dashLabGroupOpen ? 'todo.labGroupClose' : 'todo.labGroupOpen')) +
-      '</button>'
-    );
-  }
-  if (it.kind === 'labmin') {
-    return (
-      '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
-      esc((it.task && it.task.key) || '') +
-      '" data-labtype="' +
-      esc((it.task && it.task.type) || '') +
-      '" style="padding:3px 10px;flex-shrink:0">' +
-      esc(t('todo.labMake', { type: getLabLabel((it.task && it.task.type) || '') })) +
-      '</button>'
-    );
-  }
-  if (it.kind === 'supply') {
-    // Grain first when there is none — blocks cannot be made without it.
+  },
+  labgroup: () =>
+    '<button class="btn btn-sm fs-xs" data-action="labgroup-toggle" style="padding:3px 10px;flex-shrink:0">' +
+    esc(t(dashLabGroupOpen ? 'todo.labGroupClose' : 'todo.labGroupOpen')) +
+    '</button>',
+  labmin: (it) =>
+    '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
+    esc((it.task && it.task.key) || '') +
+    '" data-labtype="' +
+    esc((it.task && it.task.type) || '') +
+    '" style="padding:3px 10px;flex-shrink:0">' +
+    esc(t('todo.labMake', { type: getLabLabel((it.task && it.task.type) || '') })) +
+    '</button>',
+  // Koerner zuerst, wenn keine da sind -- aus nichts lassen sich keine Bloecke
+  // machen. Beide Knoepfe tragen den SCHLUESSEL der Sorte, nie ihren Namen:
+  // _strainByKey() trifft 'id:3' und 'n:shiitake' und sonst nichts.
+  supply: (it) => {
     const grain = it.task && it.task.taskAction === 'make-grain';
     return (
       '<button class="btn btn-sm btn-p fs-xs" data-action="' +
@@ -7351,36 +7465,36 @@ function _planBtn(it) {
       esc(t(grain ? 'todo.makeGrain' : 'todo.makeBatch')) +
       '</button>'
     );
-  }
-  if (it.kind === 'fruiting' || it.kind === 'grain') return it.task ? dashTaskBtn(it.task) : '';
-  if (it.kind === 'harvest') {
-    // Opens the harvest flow on this batch instead of navigating to the batch
-    // page. The row says "Ernte erfassen", so it should record a harvest — the
-    // jump to a list was one more place where the button and the job differed.
-    return (
-      '<button class="btn btn-sm fs-xs" data-action="harvest-batch" data-batch="' +
-      id +
-      '" style="padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
-      esc(t('harvest.logHarvest')) +
-      '</button>'
-    );
-  }
-  if (it.kind === 'manual') {
-    return (
-      '<button class="btn btn-sm fs-xs" data-action="toggle-task" data-id="' +
-      esc(String(it.taskId || '')) +
-      '" style="padding:3px 10px;flex-shrink:0">' +
-      esc(t('calDetail.markDone')) +
-      '</button>'
-    );
-  }
-  return (
+  },
+  task: (it) => (it.task ? dashTaskBtn(it.task) : ''),
+  // Die Zeile sagt "Ernte erfassen", also erfasst der Knopf eine Ernte. Vorher
+  // sprang er nur zur Charge -- eine Stelle, an der Knopf und Arbeit
+  // auseinanderliefen.
+  harvest: (it) =>
+    '<button class="btn btn-sm fs-xs" data-action="harvest-batch" data-batch="' +
+    esc(it.batchId || '') +
+    '" style="padding:3px 10px;flex-shrink:0;background:var(--c-amber-light);color:var(--c-amber-dark);border-color:var(--c-amber-border)">' +
+    esc(t('harvest.logHarvest')) +
+    '</button>',
+  manual: (it) =>
+    '<button class="btn btn-sm fs-xs" data-action="toggle-task" data-id="' +
+    esc(String(it.taskId || '')) +
+    '" style="padding:3px 10px;flex-shrink:0">' +
+    esc(t('calDetail.markDone')) +
+    '</button>',
+  // Der allgemeine Weg: ansehen. Auch fuer eine Art, die die Tabelle nicht
+  // kennt -- lieber ein Knopf, der zur Charge fuehrt, als gar keiner.
+  '': (it) =>
     '<button class="btn btn-sm fs-xs" data-action="go-to-batch" data-batch="' +
-    id +
+    esc(it.batchId || '') +
     '" style="padding:3px 10px;flex-shrink:0">' +
     esc(t('dash.view')) +
     '</button>'
-  );
+};
+function _planBtn(it) {
+  const k = planKind(it);
+  const bau = PLAN_BTNS[(k && k.btn) || ''];
+  return (bau || PLAN_BTNS[''])(it);
 }
 // One-tap: move every incubation-ready batch in one urgency section to fruiting.
 // Confirms once, then reuses the same moveBatchTo path as the per-row button.
@@ -7656,7 +7770,6 @@ function buildHarvestTasks() {
     });
 }
 
-
 // ─── DASHBOARD LAB STOCK ────────────────────────────────────
 // G2G steht nicht mehr darunter. Korn-zu-Korn ist kein eigener Bestand, den
 // man zählt — es ist eine Herkunft: die neue Körnerbrut wird aus einer alten
@@ -7739,7 +7852,6 @@ function strainsInProduction() {
   }
   return out;
 }
-
 
 // Welche Spalte einer Pilzsorte die Untergrenze eines Kulturtyps traegt.
 //
@@ -9319,7 +9431,6 @@ function wkOpenMixes() {
   return (_sbList || []).filter((x) => x.status === 'open' && x.remainingKg > 0.0001);
 }
 
-
 function fillSubstrateSelect() {
   const sel = document.getElementById('nb-substrate-batch');
   if (!sel) return;
@@ -9443,7 +9554,6 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
   }
   go();
 }
-
 
 // ─── SUBSTRATE MIX: LIST AND DETAIL (v67) ────────────────────
 // The mix card on "Neue Charge" shows what is still usable, because that is what
@@ -13206,7 +13316,6 @@ const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gyps
 const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207' };
 const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8' };
 const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a' };
-
 
 // Wie weit zurück gezählt wird, um zu gewichten. Kurz genug, dass eine
 // Umstellung im Sortiment durchschlägt, lang genug, dass eine ruhige Woche
@@ -17061,7 +17170,6 @@ function _cdDelete() {
 // State: which batch we're selecting from, and which bag IDs are chosen.
 let bsBatchId = null;
 let bsSelected = new Set();
-
 
 function renderBagSelect() {
   const b = batches.find((x) => x.batchId === bsBatchId);
@@ -21725,7 +21833,6 @@ function onCalMonthEventClick(type, id) {
   if (ev) onCalEventClick(ev);
 }
 
-
 async function pushEventCaldav(ev) {
   if (!caldav.enabled) return;
   try {
@@ -22847,6 +22954,11 @@ document.addEventListener('keydown', function (e) {
     'm-batch-print',
     'm-note',
     'm-prompt',
+    // Das Mengenfenster eines Tages. Es hat den prompt2-Dialog abgeloest, und
+    // der stand in dieser Liste -- es aber nicht: das eine Fenster der App, das
+    // sich nur ueber "Abbrechen" verlassen liess.
+    'm-dayqty',
+    'm-rhythm',
     // m-move-batch before the two list modals below: the zone picker opens on
     // top of them, so Escape should dismiss it first.
     'm-move-batch',
@@ -22876,6 +22988,11 @@ document.addEventListener('keydown', function (e) {
       else if (id === 'm-confirm') closeConfirm();
       else if (id === 'm-confirm3') closeConfirm3();
       else if (id === 'm-prompt') closePrompt();
+      // closeDayQty()/closeRhythmEditor() raeumen ihren Entwurf mit weg. Nur die
+      // Klasse zu nehmen liesse _dayQty bzw. _rhythmDraft stehen, und der
+      // naechste Aufruf faende einen halben Zustand von vorhin vor.
+      else if (id === 'm-dayqty') closeDayQty();
+      else if (id === 'm-rhythm') closeRhythmEditor();
       else el.classList.remove('open');
       return;
     }
@@ -23565,6 +23682,27 @@ function initEventListeners() {
     }
     if (e.target.closest('[data-action="own-add"]')) {
       addOwnTask();
+      return;
+    }
+    if (e.target.closest('[data-action="own-cancel"]')) {
+      _ownEdit = null;
+      _renderRhythmOwn();
+      return;
+    }
+    const bearb = e.target.closest('[data-action="own-edit"]');
+    if (bearb) {
+      _ownEdit = Number(bearb.dataset.id);
+      _renderRhythmOwn();
+      return;
+    }
+    const sichern = e.target.closest('[data-action="own-save"]');
+    if (sichern) {
+      saveOwnTask(sichern.dataset.id);
+      return;
+    }
+    const ruhe = e.target.closest('[data-action="own-pause"]');
+    if (ruhe) {
+      pauseOwnTask(ruhe.dataset.id);
       return;
     }
     const weg = e.target.closest('[data-action="own-del"]');
@@ -25030,7 +25168,6 @@ function wkOpenGrain() {
     if (typeof msQuickLabTypeChanged === 'function') msQuickLabTypeChanged();
   }
 }
-
 
 // ─── Aufs Handy legen ────────────────────────────────────────────────────────
 // Chrome meldet beforeinstallprompt, sobald die App installierbar ist, und legt
