@@ -2343,3 +2343,74 @@ describe('db – pickup withdrawals', () => {
     assert.equal(db.countPickups(d).withdrawn, 0);
   });
 });
+
+describe('db – eine Vorlagenänderung löst passende Ausnahmen auf', () => {
+  let d, p;
+  beforeEach(() => {
+    ({ db: d, path: p } = tmpDb());
+  });
+  afterEach(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+  const ymd = (dt) => {
+    const q = (n) => String(n).padStart(2, '0');
+    return dt.getFullYear() + '-' + q(dt.getMonth() + 1) + '-' + q(dt.getDate());
+  };
+  const inTagen = (n) => {
+    const x = new Date();
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() + n);
+    return x;
+  };
+  const woche = (qty) => {
+    const m = {};
+    for (let i = 0; i < 7; i++) m[i] = { theme: 'substrate', targetQty: qty, strainId: null, note: null };
+    db.setWeekRhythm(d, m);
+  };
+
+  it('lässt einen künftigen Tag der Vorlage folgen, wenn sie ihm gleich wird', () => {
+    // setRhythmTarget tat das schon für seinen eigenen Weg. Kam die Annäherung
+    // aber von der Vorlage her, blieb die Ausnahme liegen — unsichtbar, weil
+    // sie dieselbe Zahl zeigt. Senkt jemand die Vorlage später zurück, steht
+    // dieser eine Tag weiter auf dem alten Wert und niemand sieht, warum.
+    woche(36);
+    const kuenftig = ymd(inTagen(5));
+    db.setRhythmTarget(d, kuenftig, 72);
+    assert.ok(
+      db.listRhythmTasks(d).some((x) => x.date === kuenftig),
+      'die Ausnahme wurde gar nicht erst angelegt'
+    );
+    woche(72);
+    assert.ok(
+      !db.listRhythmTasks(d).some((x) => x.date === kuenftig),
+      'die Ausnahme liegt noch da, obwohl sie der Vorlage gleicht'
+    );
+  });
+
+  it('lässt eine abweichende Ausnahme in Ruhe', () => {
+    woche(36);
+    const kuenftig = ymd(inTagen(5));
+    db.setRhythmTarget(d, kuenftig, 72);
+    woche(50);
+    assert.equal(
+      db.listRhythmTasks(d).find((x) => x.date === kuenftig).targetQty,
+      72,
+      'eine echte Ausnahme wurde mit aufgeräumt'
+    );
+  });
+
+  it('rührt die Vergangenheit nicht an', () => {
+    // Ein vergangener Tag ist die Aufnahme dessen, was verlangt war.
+    woche(36);
+    db.ensureRhythmTasks(d);
+    const gestern = ymd(inTagen(-1));
+    db.setRhythmTarget(d, gestern, 72);
+    woche(72);
+    assert.equal(
+      db.listRhythmTasks(d).find((x) => x.date === gestern).targetQty,
+      72,
+      'eine vergangene Aufnahme wurde rückwirkend umgeschrieben'
+    );
+  });
+});

@@ -10800,6 +10800,36 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // POST /api/week-rhythm-day -- die Menge EINES Wochentags.
+  //
+  // PUT /api/week-rhythm nimmt die Woche als Ganzes und ersetzt sie; das ist
+  // fuer den Rhythmus-Editor richtig, wo alle sieben Zeilen vor einem liegen.
+  // Der Tagesdialog zeigt eine Zahl, und eine Zahl soll er schreiben -- sonst
+  // traegt er die sechs anderen Tage aus einem womoeglich veralteten Abbild
+  // zurueck und ueberschreibt, was jemand anderes inzwischen geaendert hat.
+  if (req.method === 'POST' && req.url === '/api/week-rhythm-day') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const body = data || {};
+      try {
+        const qty = db.setWeekRhythmDay(database, body.weekday, body.targetQty);
+        log('info', 'Week rhythm day updated', { actor: req.authUser.username, weekday: body.weekday });
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, targetQty: qty });
+      } catch (err) {
+        if (/Not a weekday|whole number|implausibly large|No rhythm on/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/rhythm-start') {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
