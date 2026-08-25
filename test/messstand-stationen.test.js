@@ -3,7 +3,7 @@
 //
 // `measureLive()` misst, was sichtbar ist, und sichtbar ist je Seite genau ein
 // Untertab: der, auf dem sie aufmacht. Zwölf Seiten tragen 33 Untertabs. Bis
-// zum 24.08.2026 wurden zwölf davon gemessen, und jedes „0 offene Befunde"
+// zum 25.08.2026 wurden zwölf davon gemessen, und jedes „0 offene Befunde"
 // dieses Standes galt damit für ein Drittel der Anwendung und las sich wie das
 // Ganze. Die Systemseite allein hat dreizehn Untertabs; nur „Server" stand je
 // in einer Zahl.

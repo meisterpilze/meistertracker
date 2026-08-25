@@ -8,7 +8,7 @@
 // Ankreuzfeld mit `appearance: auto` malt über seinen Polsterkasten, seine
 // Trefferfläche ist also immer genau so groß wie sein Bild.
 //
-// Julian hat am 24.08.2026 den Schalter gewählt. Er ist weiterhin ein echtes
+// Julian hat am 25.08.2026 den Schalter gewählt. Er ist weiterhin ein echtes
 // `input[type=checkbox]`; nur gezeichnet wird er selbst, und selbst gezeichnet
 // lassen sich Fläche und Bild trennen.
 //

@@ -55,7 +55,7 @@ const ZONES = [
 // same fixture can be rebuilt to the same shape.
 //
 // ⚠️ Freezing the DATA was only half of it, and the other half went unnoticed
-// until 24.08. The app renders against the browser's clock, so a fixture pinned
+// until 25.08. The app renders against the browser's clock, so a fixture pinned
 // to one morning slides past the overdue boundary a day at a time: three lines
 // of the Arbeitsgänge census had moved by then, and the census is meant to be
 // the thing that does not move. measure-mobile.js now offsets the page's clock

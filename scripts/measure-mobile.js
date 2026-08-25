@@ -51,7 +51,7 @@
 // dialogs. It removes the database again afterwards and refuses to start if one
 // it did not create is already there.
 //
-// ⚠️ **A sub-tab is a station too, and until 24.08. two thirds of them were
+// ⚠️ **A sub-tab is a station too, and until 25.08. two thirds of them were
 // never opened.** measureLive() measures what is visible, and what is visible
 // on a page is one sub-tab: the one it opens on. Twelve pages carry 33
 // sub-tabs. Twelve were measured. The System page alone has thirteen and only
@@ -320,7 +320,7 @@ async function oeffnen(page, stop) {
 // ── The page's clock ───────────────────────────────────────────────────────
 // The fixture pins its data to one morning on purpose and says so. What nobody
 // pinned is the clock the app reads that data against, and half a freeze is not
-// a freeze: on 24.08. three lines of the Arbeitsgänge census had moved, by the
+// a freeze: on 25.08. three lines of the Arbeitsgänge census had moved, by the
 // same amounts on two different builds, because tasks seeded as "due tomorrow"
 // on 21.08. had become overdue in the meantime. A number that wanders between
 // two runs on different days measures nothing, and the census exists to be the
@@ -970,7 +970,7 @@ async function main() {
       // Zahl. Jedes "0 offene Befunde" dieses Standes galt für ein Drittel der
       // Anwendung und las sich wie das Ganze.
       //
-      // Gefunden am 24.08. beim Vergleich jeder data-mlabel mit ihrer Spalte:
+      // Gefunden am 25.08. beim Vergleich jeder data-mlabel mit ihrer Spalte:
       // Sechs der zwölf Kartentabellen hatten keine Zeile, mit der man
       // vergleichen könnte. Sie lagen alle in einem Untertab.
       //

@@ -6,7 +6,7 @@
 // so in a comment, which reads like the job is done. It is half of it. The app
 // renders that data against the browser's clock, so a task seeded as "due
 // tomorrow" is overdue three days later, and the page draws a different number
-// of elements. On 24.08. three lines of the census had moved -- 11, 20 and 5
+// of elements. On 25.08. three lines of the census had moved -- 11, 20 and 5
 // elements at 9, 10 and 10.5px had become 9, 13 and 6 -- and they had moved by
 // the same amounts on two different builds of the navigation, which is what
 // proved it was not the code. Running the stand with --tage 3 reproduces it

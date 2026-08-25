@@ -7117,7 +7117,7 @@ function _rhythmTaskRowHtml(task, outstanding) {
 }
 // Was ein Tag verlangt: die Regel und die Ausnahme, an einer Stelle.
 //
-// Hier stand eine nackte Abfrage — "Wie viele am 24.08.?" — und ein Feld. Wer
+// Hier stand eine nackte Abfrage — "Wie viele am 25.08.?" — und ein Feld. Wer
 // 72 eintippte, bekam nirgends gesagt, dass er damit eine Ausnahme von den 36
 // des Wochenrhythmus setzte; im Kalender standen danach zwei Zahlen, und keine
 // sagte, welche die Regel war. Zwei Zahlen ohne Beschriftung sind keine zwei
@@ -7126,9 +7126,9 @@ function _rhythmTaskRowHtml(task, outstanding) {
 // Also beide untereinander, jede benannt, und ihre Summe darunter:
 //
 //   Wochenplan             36   gilt für jeden Montag
-//   Extra nur diese Woche  36   Ausnahme nur für den 24.08.
+//   Extra nur diese Woche  36   Ausnahme nur für den 25.08.
 //   ────────────────────────────────────────────────────
-//   Macht 72 am 24.08.
+//   Macht 72 am 25.08.
 //
 // Gespeichert wird weiterhin eine Zahl je Datum, nämlich die Summe. Das Extra
 // ist eine Art, sie einzugeben, kein zweiter Wert, der irgendwo mitgeführt und

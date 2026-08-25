@@ -4752,7 +4752,7 @@ tr.ms-off .ms-prog {
 /* Die Menge eines einzelnen Tages: Regel und Ausnahme untereinander.
    Beschriftung links, Zahl rechts — auf dem Telefon bleibt das nebeneinander,
    weil die Beschriftung hier die eigentliche Auskunft ist ("gilt für jeden
-   Montag" gegen "nur für den 24.08.") und ein Umbruch sie von ihrem Feld
+   Montag" gegen "nur für den 25.08.") und ein Umbruch sie von ihrem Feld
    trennen würde. Das Feld ist schmal genug, dass beides passt. */
 .dayqty-sub {
   color: var(--c-text-muted);
@@ -6251,7 +6251,7 @@ tr.ms-off .ms-prog {
    Trefferfläche IMMER genau so groß wie das gezeichnete Kästchen. Wer 44 px
    treffen will, sieht 44 px. Gemessen, nicht vermutet.
 
-   Julian hat sich am 24.08. den Schalter ausgesucht. Er ist weiterhin ein
+   Julian hat sich am 25.08. den Schalter ausgesucht. Er ist weiterhin ein
    echtes `input[type=checkbox]` — Tastatur, `:checked`, der bestehende
    Klick-Auswerter in app.js bleiben, wie sie sind — nur gezeichnet wird er
    selbst. Und selbst gezeichnet lassen sich Fläche und Bild trennen, was ein
