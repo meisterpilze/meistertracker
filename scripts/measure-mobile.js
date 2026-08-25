@@ -1371,7 +1371,7 @@ function zensusBericht() {
       const von = a[px] || 0;
       const nach = b[px] || 0;
       if (von === nach) continue;
-      const bsp = (zensus[seite]?.bySize?.[px] || []).slice(0, 3).join(', ');
+      const bsp = (zensus[seite]?.bySize?.[px] || []).slice(0, 6).join(', ');
       zeilen.push(`  ${seite}  ${px}px: ${von} → ${nach}${bsp ? `   (${bsp})` : ''}`);
     }
   }
