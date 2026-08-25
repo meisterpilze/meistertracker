@@ -9273,6 +9273,22 @@ let _sbTimer = null;
 let _sbLast = null;
 let _sbList = [];
 
+// Wie lange der Hahn laufen muss, als mm:ss.
+//
+// Die Literzahl allein beantwortet die Frage nicht, die man am Hahn hat. Der
+// Durchfluss steht in inventory.water_flow_lmin (Vorgabe 10 L/min), und db.js
+// legt waterMinutes damit schon jedem Ansatz bei — angezeigt wurde es nur in
+// der Rechner-Vorschau, nicht im Arbeitsgang, also genau dort nicht, wo man
+// davorsteht.
+//
+// Auf ganze Sekunden runden und DANN teilen: gegen eine getrennt abgerundete
+// Minute gerechnet, druckt alles knapp unter der vollen Minute "10:60".
+function waterTimeText(minutes) {
+  const n = Number(minutes);
+  if (!Number.isFinite(n) || n <= 0) return '–';
+  const s = Math.round(n * 60);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' min';
+}
 function sbPreviewSoon() {
   clearTimeout(_sbTimer);
   _sbTimer = setTimeout(sbPreview, 250);
@@ -9327,11 +9343,6 @@ async function sbPreview() {
       '</td></tr>'
     );
   };
-  // Round to whole seconds first, then split. Rounding the seconds against a
-  // separately floored minute prints 10:60 for anything just under the minute.
-  const _secs = Math.round(m.waterMinutes * 60);
-  const mm = Math.floor(_secs / 60);
-  const ss = String(_secs % 60).padStart(2, '0');
   out.innerHTML =
     '<table class="fs-sm" style="border-collapse:collapse">' +
     row(t('sub.dryMix'), m.dryKg, 'kg') +
@@ -9343,10 +9354,8 @@ async function sbPreview() {
     '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
     esc(t('sub.waterTime')) +
     '</td><td style="padding:2px 0;text-align:right;font-weight:600">' +
-    mm +
-    ':' +
-    ss +
-    ' min</td></tr>' +
+    esc(waterTimeText(m.waterMinutes)) +
+    '</td></tr>' +
     row(t('sub.moisture'), m.moisturePct, '%') +
     '</table>' +
     '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:6px">' +
@@ -25910,6 +25919,11 @@ function wkmRenderOut() {
         (m.cornKg > 0.005 ? zeile(t('sub.corn'), m.cornKg, 'kg') : '') +
         zeile(t('sub.gypsum'), m.gypsumKg, 'kg') +
         zeile(t('sub.water'), m.waterL, 'L') +
+        // Direkt unter die Literzahl: hier steht man am Hahn, und "107 L" sagt
+        // nicht, wie lange er laufen soll. Die Vorschau im Formular zeigt es
+        // seit jeher, der Arbeitsgang nicht — also ausgerechnet der Schirm
+        // nicht, den man dabei in der Hand hat.
+        `<div><span class="wkf-r-k">${esc(t('sub.waterTime'))}</span><span>${esc(waterTimeText(m.waterMinutes))}</span></div>` +
         zeile(t('sub.moisture'), m.moisturePct, '%') +
         '</div>'
       : WKM.laedt
