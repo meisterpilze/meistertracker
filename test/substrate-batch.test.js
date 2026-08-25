@@ -14,6 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const db = require('../db.js');
+const { quelle, hebeFunktion } = require('./helpers/quelle');
 
 function tmpDb() {
   const p = path.join(os.tmpdir(), 'mt_sub_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
@@ -426,5 +427,66 @@ describe('a write-off records who did it', () => {
     db.createSubstrateBatch(d, { subId: 'W3', recipeStrainId: bo, targetKg: 50 }, null);
     assert.ok(db.writeOffSubstrateBatch(d, 'W3', 'weg', 99999));
     assert.match(db.getSubstrateBatch(d, 'W3').notes, /weg/);
+  });
+});
+
+// ── Wie lange der Hahn laufen muss ──────────────────────────────────────────
+// Die Literzahl beantwortet die Frage nicht, die man am Hahn hat. Der
+// Durchfluss steht in inventory.water_flow_lmin (Vorgabe 10 L/min), und
+// computeMixBatch legt waterMinutes damit jedem Ansatz bei — angezeigt wurde es
+// nur in der Rechner-Vorschau, nicht im Arbeitsgang. Also ausgerechnet auf dem
+// Schirm nicht, den man dabei in der Hand hat.
+describe('watering time', () => {
+  const APP = quelle('app.js');
+  const zeit = new Function(hebeFunktion('waterTimeText', APP) + '\nreturn waterTimeText;')();
+
+  it('turns litres into minutes at the configured flow rate', () => {
+    const m = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 10 });
+    assert.equal(m.waterL.toFixed(1), '104.5');
+    assert.equal(zeit(m.waterMinutes), '10:27 min');
+  });
+
+  it('follows the flow rate rather than assuming ten', () => {
+    // Ein anderer Hahn, dieselben Liter: die Zahl muss mitgehen, sonst wäre sie
+    // für jede Anlage ausser dieser falsch.
+    const langsam = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 5 });
+    assert.equal(zeit(langsam.waterMinutes), '20:54 min');
+  });
+
+  it('rounds to whole seconds before splitting them off', () => {
+    // Gegen eine getrennt abgerundete Minute gerechnet druckt alles knapp unter
+    // der vollen Minute "10:60".
+    assert.equal(zeit(10 - 0.4 / 60), '10:00 min', 'knapp unter zehn Minuten muss 10:00 werden, nicht 9:60');
+    assert.equal(zeit(1.999), '2:00 min');
+    assert.equal(zeit(0.5), '0:30 min');
+  });
+
+  it('says nothing rather than zero when there is no flow rate', () => {
+    // flowLmin 0 heisst "nicht bekannt", nicht "sofort fertig".
+    const ohne = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 0 });
+    assert.equal(ohne.waterMinutes, 0);
+    assert.equal(zeit(ohne.waterMinutes), '–');
+    assert.equal(zeit(null), '–');
+    assert.equal(zeit(NaN), '–');
+  });
+
+  it('stands under the litres on the screen the mixer actually holds', () => {
+    // Der Arbeitsgang, nicht nur die Vorschau im Formular.
+    const i = APP.indexOf("zeile(t('sub.water')");
+    assert.ok(i > 0, 'die Wasserzeile des Arbeitsgangs ist fort');
+    const nach = APP.slice(i, i + 700);
+    assert.match(nach, /sub\.waterTime/, 'im Arbeitsgang steht keine Wässerzeit');
+    assert.match(nach, /waterTimeText\(m\.waterMinutes\)/);
+  });
+
+  it('formats it in one place, not two', () => {
+    // Die mm:ss-Rechnung stand als Schnipsel in der Vorschau. Ein zweiter
+    // Schnipsel daneben wäre die zweite Stelle, an der 10:60 wieder auftauchen
+    // kann.
+    assert.equal(
+      (APP.match(/String\(_?s(?:ecs)? % 60\)\.padStart/g) || []).length,
+      1,
+      'die Sekunden werden an mehr als einer Stelle zerlegt'
+    );
   });
 });
