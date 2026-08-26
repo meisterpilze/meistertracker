@@ -346,6 +346,9 @@ window.LANG['de'] = {
   'msq.laborPreview': '{n} Kultur(en) werden angelegt.',
   'msq.grainKg': 'kg pro Beutel',
   'msq.grainPreview': '{n} Beutel Körnerbrut werden angelegt.',
+  'msq.grainWet': '{kg} kg je Beutel · {total} kg gesamt',
+  'msq.grainDry': '{dry} kg trockenes Korn vom Lager',
+  'msq.needFor': 'für {n} Stück:',
   // Versand (Phase 4)
   'orders.versandTab': 'Versand',
   'orders.th.orderId': 'Bestell-ID',

@@ -15494,17 +15494,33 @@ function msQuickPreview() {
     return;
   }
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+  // Beide Zweige rechnen die Menge ein, also darf keiner mehr "pro Stück:"
+  // darüberschreiben — der Vorspann des Rezepteditors, der dort mit Anzahl 1
+  // rechnet und hier seit jeher die Summe beschriftet hat.
   if (_msQuickCtx.mode === 'charge') {
     const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
-    el.textContent = parts.length ? t('orders.p.needPrefix') + ' ' + parts.join(' · ') : '';
+    el.textContent = parts.length ? t('msq.needFor', { n: qty }) + ' ' + parts.join(' · ') : '';
   } else if (_msqIsGrainspawn()) {
-    // Only dry grain is deducted, so show the hydrated→dry figure the grain
-    // form and createGrainBatch both use rather than the wet bag weight.
+    // Drei Zahlen hingen an einer Überschrift, die zu keiner davon gehörte:
+    // "pro Stück: 7.6 kg" stand unter 10 × 2 kg. 2 kg kommt in einen Beutel,
+    // 20 kg setzt man an, und 7,6 kg ist davon das trockene Korn, das vom Lager
+    // abgeht — ausgerechnet die eine Zahl, die nicht pro Stück gilt. Alle drei
+    // stehen jetzt da, jede benannt.
+    //
+    // Die Feuchte kommt aus dem Rezept der Sorte, nicht aus getAvgComp():
+    // msQuickConfirm schreibt genau diesen Wert nach gs-rh, und createGrainBatch
+    // bucht damit (siehe koernerfeuchte-quelle.test.js). Der Schnitt über alle
+    // Rezepte kündigte hier eine andere Menge an, als gleich gebucht wird.
     const kg = parseDecimal((document.getElementById('ms-q-grainkg') || {}).value) || 0;
-    const dry = qty * mtDryKg(kg, getAvgComp().grainRhPct);
+    const rh = _msQuickCtx.ms.recGrainRhPct != null ? _msQuickCtx.ms.recGrainRhPct : 52;
+    const num = (v) => (Math.round(v * 1000) / 1000).toString();
     el.textContent =
       qty > 0 && kg > 0
-        ? t('msq.grainPreview', { n: qty }) + ' — ' + t('orders.p.needPrefix') + ' ' + Math.round(dry * 1000) / 1000 + ' kg'
+        ? t('msq.grainPreview', { n: qty }) +
+          ' — ' +
+          t('msq.grainWet', { kg: num(kg), total: num(kg * qty) }) +
+          ' · ' +
+          t('msq.grainDry', { dry: num(qty * mtDryKg(kg, rh)) })
         : '';
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
