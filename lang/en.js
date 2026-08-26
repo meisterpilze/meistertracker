@@ -750,6 +750,7 @@ window.LANG['en'] = {
   'batch.printLabels': 'Print labels for this batch',
   'batch.printOptions': 'Print options…',
   'print.printedBatch': 'Printed {n} labels: {id}',
+  'print.printedLab': 'Printed {n} culture label(s)',
   'batch.addNote': 'Add note',
   'batch.addBags': '+Bags',
   'batch.del': 'Del',

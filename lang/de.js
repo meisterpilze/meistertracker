@@ -753,6 +753,7 @@ window.LANG['de'] = {
   'batch.printLabels': 'Etiketten f\u00fcr diese Charge drucken',
   'batch.printOptions': 'Druckoptionen\u2026',
   'print.printedBatch': '{n} Etiketten gedruckt: {id}',
+  'print.printedLab': '{n} Kultur-Etiketten gedruckt',
   'batch.addNote': 'Notiz hinzuf\u00fcgen',
   'batch.addBags': '+Beutel',
   'batch.del': 'L\u00f6schen',
