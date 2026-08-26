@@ -10027,9 +10027,25 @@ async function printBatchLabelsInline() {
     a.download = b.batchId + '_labels.zpl';
     a.click();
   } else {
-    setFb('ok', t('print.printedBatch', { n: b.bags.length, id: b.batchId }));
+    printedFb(t('print.printedBatch', { n: b.bags.length, id: b.batchId }));
     nbpClose();
   }
+}
+// Gedruckt ist keine Buchung, und schon gar kein Scan.
+//
+// Alle vier Druckwege meldeten ihren Erfolg mit setFb('ok', …) ohne noModal,
+// und setFb ruft dann openScanModal(). Nach "Charge anlegen → drucken" stand
+// deshalb das Scan-Fenster offen — und weil sein Hinweis nach drei Sekunden
+// verblasst, stand es leer da und musste weggetippt werden. Der Fehlerzweig
+// derselben Funktionen war längst ein Toast; nur der Erfolg riss den Bildschirm
+// an sich.
+//
+// noModal behält, was daran wert ist behalten zu werden: Ton, Aufblitzen und
+// den Eintrag im Verlauf. Sichtbar wird die Meldung über den Toast, wie beim
+// Fehlschlag daneben.
+function printedFb(msg) {
+  setFb('ok', msg, { noModal: true });
+  toast(msg);
 }
 function goToPrintBatch() {
   go('print', 'n-print');
@@ -10869,7 +10885,7 @@ async function printNewBags() {
     a.download = b.batchId + '_new_labels.zpl';
     a.click();
   } else {
-    setFb('ok', t('addBags.printed', { n: _lastNewBags.length, id: b.batchId }));
+    printedFb(t('addBags.printed', { n: _lastNewBags.length, id: b.batchId }));
   }
   document.getElementById('m-addbags').classList.remove('open');
 }
@@ -17981,7 +17997,10 @@ async function printBagLabels() {
     a.download = b.batchId + '_labels.zpl';
     a.click();
   } else {
-    setFb('ok', 'Printed ' + bags.length + ' labels for ' + b.batchId);
+    // Stand als englischer Satz im Code, in einer App, die drei Sprachen
+    // spricht — und es ist dieselbe Meldung, die der andere Beutel-Druckweg
+    // längst übersetzt ausgibt.
+    printedFb(t('print.printedBatch', { n: bags.length, id: b.batchId }));
   }
 }
 
@@ -18004,7 +18023,7 @@ async function printLabLabels() {
     a.download = 'lab_labels.zpl';
     a.click();
   } else {
-    setFb('ok', 'Printed ' + ids.length + ' lab label' + (ids.length !== 1 ? 's' : ''));
+    printedFb(t('print.printedLab', { n: ids.length }));
   }
 }
 
