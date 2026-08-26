@@ -2810,8 +2810,11 @@
                 <div>
                   <label data-i18n="batch.bagWeight">Bag weight</label>
                   <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px" id="nb-weight-btns">
-                    <button type="button" class="btn btn-sm btn-p" id="wbtn-3">3 kg</button>
-                    <button type="button" class="btn btn-sm" id="wbtn-5">5 kg</button>
+                    <!-- data-kg ist die Quelle, nicht die Beschriftung: parseFloat
+                         liest aus "3,5 kg" eine 3. -->
+                    <button type="button" class="btn btn-sm" id="wbtn-35" data-kg="3.5">3,5 kg</button>
+                    <button type="button" class="btn btn-sm btn-p" id="wbtn-43" data-kg="4.3">4,3 kg</button>
+                    <button type="button" class="btn btn-sm" id="wbtn-5" data-kg="5">5 kg</button>
                     <button type="button" class="btn btn-sm" id="wbtn-other" data-i18n="batch.otherWeight">
                       anderes
                     </button>
@@ -2820,7 +2823,7 @@
                     type="text"
                     inputmode="decimal"
                     id="nb-weight"
-                    value="3"
+                    value="4.3"
                     style="margin-top: 6px; width: 100px; display: none"
                     autocomplete="off"
                   />
