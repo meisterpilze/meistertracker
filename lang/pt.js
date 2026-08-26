@@ -562,6 +562,7 @@ window.LANG['pt'] = {
   'batch.printLabels': 'Imprimir etiquetas para este lote',
   'batch.printOptions': 'Opções de impressão…',
   'print.printedBatch': '{n} etiquetas impressas: {id}',
+  'print.printedLab': '{n} etiqueta(s) de cultura impressas',
   'batch.addNote': 'Adicionar nota',
   'batch.addBags': '+Sacos',
   'batch.del': 'Excluir',
