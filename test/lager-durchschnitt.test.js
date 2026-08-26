@@ -15,6 +15,9 @@ const { hebe } = require('./helpers/quelle');
 
 const TEILE = [
   [/^const AVG_FENSTER_TAGE = .*$/m, 'AVG_FENSTER_TAGE'],
+  // Der Boden unter dem Blockgewicht. Er steht bei den Gewichtsknöpfen, weil er
+  // dort auch die Vorauswahl ist — hier wird er nur mitgehoben.
+  [/^const NB_BAG_KG_DEFAULT = .*$/m, 'NB_BAG_KG_DEFAULT'],
   [/^function _avgGewichte\(\) \{[\s\S]*?\r?\n\}/m, '_avgGewichte()'],
   [/^function _avgMittel\(sorten, feld, gewicht\) \{[\s\S]*?\r?\n\}/m, '_avgMittel()'],
   [/^function getAvgComp\(\) \{[\s\S]*?\r?\n\}/m, 'getAvgComp()']
@@ -138,7 +141,10 @@ describe('Lagerdurchschnitt — er kommt aus den Rezepten', () => {
     const c = bauen({ strains: [] }).getAvgComp();
     assert.equal(c.hwPct, 75);
     assert.equal(c.wbPct, 25);
-    assert.equal(c.bagKg, 3);
+    // Dieselbe Zahl, die auf dem Chargenformular vorausgewählt ist. Sie stand
+    // hier auf 3, während die Knöpfe 3 und 5 anboten und die Rezepte 5 sagten —
+    // eine dritte Vorgabe für dieselbe Frage.
+    assert.equal(c.bagKg, 4.3);
   });
 
   it('lässt die Körnerbrut-Tüte eine Einstellung — kein Rezept trägt sie', () => {
