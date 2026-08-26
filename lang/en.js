@@ -344,6 +344,9 @@ window.LANG['en'] = {
   'msq.laborPreview': '{n} culture(s) will be created.',
   'msq.grainKg': 'kg per bag',
   'msq.grainPreview': '{n} grainspawn bag(s) will be created.',
+  'msq.grainWet': '{kg} kg per bag · {total} kg total',
+  'msq.grainDry': '{dry} kg dry grain from stock',
+  'msq.needFor': 'for {n} unit(s):',
   // Versand (Phase 4)
   'orders.versandTab': 'Shipping',
   'orders.th.orderId': 'Order ID',
