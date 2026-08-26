@@ -7179,6 +7179,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  const subBurstMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/burst$/);
+  if (req.method === 'POST' && subBurstMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        // Ein fehlendes Feld setzt auf 0 zurück — der Weg zurück, wenn die Zahl
+        // am falschen Ansatz landete. Die Grenzen prüft die DB-Schicht, damit
+        // sie für jeden Aufrufer gelten und nicht nur für diesen.
+        const r = db.setSubstrateBurstBags(
+          database,
+          decodeURIComponent(subBurstMatch[1]),
+          data && 'burstBags' in data ? data.burstBags : 0
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/substrate-batches/preview') {
     jsonBody(req, res, (e, data) => {
       if (e) {

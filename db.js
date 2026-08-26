@@ -2434,6 +2434,28 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE substrate_batches ADD COLUMN actual_rh_by TEXT');
       }
     }
+  },
+  {
+    version: 83,
+    description: 'Im Autoklav geplatzte Beutel je Ansatz zaehlen',
+    fn(db) {
+      // Beutel platzen im Autoklav unter dem Druck. Das kostet Substrat, und
+      // wie oft es passiert ist die eigentliche Frage — bei welchem Rezept,
+      // welcher Fuellmenge, welcher Charge Pellets. Bisher konnte man es nur in
+      // den Kommentar schreiben, und ein Kommentar laesst sich nicht zaehlen.
+      //
+      // NOT NULL DEFAULT 0, anders als die Ist-Feuchte daneben. Die ist eine
+      // Messung: 0 % waere dort eine Behauptung, und "nicht gemessen" muss sich
+      // davon unterscheiden. Hier wird ein Ereignis gezaehlt, und ein Ansatz,
+      // an dem niemand etwas eingetragen hat, ist einer, an dem nichts geplatzt
+      // ist. Waere das NULL, muesste jede Auswertung "unbekannt" von "keins"
+      // trennen und koennte die Frage "wie oft passiert das" gar nicht
+      // beantworten.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('substrate_batches') WHERE name='burst_bags'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE substrate_batches ADD COLUMN burst_bags INTEGER NOT NULL DEFAULT 0');
+    }
   }
 ];
 
@@ -4119,6 +4141,9 @@ function _mapSubstrateRow(r) {
     actualRhPct: r.actual_rh_pct == null ? null : r.actual_rh_pct,
     actualRhAt: r.actual_rh_at || null,
     actualRhBy: r.actual_rh_by || null,
+    // Wie viele Beutel dieses Ansatzes im Autoklav geplatzt sind. 0 heisst
+    // keiner, nicht "unbekannt" — siehe Migration 83.
+    burstBags: r.burst_bags || 0,
     notes: r.notes || '',
     created: r.created,
     status: r.status
@@ -4251,6 +4276,30 @@ function setSubstrateNotes(db, subId, text) {
   db.prepare('UPDATE substrate_batches SET notes=? WHERE sub_id=?').run(clean, subId);
   incrementDataVersion(db);
   return { subId, notes: clean };
+}
+
+// Wie viele Beutel dieses Ansatzes im Autoklav geplatzt sind.
+//
+// Kein Zeitstempel und keine Person, anders als bei der Ist-Feuchte: die Zahl
+// gehoert zum Ansatz und nicht zum Moment ihrer Eingabe, und die Zeitachse fuer
+// "wie oft passiert das" ist das Anlegedatum des Ansatzes. Wer es nachtraegt,
+// traegt keine zweite Beobachtung ein, sondern vervollstaendigt dieselbe.
+function setSubstrateBurstBags(db, subId, count) {
+  const row = db.prepare('SELECT id, target_kg FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const n = Number(count == null || count === '' ? 0 : count);
+  if (!Number.isFinite(n)) throw new Error('Geplatzte Beutel muss eine Zahl sein');
+  if (!Number.isInteger(n)) throw new Error('Geplatzte Beutel muss eine ganze Zahl sein');
+  if (n < 0) throw new Error('Geplatzte Beutel kann nicht negativ sein');
+  // Die Obergrenze kommt aus dem Ansatz selbst: mehr Beutel, als er ueberhaupt
+  // fuellen kann, ist ein Tippfehler und keine Zahl. Ein Beutel unter 1 kg ist
+  // kein Block, also ist target_kg die grosszuegigste ehrliche Schranke — und
+  // sie waechst mit dem Ansatz statt als runde Zahl danebenzustehen.
+  const max = Math.max(1, Math.ceil(row.target_kg || 0));
+  if (n > max) throw new Error('So viele Beutel hat der Ansatz nicht — hoechstens ' + max);
+  db.prepare('UPDATE substrate_batches SET burst_bags=? WHERE sub_id=?').run(n, subId);
+  incrementDataVersion(db);
+  return { subId, burstBags: n };
 }
 
 function listSubstrateBatches(db, opts) {
@@ -10254,6 +10303,7 @@ module.exports = {
   getSubstrateBatch,
   setSubstrateMoisture,
   setSubstrateNotes,
+  setSubstrateBurstBags,
   writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,

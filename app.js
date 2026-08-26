@@ -9655,12 +9655,22 @@ function renderSubstrateTab() {
   if (sum) {
     const open = all.filter((s) => s.status === 'open' && s.remainingKg > 0.0001);
     const bad = all.filter((s) => s.status === 'written_off');
-    sum.textContent = t('sub.summary', {
-      total: all.length,
-      open: open.length,
-      kg: open.reduce((a, s) => a + s.remainingKg, 0).toFixed(1),
-      bad: bad.length
-    });
+    // Die Bilanz über alle Ansätze, nicht über die gefilterte Ansicht: "wie oft
+    // platzt uns etwas" ist eine Frage über die Zeit, und sie darf nicht davon
+    // abhängen, ob gerade die verbrauchten eingeblendet sind.
+    const geplatzt = all.reduce((a, s) => a + (s.burstBags || 0), 0);
+    const betroffen = all.filter((s) => s.burstBags > 0).length;
+    sum.textContent =
+      t('sub.summary', {
+        total: all.length,
+        open: open.length,
+        kg: open.reduce((a, s) => a + s.remainingKg, 0).toFixed(1),
+        bad: bad.length
+      }) +
+      // Nur wenn es etwas zu melden gibt. Eine Zeile, die bei jedem Blick "0
+      // geplatzt" sagt, wird gelesen wie Tapete und dann auch dann übersehen,
+      // wenn eine Zahl darin steht.
+      (geplatzt ? ' · ' + t('sub.burstSummary', { n: geplatzt, m: betroffen }) : '');
   }
   if (!rows.length) {
     box.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
@@ -9686,7 +9696,20 @@ function _sbRowHtml(s) {
     '<tr style="border-top:1px solid var(--c-border);cursor:pointer" onclick="openSubstrateInfo(' +
     JSON.stringify(s.subId).replace(/"/g, '&quot;') +
     ')">' +
-    cell(esc(s.subId), 'font-family:monospace;font-weight:600') +
+    // Als Marke neben der Kennung, nicht als achte Spalte: die Tabelle scrollt
+    // auf dem Handy ohnehin seitwärts, und eine Spalte, die meistens leer ist,
+    // schiebt die vollen aus dem Bild.
+    cell(
+      esc(s.subId) +
+        (s.burstBags
+          ? ' <span class="fs-micro" style="font-weight:600;color:var(--c-red-dark)" title="' +
+            esc(t('sub.burst')) +
+            '">⚠' +
+            s.burstBags +
+            '</span>'
+          : ''),
+      'font-family:monospace;font-weight:600'
+    ) +
     cell(esc(s.recipeLabel), 'color:var(--c-text-sec)') +
     cell(fmtDtShort(s.created), 'white-space:nowrap') +
     cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
@@ -9746,6 +9769,43 @@ function _subRhCell(s) {
     (diff > 0 ? '+' : '−') +
     esc(Math.abs(diff).toFixed(1)) +
     ')</span>'
+  );
+}
+
+// Geplatzte Beutel: 0 ist eine Antwort, keine Lücke.
+//
+// Anders als die Ist-Feuchte daneben, die "noch nicht gemessen" sagt, solange
+// niemand gemessen hat. Hier wird ein Ereignis gezählt, und wo nichts steht, ist
+// nichts passiert — sonst ließe sich die Frage, die diese Zahl beantworten soll
+// ("wie oft platzt uns etwas im Autoklav"), gar nicht stellen.
+function _subBurstCell(s) {
+  if (!s.burstBags) return '<span style="font-weight:400;color:var(--c-text-muted)">' + esc(t('sub.burstNone')) + '</span>';
+  return '<span style="color:var(--c-red-dark)">' + esc(t('sub.burstN', { n: s.burstBags })) + '</span>';
+}
+// Nachgetragen wie die Feuchte, und aus demselben Grund vor dem Prompt zu: der
+// Prompt läge sonst hinter der Karte (siehe measureSubstrateRh).
+function recordBurstBags(s) {
+  closeSubstrateInfo();
+  prompt2(
+    t('sub.burstPrompt', { id: s.subId }),
+    t('sub.burstHint'),
+    async (v) => {
+      const raw = (v || '').trim();
+      const n = raw === '' ? 0 : Number(raw);
+      if (!Number.isInteger(n) || n < 0) {
+        toast(t('sub.burstNaN'), 'err');
+        return;
+      }
+      const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(s.subId) + '/burst', { burstBags: n });
+      if (!r || r.error) {
+        toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+        return;
+      }
+      toast(n === 0 ? t('sub.burstCleared') : t('sub.burstSaved', { n }));
+      await refreshSubstrateBatches();
+      openSubstrateInfo(s.subId);
+    },
+    { inputmode: 'numeric', value: s.burstBags ? String(s.burstBags) : '' }
   );
 }
 
@@ -9856,6 +9916,10 @@ async function openSubstrateInfo(subId) {
     line(t('sub.water'), s.waterL.toFixed(1) + ' L') +
     line(t('sub.moisture'), s.moisturePct.toFixed(1) + ' %') +
     line(t('sub.moistureActual'), _subRhCell(s)) +
+    // Immer da, auch auf 0 — wie die Kommentarzeile weiter unten. Eine Zeile,
+    // die erst erscheint, wenn schon etwas kaputt ist, sieht aus wie keine, und
+    // dann trägt sie niemand nach.
+    line(t('sub.burst'), _subBurstCell(s)) +
     '</table>';
   // Wer gemessen hat und wann, unter die Tabelle statt in die Zeile: in der
   // Zeile stünde es neben der Zahl und läse sich wie ein Teil von ihr.
@@ -9942,6 +10006,9 @@ async function openSubstrateInfo(subId) {
   // bei einem verworfenen Ansatz noch erlaubt — warum er verworfen wurde, ist
   // genau die Frage, auf die eine gemessene Feuchte antwortet.
   act(s.actualRhPct == null ? t('sub.rhAdd') : t('sub.rhEdit'), 'btn-p', () => measureSubstrateRh(s));
+  // Auch bei einem verworfenen Ansatz: geplatzte Beutel sind oft genau der
+  // Grund, aus dem er verworfen wurde, und dann wird die Zahl danach eingetragen.
+  act(s.burstBags ? t('sub.burstEdit') : t('sub.burstAdd'), 'btn-p', () => recordBurstBags(s));
   act(s.notes ? t('sub.commentEdit') : t('sub.commentAdd'), 'btn-p', () => editSubstrateComment(s));
   if (!s.drawn.length) {
     act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
