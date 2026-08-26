@@ -8580,20 +8580,37 @@ function locUndo() {
 
 // The number field and the buttons used to sit on top of each other, both
 // setting the same value, and nothing said which one counted. The buttons now
-// carry the two sizes actually used; the field only appears for a weight that
-// is neither of them, and says so by being labelled "anderes".
+// carry the sizes actually used; the field only appears for a weight that is
+// none of them, and says so by being labelled "anderes".
+//
+// Das Gewicht eines Blocks, wo keins hergeleitet werden kann.
+//
+// Es gibt drei Größen — 3,5 / 4,3 / 5 kg — und 4,3 ist die, die läuft. Die Zahl
+// stand als 5 im Assistenten, als 3 im langen Formular und noch einmal als
+// Rückfall in getAvgComp(), also drei Vorgaben für dieselbe Frage. Hergeleitet
+// wird sie weiterhin, wo es geht: aus dem Rezept der Sorte, sonst aus dem
+// Schnitt über alle Rezepte. Das hier ist der Boden darunter.
+const NB_BAG_KG_DEFAULT = 4.3;
+// Welche Gewichte angeboten werden, steht an den Knöpfen — nicht hier.
+//
+// Vorher stand die Liste zweimal im Code ('wbtn-3', 'wbtn-5') und ein drittes
+// Mal als `kg === 3 || kg === 5`, und die Beschriftung war die Quelle der Zahl.
+// Beim Wechsel auf 3,5 / 4,3 / 5 kg wäre beides gebrochen: drei Stellen, die
+// mitgeführt werden müssen, und parseFloat('3,5 kg') ist 3.
+function nbWeightButtons() {
+  return Array.from(document.querySelectorAll('#nb-weight-btns [data-kg]'));
+}
 function setBagWeight(kg) {
   const field = document.getElementById('nb-weight');
   if (!field) return;
   field.value = kg;
-  ['wbtn-3', 'wbtn-5'].forEach((id) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    const btnKg = parseFloat(btn.textContent);
-    btn.className = 'btn btn-sm' + (btnKg === kg ? ' btn-p' : '');
+  let preset = false;
+  nbWeightButtons().forEach((btn) => {
+    const an = parseFloat(btn.dataset.kg) === kg;
+    if (an) preset = true;
+    btn.className = 'btn btn-sm' + (an ? ' btn-p' : '');
   });
   const other = document.getElementById('wbtn-other');
-  const preset = kg === 3 || kg === 5;
   if (other) other.className = 'btn btn-sm' + (preset ? '' : ' btn-p');
   field.style.display = preset ? 'none' : '';
   nbPreview();
@@ -8603,9 +8620,8 @@ function nbOtherWeight() {
   const field = document.getElementById('nb-weight');
   if (!field) return;
   field.style.display = '';
-  ['wbtn-3', 'wbtn-5'].forEach((id) => {
-    const btn = document.getElementById(id);
-    if (btn) btn.className = 'btn btn-sm';
+  nbWeightButtons().forEach((btn) => {
+    btn.className = 'btn btn-sm';
   });
   const other = document.getElementById('wbtn-other');
   if (other) other.className = 'btn btn-sm btn-p';
@@ -8926,6 +8942,10 @@ function nbSubSum() {
 // NOT remembered — they are per-batch decisions and a stale strain carried
 // over would be a silent mislabel.
 let _nbDefaultsApplied = false;
+// Hochzählen, wenn sich die angebotenen Beutelgewichte ändern: nbApplyDefaults
+// verwirft ein gespeichertes Gewicht mit älterem Stempel genau einmal, damit die
+// neue Vorgabe auf einem Gerät ankommt, das die App schon kennt.
+const NB_DEFAULTS_WEIGHT_V = 2;
 function nbSaveDefaults() {
   try {
     const g = (id) => (document.getElementById(id) || {}).value;
@@ -8935,6 +8955,7 @@ function nbSaveDefaults() {
         qty: g('nb-qty'),
         days: g('nb-days'),
         weight: g('nb-weight'),
+        wv: NB_DEFAULTS_WEIGHT_V,
         hw: g('nb-hw'),
         wb: g('nb-wb'),
         coir: g('nb-coir'),
@@ -8972,7 +8993,21 @@ function nbApplyDefaults() {
   // starts from the real recipe instead of blank. Saved values still win; the
   // seed only fills what is missing or was stored empty.
   const _avg = getAvgComp();
-  const seeded = { hw: _avg.hwPct, wb: _avg.wbPct, rh: _avg.rhPct, grainrh: _avg.grainRhPct };
+  const seeded = {
+    hw: _avg.hwPct,
+    wb: _avg.wbPct,
+    rh: _avg.rhPct,
+    grainrh: _avg.grainRhPct,
+    // Das Gewicht wurde nur gespeichert, nie gesät: ein Gerät ohne Vorrat fiel
+    // auf das value-Attribut im HTML zurück, und das war eine vierte Vorgabe.
+    weight: _avg.bagKg
+  };
+  // Ein Gewicht, das ein Benutzer gewählt hat, bleibt stehen — das ist der Sinn
+  // dieses Vorrats. Ein Gewicht, das er nur geerbt hat, weil damals 3 bzw. 5 kg
+  // in den Knöpfen standen, ist keine Wahl, und es überstimmte sonst die neue
+  // Vorgabe auf jedem Gerät, das die App schon einmal offen hatte. Einmal
+  // verworfen, danach merkt sich das Feld wieder, was zuletzt gewählt wurde.
+  if (d && d.wv !== NB_DEFAULTS_WEIGHT_V) delete d.weight;
   d = d ? Object.assign(seeded, _dropEmpty(d)) : seeded;
   const put = (id, v) => {
     if (v === undefined || v === null || v === '') return;
@@ -9025,7 +9060,16 @@ async function createBatch() {
   // the server takes the kilograms out of the mix and charges only the spawn.
   const _sbSel = document.getElementById('nb-substrate-batch');
   if (_sbSel && _sbSel.value) {
-    createBatchFromSubstrate(genBatchId(ms.name), _sbSel.value, strainId, qty, bagKg || ms.recBagKg || 5, days, st, strainText);
+    createBatchFromSubstrate(
+      genBatchId(ms.name),
+      _sbSel.value,
+      strainId,
+      qty,
+      bagKg || ms.recBagKg || NB_BAG_KG_DEFAULT,
+      days,
+      st,
+      strainText
+    );
     return;
   }
   if (!bagKg) {
@@ -9249,15 +9293,37 @@ async function createBatch() {
   nbPreview();
   updateTodoBadge();
   // Show zone picker — required before print
+  nbPlaceAndPrint(batchObj, bags);
+}
+
+// Der Schluss jedes Weges, der Beutel anlegt: erst einlagern, dann Etiketten.
+//
+// Das stand als Rumpf am Ende von createBatch, und der geführte Ablauf kam gar
+// nicht hier vorbei — er zieht über createBatchFromSubstrate und endete mit
+// seiner Quittung. Zwei Chargen sind so entstanden, die kein einziger ADD-Scan
+// je berührt hat: für getStatus sind sie EMPTY, das Dashboard zeigt sie nicht,
+// jeder Umzug überspringt sie, und Etiketten hat auch niemand gedruckt. Die
+// Zonenwahl ist ein Tor, kein Angebot — deshalb liegt sie jetzt an einer
+// Stelle, die alle Wege durchlaufen, statt an einer, die einer davon umgeht.
+//
+// Der Aufrufer muss vorher sein eigenes Fenster schließen. m-move-batch und
+// m-batch-print stehen in index.html VOR m-work-flow und teilen sich dessen
+// z-index, also läge beides hinter dem Ablauffenster — derselbe Fehler wie in
+// #592.
+function nbPlaceAndPrint(batchObj, bags) {
   openZonePickModal(batchObj, bags, function () {
-    document.getElementById('nb-bags').innerHTML = bags
-      .map(
-        (b) =>
-          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
-      )
-      .join('');
+    const liste = document.getElementById('nb-bags');
+    if (liste)
+      liste.innerHTML = bags
+        .map(
+          (b) =>
+            `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+        )
+        .join('');
+    // printBatchLabelsInline liest die Charge von hier, auch wenn die
+    // Chargenseite gar nicht im Bild ist.
     const _res = document.getElementById('nb-result');
-    _res.dataset.batchId = batchObj.batchId;
+    if (_res) _res.dataset.batchId = batchObj.batchId;
     const kopf = document.getElementById('nbp-head');
     if (kopf) kopf.textContent = t('batch.printFor', { id: batchObj.batchId, n: bags.length });
     nbpOpen();
@@ -13524,7 +13590,7 @@ function getAvgComp() {
     hwPct: nimm(stufe(bloecke, 'recHardwoodPct'), 'hwPct', 75),
     wbPct: nimm(stufe(bloecke, 'recWheatbranPct'), 'wbPct', 25),
     rhPct: nimm(stufe(bloecke, 'recRhPct'), 'rhPct', 63),
-    bagKg: nimm(stufe(bloecke, 'recBagKg'), 'bagKg', 3),
+    bagKg: nimm(stufe(bloecke, 'recBagKg'), 'bagKg', NB_BAG_KG_DEFAULT),
     // Kein Rezeptfeld trägt die Größe einer Körnerbrut-Tüte. Die bleibt als
     // Einstellung stehen, und nur die.
     grainBagKg: gespeichert.grainBagKg ?? 1,
@@ -24236,12 +24302,14 @@ function initEventListeners() {
       if (redraw) redraw();
     });
   }
-  $('wbtn-3').addEventListener('click', () => {
-    setBagWeight(3);
-  });
-  $('wbtn-5').addEventListener('click', () => {
-    setBagWeight(5);
-  });
+  // Ein Zuhörer auf der Reihe statt einer Zeile je Knopf: ein weiteres Gewicht
+  // ist dann eine Zeile in index.html und sonst nichts.
+  const _wrow = $('nb-weight-btns');
+  if (_wrow)
+    _wrow.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-kg]');
+      if (btn) setBagWeight(parseFloat(btn.dataset.kg));
+    });
   const _wother = $('wbtn-other');
   if (_wother) _wother.addEventListener('click', nbOtherWeight);
   $('nb-weight').addEventListener('input', nbPreview);
@@ -25430,7 +25498,7 @@ const WKB = {
   step: 1,
   strainId: null,
   qty: 20,
-  bagKg: 5,
+  bagKg: NB_BAG_KG_DEFAULT,
   subId: '',
   notes: '',
   custom: false,
@@ -25563,7 +25631,7 @@ function wkbRender() {
            <input type="text" inputmode="numeric" id="wkb-qty" value="${WKB.qty}" /></div>
          <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
            <div class="wkf-chipsrow">` +
-      [0.7, 1, 2, 3, 5]
+      [3.5, 4.3, 5]
         .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
         .join('') +
       `</div></div>
@@ -25713,9 +25781,6 @@ function wkbCreate() {
   }
   if (!mix) return wkbCreateFromShelf();
   const r = wkbRecipe();
-  // Vor der Buchung festhalten: loadData() ersetzt _sbList, und danach ist der
-  // Ansatz womöglich schon leer und aus der Liste gefallen.
-  const mischung = wkbMischung();
   const batchId = genBatchId(ms.name);
   // Wie das lange Formular: ohne eigene Stammbezeichnung steht in der Spalte
   // 'XXX', nicht das Sorten-Kürzel. Sonst bedeutet dieselbe Spalte je nach
@@ -25723,35 +25788,31 @@ function wkbCreate() {
   createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, 'XXX', '', {
     notes: WKB.notes.trim(),
     onDone: (res) => {
+      const neuId = res.batchId || batchId;
+      // Was noch im Ansatz steht, ist die Zahl, gegen die die nächste Charge
+      // geplant wird. Sie stand auf der Quittung, die dieser Weg jetzt nicht
+      // mehr zeigt — also geht sie in die Meldung mit.
+      const gezogen = t('work.bDrawn', {
+        kg: (res.drawKg || wkbDraw()).toFixed(0),
+        id: mix.subId,
+        left: (res.remainingKg || 0).toFixed(0)
+      });
       // Der Ablauf kann inzwischen verlassen oder ein anderer geöffnet worden
       // sein. Dann gehört WKF nicht mehr uns — die Bestätigung sagt es dem
-      // Fenster, statt den fremden Bildschirm mit unserer Quittung zu ersetzen.
+      // Fenster, statt den fremden Bildschirm zu übernehmen.
       if (WKF.kind !== 'batch') {
-        toast(t('work.bDone', { n: WKB.qty, name: ms.name }));
+        toast(t('work.bDone', { n: WKB.qty, name: ms.name }) + ' — ' + gezogen);
         return;
       }
-      WKF.receipt = {
-        headline: t('work.bDone', { n: WKB.qty, name: ms.name }),
-        lines: [
-          [t('work.rBatch'), res.batchId || batchId],
-          [t('work.stepSubstrate'), t('work.bDrawn', { kg: (res.drawKg || wkbDraw()).toFixed(0), id: mix.subId, left: (res.remainingKg || 0).toFixed(0) })],
-          // Was tatsächlich in den Beuteln ist, samt Herkunft der Zahl — bei einem
-          // Ansatz ist das dessen Mischung, nicht das Rezept der Sorte.
-          [
-            t('work.bMixLabel'),
-            mischung.hw + '/' + mischung.wb + ' @ ' + mischung.rh + ' %' +
-              (mischung.ausAnsatz
-                ? t('work.bFromMix', { id: mischung.ausAnsatz })
-                : WKB.custom
-                  ? t('work.bChanged')
-                  : t('work.bFromRecipe'))
-          ],
-          [t('batch.incDays'), String(r.days)]
-        ].concat(WKB.notes.trim() ? [[t('work.bNote'), WKB.notes.trim()]] : []),
-        next: null
-      };
-      WKF.step = 'done';
-      wkbRender();
+      // Zuerst zu, dann einlagern: m-move-batch und m-batch-print lägen sonst
+      // hinter diesem Fenster (siehe nbPlaceAndPrint). Die Quittung entfällt
+      // dafür — der Zonenwähler ist ein Pflichtschritt, und ein Bildschirm, der
+      // vorher "fertig" sagt, lädt dazu ein, ihn wegzutippen. Genau so sind zwei
+      // Chargen ohne einen einzigen ADD-Scan entstanden.
+      wkfClose();
+      toast(t('work.bDone', { n: WKB.qty, name: ms.name }) + ' — ' + gezogen);
+      const neu = batches.find((x) => x.batchId === neuId);
+      if (neu) nbPlaceAndPrint(neu, neu.bags || []);
     }
   });
 }
@@ -25766,7 +25827,7 @@ function wkbCreate() {
     const a = el.dataset.wkb;
     if (a === 'kg') {
       wkbReadStep();
-      WKB.bagKg = parseDecimal(el.dataset.val) || 5;
+      WKB.bagKg = parseDecimal(el.dataset.val) || NB_BAG_KG_DEFAULT;
     } else if (a === 'next') {
       wkbReadStep();
       WKB.step++;
