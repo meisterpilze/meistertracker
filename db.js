@@ -8006,14 +8006,22 @@ function deleteExpiredOAuthData(db) {
   //
   // Each condition earns its place. `client_secret_hash IS NULL` is what
   // listOAuthClients already calls autoRegistered, so a client an admin created
-  // by hand is never touched. The two NOT IN clauses spare anything that ever
-  // got a code or a token, live or expired. And a day is far longer than
+  // by hand is never touched. `last_used IS NULL` spares anything that ever got
+  // as far as a consent screen, a code or a token — touchOAuthClient stamps it
+  // at all three, and migration 74 backfilled the column from the codes and
+  // tokens of the clients that predate it. And a day is far longer than
   // register→authorize→token takes.
   //
   // What this does mean: a client that has not been used for long enough that
   // all its tokens have expired *and* been reaped will eventually be swept, and
   // has to register again. That is what dynamic registration is for, and the
   // alternative is keeping every registration ever made for ever.
+  //
+  // What it must not mean is a client that cannot find its way back. One that
+  // caches its id across restarts — mcp-remote does — re-presents a swept id
+  // for ever, and learns nothing, because /oauth/authorize can only answer the
+  // browser in front of it. So that route says in words that the registration
+  // is gone and the cache holding it has to go too.
   db.prepare(
     `DELETE FROM oauth_clients
       WHERE client_secret_hash IS NULL
