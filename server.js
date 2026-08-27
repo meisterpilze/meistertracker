@@ -5718,7 +5718,44 @@ function handleRequest(req, res) {
 
         const client = db.getOAuthClient(database, clientId);
         if (!client) {
-          jsonErr(res, 400, 'invalid client_id');
+          // A browser is always the reader here — this route is where a client
+          // sends a person — so the answer is a page and not the JSON the
+          // machine endpoints return. It is also the far end of a trap worth
+          // naming. A proxy that caches its registration (mcp-remote keeps one
+          // per server under ~/.mcp-auth, for ever) hands over an id that
+          // deleteExpiredOAuthData has since swept, and this error reaches only
+          // the tab, never the proxy: it goes on presenting the same dead id at
+          // every start, and opens a new tab each time. Told
+          // {"error":"invalid client_id"} nobody guesses the fix is a file on
+          // their own disk, so the page says so.
+          log('warn', 'OAuth authorize: unknown client_id', { user: authUser.username });
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Registration Expired – Meistertracker</title><link rel="icon" href="/favicon.ico">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b;font-size:15px;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:36px;width:100%;max-width:460px;margin:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.07)}
+.logo{text-align:center;margin-bottom:8px;color:#d97706}
+h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
+.sub{color:#64748b;font-size:14px;text-align:center;margin-bottom:24px}
+.note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92400e}
+ol{font-size:14px;color:#334155}
+ol li{margin:10px 0 10px 20px}
+code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style></head><body>
+<div class="card">
+  <div class="logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg></div>
+  <h1>Registration Expired</h1>
+  <p class="sub">The app that sent you here is using a client registration this server no longer has.</p>
+  <div class="note">A registration that never gets this far is removed after a day. The app kept its copy and has no way to notice that this one is gone, so it will keep sending you here — nothing on this page can revive it.</div>
+  <ol>
+    <li>Delete the app's cached registration. <code>mcp-remote</code> keeps one per server under <code>~/.mcp-auth</code>; most other clients drop theirs when you remove and re-add the server.</li>
+    <li>Start the app again and open the fresh authorization link it prints.</li>
+    <li>Finish that one — click Allow — while you are still signed in here.</li>
+  </ol>
+</div></body></html>`);
           return;
         }
         if (!client.redirectUris.includes(redirectUri)) {
@@ -5728,6 +5765,15 @@ function handleRequest(req, res) {
 
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const clientName = client.clientName || clientId;
+        // Getting an authenticated person as far as this screen is what makes a
+        // registration real, so it counts as use. Marked here and not only when
+        // a code or a token is issued, because the gap between the two is where
+        // clients got stuck: close the tab, think it over until tomorrow, and
+        // deleteExpiredOAuthData swept a registration the client had already
+        // cached and would never re-request. The bound S-25 put on
+        // POST /oauth/register survives intact — reaching this line needs
+        // checkAuth, and unauthenticated registration spam never can.
+        db.touchOAuthClient(database, clientId);
         log('info', 'OAuth consent shown', { clientId, clientName, user: authUser.username });
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!DOCTYPE html>
