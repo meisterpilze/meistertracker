@@ -1235,6 +1235,11 @@
                 <path d="M12 17h.01" />
                 <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               </svg>
+              <!-- Wieviele Beutel schon gesammelt sind. Solange die Kamera das
+                   Bild füllt, ist diese Zahl die einzige Rückmeldung darüber —
+                   und der Knopf, der sie trägt, ist zugleich der Weg ins
+                   Formular. -->
+              <span class="cam-hud-badge" id="cam-contam-count" hidden>0</span>
             </button>
             <button
               id="btn-cam-torch"
@@ -2135,6 +2140,11 @@
           <div class="scan-modal-btns">
             <button id="set-19" class="btn-xs" data-i18n="scan.reset">Reset</button>
             <button id="btn-20" class="btn-xs green" data-i18n="scan.addBatch">+ Batch</button>
+            <!-- Am Tisch wird mit dem Handscanner gesammelt, und dort gibt es
+                 keine Kamera-Leiste mit dem ⚠-Knopf. Ohne diesen hier käme man
+                 an das Formular nur über die Kamera. Beschriftung und
+                 Sichtbarkeit setzt updateSD(). -->
+            <button id="btn-contam-collect" class="btn-xs btn-contam-collect" style="display: none"></button>
             <button
               class="btn-xs btn-end-session"
               id="btn-end-session"

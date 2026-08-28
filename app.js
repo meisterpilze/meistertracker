@@ -16855,9 +16855,19 @@ document.getElementById('m-baginfo').addEventListener('click', (e) => {
 // MVP from audit Section 2 / PR 7. Captures bag/batch + type + severity +
 // notes + up to 4 photos (compressed client-side to ~200 KB JPEG / ~15 KB
 // thumb), POSTs to /api/contamination-reports.
-let _crBagId = null;
+// Die Beutel, über die dieses Formular berichtet: [{ bag, batch }].
+//
+// Es war ein Beutel, und das war die Reibung. Eine kontaminierte Reihe ist nicht
+// ein Beutel, sondern acht, und für jeden ging dasselbe Fenster auf: Typ tippen,
+// Schwere tippen, senden, Fenster zu, nächster Scan. Jetzt sammelt der Scanner,
+// solange CONTAM steht, und das Formular kommt einmal für alle.
+let _crTargets = [];
 let _crBatchId = null;
 let _crZoneId = null;
+// Steht auf true, während die Kamera aus einem offenen Formular heraus geholt
+// wurde ("+ Scannen"). closeCamScan() bringt das Formular dann zurück, mit Typ,
+// Schwere, Fotos und Notiz so, wie sie vor dem Scannen standen.
+let _crResumeForm = false;
 let _crTypes = null; // lazily loaded from /api/contamination-types
 let _crSelectedTypeId = null;
 // Last type reported this session — pre-selected on the next report so a whole
@@ -16876,26 +16886,44 @@ function biReportContam() {
 }
 
 function openContamReport(bagId, batchId, zoneId) {
-  _crBagId = bagId || null;
+  _crTargets = bagId ? [{ bag: bagId, batch: batchId || null }] : [];
   _crBatchId = batchId || null;
   _crZoneId = zoneId || null;
-  _crSelectedTypeId = _crLastTypeId;
-  _crSeverity = 'minor';
-  _crPhotos = [];
-  // Reset form
-  document.getElementById('cr-notes').value = '';
-  document.getElementById('cr-photo-status').textContent = '';
-  document.getElementById('cr-target').textContent = bagId
-    ? t('contam.targetBag', { bag: bagId, batch: batchId || '—' })
-    : t('contam.targetBatch', { batch: batchId || '—' });
-  // Reset severity buttons to 'minor' active
-  document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.sev === 'minor');
-  });
-  // Auto-MOVE default tracks severity: off for minor, on for major/lost.
-  // Worker can still toggle it manually before submit.
-  const autoMoveEl = document.getElementById('cr-auto-move');
-  if (autoMoveEl) autoMoveEl.checked = false;
+  _crOpenForm(false);
+}
+
+// Das Formular über die Beutel öffnen, die der Scanner schon gesammelt hat.
+function crOpenCollected() {
+  if (!_crTargets.length) return;
+  // Bei einem Beutel steht die Charge im Kopf des Formulars; bei mehreren aus
+  // verschiedenen Chargen gibt es keine gemeinsame, und jeder Bericht bekommt
+  // seine eigene aus der Sammelliste.
+  _crBatchId = _crTargets.length === 1 ? _crTargets[0].batch : null;
+  _crZoneId = null;
+  _crOpenForm(false);
+}
+
+// keep = true lässt Typ, Schwere, Fotos und Notiz stehen. Das ist der Rückweg
+// aus "+ Scannen": wer zwei Beutel nachträgt, hat sein Foto schon gemacht und
+// den Typ schon getippt.
+function _crOpenForm(keep) {
+  if (!keep) {
+    _crSelectedTypeId = _crLastTypeId;
+    _crSeverity = 'minor';
+    _crPhotos = [];
+    // Reset form
+    document.getElementById('cr-notes').value = '';
+    document.getElementById('cr-photo-status').textContent = '';
+    // Reset severity buttons to 'minor' active
+    document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.sev === 'minor');
+    });
+    // Auto-MOVE default tracks severity: off for minor, on for major/lost.
+    // Worker can still toggle it manually before submit.
+    const autoMoveEl = document.getElementById('cr-auto-move');
+    if (autoMoveEl) autoMoveEl.checked = false;
+  }
+  _crRenderTargets();
   _renderCrPhotos();
   // Lazy-load types on first open; refresh on later opens to pick up admin edits
   apiGet('/api/contamination-types')
@@ -16912,9 +16940,108 @@ function openContamReport(bagId, batchId, zoneId) {
   document.getElementById('m-contam-report').classList.add('open');
 }
 
+// Die Beutel im Kopf des Formulars, jeder mit einem × zum Streichen, dahinter
+// der Knopf, der die Kamera für weitere holt.
+function _crRenderTargets() {
+  const el = document.getElementById('cr-target');
+  if (!el) return;
+  const add =
+    '<button type="button" id="cr-scan-more" class="cr-target-add">' + esc(t('contam.scanMore')) + '</button>';
+  if (!_crTargets.length) {
+    el.innerHTML = '<span class="cr-target-text">' + esc(t('contam.targetBatch', { batch: _crBatchId || '—' })) + '</span>' + add;
+    return;
+  }
+  const chips = _crTargets
+    .map(
+      (tg) =>
+        '<span class="cr-target-chip">' +
+        esc(tg.bag) +
+        '<button type="button" class="cr-target-x" data-cr-untarget="' +
+        esc(tg.bag) +
+        '" aria-label="' +
+        esc(t('contam.removeBag', { bag: tg.bag })) +
+        '">&times;</button></span>'
+    )
+    .join('');
+  const head =
+    _crTargets.length === 1
+      ? '<span class="cr-target-text">' +
+        esc(t('contam.targetBag', { bag: _crTargets[0].bag, batch: _crTargets[0].batch || '—' })) +
+        '</span>'
+      : '<span class="cr-target-text">' + esc(t('contam.targetBags', { n: _crTargets.length })) + '</span>';
+  el.innerHTML = head + '<div class="cr-target-chips">' + chips + add + '</div>';
+}
+
+// Beutel in die Sammelliste legen — oder wieder heraus, wenn er schon drin ist.
+// Zweimal denselben Beutel zu scannen ist am Regal das übliche Versehen; ihn
+// stumm ein zweites Mal aufzunehmen wären zwei Berichte über einen Beutel.
+function crToggleTarget(bagId, batchId) {
+  const key = (bagId || '').toUpperCase();
+  if (!key) return null;
+  const i = _crTargets.findIndex((tg) => (tg.bag || '').toUpperCase() === key);
+  if (i !== -1) {
+    _crTargets.splice(i, 1);
+    return { bag: bagId, added: false, count: _crTargets.length };
+  }
+  _crTargets.push({ bag: bagId, batch: batchId || null });
+  return { bag: bagId, added: true, count: _crTargets.length };
+}
+
+// Aus dem offenen Formular zurück zum Scannen, ohne das Formular aufzugeben.
+//
+// Am Telefon ist die Kamera der Scanner. Am Tisch hängt ein Handscanner und oft
+// gar keine Kamera — dort tritt das Formular nur zur Seite, und der
+// Melden-Knopf in der Scan-Hülle holt es mit allem Ausgefüllten zurück.
+function crScanMore() {
+  _crResumeForm = true;
+  document.getElementById('m-contam-report').classList.remove('open');
+  const kamera = !window.matchMedia || window.matchMedia('(pointer: coarse)').matches;
+  // Stumm scharfstellen, wo die Kamera aufgeht: die Quittung von
+  // armScanAction() klappt sonst die grüne Scan-Hülle auf, und die liegt
+  // (z-index 900) über dem Kamerabild.
+  if (scan.action !== 'CONTAM') armScanAction('CONTAM', kamera ? { noModal: true } : undefined);
+  if (kamera) openCamScan();
+  else openScanModal();
+  updateSD();
+}
+
+// Sammeln beenden: Kamera zu, Formular auf.
+//
+// Die Kamera muss zu, bevor das Formular aufgeht: beide liegen auf z-index 200,
+// und die Kamera steht im Quelltext dahinter — offen läge sie obenauf und das
+// Formular unsichtbar darunter.
+//
+// Die Marke fällt zuerst, sonst holt closeCamScan() das Formular ein zweites
+// Mal, und zwar über den Weg, der den Entwurf verwirft.
+function crFinishCollect() {
+  const keep = _crResumeForm;
+  _crResumeForm = false;
+  if (document.getElementById('m-camscan').classList.contains('open')) closeCamScan();
+  if (keep) _crOpenForm(true);
+  else crOpenCollected();
+}
+
+// Das Formular zur Seite legen: × oben rechts und der Tipp neben das Fenster.
+//
+// Beides schloss den Bericht und warf alles weg. Bei einem Beutel war das ein
+// Formular; bei acht sind es acht Scans, die ein Fehltipp am Rand kostet — und
+// am Telefon ist der Rand da, wo der Daumen hält. Also bleibt beides stehen,
+// und der ⚠-Knopf mit seiner Zahl bzw. "Melden (N)" holt es zurück.
+function crStashReport() {
+  document.getElementById('m-contam-report').classList.remove('open');
+  if (_crTargets.length) _crResumeForm = true;
+  updateSD();
+}
+
+// Abbrechen: weg ist weg. Der eine Weg, der die gesammelten Beutel wirklich
+// verwirft — sonst stünden sie beim nächsten Bericht wieder da, und niemand
+// würde sie dort suchen.
 function closeContamReport() {
   document.getElementById('m-contam-report').classList.remove('open');
   _crPhotos = [];
+  _crTargets = [];
+  _crResumeForm = false;
+  updateSD();
 }
 
 function _crLocalizedName(t) {
@@ -17199,24 +17326,44 @@ async function _paDone() {
   _renderCrPhotos();
 }
 
+// Ein Bericht je Beutel — Typ, Schwere, Fotos und Notiz gelten für alle. Ohne
+// gescannten Beutel bleibt der Bericht über die Charge, wie er es immer war.
+// Jeder Eintrag bekommt seine eigene report_uuid: die Warteschlange spielt den
+// Rumpf unverändert nach, und ohne eigene Kennung fielen die Beutel dabei auf
+// einen einzigen Bericht zusammen.
+function crReportBags() {
+  if (!_crTargets.length) return [{ bag_id: null, batch_id: _crBatchId || null, report_uuid: newScanUuid() }];
+  return _crTargets.map((tg) => ({
+    bag_id: tg.bag,
+    batch_id: tg.batch || _crBatchId || null,
+    report_uuid: newScanUuid()
+  }));
+}
+
 async function _crSubmit() {
   if (!_crSelectedTypeId) {
     setFb('err', t('contam.errNoType'));
     return;
   }
+  // Alle Beutel wieder aus der Meldung genommen und trotzdem gesendet: ohne
+  // Beutel und ohne Charge wäre das ein Bericht über nichts, und niemand könnte
+  // ihm hinterher ansehen, worüber er sein sollte.
+  if (!_crTargets.length && !_crBatchId && !_crZoneId) {
+    setFb('err', t('contam.errNoTarget'));
+    return;
+  }
   const submitBtn = document.getElementById('cr-submit');
   submitBtn.disabled = true;
   try {
+    const bags = crReportBags();
     const body = {
-      bag_id: _crBagId,
-      batch_id: _crBatchId,
+      bags,
       zone_id: _crZoneId,
       type_id: _crSelectedTypeId,
       severity: _crSeverity,
       notes: document.getElementById('cr-notes').value.trim(),
       photos: _crPhotos,
-      auto_move: !!document.getElementById('cr-auto-move')?.checked,
-      report_uuid: newScanUuid()
+      auto_move: !!document.getElementById('cr-auto-move')?.checked
     };
     const r = await apiPost('/api/contamination-reports', body);
     if (r && r.error) {
@@ -17229,6 +17376,16 @@ async function _crSubmit() {
       // Service worker queued the report because the network was unreachable.
       // The browse list won't have this entry yet — replayed when WiFi returns.
       setFb('warn', t('contam.reportQueued'));
+    } else if (bags.length > 1) {
+      // Eine ganze Reihe auf einmal: die Nummer eines einzelnen Berichts sagt
+      // hier nichts, die Anzahl schon.
+      const moved = r.autoMovedCount || 0;
+      setFb(
+        'ok',
+        moved
+          ? t('contam.reportsSavedAutoMoved', { n: bags.length, moved: moved })
+          : t('contam.reportsSaved', { n: bags.length })
+      );
     } else {
       // If the server actually moved the bag to CONTAM, surface that in the
       // toast so the worker isn't surprised by the new scan-log entry.
@@ -18938,7 +19095,10 @@ function updateCamHud() {
 // Nothing about the modes changed; they simply have a second door now. Toggling
 // the same action off returns to plain scanning, so the button that armed it is
 // also the way back out.
-function armScanAction(val) {
+// opts.noModal: quittieren, ohne die grüne Scan-Hülle aufzuklappen. Die liegt
+// über der Kamera, und wer den Vorgang setzt, um gleich zu scannen, will das
+// Bild sehen und nicht die Hülle davor.
+function armScanAction(val, opts) {
   if (!ACTIONS.includes(val)) return;
   const keepTo = val === scan.action && scan.to;
   scan.action = val;
@@ -18961,7 +19121,8 @@ function armScanAction(val) {
       REMOVE: t('scanFb.actionRemove'),
       HARVEST: t('scanFb.actionHarvest'),
       CONTAM: t('scanFb.actionContam')
-    }[val]
+    }[val],
+    opts && opts.noModal ? { noModal: true } : undefined
   );
   // Ten places assign scan.action and only two used to refresh this, so the
   // button could sit lit while ADD was armed — and the next bag scanned got
@@ -18970,8 +19131,16 @@ function armScanAction(val) {
 }
 // Arm CONTAM, or stand down if it is already armed. The camera stays open
 // either way: a worker walking a rack reports several bags in a row.
+//
+// Liegen Beutel in der Sammelliste, heißt derselbe Knopf "fertig, jetzt
+// melden": das Formular geht auf, statt die gescannten Beutel wegzuwerfen.
+// Wegwerfen kann man sie weiter — mit dem ✗ daneben, das den Scan zurücksetzt.
 function toggleContamScan() {
   if (scan.action === 'CONTAM') {
+    if (_crTargets.length) {
+      crFinishCollect();
+      return;
+    }
     scan.action = null;
     updateSD();
     setFb('ok', t('scanFb.actionCleared'));
@@ -18986,6 +19155,18 @@ function updateCamContamBtn() {
   const on = scan.action === 'CONTAM';
   b.classList.toggle('on', on);
   b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  // Der Zähler ist die einzige Rückmeldung darüber, wieviel schon gesammelt
+  // ist, solange die Kamera das Bild füllt.
+  const badge = document.getElementById('cam-contam-count');
+  if (badge) {
+    const n = _crTargets.length;
+    badge.textContent = String(n);
+    badge.hidden = !n;
+  }
+  b.setAttribute(
+    'aria-label',
+    _crTargets.length ? t('contam.reportN', { n: _crTargets.length }) : t('scan.contamAria')
+  );
 }
 
 function updateSD() {
@@ -19019,8 +19200,16 @@ function updateSD() {
   if (scan.count > 0) countChip.classList.add('count-bump');
   // Session end button
   document.getElementById('btn-end-session').style.display = sessionEntries.length > 0 ? '' : 'none';
+  // Der Weg ins Kontaminations-Formular für alle, die am Tisch mit dem
+  // Handscanner sammeln: die Kamera-Leiste mit dem ⚠-Knopf sehen die nicht.
+  const collectBtn = document.getElementById('btn-contam-collect');
+  if (collectBtn) {
+    collectBtn.style.display = _crTargets.length ? '' : 'none';
+    collectBtn.textContent = t('contam.reportN', { n: _crTargets.length });
+  }
   // Also sync camera HUD if it exists
   updateCamHud();
+  updateCamContamBtn();
 }
 // Tap the To chip (scan modal or camera HUD) to set the destination by hand.
 // Normally it comes from scanning a location barcode, but a shelf label can be
@@ -19048,6 +19237,11 @@ function scanPickDestination() {
 }
 function resetScan() {
   scan = { action: null, from: null, to: null, count: scan.count, harvestBag: null };
+  // Zurücksetzen heißt auch: die gesammelten Beutel sind weg. Sie hier stehen
+  // zu lassen hieße, sie zu einem späteren Bericht mitzunehmen, den niemand
+  // über sie schreiben wollte.
+  _crTargets = [];
+  _crResumeForm = false;
   // It clears scan.action, and it is bound to a button inside the open camera
   // HUD — so without this the CONTAM toggle beside it stayed lit and pressed
   // over a disarmed scanner, and the next bad bag got the neutral sheet.
@@ -19572,9 +19766,34 @@ function processScan(raw) {
       return;
     }
     if (scan.action === 'CONTAM') {
-      // Stay in CONTAM mode after the modal opens — workers reporting a row of
-      // contaminated bags can keep scanning without re-arming the action.
-      openContamReport(isBag ? val : null, batchId, null);
+      // Eine ganze Charge hat keine Beutelnummer — dafür gibt es nichts zu
+      // sammeln, das Formular geht wie bisher sofort auf.
+      if (!isBag) {
+        // Es sei denn, es liegen schon Beutel in der Liste: die Meldung über
+        // die ganze Charge würde sie ersetzen, ohne dass jemand es sieht.
+        if (_crTargets.length) {
+          setFb('err', t('contam.batchWhileCollecting', { n: _crTargets.length }));
+          return;
+        }
+        // Die Kamera muss zu, sonst läge sie über dem Formular (beide z-index
+        // 200, die Kamera steht im Quelltext dahinter).
+        closeCamScan();
+        openContamReport(null, batchId, null);
+        return;
+      }
+      // Sonst wird gesammelt: der Scanner bleibt in CONTAM, die Kamera bleibt
+      // offen, und der Beutel legt sich zu den anderen. Das Formular kommt
+      // einmal am Ende — vorher stand es nach jedem einzelnen Scan im Weg.
+      const r = crToggleTarget(val, batchId);
+      _scanBeep(r.added ? 800 : 500, 60);
+      setFb(
+        'ok',
+        r.added ? t('contam.collected', { bag: val, n: r.count }) : t('contam.uncollected', { bag: val, n: r.count })
+      );
+      // Ein offenes Formular zeigt die Liste mit — am Tisch scannt man mit dem
+      // Handscanner weiter, während es aufsteht.
+      if (document.getElementById('m-contam-report').classList.contains('open')) _crRenderTargets();
+      updateSD();
       return;
     }
     if (scan.action === 'ADD' && !scan.to) {
@@ -23592,6 +23811,17 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
+  // Die Kamera zuzumachen ist am Telefon das Zeichen "fertig" — der grüne Haken
+  // tut nichts anderes. Steht CONTAM und liegen Beutel in der Sammelliste, ist
+  // das Formular das, was jetzt drankommt; ohne das führte der Haken ins Leere
+  // und acht Scans lägen unsichtbar herum. Dasselbe gilt für den Rückweg aus
+  // "+ Scannen", der dabei seinen halb ausgefüllten Entwurf mitbringt.
+  //
+  // Nur solange CONTAM steht: wer den Vorgang abräumt und einen Beutel
+  // nachschlägt, bekommt sein Beutel-Fenster und nicht den alten Entwurf davor.
+  // Die Klasse ist oben schon gefallen, crFinishCollect() ruft also nicht
+  // zurück hierher.
+  if (scan.action === 'CONTAM' && (_crResumeForm || _crTargets.length)) crFinishCollect();
   // Closing the camera ends inoculant-picking; without this every later bag scan
   // would keep feeding a form the worker has already left. Captured first — the
   // restore below needs to know who opened the camera, and clearing it before
@@ -23792,11 +24022,26 @@ function initEventListeners() {
   });
 
   // Contamination report modal wiring
-  $('cls-cr').addEventListener('click', closeContamReport);
+  // × und Rand legen zur Seite, Abbrechen verwirft. Vor dem Sammeln war das
+  // dasselbe; jetzt hängen acht Scans daran.
+  $('cls-cr').addEventListener('click', crStashReport);
   $('cr-cancel').addEventListener('click', closeContamReport);
   $('cr-submit').addEventListener('click', _crSubmit);
   document.getElementById('m-contam-report').addEventListener('click', (e) => {
-    if (e.target.id === 'm-contam-report') closeContamReport();
+    if (e.target.id === 'm-contam-report') crStashReport();
+  });
+  // Beutelliste im Kopf des Formulars — Delegation, weil sie sich mit jedem
+  // Scan neu zeichnet.
+  $('cr-target').addEventListener('click', (e) => {
+    if (e.target.closest('#cr-scan-more')) {
+      crScanMore();
+      return;
+    }
+    const x = e.target.closest('[data-cr-untarget]');
+    if (!x) return;
+    crToggleTarget(x.getAttribute('data-cr-untarget'), null);
+    _crRenderTargets();
+    updateSD();
   });
   // Type picker — event delegation since the grid is re-rendered on selection
   $('cr-type-grid').addEventListener('click', (e) => {
@@ -24089,6 +24334,9 @@ function initEventListeners() {
   $('cls-18').addEventListener('click', closeScanModal);
   $('set-19').addEventListener('click', resetScan);
   $('btn-20').addEventListener('click', openBatchAdd);
+  // crFinishCollect, nicht crOpenCollected: wer über "+ Beutel scannen" hier
+  // gelandet ist, bekommt seinen Entwurf zurück statt eines leeren Formulars.
+  $('btn-contam-collect').addEventListener('click', crFinishCollect);
   $('btn-end-session').addEventListener('click', endScanSession);
   // Destination chips are tappable — pick a target when its barcode can't be scanned.
   $('chip-to').addEventListener('click', scanPickDestination);
