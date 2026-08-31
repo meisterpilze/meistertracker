@@ -8590,7 +8590,7 @@ function locUndo() {
 // Rückfall in getAvgComp(), also drei Vorgaben für dieselbe Frage. Hergeleitet
 // wird sie weiterhin, wo es geht: aus dem Rezept der Sorte, sonst aus dem
 // Schnitt über alle Rezepte. Das hier ist der Boden darunter.
-const NB_BAG_KG_DEFAULT = 4.3;
+const NB_BAG_KG_DEFAULT = 3.8;
 // Welche Gewichte angeboten werden, steht an den Knöpfen — nicht hier.
 //
 // Vorher stand die Liste zweimal im Code ('wbtn-3', 'wbtn-5') und ein drittes
@@ -8945,7 +8945,7 @@ let _nbDefaultsApplied = false;
 // Hochzählen, wenn sich die angebotenen Beutelgewichte ändern: nbApplyDefaults
 // verwirft ein gespeichertes Gewicht mit älterem Stempel genau einmal, damit die
 // neue Vorgabe auf einem Gerät ankommt, das die App schon kennt.
-const NB_DEFAULTS_WEIGHT_V = 2;
+const NB_DEFAULTS_WEIGHT_V = 3;
 function nbSaveDefaults() {
   try {
     const g = (id) => (document.getElementById(id) || {}).value;
@@ -25717,7 +25717,7 @@ function wkbRender() {
            <input type="text" inputmode="numeric" id="wkb-qty" value="${WKB.qty}" /></div>
          <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
            <div class="wkf-chipsrow">` +
-      [3.5, 4.3, 5]
+      [3.5, 3.8, 4.3, 5]
         .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
         .join('') +
       `</div></div>
