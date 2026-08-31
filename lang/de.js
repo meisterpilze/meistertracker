@@ -248,6 +248,8 @@ window.LANG['de'] = {
   'sub.title': 'Substrat ansetzen',
   'sub.desc': 'Menge fertiges Substrat und Rezept angeben. Nur dieser Schritt bucht Pellets, Kleie und Gips vom Lager ab — die Chargen darunter ziehen dann Kilo aus dem Ansatz.',
   'sub.recipe': 'Rezept',
+  'sub.blendTitle': 'Mischung',
+  'sub.blendReset': 'Zurück zum Rezept',
   'sub.targetKg': 'kg fertiges Substrat',
   'sub.notes': 'Notiz',
   'sub.create': 'Neues Substrat',

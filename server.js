@@ -780,6 +780,23 @@ function validateLengths(data, limits) {
   }
   return null;
 }
+// Die Anteile, mit denen ein Ansatz vom Rezept der Sorte abweichen darf.
+//
+// Die Grenzen sind weit gefasst: sie fangen den Tippfehler ab (700 statt 70,
+// ein leeres Feld als 0 % Feuchte), sie schreiben nicht vor, was ein sinnvolles
+// Rezept ist. Ob die Zahlen zusammen aufgehen — Kleie und Mais unter 100 %,
+// Zielfeuchte über der Restfeuchte der Sackware — entscheidet computeMixBatch,
+// wo die Rechnung steht, die sonst daran scheitern würde.
+function validateMixOverride(mix) {
+  if (mix === undefined || mix === null) return null;
+  if (typeof mix !== 'object' || Array.isArray(mix)) return 'mix must be an object';
+  return validateRanges(mix, {
+    branPct: { min: 0, max: 95 },
+    cornPct: { min: 0, max: 95 },
+    gypsumPct: { min: 0, max: 20 },
+    moisturePct: { min: 20, max: 90 }
+  });
+}
 // Validate ISO date strings (YYYY-MM-DD or full ISO)
 function validateDate(value, fieldName) {
   if (!value) return null;
@@ -7306,15 +7323,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vrng);
         return;
       }
+      const vmix = validateMixOverride(data.mix);
+      if (vmix) {
+        jsonErr(res, 400, vmix);
+        return;
+      }
       try {
         const found = db.getMixRecipe(database, data.recipeStrainId);
         if (!found) {
           jsonOk(res, { hasRecipe: false });
           return;
         }
+        const adj = db.mixWithOverride(found.recipe, data.mix);
         jsonOk(res, {
           hasRecipe: true,
-          mix: db.computeMixBatch(found.recipe, data.targetKg, found.opts),
+          mix: db.computeMixBatch(adj.recipe, data.targetKg, found.opts),
+          adjusted: adj.adjusted,
           recipeLabel: found.strain.name + ' (' + found.strain.kuerzel + ')'
         });
       } catch (err) {
@@ -7351,6 +7375,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.subId)) {
         jsonErr(res, 400, 'subId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      const vmixc = validateMixOverride(data.mix);
+      if (vmixc) {
+        jsonErr(res, 400, vmixc);
         return;
       }
       try {

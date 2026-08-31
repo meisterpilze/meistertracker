@@ -8590,7 +8590,7 @@ function locUndo() {
 // Rückfall in getAvgComp(), also drei Vorgaben für dieselbe Frage. Hergeleitet
 // wird sie weiterhin, wo es geht: aus dem Rezept der Sorte, sonst aus dem
 // Schnitt über alle Rezepte. Das hier ist der Boden darunter.
-const NB_BAG_KG_DEFAULT = 4.3;
+const NB_BAG_KG_DEFAULT = 3.8;
 // Welche Gewichte angeboten werden, steht an den Knöpfen — nicht hier.
 //
 // Vorher stand die Liste zweimal im Code ('wbtn-3', 'wbtn-5') und ein drittes
@@ -8945,7 +8945,7 @@ let _nbDefaultsApplied = false;
 // Hochzählen, wenn sich die angebotenen Beutelgewichte ändern: nbApplyDefaults
 // verwirft ein gespeichertes Gewicht mit älterem Stempel genau einmal, damit die
 // neue Vorgabe auf einem Gerät ankommt, das die App schon kennt.
-const NB_DEFAULTS_WEIGHT_V = 2;
+const NB_DEFAULTS_WEIGHT_V = 3;
 function nbSaveDefaults() {
   try {
     const g = (id) => (document.getElementById(id) || {}).value;
@@ -9360,6 +9360,112 @@ function sbPreviewSoon() {
   _sbTimer = setTimeout(sbPreview, 250);
 }
 
+// ── Die Mischung im Ansatz-Formular ──────────────────────────
+// Das Rezept der Sorte belegt die Felder, danach gehören sie diesem einen
+// Ansatz. Wer 70/30 mischen will, tippt hier 70 — vorher hätte er dafür das
+// Rezept der Sorte umschreiben müssen, und damit jeden künftigen Ansatz mit.
+const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-corn', 'sb-gyp', 'sb-rh'];
+function _sbNum(id) {
+  const el = document.getElementById(id);
+  if (!el || el.value === '') return null;
+  const v = parseDecimal(el.value);
+  return Number.isFinite(v) ? v : null;
+}
+function _sbSet(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.value = v == null ? '' : String(Math.round(v * 100) / 100);
+}
+// Das Rezept der gewählten Sorte, so wie die Mischrechnung es liest. Der
+// Pelletanteil steht nicht darin: er ist der Rest, und zwei Zahlen für dieselbe
+// Größe driften auseinander.
+function sbRecipeOf(strainId) {
+  const ms = (mushroomStrains || []).find((x) => x.id === strainId);
+  if (!ms) return null;
+  return {
+    branPct: +ms.recWheatbranPct || 0,
+    cornPct: +ms.recCornPct || 0,
+    gypsumPct: +ms.recGypsumPct || 0,
+    moisturePct: +ms.recRhPct || 0
+  };
+}
+// Sorte gewechselt: die Felder kommen frisch aus deren Rezept. Eine 70/30, die
+// für den vorigen Ansatz getippt wurde, still auf die nächste Sorte
+// mitzunehmen, wäre die unangenehmere Überraschung.
+function sbRecipeChanged() {
+  sbFillBlendFromRecipe();
+  sbPreview();
+}
+function sbFillBlendFromRecipe() {
+  const rec = sbRecipeOf(parseInt(document.getElementById('sb-recipe').value, 10));
+  const cornWrap = document.getElementById('sb-corn-wrap');
+  if (!rec) {
+    SB_BLEND_FIELDS.forEach((id) => _sbSet(id, null));
+    if (cornWrap) cornWrap.style.display = 'none';
+    sbBlendDirty();
+    return;
+  }
+  _sbSet('sb-wb', rec.branPct);
+  _sbSet('sb-corn', rec.cornPct);
+  _sbSet('sb-hw', 100 - rec.branPct - rec.cornPct);
+  _sbSet('sb-gyp', rec.gypsumPct);
+  _sbSet('sb-rh', rec.moisturePct);
+  // Maismehl steht nur da, wo das Rezept welches vorsieht — sonst wäre es ein
+  // Feld, das bei zwölf von dreizehn Sorten 0 sagt und nur Platz kostet.
+  if (cornWrap) cornWrap.style.display = rec.cornPct > 0 ? '' : 'none';
+  sbBlendDirty();
+}
+// Pellets und Kleie sind eine Zahl in zwei Feldern: was nicht Kleie (und Mais)
+// ist, ist Pellets. Wer eines tippt, hat das andere mitgesagt — sonst stünde da
+// eine Mischung, die nicht 100 % ergibt, und die Rechnung nähme stillschweigend
+// eine andere.
+function sbBlendEdited(which) {
+  const corn = _sbNum('sb-corn') || 0;
+  const rest = Math.max(0, 100 - corn);
+  if (which === 'hw') {
+    const hw = Math.min(rest, Math.max(0, _sbNum('sb-hw') || 0));
+    _sbSet('sb-wb', rest - hw);
+  } else if (which === 'wb' || which === 'corn') {
+    const wb = Math.min(rest, Math.max(0, _sbNum('sb-wb') || 0));
+    _sbSet('sb-hw', rest - wb);
+  }
+  sbBlendDirty();
+  sbPreviewSoon();
+}
+// Weicht die Mischung vom Rezept ab? Steuert den Rückweg — und nur den; was
+// wirklich angesetzt wird, entscheidet der Server anhand derselben Zahlen.
+function sbBlendAdjusted() {
+  const rec = sbRecipeOf(parseInt(document.getElementById('sb-recipe').value, 10));
+  if (!rec) return false;
+  const gleich = (a, b) => Math.abs((a == null ? 0 : a) - b) < 1e-9;
+  return !(
+    gleich(_sbNum('sb-wb'), rec.branPct) &&
+    gleich(_sbNum('sb-corn'), rec.cornPct) &&
+    gleich(_sbNum('sb-gyp'), rec.gypsumPct) &&
+    gleich(_sbNum('sb-rh'), rec.moisturePct)
+  );
+}
+function sbBlendDirty() {
+  const btn = document.getElementById('sb-blend-reset');
+  if (btn) btn.style.display = sbBlendAdjusted() ? '' : 'none';
+}
+function sbResetBlend() {
+  sbFillBlendFromRecipe();
+  sbPreview();
+}
+// Was an den Server geht: nur die vier Zahlen, die die Mischrechnung liest.
+function sbBlend() {
+  const o = {};
+  const wb = _sbNum('sb-wb');
+  if (wb != null) o.branPct = wb;
+  const corn = _sbNum('sb-corn');
+  if (corn != null) o.cornPct = corn;
+  const gyp = _sbNum('sb-gyp');
+  if (gyp != null) o.gypsumPct = gyp;
+  const rh = _sbNum('sb-rh');
+  if (rh != null) o.moisturePct = rh;
+  return o;
+}
+
 async function sbPreview() {
   const out = document.getElementById('sb-out');
   const btn = document.getElementById('sb-go');
@@ -9372,7 +9478,8 @@ async function sbPreview() {
     out.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
     return;
   }
-  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg });
+  const blend = sbBlend();
+  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg, mix: blend });
   if (!r || r.error) {
     out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
     return;
@@ -9382,7 +9489,12 @@ async function sbPreview() {
     return;
   }
   const m = r.mix;
-  _sbLast = { recipeStrainId, kg, mix: m, label: r.recipeLabel };
+  // Die Beschriftung trägt die Mischung, sobald sie vom Rezept abweicht — und
+  // zwar dieselbe, die der Server dem Ansatz gibt. Der Bestätigungsdialog soll
+  // sagen, was gleich in der Liste steht.
+  const label =
+    r.recipeLabel + (r.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
+  _sbLast = { recipeStrainId, kg, mix: m, label: label, blend: blend };
   if (btn) btn.disabled = false;
   const stock = (inventory && inventory.stock) || {};
   // Red when the shelf cannot cover the line. The server clamps a deduction to
@@ -9472,6 +9584,9 @@ async function createSubstrateBatchUI() {
         subId,
         recipeStrainId: _sbLast.recipeStrainId,
         targetKg: _sbLast.kg,
+        // Dieselben Zahlen, die die Vorschau gerechnet hat. Sie hier wegzulassen
+        // hieße, etwas anderes anzulegen als das, was auf dem Schirm stand.
+        mix: _sbLast.blend,
         notes: (document.getElementById('sb-notes').value || '').trim()
       });
       if (!r || r.error) {
@@ -25965,7 +26080,7 @@ function wkbRender() {
            <input type="text" inputmode="numeric" id="wkb-qty" value="${WKB.qty}" /></div>
          <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
            <div class="wkf-chipsrow">` +
-      [3.5, 4.3, 5]
+      [3.5, 3.8, 4.3, 5]
         .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
         .join('') +
       `</div></div>
