@@ -991,6 +991,8 @@ window.LANG['pt'] = {
   'sub.title': 'Preparar substrato',
   'sub.desc': 'Indique a quantidade de substrato pronto e a receita. Só este passo retira pellets, farelo e gesso do stock — os lotes abaixo tiram quilos da preparação.',
   'sub.recipe': 'Receita',
+  'sub.blendTitle': 'Mistura',
+  'sub.blendReset': 'Voltar à receita',
   'sub.targetKg': 'kg de substrato pronto',
   'sub.notes': 'Nota',
   'sub.create': 'Novo substrato',

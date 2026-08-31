@@ -4034,6 +4034,36 @@ function computeMixBatch(rec, targetKg, opts) {
   };
 }
 
+// Ein Rezept mit den Zahlen, die im Ansatz-Formular stehen.
+//
+// Das Rezept der Sorte war bisher die Vorschrift: wer 70/30 statt 80/20 mischen
+// wollte, musste das Rezept der Sorte umschreiben — und damit jeden künftigen
+// Ansatz mit. Ein einzelner Versuchsansatz kostete also eine Änderung an der
+// Sorte und eine zweite, um sie zurückzunehmen; die zweite vergisst man.
+//
+// Jetzt ist das Rezept die Vorlage, und der Ansatz darf davon abweichen. Was
+// der Ansatz wirklich war, stand ohnehin schon in seinen eigenen Spalten
+// (hardwood_pct, wheatbran_pct, … liegen seit jeher pro Ansatz in
+// substrate_batches) — es gab nur keinen Weg, sie anders zu füllen als über die
+// Sorte.
+//
+// Übernommen wird nur, was genannt ist; alles andere bleibt beim Rezept. Der
+// Hartholzanteil steht nicht in der Liste, weil er keine Eingabe ist: er ist
+// der Rest (1 − Kleie − Mais), und zwei Zahlen für dieselbe Größe driften.
+function mixWithOverride(recipe, ov) {
+  if (!ov || typeof ov !== 'object') return { recipe, adjusted: false };
+  const out = { ...recipe };
+  let adjusted = false;
+  for (const k of ['branPct', 'cornPct', 'gypsumPct', 'moisturePct']) {
+    const v = ov[k];
+    if (v == null || !Number.isFinite(+v)) continue;
+    if (Math.abs(+v - (+recipe[k] || 0)) < 1e-9) continue;
+    out[k] = +v;
+    adjusted = true;
+  }
+  return { recipe: out, adjusted };
+}
+
 // Read a Sorte's recipe as a blend, plus the site-wide assumptions. Returns null
 // when the Sorte has no usable recipe — Reishi and Cordyceps ship that way.
 function getMixRecipe(db, strainId) {
@@ -4069,7 +4099,18 @@ function getMixRecipe(db, strainId) {
 function createSubstrateBatch(db, b, userId) {
   const found = getMixRecipe(db, b.recipeStrainId);
   if (!found) throw new Error('Diese Sorte hat noch kein Rezept. Bitte zuerst ein Rezept speichern.');
-  const mix = computeMixBatch(found.recipe, b.targetKg, found.opts);
+  const adj = mixWithOverride(found.recipe, b.mix);
+  const mix = computeMixBatch(adj.recipe, b.targetKg, found.opts);
+  // Ein abweichender Ansatz trägt seine Mischung im Namen. Ohne das stünde in
+  // der Liste "Blue Oyster (BO)" über einer 70/30-Mischung, und wer später
+  // sucht, warum dieser eine Ansatz sich anders verhalten hat, findet den
+  // Unterschied nur, wenn er die Zeile aufklappt.
+  const label =
+    found.strain.name +
+    ' (' +
+    found.strain.kuerzel +
+    ')' +
+    (adj.adjusted ? ' · ' + Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct) : '');
   const created = b.created || new Date().toISOString();
   db.exec('BEGIN');
   try {
@@ -4083,7 +4124,7 @@ function createSubstrateBatch(db, b, userId) {
     ).run(
       b.subId,
       b.recipeStrainId,
-      found.strain.name + ' (' + found.strain.kuerzel + ')',
+      label,
       mix.targetKg,
       mix.targetKg,
       mix.hardwoodPct,
@@ -9236,6 +9277,14 @@ const SAFE_ERROR_PREFIXES = [
   'invalid material:',
   'Invalid culture parent:',
   'Substrate composition must total',
+  // Mischen — computeMixBatch. Seit die Anteile im Ansatz-Formular eintippbar
+  // sind, sind das erreichbare Tippfehler und keine Programmfehler mehr: ohne
+  // sie hier läse der Mischende "Internal server error" statt zu erfahren, dass
+  // 6 % Zielfeuchte unter der Restfeuchte der Sackware liegen.
+  'Zielfeuchte ',
+  'Zielmenge muss',
+  'Kleie + Maismehl ergeben ',
+  'Restfeuchte zu hoch',
   'Zone has ',
   'Rack has ',
   'Zone name ',
@@ -10305,6 +10354,7 @@ module.exports = {
   clearScanLog,
   resetOperationalData,
   computeMixBatch,
+  mixWithOverride,
   getMixRecipe,
   createSubstrateBatch,
   listSubstrateBatches,
