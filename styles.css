@@ -2326,6 +2326,19 @@ textarea.is-invalid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+/* Die Anteile im Ansatz-Formular: vier oder fünf kurze Zahlenfelder. Keine
+   feste Spaltenzahl, weil das Maismehl-Feld nur bei den Rezepten dabei ist, die
+   welches vorsehen — und weil am Telefon zwei nebeneinander passen, am Tisch
+   alle. */
+.sb-blend-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px 10px;
+  margin-top: 4px;
+}
+.sb-blend-row label {
+  color: var(--c-text-sec);
+}
 .g4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

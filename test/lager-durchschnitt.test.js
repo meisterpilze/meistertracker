@@ -143,8 +143,10 @@ describe('Lagerdurchschnitt — er kommt aus den Rezepten', () => {
     assert.equal(c.wbPct, 25);
     // Dieselbe Zahl, die auf dem Chargenformular vorausgewählt ist. Sie stand
     // hier einmal auf einem eigenen Wert, neben den Knöpfen und den Rezepten —
-    // eine dritte Vorgabe für dieselbe Frage.
-    assert.equal(c.bagKg, 4.3);
+    // eine dritte Vorgabe für dieselbe Frage. Die Zahl selbst ist bloß die
+    // Vorauswahl; wenn diese Zeile bricht, ist die Vorgabe an einer Stelle
+    // mitgezogen worden und an der anderen nicht.
+    assert.equal(c.bagKg, 3.8);
   });
 
   it('lässt die Körnerbrut-Tüte eine Einstellung — kein Rezept trägt sie', () => {

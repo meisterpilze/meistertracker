@@ -247,6 +247,8 @@ window.LANG['en'] = {
   'sub.title': 'Mix substrate',
   'sub.desc': 'Give an amount of finished substrate and a recipe. Only this step takes pellets, bran and gypsum off the shelf — the Chargen below then draw kilograms out of the mix.',
   'sub.recipe': 'Recipe',
+  'sub.blendTitle': 'Blend',
+  'sub.blendReset': 'Back to the recipe',
   'sub.targetKg': 'kg finished substrate',
   'sub.notes': 'Note',
   'sub.create': 'New substrate',
