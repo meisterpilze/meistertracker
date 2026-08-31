@@ -1427,6 +1427,32 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-btn.on:active {
   background: rgba(220, 38, 38, 0.7);
 }
+/* Zähler der gesammelten Beutel, auf dem CONTAM-Knopf. Der Knopf ist rund und
+   randlos, also sitzt die Zahl als eigene Scheibe an seiner Ecke — im Knopf
+   wäre sie unter dem Warndreieck. */
+.cam-hud-btn {
+  position: relative;
+}
+.cam-hud-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.cam-hud-badge[hidden] {
+  display: none;
+}
 .cam-hud-done {
   background: #16a34a;
 }
@@ -6659,6 +6685,76 @@ tr.ms-off .ms-prog {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
+}
+/* Die Beutel, über die der Bericht geht — einer je Plättchen, mit einem × zum
+   Streichen, dahinter der Knopf für weitere. Am Telefon bricht die Zeile um,
+   statt zu scrollen: eine Reihe können acht Beutel sein. */
+.cr-target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cr-target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 8px;
+  border-radius: 6px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+}
+.cr-target-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Dasselbe Maß wie jeder andere Knopf im Formular: das × steht am Regal
+     zwischen zwei Beuteln und wird mit dem Daumen getroffen, nicht mit der
+     Maus. */
+  width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--c-text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cr-target-x:active {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--c-text);
+}
+.cr-target-add {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 1px dashed var(--c-border);
+  border-radius: 6px;
+  background: none;
+  color: var(--c-text-sec);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cr-target-add:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+/* Ohne gesammelte Beutel steht der Knopf allein hinter dem Text der Charge. */
+.cr-target-text + .cr-target-add {
+  margin-left: 8px;
+}
+/* Melden-Knopf in der Scan-Leiste: rot, weil er das Formular über bereits
+   markierte Beutel öffnet, und das ist der Abschluss des Sammelns. */
+.btn-contam-collect {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
 }
 .contam-type-grid {
   display: grid;

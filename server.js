@@ -1253,6 +1253,38 @@ function savePhotoToDisk(reportId, photo, authUser) {
   };
 }
 
+// Wieviele Beutel ein einzelner Bericht nennen darf. Eine Reihe im Regal sind
+// zwanzig; die Grenze ist da, damit ein kaputter Aufrufer nicht 10.000 Berichte
+// in eine Transaktion schreibt, nicht als Arbeitsgrenze.
+const CONTAM_MAX_TARGETS = 50;
+
+// Die Beutel, die ein Bericht abdeckt.
+//
+// Ein Formular, mehrere Beutel: wer eine kontaminierte Reihe abgeht, scannt sie
+// am Stück und füllt Typ, Schwere, Foto und Notiz einmal aus. Jeder Eintrag
+// bringt seine eigene report_uuid mit, sonst fielen beim Nachspielen aus der
+// Offline-Warteschlange alle Beutel auf denselben Bericht zusammen.
+//
+// Ohne `bags` bleiben die flachen Felder das eine Ziel — so sehen die Rümpfe
+// aus, die vor dieser Änderung in eine Warteschlange gelegt wurden, und die
+// werden nach dem Update noch abgespielt.
+function contamReportTargets(data) {
+  if (!Array.isArray(data.bags)) {
+    return [
+      {
+        bag_id: data.bag_id || null,
+        batch_id: data.batch_id || null,
+        report_uuid: data.report_uuid || null
+      }
+    ];
+  }
+  return data.bags.map((b) => ({
+    bag_id: (b && b.bag_id) || null,
+    batch_id: (b && b.batch_id) || null,
+    report_uuid: (b && b.report_uuid) || null
+  }));
+}
+
 // ── AUTH HELPERS ─────────────────────────────────────────────
 // Session cookie name varies by transport:
 //   - HTTPS → "__Host-session" (the __Host- prefix forces the browser to
@@ -7809,74 +7841,101 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vl);
         return;
       }
+      if (data.bags !== undefined && (!Array.isArray(data.bags) || data.bags.length === 0)) {
+        jsonErr(res, 400, 'bags must be a non-empty array');
+        return;
+      }
+      if (Array.isArray(data.bags) && data.bags.length > CONTAM_MAX_TARGETS) {
+        jsonErr(res, 400, 'bags: at most ' + CONTAM_MAX_TARGETS + ' bags per report');
+        return;
+      }
+      const targets = contamReportTargets(data);
+      const vbl = targets
+        .map((tg) => validateLengths(tg, { bag_id: 100, batch_id: 100, report_uuid: 100 }))
+        .find(Boolean);
+      if (vbl) {
+        jsonErr(res, 400, vbl);
+        return;
+      }
       // Track disk-side photo files written so we can best-effort delete them
       // if the surrounding DB transaction rolls back. Disk writes themselves
       // are not transactional, so on rollback we accept that orphaned files
       // may remain — TODO: write to a temp staging dir and atomically move on
       // commit if this becomes load-bearing.
       const writtenPhotoFiles = [];
-      let reportId = null;
+      const reportIds = [];
       const photoIds = [];
-      let autoMovedScanId = null;
+      const autoMovedScanIds = [];
       try {
         database.exec('BEGIN');
         try {
-          const cr = db.createContaminationReport(database, {
-            ...data,
-            user_id: req.authUser ? req.authUser.user_id : null
-          });
-          reportId = cr.id;
-          // On an offline-replay duplicate (same report_uuid) the report, photos
-          // and auto-MOVE already committed the first time — skip re-running the
-          // side effects so a lost 200 can't create a second report or CONTAM move.
-          const photos = !cr.duplicate && Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
-          for (const p of photos) {
-            const saved = savePhotoToDisk(reportId, p, req.authUser);
-            if (saved) {
-              writtenPhotoFiles.push(path.join(DIR, 'data', saved.rel_path));
-              writtenPhotoFiles.push(path.join(DIR, 'data', saved.thumb_path));
-              photoIds.push(db.addContaminationPhoto(database, reportId, saved));
+          for (const target of targets) {
+            const cr = db.createContaminationReport(database, {
+              ...data,
+              bag_id: target.bag_id,
+              batch_id: target.batch_id,
+              report_uuid: target.report_uuid,
+              user_id: req.authUser ? req.authUser.user_id : null
+            });
+            const reportId = cr.id;
+            reportIds.push(reportId);
+            // On an offline-replay duplicate (same report_uuid) the report, photos
+            // and auto-MOVE already committed the first time — skip re-running the
+            // side effects so a lost 200 can't create a second report or CONTAM move.
+            //
+            // Jeder Beutel bekommt seine eigene Kopie der Fotos. Eine Datei
+            // zwischen Berichten zu teilen wäre sparsamer und ginge beim ersten
+            // Löschen kaputt: der Löschweg hängt die Dateien ab, auf die seine
+            // eigenen Zeilen zeigen, ohne zu fragen, wer sonst noch darauf zeigt.
+            const photos = !cr.duplicate && Array.isArray(data.photos) ? data.photos.slice(0, 4) : [];
+            for (const p of photos) {
+              const saved = savePhotoToDisk(reportId, p, req.authUser);
+              if (saved) {
+                writtenPhotoFiles.push(path.join(DIR, 'data', saved.rel_path));
+                writtenPhotoFiles.push(path.join(DIR, 'data', saved.thumb_path));
+                photoIds.push(db.addContaminationPhoto(database, reportId, saved));
+              }
             }
-          }
-          // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
-          // client didn't explicitly opt out), insert a MOVE scan-log entry that
-          // moves the bag to the first zone with role='contaminated'. Stamps
-          // contamination_reports.scan_log_id to link the two records together.
-          // Skipped silently when (a) auto_move is false, (b) severity is minor,
-          // (c) no bag_id (whole-batch report), (d) no contam zone configured.
-          const wantAutoMove =
-            !cr.duplicate && data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
-          if (wantAutoMove && data.bag_id) {
-            const contamZone = database
-              .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
-              .get();
-            if (contamZone) {
-              const lastLoc = database
-                .prepare(
-                  "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
-                )
-                .get(data.bag_id);
-              const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
-              const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
-              // Use the no-txn variant so this insert is part of the surrounding transaction.
-              const ids = db.appendScanEntriesNoTxn(
-                database,
-                [
-                  {
-                    time: new Date().toISOString(),
-                    action: 'MOVE',
-                    batch: data.batch_id || null,
-                    bag: data.bag_id,
-                    from: lastLoc ? lastLoc.toLoc : null,
-                    to: contamZone.id,
-                    reason: reasonKey
-                  }
-                ],
-                req.authUser ? req.authUser.user_id : null
-              );
-              if (ids && ids.length) {
-                autoMovedScanId = ids[0];
-                db.setContaminationReportScanLogId(database, reportId, autoMovedScanId);
+            // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
+            // client didn't explicitly opt out), insert a MOVE scan-log entry that
+            // moves the bag to the first zone with role='contaminated'. Stamps
+            // contamination_reports.scan_log_id to link the two records together.
+            // Skipped silently when (a) auto_move is false, (b) severity is minor,
+            // (c) no bag_id (whole-batch report), (d) no contam zone configured.
+            const wantAutoMove =
+              !cr.duplicate && data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
+            if (wantAutoMove && target.bag_id) {
+              const contamZone = database
+                .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
+                .get();
+              if (contamZone) {
+                const lastLoc = database
+                  .prepare(
+                    "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
+                  )
+                  .get(target.bag_id);
+                const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
+                const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
+                // Use the no-txn variant so this insert is part of the surrounding transaction.
+                const ids = db.appendScanEntriesNoTxn(
+                  database,
+                  [
+                    {
+                      time: new Date().toISOString(),
+                      action: 'MOVE',
+                      batch: target.batch_id || null,
+                      bag: target.bag_id,
+                      from: lastLoc ? lastLoc.toLoc : null,
+                      to: contamZone.id,
+                      reason: reasonKey
+                    }
+                  ],
+                  req.authUser ? req.authUser.user_id : null
+                );
+                if (ids && ids.length) {
+                  autoMovedScanIds.push(ids[0]);
+                  db.setContaminationReportScanLogId(database, reportId, ids[0]);
+                }
               }
             }
           }
@@ -7897,7 +7956,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           throw innerErr;
         }
         broadcastSSE(res);
-        jsonOk(res, { id: reportId, photoIds, autoMovedScanId });
+        // `id` und `autoMovedScanId` bleiben stehen: ein Bericht über einen
+        // Beutel ist weiter der Normalfall, und die Quittung, die der Client
+        // dafür zeigt, liest genau diese zwei Felder.
+        jsonOk(res, {
+          id: reportIds[0] || null,
+          ids: reportIds,
+          photoIds,
+          autoMovedScanId: autoMovedScanIds[0] || null,
+          autoMovedCount: autoMovedScanIds.length
+        });
       } catch (err) {
         // R-15: photo-cap errors map to 507 Insufficient Storage so the
         // client can display a useful "directory full" message instead of a
