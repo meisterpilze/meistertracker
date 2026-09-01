@@ -7117,7 +7117,7 @@ function _rhythmTaskRowHtml(task, outstanding) {
 }
 // Was ein Tag verlangt: die Regel und die Ausnahme, an einer Stelle.
 //
-// Hier stand eine nackte Abfrage — "Wie viele am 24.08.?" — und ein Feld. Wer
+// Hier stand eine nackte Abfrage — "Wie viele am 25.08.?" — und ein Feld. Wer
 // 72 eintippte, bekam nirgends gesagt, dass er damit eine Ausnahme von den 36
 // des Wochenrhythmus setzte; im Kalender standen danach zwei Zahlen, und keine
 // sagte, welche die Regel war. Zwei Zahlen ohne Beschriftung sind keine zwei
@@ -7126,9 +7126,9 @@ function _rhythmTaskRowHtml(task, outstanding) {
 // Also beide untereinander, jede benannt, und ihre Summe darunter:
 //
 //   Wochenplan             36   gilt für jeden Montag
-//   Extra nur diese Woche  36   Ausnahme nur für den 24.08.
+//   Extra nur diese Woche  36   Ausnahme nur für den 25.08.
 //   ────────────────────────────────────────────────────
-//   Macht 72 am 24.08.
+//   Macht 72 am 25.08.
 //
 // Gespeichert wird weiterhin eine Zahl je Datum, nämlich die Summe. Das Extra
 // ist eine Art, sie einzugeben, kein zweiter Wert, der irgendwo mitgeführt und
@@ -20187,14 +20187,23 @@ async function loadUsersTab() {
     const tbl = document.getElementById('users-table');
     if (!tbl) return;
     tbl.innerHTML =
-      '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Username</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Role</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Labels kaufen + Versanddaten sehen">Versand</th><th style="text-align:center;padding:6px;border-bottom:1px solid var(--c-border)" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th><th style="text-align:left;padding:6px;border-bottom:1px solid var(--c-border)">Created</th><th style="padding:6px;border-bottom:1px solid var(--c-border)"></th></tr></thead><tbody>' +
+      '<table class="t-cards us-tab" role="table"><thead role="rowgroup"><tr role="row">' +
+      '<th role="columnheader">Username</th>' +
+      '<th role="columnheader">Role</th>' +
+      '<th role="columnheader" title="Darf Labels kaufen + Versanddaten sehen">Versand</th>' +
+      '<th role="columnheader" title="Darf Ernte für den Verkauf freigeben — die Menge, die der Shop anbietet">Freigabe</th>' +
+      '<th role="columnheader">Created</th>' +
+      '<th role="columnheader"></th></tr></thead><tbody role="rowgroup">' +
       users
         .map(
           (u) =>
-            `<tr><td style="padding:6px">${esc(u.username)}</td><td style="padding:6px">${esc(u.role)}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td style="padding:6px;text-align:center">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td style="padding:6px">${u.created ? fmtDt(u.created) : ''}</td><td style="padding:6px">${u.username !== currentUser.username ? `<button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
+            `<tr><td data-mlabel="Username">${esc(u.username)}</td><td data-mlabel="Role">${esc(u.role)}</td><td data-mlabel="Versand">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer versenden">' : `<input type="checkbox" data-action="toggle-ship" data-user-id="${esc(u.id)}" ${u.can_ship ? 'checked' : ''}>`}</td><td data-mlabel="Freigabe">${u.role === 'admin' ? '<input type="checkbox" checked disabled title="Admins dürfen immer freigeben">' : `<input type="checkbox" data-action="toggle-release" data-user-id="${esc(u.id)}" ${u.can_release ? 'checked' : ''}>`}</td><td data-mlabel="Created">${u.created ? fmtDt(u.created) : ''}</td><td class="us-actions">${u.username !== currentUser.username ? `<button class="btn btn-r fs-xs" style="padding:2px 8px" data-action="delete-user" data-user-id="${esc(u.id)}">Delete</button>` : ''}</td></tr>`
         )
         .join('') +
       '</tbody></table>';
+    // Diese Tabelle entsteht erst hier, also kann der Beobachter aus
+    // watchCardTables() sie beim Aufbau der Seite nicht gekannt haben.
+    watchCardTables(tbl);
     tbl.onclick = onUsersTableClick;
   } catch (e) {
     console.error('Failed to load users:', e);
@@ -23660,6 +23669,59 @@ loadData();
 // Primary: SSE for instant updates. Fallback: poll every 30s (was 5s) for stale detection.
 connectSSE();
 setInterval(pollSync, 30000);
+
+// ── The roles the card mode takes away (finding T7) ────────────────────────
+// Below the card breakpoint every table element gets `display: block`, and a
+// browser drops a table's implicit roles the moment its display stops being a
+// table one. What a screen reader hears after that is not a table with rows and
+// columns but a run of paragraphs: no "row 3 of 12", no column association, no
+// way to move by cell. Twelve tables do it, and nothing put the roles back.
+//
+// The shop already fixed the same thing the same way, by hand, 44 times in the
+// three files whose CSS builds cards. The tracker cannot: only the header of
+// each table stands in index.html, the rows are built in a dozen render
+// functions as template literals, and a role written into forty of those
+// literals is forty chances to forget one.
+//
+// So the header carries its roles in the markup and the rows get theirs here.
+// The roles are correct at every width -- they are the implicit roles anyway
+// while the table is a table -- so nothing has to know where the breakpoint is.
+//
+// Direct children only. A cell may hold a table of its own, and its rows are
+// that table's rows, not this one's.
+function stampRowRoles(tbody) {
+  for (const tr of tbody.children) {
+    if (tr.tagName !== 'TR') continue;
+    tr.setAttribute('role', 'row');
+    for (const zelle of tr.children) {
+      if (zelle.tagName === 'TD') zelle.setAttribute('role', 'cell');
+      else if (zelle.tagName === 'TH') zelle.setAttribute('role', 'rowheader');
+    }
+  }
+}
+
+// One observer per table body rather than one call per render: the twelve
+// bodies are filled from a dozen places, several of them more than once, and a
+// thirteenth place added tomorrow would silently render a table nobody can read
+// by row. childList only, so stamping an attribute cannot re-trigger it.
+const kartenBeobachtet = new WeakSet();
+function watchCardTables(bereich) {
+  for (const tbody of (bereich || document).querySelectorAll('.t-cards > tbody')) {
+    // Ein zweiter Beobachter auf demselben Rumpf stempelt dasselbe zweimal.
+    // Nötig, seit auch Tabellen mitgezählt werden, die erst zur Laufzeit
+    // entstehen: die Benutzertabelle wird bei jedem Rendern neu gebaut.
+    if (kartenBeobachtet.has(tbody)) continue;
+    kartenBeobachtet.add(tbody);
+    stampRowRoles(tbody);
+    new MutationObserver(() => stampRowRoles(tbody)).observe(tbody, { childList: true });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', watchCardTables, { once: true });
+} else {
+  watchCardTables();
+}
 
 // Register service worker for PWA / offline support
 if ('serviceWorker' in navigator) {

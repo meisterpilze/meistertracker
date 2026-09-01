@@ -2685,24 +2685,24 @@
                 </div>
               </div>
               <div style="overflow-x: auto">
-                <table id="t-batches" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
-                      <th class="sortable" data-sort="qty" data-i18n="th.qty">Qty</th>
-                      <th class="sortable" data-sort="days" data-i18n="th.inc">Inc</th>
-                      <th data-i18n="th.substrate">Substrate</th>
-                      <th data-i18n="th.source">Source</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created">Created</th>
-                      <th class="sortable" data-sort="due" data-i18n="th.due">Due</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status">Status</th>
-                      <th data-i18n="th.notes">Notes</th>
-                      <th></th>
+                <table id="t-batches" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId" role="columnheader">Batch ID</th>
+                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
+                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
+                      <th class="sortable" data-sort="qty" data-i18n="th.qty" role="columnheader">Qty</th>
+                      <th class="sortable" data-sort="days" data-i18n="th.inc" role="columnheader">Inc</th>
+                      <th data-i18n="th.substrate" role="columnheader">Substrate</th>
+                      <th data-i18n="th.source" role="columnheader">Source</th>
+                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
+                      <th class="sortable" data-sort="due" data-i18n="th.due" role="columnheader">Due</th>
+                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
+                      <th data-i18n="th.notes" role="columnheader">Notes</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="batches-body"></tbody>
+                  <tbody id="batches-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3127,19 +3127,19 @@
                 />
               </div>
               <div style="overflow-x: auto">
-                <table id="t-harvest" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th class="sortable" data-sort="time" data-i18n="th.date">Date</th>
-                      <th class="sortable" data-sort="batch" data-i18n="th.batch">Batch</th>
-                      <th class="sortable" data-sort="bag" data-i18n="th.bag">Bag</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
-                      <th class="sortable" data-sort="flush" data-i18n="th.flush">Flush</th>
-                      <th class="sortable" data-sort="grams" data-i18n="th.grams">Grams</th>
+                <table id="t-harvest" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th class="sortable" data-sort="time" data-i18n="th.date" role="columnheader">Date</th>
+                      <th class="sortable" data-sort="batch" data-i18n="th.batch" role="columnheader">Batch</th>
+                      <th class="sortable" data-sort="bag" data-i18n="th.bag" role="columnheader">Bag</th>
+                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
+                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
+                      <th class="sortable" data-sort="flush" data-i18n="th.flush" role="columnheader">Flush</th>
+                      <th class="sortable" data-sort="grams" data-i18n="th.grams" role="columnheader">Grams</th>
                     </tr>
                   </thead>
-                  <tbody id="harvest-body"></tbody>
+                  <tbody id="harvest-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3503,18 +3503,18 @@
               </div>
 
               <div style="overflow-x: auto">
-                <table id="t-orders" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th data-i18n="orders.th.channel">Kanal</th>
-                      <th data-i18n="orders.th.order">Bestellung</th>
-                      <th data-i18n="orders.th.customer">Kunde</th>
-                      <th data-i18n="orders.th.items">Artikel</th>
-                      <th data-i18n="orders.th.shipBy">Liefern bis</th>
-                      <th data-i18n="orders.th.status">Status</th>
+                <table id="t-orders" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th data-i18n="orders.th.channel" role="columnheader">Kanal</th>
+                      <th data-i18n="orders.th.order" role="columnheader">Bestellung</th>
+                      <th data-i18n="orders.th.customer" role="columnheader">Kunde</th>
+                      <th data-i18n="orders.th.items" role="columnheader">Artikel</th>
+                      <th data-i18n="orders.th.shipBy" role="columnheader">Liefern bis</th>
+                      <th data-i18n="orders.th.status" role="columnheader">Status</th>
                     </tr>
                   </thead>
-                  <tbody id="orders-body"></tbody>
+                  <tbody id="orders-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3528,18 +3528,18 @@
                 Offene Bestellungen minus reserviert. „Start bis" = frühestes Lieferdatum minus Vorlaufzeit.
               </div>
               <div style="overflow-x: auto">
-                <table id="t-demand" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th data-i18n="orders.th.product">Produkt</th>
-                      <th data-i18n="orders.th.demand">Bedarf</th>
-                      <th data-i18n="orders.th.fromStock">vom Lager</th>
-                      <th data-i18n="orders.th.toProduce">produzieren</th>
-                      <th data-i18n="orders.th.startBy">Start bis</th>
-                      <th data-i18n="orders.th.components">Komponenten</th>
+                <table id="t-demand" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th data-i18n="orders.th.product" role="columnheader">Produkt</th>
+                      <th data-i18n="orders.th.demand" role="columnheader">Bedarf</th>
+                      <th data-i18n="orders.th.fromStock" role="columnheader">vom Lager</th>
+                      <th data-i18n="orders.th.toProduce" role="columnheader">produzieren</th>
+                      <th data-i18n="orders.th.startBy" role="columnheader">Start bis</th>
+                      <th data-i18n="orders.th.components" role="columnheader">Komponenten</th>
                     </tr>
                   </thead>
-                  <tbody id="demand-body"></tbody>
+                  <tbody id="demand-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3714,16 +3714,16 @@
               </div>
 
               <div style="overflow-x: auto">
-                <table id="t-catalog" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th data-i18n="orders.th.product">Produkt</th>
-                      <th data-i18n="orders.th.category">Kategorie</th>
-                      <th data-i18n="orders.th.sku">SKU</th>
-                      <th></th>
+                <table id="t-catalog" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th data-i18n="orders.th.product" role="columnheader">Produkt</th>
+                      <th data-i18n="orders.th.category" role="columnheader">Kategorie</th>
+                      <th data-i18n="orders.th.sku" role="columnheader">SKU</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="orders-catalog-body"></tbody>
+                  <tbody id="orders-catalog-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3734,15 +3734,15 @@
                 Bestände aus dem zentralen Lager. Hier gesetzt wirkt überall (Chargen + Bedarf).
               </div>
               <div style="overflow-x: auto">
-                <table id="t-rawstock" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th data-i18n="orders.mat.name">Material</th>
-                      <th data-i18n="orders.rawStockKg">Bestand (kg)</th>
-                      <th></th>
+                <table id="t-rawstock" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th data-i18n="orders.mat.name" role="columnheader">Material</th>
+                      <th data-i18n="orders.rawStockKg" role="columnheader">Bestand (kg)</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="orders-rawstock-body"></tbody>
+                  <tbody id="orders-rawstock-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3753,24 +3753,24 @@
             <div class="card">
               <div class="sec" data-i18n="orders.customersTitle">Kunden</div>
               <div style="overflow-x: auto">
-                <table id="t-customers" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th data-i18n="orders.th.customer">Kunde</th>
-                      <th data-i18n="orders.th.channels">Kanäle</th>
-                      <th data-i18n="orders.th.orders">Bestellungen</th>
-                      <th data-i18n="orders.th.ltv">Umsatz</th>
-                      <th data-i18n="orders.th.last">Letzte</th>
-                      <th data-i18n="orders.th.type">Status</th>
+                <table id="t-customers" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th data-i18n="orders.th.customer" role="columnheader">Kunde</th>
+                      <th data-i18n="orders.th.channels" role="columnheader">Kanäle</th>
+                      <th data-i18n="orders.th.orders" role="columnheader">Bestellungen</th>
+                      <th data-i18n="orders.th.ltv" role="columnheader">Umsatz</th>
+                      <th data-i18n="orders.th.last" role="columnheader">Letzte</th>
+                      <th data-i18n="orders.th.type" role="columnheader">Status</th>
                       <!-- Admin-only; empty for everyone else. This is where a
                            marketplace account-closure request gets carried out.
                            The eBay deletion endpoint records such requests but
                            never erases on its own — it is unauthenticated by
                            necessity, so the irreversible part lives behind auth. -->
-                      <th id="orders-customers-privacy-th" hidden data-i18n="orders.th.privacy">Datenschutz</th>
+                      <th id="orders-customers-privacy-th" hidden data-i18n="orders.th.privacy" role="columnheader">Datenschutz</th>
                     </tr>
                   </thead>
-                  <tbody id="orders-customers-body"></tbody>
+                  <tbody id="orders-customers-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -3951,24 +3951,24 @@
                 />
               </div>
               <div style="overflow-x: auto">
-                <table id="t-grain" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId">Batch ID</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
-                      <th class="sortable" data-sort="qty" data-i18n="th.qty">Qty</th>
-                      <th data-i18n="th.inc">Inc</th>
-                      <th data-i18n="th.substrate">Substrate</th>
-                      <th data-i18n="th.source">Source</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created">Created</th>
-                      <th class="sortable" data-sort="due" data-i18n="th.due">Due</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status">Status</th>
-                      <th data-i18n="th.notes">Notes</th>
-                      <th></th>
+                <table id="t-grain" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId" role="columnheader">Batch ID</th>
+                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
+                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
+                      <th class="sortable" data-sort="qty" data-i18n="th.qty" role="columnheader">Qty</th>
+                      <th data-i18n="th.inc" role="columnheader">Inc</th>
+                      <th data-i18n="th.substrate" role="columnheader">Substrate</th>
+                      <th data-i18n="th.source" role="columnheader">Source</th>
+                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
+                      <th class="sortable" data-sort="due" data-i18n="th.due" role="columnheader">Due</th>
+                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
+                      <th data-i18n="th.notes" role="columnheader">Notes</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="grain-body"></tbody>
+                  <tbody id="grain-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -4006,21 +4006,21 @@
                 </div>
               </div>
               <div style="overflow-x: auto">
-                <table id="t-cultures" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th class="sortable" data-sort="id" data-i18n="th.id">ID</th>
-                      <th class="sortable" data-sort="type" data-i18n="th.type">Type</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain">Strain</th>
-                      <th class="sortable" data-sort="parentId" data-i18n="th.parent">Parent</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created">Created</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status">Status</th>
-                      <th data-i18n="th.notes">Notes</th>
-                      <th></th>
+                <table id="t-cultures" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th class="sortable" data-sort="id" data-i18n="th.id" role="columnheader">ID</th>
+                      <th class="sortable" data-sort="type" data-i18n="th.type" role="columnheader">Type</th>
+                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
+                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
+                      <th class="sortable" data-sort="parentId" data-i18n="th.parent" role="columnheader">Parent</th>
+                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
+                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
+                      <th data-i18n="th.notes" role="columnheader">Notes</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="cultures-body"></tbody>
+                  <tbody id="cultures-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
@@ -4954,25 +4954,25 @@
               </div>
               <div class="fs-xs" id="log-count" style="color: var(--c-text-muted); margin-bottom: 4px"></div>
               <div style="overflow-x: auto">
-                <table id="t-log" class="t-cards">
-                  <thead>
-                    <tr>
-                      <th id="tgl-38" data-i18n="settings.time" style="cursor: pointer">
+                <table id="t-log" class="t-cards" role="table">
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th id="tgl-38" data-i18n="settings.time" style="cursor: pointer" role="columnheader">
                         Time <span id="log-sort-time"></span>
                       </th>
-                      <th data-i18n="settings.user">User</th>
-                      <th id="tgl-39" data-i18n="settings.action" style="cursor: pointer">
+                      <th data-i18n="settings.user" role="columnheader">User</th>
+                      <th id="tgl-39" data-i18n="settings.action" style="cursor: pointer" role="columnheader">
                         Action <span id="log-sort-action"></span>
                       </th>
-                      <th data-i18n="batch.batchId">Batch</th>
-                      <th data-i18n="settings.bag">Bag</th>
-                      <th data-i18n="settings.from">From</th>
-                      <th data-i18n="settings.to">To</th>
-                      <th data-i18n="batch.species">Species</th>
-                      <th></th>
+                      <th data-i18n="batch.batchId" role="columnheader">Batch</th>
+                      <th data-i18n="settings.bag" role="columnheader">Bag</th>
+                      <th data-i18n="settings.from" role="columnheader">From</th>
+                      <th data-i18n="settings.to" role="columnheader">To</th>
+                      <th data-i18n="batch.species" role="columnheader">Species</th>
+                      <th role="columnheader"></th>
                     </tr>
                   </thead>
-                  <tbody id="log-body"></tbody>
+                  <tbody id="log-body" role="rowgroup"></tbody>
                 </table>
               </div>
               <div id="log-load-more" style="text-align: center; padding: 8px; display: none">
@@ -6320,25 +6320,25 @@
             -->
             <div class="fs-meta" id="harvestrelease-feed" style="display: none; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px"></div>
             <div style="overflow-x: auto">
-              <table id="t-harvestrelease" class="t-cards">
-                <thead>
-                  <tr>
-                    <th data-i18n="harvestFeed.colSpecies">Species</th>
-                    <th data-i18n="harvestFeed.colHarvested">Harvested</th>
-                    <th data-i18n="harvestFeed.colRelease">Release (kg)</th>
+              <table id="t-harvestrelease" class="t-cards" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th data-i18n="harvestFeed.colSpecies" role="columnheader">Species</th>
+                    <th data-i18n="harvestFeed.colHarvested" role="columnheader">Harvested</th>
+                    <th data-i18n="harvestFeed.colRelease" role="columnheader">Release (kg)</th>
                     <!--
                       The column the page was missing. Bookings the shop has
                       taken, per species — shown next to the release, never
                       subtracted from it: the release is a number somebody typed
                       and it does not move behind their back.
                     -->
-                    <th data-i18n="harvestFeed.colPromised">Promised</th>
-                    <th data-i18n="harvestFeed.colFree">Free</th>
-                    <th data-i18n="harvestFeed.colUntil">Valid until</th>
-                    <th></th>
+                    <th data-i18n="harvestFeed.colPromised" role="columnheader">Promised</th>
+                    <th data-i18n="harvestFeed.colFree" role="columnheader">Free</th>
+                    <th data-i18n="harvestFeed.colUntil" role="columnheader">Valid until</th>
+                    <th role="columnheader"></th>
                   </tr>
                 </thead>
-                <tbody id="harvestrelease-body"></tbody>
+                <tbody id="harvestrelease-body" role="rowgroup"></tbody>
                 <!--
                   Bookings the feed could not tie to a release row — from a
                   receiver older than the `species` field. Named rather than
@@ -6401,17 +6401,17 @@
               Abholorts. Diese Liste wird hier nicht bearbeitet.
             </p>
             <div style="overflow-x: auto">
-              <table id="t-pickups" class="t-cards">
-                <thead>
-                  <tr>
-                    <th data-i18n="pickups.th.when">Wann</th>
-                    <th data-i18n="pickups.th.place">Ort</th>
-                    <th data-i18n="pickups.th.order">Bestellung</th>
-                    <th data-i18n="pickups.th.items">Positionen</th>
-                    <th data-i18n="pickups.th.state">Stand</th>
+              <table id="t-pickups" class="t-cards" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th data-i18n="pickups.th.when" role="columnheader">Wann</th>
+                    <th data-i18n="pickups.th.place" role="columnheader">Ort</th>
+                    <th data-i18n="pickups.th.order" role="columnheader">Bestellung</th>
+                    <th data-i18n="pickups.th.items" role="columnheader">Positionen</th>
+                    <th data-i18n="pickups.th.state" role="columnheader">Stand</th>
                   </tr>
                 </thead>
-                <tbody id="pickups-body"></tbody>
+                <tbody id="pickups-body" role="rowgroup"></tbody>
               </table>
             </div>
           </div>
