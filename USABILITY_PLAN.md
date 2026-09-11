@@ -183,7 +183,16 @@ so the phone block could stack the cards and could not stop them shrinking to th
 their own text (137px inside a 343px page); and the Übersicht toolbar is 382px wide at
 375px, invisible to `measure-mobile.js` for as long as the section around it was hidden.*
 
+*Reversed on 2026-09-11, on the phone's evidence: with the list on top the app opened on
+what is due and the seven tiles — the reason the page exists — began below the fold. Tiles
+first now, the list under them; the same page answers the same two questions in the other
+order. The same day the Chargen page's **Neue Charge** button stopped opening the long form
+and opens the guided flow instead, so there is one way to make a Charge; and Laborarbeit got
+the label dialog a Charge already had, where the person is standing, instead of a result
+card inside a form the quick dialog never shows. See `test/etiketten-nach-laborarbeit.test.js`.*
+
 ### Phase 3 — Field-level validation and a toast · §3.5 · **shipped**
+
 
 One `toast(msg, kind)` and one `fieldError(input, msg)`, then convert the 77 sites:
 

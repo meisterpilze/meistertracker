@@ -1222,15 +1222,7 @@ function openStab(page, sub) {
   // scan log once per rack and once per zone, and this panel is display:none
   // until somebody asks for it.
   if (page === 'batch' && sub === 'locations') renderStatus();
-  if (page === 'batch' && sub === 'new') {
-    _fillNbProducts();
-    if (!_nbDefaultsApplied) {
-      nbApplyDefaults();
-      _nbDefaultsApplied = true;
-    }
-    // Refill every time: bags get consumed and created between visits.
-    inocRender('nb');
-  }
+  if (page === 'batch' && sub === 'new') nbEnsureReady();
   if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
   if (page === 'lab' && sub === 'cultures') renderCultures();
@@ -8942,6 +8934,23 @@ function nbSubSum() {
 // NOT remembered — they are per-batch decisions and a stale strain carried
 // over would be a silent mislabel.
 let _nbDefaultsApplied = false;
+// Das lange Chargenformular, bevor jemand hineinschreibt: Produkte laden, beim
+// ersten Mal in einer Sitzung die gemerkten Vorgaben setzen, die Beimpfungsliste
+// auffrischen (Beutel werden zwischen zwei Chargen verbraucht und angelegt).
+//
+// Das stand in openStab('batch', 'new') und war der einzige Grund, warum der
+// Schnelldialog und der geführte Ablauf erst auf die Chargenseite wechselten,
+// bevor sie das Rezept eintrugen — sonst hätte der erste Besuch der Sitzung
+// überschrieben, was sie gerade gesetzt hatten. Jetzt bleiben sie, wo sie sind:
+// das Formular ist ihre Ablage, nicht ihr Ziel.
+function nbEnsureReady() {
+  _fillNbProducts();
+  if (!_nbDefaultsApplied) {
+    nbApplyDefaults();
+    _nbDefaultsApplied = true;
+  }
+  inocRender('nb');
+}
 // Hochzählen, wenn sich die angebotenen Beutelgewichte ändern: nbApplyDefaults
 // verwirft ein gespeichertes Gewicht mit älterem Stempel genau einmal, damit die
 // neue Vorgabe auf einem Gerät ankommt, das die App schon kennt.
@@ -15908,8 +15917,11 @@ function msQuickConfirm() {
     setv('lw-source', '');
     setv('lw-notes', '');
     msQuickClose();
-    go('lab', 'n-lab');
-    openStab('lab', 'work'); // populates lw-parent via lwUpdate()
+    // Kein Wechsel auf die Laborseite. Der ging dorthin, damit openStab()
+    // lwUpdate() rief — und ließ den Arbeiter dann auf dem langen Formular
+    // stehen, ohne ein Etikett. lwUpdate() füllt lw-parent auch so; das
+    // Etiketten-Fenster kommt aus logLabWork() von selbst, egal wo man steht.
+    lwUpdate();
     const parent = document.getElementById('lw-parent');
     if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
     logLabWork();
@@ -15943,13 +15955,13 @@ function msQuickConfirm() {
   // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
   // leak into the next batch — so carry it over the close explicitly.
   const _inocPicked = _inoc.slice();
-  // Land on the Charge page BEFORE prefilling. Der Etiketten-Dialog kommt
-  // inzwischen von selbst hoch, egal wo man steht — aber die Reihenfolge bleibt:
-  // openStab() ruft beim ersten Besuch einer Sitzung nbApplyDefaults(), und das
-  // überschriebe jedes Feld, das das Rezept gleich setzt.
+  // Formular bereitmachen, BEVOR das Rezept hineingeschrieben wird: beim ersten
+  // Mal in einer Sitzung setzt nbEnsureReady() die gemerkten Vorgaben, und die
+  // überschrieben sonst jedes Feld, das das Rezept gleich setzt. Ein Wechsel auf
+  // die Chargenseite ist dafür nicht nötig — der Etiketten-Dialog kommt von
+  // selbst hoch, egal wo man steht.
   msQuickClose();
-  go('batch', 'n-batch');
-  openStab('batch', 'new');
+  nbEnsureReady();
   nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: _inocPicked });
   createBatch();
 }
@@ -16168,11 +16180,6 @@ function lwUpdate() {
   const kbRows = document.getElementById('lw-kb-rows'),
     qtyRow = document.getElementById('lw-qty-row');
   const strainTextRow = document.getElementById('lw-strain-text-row');
-  const gsResult = document.getElementById('gs-result');
-  const lwResult = document.getElementById('lw-result');
-  // Hide result cards when switching work type
-  if (type !== 'KB' && gsResult) gsResult.style.display = 'none';
-  if (lwResult) lwResult.style.display = 'none';
   if (type === 'KB') {
     pr.style.display = 'none';
     sr.style.display = 'none';
@@ -16304,7 +16311,7 @@ function logLabWork() {
     created: new Date().toISOString()
   }));
   cultures.push(...newC);
-  apiPost('/api/cultures', { cultures: newC }).then((r) => {
+  const saved = apiPost('/api/cultures', { cultures: newC }).then((r) => {
     if (r && r.cultureBarcodes) {
       for (const [id, bc] of Object.entries(r.cultureBarcodes)) {
         barcodeRegistry.set(bc, { type: 'culture', id });
@@ -16319,15 +16326,14 @@ function logLabWork() {
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
   lwPreview();
-  // Show result card with created IDs and print button
-  lastCreatedCultureIds = newC.map((c) => c.id);
-  document.getElementById('lw-ids').innerHTML = lastCreatedCultureIds
-    .map(
-      (id) =>
-        `<span class="fs-micro" style="font-family:monospace;background:var(--c-card);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
-    )
-    .join('');
-  document.getElementById('lw-result').style.display = 'block';
+  // Der Schluss jedes Weges, der Kulturen anlegt: das Etiketten-Fenster, wie
+  // nbPlaceAndPrint() für Beutel. Vorher stand hier eine Ergebniskarte mit
+  // Druckknopf im langen Formular — und der Schnelldialog, der dieses Formular
+  // nur noch als Ablage benutzt, ließ den Arbeiter ohne ein Etikett stehen.
+  cprShow(
+    newC.map((c) => c.id),
+    saved
+  );
 }
 function renderLabLog() {
   const body = document.getElementById('lab-log-body');
@@ -16574,31 +16580,12 @@ function createGrainBatch() {
   gsPreview();
   updateTodoBadge();
   renderBatches();
-  // Show zone picker — required before print
-  openZonePickModal(batchObj, bagIds, function () {
-    document.getElementById('gs-bags').innerHTML = bagIds
-      .map(
-        (b) =>
-          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
-      )
-      .join('');
-    document.getElementById('gs-result').style.display = 'block';
-    goToPrintGrainBatch();
-  });
-}
-function goToPrintGrainBatch() {
-  go('print', 'n-print');
-  setTimeout(() => {
-    openStab('print', 'bags');
-    document.getElementById('print-batch-search').value = '';
-    fillBatchSelect('');
-    const last = batches[batches.length - 1];
-    if (last) {
-      const s = document.getElementById('print-batch');
-      s.value = last.batchId;
-      renderBagPreview();
-    }
-  }, 100);
+  // Einlagern, dann Etiketten — derselbe Schluss wie bei jeder anderen Charge.
+  // Die Körnerbrut hatte ihren eigenen: eine Ergebniskarte im langen Formular
+  // und ein Sprung auf die Druckseite. Vom Schnelldialog aus hieß das, auf einer
+  // Seite zu landen, die man nie aufgemacht hatte, während die Charge aus dem
+  // Assistenten ihr Fenster bekam, wo man stand. Ein Weg, ein Fenster.
+  nbPlaceAndPrint(batchObj, bagIds);
 }
 
 // ─── LINEAGE ─────────────────────────────────────────────────
@@ -18616,6 +18603,10 @@ function renderBagPreview() {
 
 let selectedLabIds = new Set();
 let lastCreatedCultureIds = [];
+// Die Speicherung, auf die das Fenster wartet, bevor es druckt: die Nummern-
+// Barcodes kommen mit der Antwort des Servers, und ein Etikett, das vorher
+// gedruckt wird, trägt die alte Kodierung aus der ID (siehe labLabelItems).
+let _cprSaved = null;
 function goToPrintLabCulture() {
   selectedLabIds = new Set(lastCreatedCultureIds);
   go('print', 'n-print');
@@ -18624,6 +18615,60 @@ function goToPrintLabCulture() {
     renderLabList();
     renderLabPreview();
   }, 150);
+}
+// Der Schluss jedes Weges, der Kulturen anlegt: das Etiketten-Fenster — was
+// nbPlaceAndPrint() für Beutel ist, ohne die Zonenwahl davor, weil eine Kultur
+// keinen Standort hat. Kommt von selbst hoch, egal wo man steht; die Seite mit
+// dem langen Formular ist seit dem Schnelldialog nur noch dessen Ablage.
+function cprShow(ids, saved) {
+  lastCreatedCultureIds = ids.slice();
+  _cprSaved = saved || null;
+  const head = document.getElementById('cpr-head');
+  if (head) head.textContent = t('lab.printFor', { n: ids.length });
+  const list = document.getElementById('cpr-ids');
+  if (list)
+    list.innerHTML = ids
+      .map(
+        (id) =>
+          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
+      )
+      .join('');
+  const m = document.getElementById('m-culture-print');
+  if (m) m.classList.add('open');
+}
+function cprClose() {
+  const m = document.getElementById('m-culture-print');
+  if (m) m.classList.remove('open');
+}
+async function printCultureLabelsInline() {
+  const ids = lastCreatedCultureIds;
+  if (!ids.length) {
+    toast(t('print.selectCulture'), 'err');
+    return;
+  }
+  // Ein schneller Daumen schlägt sonst die Antwort des Servers: erst speichern
+  // lassen, dann drucken. Schlägt das Speichern fehl, steht die Kultur trotzdem
+  // schon im Speicher — dann druckt das Etikett mit der ID-Kodierung, wie die
+  // Druckseite es auch täte.
+  if (_cprSaved) await _cprSaved.catch(() => {});
+  const modeEl = document.getElementById('lab-mode');
+  const qrEl = document.getElementById('lab-qr');
+  const zpl = makeLabZPL(ids, modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
+  if (!zpl || !zpl.includes('^XA')) {
+    toast(t('print.noLabels'), 'err');
+    return;
+  }
+  const err = await sendToPrinter(zpl);
+  if (err) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'lab_labels.zpl';
+    a.click();
+  } else {
+    printedFb(t('print.printedLab', { n: ids.length }));
+    cprClose();
+  }
 }
 function renderLabList() {
   const filter = document.getElementById('lab-filter').value,
@@ -22854,7 +22899,10 @@ const GS_TYPES = [
     // page, and what they last had it filtered to is part of it.
     go: (rec) => {
       gsNav(rec.btn, rec.page);
-      if (rec.stab) gsStab(rec.page, rec.stab);
+      if (rec.lead) {
+        const b = document.getElementById(rec.lead);
+        if (b) b.click();
+      } else if (rec.stab) gsStab(rec.page, rec.stab);
     }
   }
 ];
@@ -22910,7 +22958,7 @@ function gsMatch(index, query) {
   const q = String(query || '')
     .trim()
     .toLowerCase();
-  if (!q) return index.filter((r) => r.type === 'page' && !r.stab);
+  if (!q) return index.filter((r) => r.type === 'page' && !r.stab && !r.lead);
   const scored = [];
   index.forEach((rec) => {
     const rank = gsRank(rec, q);
@@ -23010,13 +23058,21 @@ function gsPageIndex() {
     // deshalb aus dem Suchindex: "Neue Charge" und "Laborarbeit" waren ueber
     // die Suche nicht mehr zu finden, seit sie Knoepfe wurden. Sie tragen ihre
     // Beschriftung selbst.
+    //
+    // Der Treffer drueckt den Leitknopf, nicht das Panel: beide Knoepfe oeffnen
+    // inzwischen den Schnelldialog bzw. den gefuehrten Ablauf, und das Panel
+    // dahinter ist nur noch dessen Ablage. Der Eintrag nannte vorher ausserdem
+    // keinen Seitenknopf — gsNav() lief damit in go(page, undefined) und warf.
+    const lead = strip.parentElement.querySelector('.btn-lead');
     strip.parentElement.querySelectorAll('.sp[data-stab-lead]').forEach((sp) => {
       out.push({
         type: 'page',
         id: home + ' › ' + t(sp.dataset.stabLead),
         sub: '',
         page,
-        stab: sp.id.replace('sp-' + page + '-', '')
+        btn: nav.id,
+        lead: lead ? lead.id : '',
+        stab: lead ? '' : sp.id.replace('sp-' + page + '-', '')
       });
     });
     strip.querySelectorAll('.stab').forEach((st) => {
@@ -24709,7 +24765,11 @@ function initEventListeners() {
   // Was added to the markup and never wired, so the room view — the only place
   // bags can be selected and moved in bulk — was unreachable by tapping.
   $('st-batch-locations').addEventListener('click', () => openStab('batch', 'locations'));
-  $('btn-batch-new').addEventListener('click', () => openStab('batch', 'new'));
+  // Derselbe Weg wie die Kachel auf der Arbeitsgang-Seite: der geführte Ablauf,
+  // nicht das lange Formular. Zwei Wege zur selben Charge hießen zwei Formulare
+  // mit zwei Verhalten, und das lange endete ohne Fenster. sp-batch-new bleibt
+  // als Ablage, aus der createBatch() liest — aufgeschlagen wird es nicht mehr.
+  $('btn-batch-new').addEventListener('click', wkbOpen);
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
@@ -24864,6 +24924,17 @@ function initEventListeners() {
   document.getElementById('m-batch-print').addEventListener('click', (e) => {
     if (e.target.id === 'm-batch-print') nbpClose();
   });
+  // Das Kultur-Gegenstück, gleiche Bauart: siehe cprShow().
+  $('prt-cpr').addEventListener('click', printCultureLabelsInline);
+  $('prt-cpr-opts').addEventListener('click', () => {
+    cprClose();
+    goToPrintLabCulture();
+  });
+  $('cpr-later').addEventListener('click', cprClose);
+  $('cpr-close').addEventListener('click', cprClose);
+  document.getElementById('m-culture-print').addEventListener('click', (e) => {
+    if (e.target.id === 'm-culture-print') cprClose();
+  });
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
@@ -24932,8 +25003,6 @@ function initEventListeners() {
   $('gs-weight-lines').addEventListener('input', gsPreview);
   $('gs-add-line').addEventListener('click', gsAddLine);
   if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
-  $('prt-gs').addEventListener('click', goToPrintGrainBatch);
-  $('prt-lw').addEventListener('click', goToPrintLabCulture);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
   $('lw-type').addEventListener('change', lwUpdate);
@@ -26256,10 +26325,11 @@ function wkbCreateFromShelf() {
   if (!ms) return;
   const r = wkbRecipe();
   wkfClose();
-  // Zuerst hin, dann füllen: openStab() ruft beim ersten Besuch einer Sitzung
-  // nbApplyDefaults(), und das überschrieb bisher alles, was hier gesetzt wurde.
-  go('batch', 'n-batch');
-  openStab('batch', 'new');
+  // Erst bereitmachen, dann füllen: beim ersten Mal in einer Sitzung setzt
+  // nbEnsureReady() die gemerkten Vorgaben, und die überschrieben sonst alles,
+  // was hier gesetzt wird. Die Seite wechselt dafür nicht mehr — siehe
+  // msQuickConfirm, derselbe Grund.
+  nbEnsureReady();
   // Das Rezept des Assistenten überschreibt das der Sorte, wo es abweicht;
   // Kultur und Beimpfung bleiben leer, weil dieser Weg keine kennt.
   nbFillFromStrain(ms, {

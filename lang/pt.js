@@ -2014,6 +2014,7 @@ window.LANG['pt'] = {
   'batch.printTitle': 'Imprimir etiquetas',
   'batch.printLater': 'Depois',
   'batch.printFor': '{id} — {n} sacos armazenados',
+  'lab.printFor': '{n} cultura(s) criada(s)',
   'work.installWhy': 'Coloque o app no celular — abre por um ícone, sem a barra do navegador.',
   'work.installApple': 'Para adicionar: toque em Compartilhar abaixo e depois em “Adicionar à Tela de Início”.',
   'work.installDo': 'Adicionar à tela inicial',

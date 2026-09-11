@@ -26,9 +26,10 @@ const HTML = quelle('index.html');
 const WEGE = [
   ['createBatch', 'nbPlaceAndPrint'],
   ['wkbCreate', 'nbPlaceAndPrint'],
-  // Die Körnerbrut bringt ihren eigenen Zonenwähler mit — sie druckt andere
-  // Etiketten und hat ihren eigenen Ergebnisblock.
-  ['createGrainBatch', 'openZonePickModal']
+  // Die Körnerbrut hatte ihren eigenen Schluss — eigener Zonenwähler, eigene
+  // Ergebniskarte, Sprung auf die Druckseite. Seit dem 11.09.2026 nimmt sie
+  // denselben wie jede Charge: ein Weg, ein Fenster.
+  ['createGrainBatch', 'nbPlaceAndPrint']
 ];
 
 describe('Einlagern nach dem Anlegen', () => {

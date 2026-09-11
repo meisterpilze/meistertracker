@@ -806,6 +806,37 @@
       </div>
     </div>
 
+    <!-- Etiketten für Kulturen: erscheint direkt nach dem Anlegen von Laborarbeit,
+         wie m-batch-print nach einer Charge — nur ohne Zonenwahl davor, eine
+         Kultur hat keinen Standort. Vorher stand das als Karte im langen
+         Laborformular; der Schnelldialog, der das Formular nur noch als Ablage
+         benutzt, zeigte sie nie. -->
+    <div class="modal-bg" id="m-culture-print" role="dialog" aria-modal="true" aria-labelledby="m-culture-print-title" hidden>
+      <div class="modal" style="max-width: 480px">
+        <div class="wkf-head">
+          <h3 id="m-culture-print-title" data-i18n="batch.printTitle">Etiketten drucken</h3>
+          <button id="cpr-close" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="cpr-head" style="font-size: 13px; color: var(--c-text-sec); margin-bottom: 8px"></div>
+        <div class="sec" data-i18n="lab.createdIds">Created culture IDs</div>
+        <div
+          id="cpr-ids"
+          style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto"
+        ></div>
+        <div class="nbp-btns">
+          <button id="prt-cpr" class="btn btn-p" data-i18n="lab.printLabelsNow">Print labels for these cultures</button>
+          <div class="nbp-sub">
+            <button id="prt-cpr-opts" class="btn" data-i18n="batch.printOptions">Print options…</button>
+            <button id="cpr-later" class="btn" data-i18n="batch.printLater">Später</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Move bag modal -->
     <div class="modal-bg" id="m-locmove" role="dialog" aria-modal="true" aria-labelledby="lm-title" hidden>
       <div class="modal" style="max-width: 420px">
@@ -2263,34 +2294,13 @@
              they happen. Every tile opens a flow that works by clicking — the
              scanner stays the fast path on the tablet, but nothing here needs it. -->
         <div class="page active" id="p-work">
-          <!-- What is due, above the seven jobs that do it. This lived on the
-               Dashboard, and the two screens pointed at each other: a strip here read
-               "Weißt du nicht, was ansteht?" and sent you there, and the first thing
-               there was two buttons that came straight back — the same redundancy the
-               speed-dial FAB was deleted for. One screen answers both halves now, and
-               the Dashboard keeps what only it has. -->
-          <div class="dash-top-row">
-            <!-- Batch tasks (worker-first — top of page) -->
-            <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
-              <!-- No All/Urgent-only filter: the urgency sections below ARE the
-                   filter, and "urgent only" hid the sections it duplicated. -->
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
-              </div>
-              <div id="dash-batch-tasks"></div>
-            </div>
-
-            <!-- Split batches (bags of the same batch across multiple stages) used
-                 to be its own card here. It is now the LIEGENGEBLIEBEN section of
-                 the Batch tasks card: same data (getSplitBatches), but read as an
-                 instruction alongside the dated work instead of a separate table. -->
-          </div>
-          <!-- Diese Überschrift stand ganz oben, über der Liste. Sie beschreibt
-               aber die Kacheln: "Wähle den Arbeitsgang" ist keine Antwort auf
-               "was steht an", sondern auf "ich habe gerade etwas getan". Die
-               Seite beantwortet zwei Fragen, und eine Überschrift, die nur für
-               die untere gilt, stand über der oberen. Jetzt steht sie da, wo
-               sie hingehört, und die Liste trägt ihre eigene. -->
+          <!-- Die sieben Arbeitsgänge zuerst. Die Tagesliste stand darüber, seit
+               sie vom Dashboard hierherzog — und am Telefon hieß das: die App
+               öffnet auf einer Liste, und die Kacheln, deretwegen man sie
+               aufgemacht hat, liegen unter dem Falz. Jetzt ist das Erste im
+               Bild das, was man gleich tut; was ansteht, folgt darunter. Die
+               Überschrift gilt nur für die Kacheln, und die Liste trägt ihre
+               eigene. -->
           <div class="wk-head">
             <div>
               <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
@@ -2422,6 +2432,30 @@
               <span class="wk-tile-t" data-i18n="work.contam">Kontamination melden</span>
               <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
             </button>
+          </div>
+          <!-- What is due, below the seven jobs that do it. This lived on the
+               Dashboard, and the two screens pointed at each other: a strip here read
+               "Weißt du nicht, was ansteht?" and sent you there, and the first thing
+               there was two buttons that came straight back — the same redundancy the
+               speed-dial FAB was deleted for. One screen answers both halves now, and
+               the Dashboard keeps what only it has. The list sat above the tiles at
+               first; on a phone that opened the app on a list and put the seven jobs
+               below the fold, so the halves swapped. -->
+          <div class="dash-top-row">
+            <!-- Batch tasks — what is due, under the seven jobs -->
+            <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
+              <!-- No All/Urgent-only filter: the urgency sections below ARE the
+                   filter, and "urgent only" hid the sections it duplicated. -->
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+                <div class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</div>
+              </div>
+              <div id="dash-batch-tasks"></div>
+            </div>
+
+            <!-- Split batches (bags of the same batch across multiple stages) used
+                 to be its own card here. It is now the LIEGENGEBLIEBEN section of
+                 the Batch tasks card: same data (getSplitBatches), but read as an
+                 instruction alongside the dated work instead of a separate table. -->
           </div>
           <!-- Aufs Handy legen. Steht nur da, wenn der Browser die Installation
                anbietet oder Safari sie von Hand verlangt — und nie, wenn die App
@@ -2585,12 +2619,11 @@
                mixes, the harvests — and this is where something new starts, so it
                reads as a different kind of control and sits above them, the same
                way Laborarbeit does one section over.
-               It still opens sp-batch-new rather than a dialog: that panel is a
-               two-step workflow, mix the substrate and then draw bags from it,
-               and the substrate step is the only place raw material leaves the
-               shelf. The comment that used to sit here claimed it opened the
-               quick-create dialog; it never did — msQuickChargeNew() is that
-               dialog, and it is reached from a Sorte tile or a supply task. -->
+               It opens the guided flow (wkbOpen), the same one the Arbeitsgänge
+               tile opens: there is one way to make a Charge, not a long form
+               here and a wizard there. sp-batch-new stays below as that flow's
+               backing form — createBatch() still reads its fields — but nothing
+               sends a person to it any more. -->
           <button class="btn btn-p btn-lead" id="btn-batch-new">
             <svg
               width="17"
@@ -4185,46 +4218,9 @@
                       style="display: none; background: var(--c-primary-light); border: 1px solid var(--c-green-border); border-radius: 8px; padding: 10px 12px; color: var(--c-green-dark); line-height: 1.8"
                     ></div>
                   </div>
-                  <!-- KB result (shown after grain batch creation) -->
-                  <div
-                    id="gs-result"
-                    style="display: none; background: var(--c-bg); border-radius: 8px; padding: 10px 12px"
-                  >
-                    <div class="sec" style="margin-bottom: 6px" data-i18n="batch.generatedIds">
-                      Generierte Beutel-IDs
-                    </div>
-                    <div
-                      id="gs-bags"
-                      style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 200px; overflow-y: auto"
-                    ></div>
-                    <button
-                      id="prt-gs"
-                      class="btn btn-p"
-                      style="width: 100%; margin-top: 10px"
-                      data-i18n="batch.printLabels"
-                    >
-                      Etiketten für diese Charge drucken
-                    </button>
-                  </div>
-                  <!-- Culture result (shown after MC/PD/LC creation) -->
-                  <div
-                    id="lw-result"
-                    style="display: none; background: var(--c-bg); border-radius: 8px; padding: 10px 12px"
-                  >
-                    <div class="sec" style="margin-bottom: 6px" data-i18n="lab.createdIds">Created culture IDs</div>
-                    <div
-                      id="lw-ids"
-                      style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 200px; overflow-y: auto"
-                    ></div>
-                    <button
-                      id="prt-lw"
-                      class="btn btn-p"
-                      style="width: 100%; margin-top: 10px"
-                      data-i18n="lab.printLabelsNow"
-                    >
-                      Print labels for these cultures
-                    </button>
-                  </div>
+                  <!-- No result card here any more: every path that makes bags
+                       ends in m-batch-print and every path that makes cultures
+                       in m-culture-print, wherever the person is standing. -->
                   <button id="btn-26" class="btn btn-p" data-i18n="lab.logWorkBtn">Log work</button>
                 </div>
               </div>

@@ -2017,6 +2017,7 @@ window.LANG['de'] = {
   'batch.printTitle': 'Etiketten drucken',
   'batch.printLater': 'Später',
   'batch.printFor': '{id} — {n} Beutel eingelagert',
+  'lab.printFor': '{n} Kultur(en) angelegt',
   'work.installWhy': 'Die App aufs Handy legen — dann öffnet sie mit einem Symbol, ohne Browserleiste.',
   'work.installApple': 'Aufs Handy legen: unten auf Teilen tippen, dann „Zum Home-Bildschirm".',
   'work.installDo': 'Aufs Handy legen',

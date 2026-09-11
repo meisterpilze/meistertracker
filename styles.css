@@ -5253,6 +5253,9 @@ tr.ms-off .ms-prog {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  /* Folgt den Kacheln; eine Liste, die an der letzten Kachel klebt, liest sich
+     als deren Fortsetzung. */
+  margin-top: 16px;
   margin-bottom: 10px;
 }
 
@@ -7269,16 +7272,14 @@ tr.ms-off .ms-prog {
    this is the screen a new worker meets first, and on the tablet it is used
    standing up. Line icons, not emoji — same visual language as the sidebar. */
 
-/* Sie stand einmal ganz oben und brauchte keinen Abstand nach oben. Jetzt
-   trennt sie die beiden Hälften der Seite — "was ansteht" darüber, "was hast du
-   gemacht" darunter — und eine Überschrift, die an der Karte davor klebt, sieht
-   aus, als gehöre sie noch dazu. */
+/* Wieder ganz oben, also ohne Abstand nach oben: die Kacheln stehen seit dem
+   11.09.2026 über der Tagesliste, damit das Telefon auf ihnen öffnet. Den
+   Abstand zwischen den beiden Hälften trägt jetzt .dash-top-row. */
 .wk-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 16px;
   margin-bottom: 4px;
 }
 .wk-sub {

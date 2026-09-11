@@ -1998,6 +1998,7 @@ window.LANG['en'] = {
   'batch.printTitle': 'Print labels',
   'batch.printLater': 'Later',
   'batch.printFor': '{id} — {n} bags placed',
+  'lab.printFor': '{n} culture(s) created',
   'work.installWhy': 'Put the app on your phone — it then opens from an icon, without the browser bar.',
   'work.installApple': 'To add it: tap Share below, then “Add to Home Screen”.',
   'work.installDo': 'Add to home screen',
