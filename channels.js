@@ -798,6 +798,116 @@ function _normalizeBillbee(o) {
   };
 }
 
+// Which Billbee shop account a pushed order is filed under. Resolved from the
+// API and cached for the process, the same way carrier ids are: the id is
+// account-specific, so hard-coding it would tie this code to one installation.
+//
+// Matched on the platform first and the name only as a fallback, because the name
+// is whatever the merchant typed when they added the connection.
+let _billbeeShops = null;
+async function _billbeeWixShopId(cfg) {
+  if (!_billbeeShops) {
+    let j;
+    try {
+      j = await _billbeeFetch(cfg, '/shopaccounts?page=1&pageSize=50', {}, 'Billbee Shopkonten');
+    } catch {
+      // Not cached — a transient failure must not disable shop ids for the life of
+      // the server. Without an id the order still files, just without a shop.
+      return null;
+    }
+    _billbeeShops = ((j && j.Data) || [])
+      .map((s) => ({
+        id: Number(s && s.Id),
+        name: String((s && s.Name) || ''),
+        platform: String((s && (s.Platform || s.Type)) || '')
+      }))
+      .filter((s) => Number.isFinite(s.id));
+  }
+  const byPlatform = _billbeeShops.find((s) => s.platform.toLowerCase() === 'wix');
+  if (byPlatform) return byPlatform.id;
+  const byName = _billbeeShops.find((s) => s.name.toLowerCase().includes('wix'));
+  return byName ? byName.id : null;
+}
+
+// Billbee's OrderStateEnum, the write direction of _billbeeStatus. 'new' does not
+// map to "paid": the hub's three statuses say nothing about money, and filing an
+// unpaid order as paid would put it straight into Billbee's "bezahlte Aufträge,
+// die versendet werden können" list. So payment is read from the channel's own
+// record instead, and anything unproven stays at 2 (confirmed).
+function _billbeeStateFor(order) {
+  if (order.status === 'cancelled') return 8;
+  if (order.status === 'shipped') return 4;
+  const paid = String((order.raw && (order.raw.paymentStatus || order.raw.PaymentStatus)) || '').toUpperCase();
+  return paid === 'PAID' || paid === 'FULLY_PAID' ? 3 : 2;
+}
+
+/**
+ * Map one hub order onto Billbee's Order model for POST /orders.
+ *
+ * Unlike every other Billbee function here this one *writes* a customer's name
+ * and address. That is the point rather than an oversight: the hub holds them
+ * only to print a label, Billbee is the commercial system that issues the invoice
+ * and owns the customer record, and an order pushed without an address is an
+ * order nobody can ship.
+ *
+ * ⚠️ Billbee uses one Order model in both directions, so the property names here
+ * are the ones _normalizeBillbee already reads back. The write direction cannot
+ * be checked without a live API key, so verify this payload against the first
+ * real order and adjust — the same caveat _normalizeWix carries.
+ */
+function _billbeeOrderPayload(order) {
+  const name = order.shipName || order.customerName || '';
+  const sp = name.indexOf(' ');
+  const firstName = sp > 0 ? name.slice(0, sp) : name;
+  const lastName = sp > 0 ? name.slice(sp + 1) : '';
+  const address = {
+    FirstName: firstName || null,
+    LastName: lastName || null,
+    Company: order.shipCompany || null,
+    Street: order.shipStreet || null,
+    HouseNumber: order.shipHouse || null,
+    Line2: order.shipAddress2 || null,
+    City: order.shipCity || null,
+    Zip: order.shipPostal || null,
+    CountryISO2: order.shipCountry || null,
+    Phone: order.shipPhone || null,
+    Email: order.customerEmail || null
+  };
+  const items = (order.items || []).map((li) => {
+    const qty = Number(li.qty) || 1;
+    const unit = li.unitPrice != null && Number.isFinite(Number(li.unitPrice)) ? Number(li.unitPrice) : 0;
+    return {
+      // Billbee matches an incoming position to an existing article by SKU — the
+      // same rule by which a rename can mint duplicates. So the SKU has to
+      // travel even when the title does not.
+      Product: { Title: li.title || null, SKU: li.channelSku || null },
+      Quantity: qty,
+      // Billbee reads TotalPrice as the position total, not the unit price. The
+      // hub stores the unit price, so it is multiplied back out here — the exact
+      // inverse of what _normalizeBillbee does on the way in.
+      TotalPrice: Math.round(unit * qty * 100) / 100
+    };
+  });
+  const state = _billbeeStateFor(order);
+  const payload = {
+    OrderNumber: String(order.channelOrderId),
+    CreatedAt: order.orderDate || null,
+    State: state,
+    Currency: order.currency || 'EUR',
+    TotalCost: order.totalAmount != null ? Number(order.totalAmount) : null,
+    Customer: { Name: order.customerName || name || null, Email: order.customerEmail || null },
+    InvoiceAddress: address,
+    ShippingAddress: address,
+    OrderItems: items
+  };
+  // Only claimed when it is actually known — see _billbeeStateFor.
+  if (state === 3 && order.totalAmount != null) {
+    payload.PaidAmount = Number(order.totalAmount);
+    payload.PayedAt = order.orderDate || null;
+  }
+  return payload;
+}
+
 const billbee = {
   async testConnection(cfg) {
     const j = await _billbeeFetch(cfg, '/shopaccounts?page=1&pageSize=50', {}, 'Billbee Shopkonten');
@@ -846,6 +956,34 @@ const billbee = {
       'Billbee Sendungsnummer'
     );
     return { ok: true };
+  },
+  /**
+   * File one hub order *into* Billbee. The only call here that runs against the
+   * grain of this provider, and it exists for exactly one channel.
+   *
+   * Billbee reads every other shop by API and needs nothing from this server. Wix
+   * is the exception: Billbee's Wix connector parses order mails, and Wix's
+   * current mail carries no order data, so Billbee can never see a Wix sale on its
+   * own — see BILLBEE_SUPERSEDES in db.js. Meanwhile this server *can* read the
+   * Wix API and already does. So the hub becomes the bridge.
+   *
+   * Only ever called for orders that came from the Wix API. Pushing an order that
+   * was itself imported *from* Billbee would file it back as a second, unrelated
+   * order — the caller guards on channel, and so does this.
+   */
+  async pushOrder(cfg, order) {
+    if (!order || order.channel !== 'wix') throw new Error('Billbee-Push nur für Wix-Bestellungen');
+    if (order.channelOrderId == null) throw new Error('Wix-Bestellnummer fehlt');
+    const shopId = await _billbeeWixShopId(cfg);
+    const q = shopId != null ? '?shopId=' + encodeURIComponent(shopId) : '';
+    const j = await _billbeeFetch(
+      cfg,
+      '/orders' + q,
+      { method: 'POST', body: JSON.stringify(_billbeeOrderPayload(order)) },
+      'Billbee Auftrag anlegen'
+    );
+    const created = (j && j.Data) || j || {};
+    return { ok: true, billbeeOrderId: created.BillBeeOrderId != null ? String(created.BillBeeOrderId) : null, shopId };
   }
 };
 
@@ -873,6 +1011,8 @@ module.exports = {
   _normalizeBillbee,
   _billbeeLabRecord,
   _billbeeStatus,
+  _billbeeOrderPayload,
+  _billbeeStateFor,
   _splitHouse,
   WIX_BASE
 };

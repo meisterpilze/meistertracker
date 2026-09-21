@@ -966,6 +966,64 @@ async function withFreshChannelToken(channel) {
   }
   return { cfg, prov };
 }
+// At most this many orders are handed to Billbee in one sync. Billbee's throttle
+// spaces the calls about 0.55s apart, so 50 is roughly half a minute — enough to
+// clear a backlog over a few polls, short enough that the first sync after
+// connecting Billbee does not sit there for ten minutes.
+const BILLBEE_PUSH_PER_RUN = 50;
+
+/**
+ * Hand Wix orders to Billbee.
+ *
+ * Billbee reads every other shop through its own API and needs nothing from this
+ * server. Wix is the exception: Billbee's Wix connector parses the order mail Wix
+ * sends the merchant, and that mail carries no order data at all — so left alone,
+ * a Wix sale reaches Billbee only if somebody types it in by hand. This server
+ * does read the Wix API, so it forwards what it finds. See BILLBEE_SUPERSEDES in
+ * db.js for why Billbee cannot simply be pointed at Wix instead.
+ *
+ * Every Wix order the sync saw is a candidate, not only the newly imported ones,
+ * because the marks in `meta` are what decide. So an order whose push failed last
+ * time is retried on its own, and connecting Billbee later backfills the history
+ * that predates it. Best-effort throughout, like pushTracking: one order Billbee
+ * refuses must not stop the rest, and none of it may fail the sync.
+ */
+async function pushWixOrdersToBillbee(channel, orders) {
+  if (channel !== 'wix') return { pushed: 0, error: null };
+  const cfg = db.getChannelConfig(database, 'billbee');
+  if (!cfg.enabled || !cfg.apiKey || !cfg.clientId || !cfg.clientSecret) return { pushed: 0, error: null };
+  const waiting = orders.filter(
+    (o) => o.channel === 'wix' && o.channelOrderId != null && !db.billbeePushedAt(database, 'wix', o.channelOrderId)
+  );
+  if (!waiting.length) return { pushed: 0, error: null };
+  // Oldest first, so a backlog is filed in the order the sales actually happened.
+  waiting.sort((a, b) => String(a.orderDate || '').localeCompare(String(b.orderDate || '')));
+  const prov = channels.getChannelProvider('billbee');
+  let pushed = 0;
+  let error = null;
+  let inARow = 0;
+  for (const o of waiting.slice(0, BILLBEE_PUSH_PER_RUN)) {
+    try {
+      await prov.pushOrder(cfg, o);
+      // Marked only once Billbee has taken it. An order stays unmarked on any
+      // failure, and that is exactly what makes the next run pick it up again.
+      db.markBillbeePushed(database, 'wix', o.channelOrderId);
+      pushed++;
+      inARow = 0;
+    } catch (e) {
+      if (!error) error = e.message || 'Billbee-Push fehlgeschlagen';
+      log('warn', 'Billbee push failed', { order: String(o.channelOrderId), error: e.message });
+      // Three failures in a row is not three bad orders — it is a key that was
+      // never approved, or a Billbee that is down. Stop rather than spend the next
+      // half minute proving it 47 more times; nothing was marked, so the next sync
+      // resumes here.
+      if (++inARow >= 3) break;
+    }
+  }
+  if (pushed) log('info', 'Pushed Wix orders to Billbee', { pushed });
+  return { pushed, error };
+}
+
 /**
  * Pull one channel's orders and commit them. Never throws: the outcome is the
  * return value, because both callers — the button and the timer below — have to
@@ -1042,13 +1100,18 @@ async function syncChannelOrders(channel, excludeRes) {
       }
       throw eTx;
     }
+    // Wix orders travel on to Billbee, which has no way to fetch them itself.
+    // After the commit and outside the transaction: it is network I/O, and a
+    // Billbee that is switched off or refusing must never cost an order that is
+    // already safely imported here.
+    const push = await pushWixOrdersToBillbee(channel, collected);
     // Partial success: earlier pages are committed. Record and report the error,
     // but keep the imported orders rather than throwing the whole run away
     // because a later page failed.
     const error = fetchErr ? fetchErr.message || 'sync failed' : null;
     db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: error });
     broadcastSSE(excludeRes);
-    return { imported, error };
+    return { imported, error, pushedToBillbee: push.pushed, billbeeError: push.error };
   } catch (err) {
     const error = err.message || 'sync failed';
     db.setChannelSyncState(database, channel, { lastSync: new Date().toISOString(), lastError: error });

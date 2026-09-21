@@ -9818,6 +9818,34 @@ function _insertOrderItems(db, orderId, channel, items) {
   }
 }
 
+/**
+ * Which orders have already been filed into Billbee.
+ *
+ * One `meta` row per pushed order rather than a high-water mark, because the two
+ * fail differently and only one of them fails safely. A mark says "Billbee has
+ * this sale"; anything unmarked is simply pushed on the next run. So a push that
+ * fails — a key not yet approved, a 429, the server restarting mid-run — is
+ * retried by itself, and one that never happened is not skipped because a later
+ * order moved a watermark past it. A duplicated sale in the merchant's books is
+ * much worse than a repeated attempt.
+ *
+ * Even thousands of such rows are nothing for SQLite.
+ */
+const BILLBEE_PUSH_PREFIX = 'billbee_push:';
+function _billbeePushKey(channel, channelOrderId) {
+  return BILLBEE_PUSH_PREFIX + channel + ':' + String(channelOrderId);
+}
+function billbeePushedAt(db, channel, channelOrderId) {
+  if (!channel || channelOrderId == null) return null;
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(_billbeePushKey(channel, channelOrderId));
+  return (row && row.value) || null;
+}
+function markBillbeePushed(db, channel, channelOrderId, at) {
+  db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(
+    _billbeePushKey(channel, channelOrderId),
+    at || new Date().toISOString()
+  );
+}
 function upsertOrder(db, o) {
   if (!o || !o.channel || o.channelOrderId == null) throw new Error('upsertOrder: channel + channelOrderId required');
   const now = new Date().toISOString();
@@ -10009,14 +10037,27 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
 const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
-// The three Billbee stands in for. Billbee is not a shop but the merchant's own
+// The two Billbee stands in for. Billbee is not a shop but the merchant's own
 // order hub: it already holds the orders of every channel they sell on, so a shop
 // that is in Billbee *and* connected here directly delivers the same sale twice —
-// once as a 'billbee' order keyed on BillBeeOrderId, once as a 'wix'/'etsy'/'ebay'
+// once as a 'billbee' order keyed on BillBeeOrderId, once as an 'etsy'/'ebay'
 // order keyed on the marketplace's own id. Those two keys have nothing to do with
 // each other, so upsertOrder cannot merge them: it files both, and the production
 // planning makes the order twice.
-const BILLBEE_SUPERSEDES = ['wix', 'etsy', 'ebay'];
+//
+// **Wix is deliberately not on this list, and must not be added back.** Billbee
+// has no Wix API to read. Its Wix connector parses the order mail Wix sends the
+// merchant, and Wix's current template carries no order data at all — no address,
+// no positions, just a "Bestellung ansehen" link into the dashboard — so Billbee
+// answers it with "Wix Email konnte nicht als Bestell Email erkannt werden".
+// A Wix channel in Billbee therefore never fetches an order, however long it
+// is left running.
+//
+// So Billbee cannot cover Wix, and standing the direct Wix connection down for it
+// would drop those orders out of *both* systems rather than move them between
+// them. The direct connection stays on and feeds Billbee instead — see
+// billbee.pushOrder in channels.js.
+const BILLBEE_SUPERSEDES = ['etsy', 'ebay'];
 function _ensureChannelRow(db, channel) {
   db.prepare('INSERT OR IGNORE INTO sales_channel_config(channel, created) VALUES(?, ?)').run(
     channel,
@@ -10285,6 +10326,8 @@ module.exports = {
   listUnmappedItems,
   listChannelMappings,
   upsertOrder,
+  billbeePushedAt,
+  markBillbeePushed,
   listOrders,
   getChannelConfig,
   listChannelConfigs,

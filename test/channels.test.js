@@ -113,9 +113,19 @@ describe('Billbee stands in for the direct connections', () => {
   it('supersedes the connected direct channels once Billbee is on', () => {
     db.updateChannelConfig(d, 'billbee', { clientSecret: 'pw' });
     const f = flags();
-    assert.equal(f.wix, 'billbee');
     assert.equal(f.etsy, 'billbee');
     assert.equal(f.billbee, null, 'the hub never supersedes itself');
+  });
+
+  it('never supersedes Wix, however well Billbee is connected', () => {
+    // Billbee has no Wix API to read. Its Wix connector parses the order mail Wix
+    // sends the merchant, and that mail carries no order data — the connector
+    // brings in no orders at all.
+    // So pausing this connection would not move the Wix orders to Billbee, it
+    // would drop them out of both systems; the hub keeps pulling and pushes them
+    // on instead.
+    db.updateChannelConfig(d, 'billbee', { enabled: true, apiKey: 'BB', clientId: 'a@example.de', clientSecret: 'pw' });
+    assert.equal(flags().wix, null);
   });
 
   it('leaves a channel that would not pull anyway alone', () => {
