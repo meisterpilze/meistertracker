@@ -91,6 +91,15 @@
               <label data-i18n="addBags.howMany">How many bags to add</label>
               <input type="number" id="ab-qty" value="1" min="1" max="200" style="width: 100px" />
             </div>
+            <!-- Körnerbrut wird gewogen, und eine Charge darf mehr als eine
+                 Größe tragen. Ohne dieses Feld bekämen nachträglich ergänzte
+                 Beutel stumm das Gewicht der Charge — und stünden dann mit einer
+                 Zahl im Regal, die nicht ihre ist. Nur für Körner sichtbar
+                 (siehe openAddBags). -->
+            <div id="ab-kg-wrap" style="display: none">
+              <label data-i18n="addBags.bagKg">kg pro Beutel</label>
+              <input type="text" inputmode="decimal" id="ab-kg" autocomplete="off" style="width: 100px" />
+            </div>
             <div class="fs-meta"
               id="ab-preview"
               style="color: var(--c-text-sec); background: var(--c-bg); border-radius: 7px; padding: 8px 10px; display: none"
@@ -274,7 +283,20 @@
       "
       onclick="if (event.target === this) msQuickClose();"
     >
-      <div class="card" style="max-width: 380px; width: 100%; margin: 0">
+      <!-- Der Dialog wächst um eine Zeile je Größe, und im Querformat ist er
+           schon mit einer knapp. dvh mit vh davor, wie überall sonst im Blatt:
+           mit aufgeklappter Tastatur misst vh weiter das ganze Fenster. -->
+      <div
+        class="card"
+        style="
+          max-width: 380px;
+          width: 100%;
+          margin: 0;
+          max-height: calc(100vh - 24px);
+          max-height: calc(100dvh - 24px);
+          overflow-y: auto;
+        "
+      >
         <div class="sec" id="ms-q-title">—</div>
         <div id="ms-q-sub" class="muted fs-meta" style="margin: 4px 0 10px"></div>
         <div id="ms-q-sorte-wrap" style="display: none; margin-bottom: 8px">
@@ -295,15 +317,20 @@
             <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
           </select>
         </div>
-        <!-- Grain spawn is weight-based, unlike the count-based culture types,
-             and no block recipe carries a spawn bag weight — so it needs its own
-             field. Shown only for Grainspawn (see msQuickRender). -->
-        <div id="ms-q-grainkg-wrap" style="display: none; margin-bottom: 8px">
-          <label data-i18n="msq.grainKg">kg pro Beutel</label>
-          <input type="number" id="ms-q-grainkg" min="0.1" step="0.1" value="1" oninput="msQuickPreview()" />
+        <!-- Körnerbrut is weighed, not counted, and one Ansatz goes into bags of
+             more than one size: same Flüssigkultur, same Charge, 1 kg next to 2
+             next to 3. So the count does not live in the shared Anzahl stepper
+             here — it lives per size, one row each, the same shape the long form
+             has (gs-wline). With a single row it reads exactly like the single
+             field this replaced. Shown for Körnerbrut in either mode — as
+             Laborarbeit and as the Charge of a Körner-Sorte (see msQuickRender). -->
+        <div id="ms-q-sizes-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="msq.grainSizes">Größen (kg × Beutel)</label>
+          <div id="ms-q-sizes"></div>
+          <button type="button" id="ms-q-add-size" class="btn btn-sm" data-i18n="msq.addSize">+ Größe</button>
         </div>
-        <div class="g2">
-          <div>
+        <div class="g2" id="ms-q-grid">
+          <div id="ms-q-qty-wrap">
             <label data-i18n="msq.qty">Anzahl</label>
             <div style="display: flex; align-items: center; gap: 8px">
               <button

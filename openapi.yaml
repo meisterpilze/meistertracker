@@ -398,6 +398,15 @@ paths:
                     type: string
                 newQty:
                   type: integer
+                bagKg:
+                  type: number
+                  description: >-
+                    Weight of each added bag in kg. Omit to reuse the batch's own
+                    weight. Grain spawn is weighed and one batch may hold more
+                    than one size, so the added bags need not match the rest.
+                  minimum: 0
+                  exclusiveMinimum: true
+                  maximum: 1000
       responses:
         '200':
           description: Bags added

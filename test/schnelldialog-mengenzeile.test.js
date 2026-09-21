@@ -14,6 +14,12 @@
 // Sorte, die von der Vorgabe abweicht, bekam eine Menge angekündigt, die nicht
 // die gebuchte war.
 //
+// Der dritte Punkt kam später dazu: eine Körnerbrut geht in Beutel
+// verschiedener Größe — dieselbe Flüssigkultur, derselbe Ansatz, 1 kg neben 2.
+// Der Dialog trug eine einzige Zahl für alle, also stand die Aufstellung, die
+// er ankündigen müsste, gar nicht zur Verfügung. Jetzt zählt jede Größe für
+// sich, und die Zeile nennt sie einzeln, bevor sie die Summen nennt.
+//
 // Geprüft wird der fertige Satz, nicht die Form des Codes: es geht um das, was
 // vor dem Anlegen auf dem Bildschirm steht.
 const { describe, it } = require('node:test');
@@ -46,18 +52,35 @@ const CODE = [
   hebeFunktion('_msStrainToRecipe', SRC),
   hebeFunktion('_msNeedParts', SRC),
   hebeFunktion('_msqIsGrainspawn', SRC),
+  hebeFunktion('_msqIsGrain', SRC),
+  hebeFunktion('msqSizeRows', SRC),
+  hebeFunktion('msqReadSizes', SRC),
   hebeFunktion('msQuickPreview', SRC)
 ].join('\n');
 
-// Ein Lauf des Dialogs: Felder rein, Vorschauzeile raus.
-function vorschau({ ms, mode, qty, grainKg, labType, lang }) {
+// Eine Größenzeile, wie msqReadSizes sie im DOM vorfindet.
+function zeile(kg, qty) {
   const felder = {
-    'ms-q-qty': { value: String(qty) },
-    'ms-q-grainkg': { value: grainKg == null ? '' : String(grainKg) },
+    '.msq-size-kg': { value: kg == null ? '' : String(kg) },
+    '.msq-size-qty': { value: qty == null ? '' : String(qty) }
+  };
+  return { querySelector: (sel) => felder[sel] || null };
+}
+
+// Ein Lauf des Dialogs: Felder rein, Vorschauzeile raus. `groessen` ist die
+// Liste, die im Dialog steht — [kg, Anzahl] je Zeile. Die alte Kurzform
+// (qty + grainKg) ist dieselbe Liste mit genau einer Zeile.
+function vorschau({ ms, mode, qty, grainKg, groessen, labType, lang }) {
+  const zeilen = (groessen || [[grainKg, qty]]).map(([kg, n]) => zeile(kg, n));
+  const felder = {
+    'ms-q-qty': { value: String(qty == null ? '' : qty) },
     'ms-q-labtype': { value: labType || '' },
     'ms-q-preview': { textContent: '', style: {} }
   };
-  const doc = { getElementById: (id) => felder[id] || null };
+  const doc = {
+    getElementById: (id) => felder[id] || null,
+    querySelectorAll: () => zeilen
+  };
   new Function('document', 'LANG', 'currentLang', '_msQuickCtx', CODE + '\nmsQuickPreview();')(
     doc,
     woerterbuecher(),
@@ -91,7 +114,7 @@ describe('Mengenzeile im Schnelldialog', () => {
   it('nennt Beutelgewicht, Gesamtmenge und trockenes Korn getrennt', () => {
     const s = vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 2 });
     assert.match(s, /10 Beutel Körnerbrut werden angelegt\./);
-    assert.match(s, /2 kg je Beutel/);
+    assert.match(s, /10 × 2 kg/);
     assert.match(s, /20 kg gesamt/);
     // 20 kg nass bei 62 % Wasser = 7,6 kg trocken — die Zahl, die vorher allein
     // dastand und "pro Stück" hieß.
@@ -135,13 +158,71 @@ describe('Mengenzeile im Schnelldialog', () => {
     assert.equal(vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 0 }), '');
   });
 
+  it('nennt jede Größe einzeln und summiert über alle', () => {
+    // Der Fall, für den die Zeilenliste da ist: ein Ansatz, eine Kultur, drei
+    // Größen. 10 + 5 + 2 sind 17 Beutel, 10 + 10 + 6 sind 26 kg nass, und bei
+    // 62 % Wasser bleiben davon 9,88 kg trockenes Korn.
+    const s = vorschau({
+      ms: SORTE(),
+      mode: 'labor',
+      labType: 'KB',
+      groessen: [
+        [1, 10],
+        [2, 5],
+        [3, 2]
+      ]
+    });
+    assert.match(s, /17 Beutel Körnerbrut werden angelegt\./);
+    assert.match(s, /10 × 1 kg \+ 5 × 2 kg \+ 2 × 3 kg/);
+    assert.match(s, /26 kg gesamt/);
+    assert.match(s, /9\.88 kg trockenes Korn vom Lager/);
+  });
+
+  it('übergeht Zeilen ohne Gewicht oder ohne Anzahl', () => {
+    // Eine halb ausgefüllte Zeile ist keine Größe. Sie darf die Summe nicht
+    // verfälschen — und sie darf die Zeile auch nicht leer machen, solange eine
+    // vollständige danebensteht.
+    const s = vorschau({
+      ms: SORTE(),
+      mode: 'labor',
+      labType: 'KB',
+      groessen: [
+        [1, 10],
+        [2, 0],
+        [null, 5]
+      ]
+    });
+    assert.match(s, /10 Beutel Körnerbrut werden angelegt\./);
+    assert.match(s, /10 kg gesamt/);
+    assert.doesNotMatch(s, /× 2 kg/);
+  });
+
+  it('rechnet eine Körner-Charge über ihre Größen, nicht über die Anzahl oben', () => {
+    // Eine Sorte, deren Rezept auf Körner lautet, kommt als CHARGE durch den
+    // Dialog — und fiel damit in den Materiallisten-Zweig, der die Anzahl über
+    // den Zeilen liest. Die gibt es für sie nicht mehr.
+    const s = vorschau({
+      ms: SORTE({ recBatchType: 'grain', recGrainKg: 2, recGrainRhPct: 52 }),
+      mode: 'charge',
+      groessen: [
+        [1, 4],
+        [2, 3]
+      ]
+    });
+    assert.match(s, /7 Beutel Körnerbrut werden angelegt\./);
+    assert.match(s, /4 × 1 kg \+ 3 × 2 kg/);
+    assert.match(s, /10 kg gesamt/);
+    assert.doesNotMatch(s, /für \d+ Stück:/);
+  });
+
   it('trägt die Zeile in jeder Sprache, nicht nur auf Deutsch', () => {
     // Ein fehlender Schlüssel wirft nicht, er steht als Kennung auf dem Schirm.
     for (const lang of ['en', 'pt']) {
       const s = vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 2, lang });
       assert.doesNotMatch(s, /msq\./, lang + ': ein Schlüssel steht unübersetzt in der Zeile');
       assert.match(s, /7\.6/, lang + ': die trockene Menge fehlt');
-      assert.match(s, /20/, lang + ': die Gesamtmenge fehlt');
+      assert.match(s, /20 kg/, lang + ': die Gesamtmenge fehlt');
+      assert.match(s, /10 × 2 kg/, lang + ': die Aufstellung der Größen fehlt');
     }
   });
 });

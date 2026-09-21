@@ -7639,7 +7639,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // I-22 + I-23: thread user_id and let addBagsToBatch deduct inventory
         // for the new bags inside the same transaction.
         const userId = req.authUser ? req.authUser.user_id : null;
-        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty, undefined, userId);
+        // Körnerbrut wird gewogen, und eine Charge darf mehr als eine Größe
+        // tragen — also darf der Aufrufer sagen, wie schwer die ergänzten
+        // Beutel sind. Ohne Angabe bleibt es beim Gewicht der Charge, wie
+        // bisher. Die Zahl geht in eine Bestandsbuchung ein, also wird sie hier
+        // geprüft und nicht erst von SQLite entgegengenommen.
+        let bagKg;
+        if (data.bagKg != null) {
+          bagKg = Number(data.bagKg);
+          if (!Number.isFinite(bagKg) || bagKg <= 0 || bagKg > 1000) {
+            jsonErr(res, 400, 'bagKg must be a positive number (max 1000)');
+            return;
+          }
+        }
+        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty, bagKg, userId);
         broadcastSSE(res);
         jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
       } catch (err) {

@@ -128,6 +128,16 @@ function itemsToZPL(items) {
   return z + '^XZ';
 }
 
+// Siehe app.js: dieselbe Beschriftung, damit gedruckt und angezeigt nicht
+// auseinanderlaufen.
+function labelKg(kg) {
+  return String(Math.round(kg * 1000) / 1000).replace('.', ',') + 'kg';
+}
+function bagLabelKg(batch, bagId) {
+  const w = batch && batch.bagWeights ? batch.bagWeights[bagId] : null;
+  if (Number.isFinite(w) && w > 0) return w;
+  return Number.isFinite(batch && batch.bagKg) && batch.bagKg > 0 ? batch.bagKg : null;
+}
 function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
   const items = [];
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
@@ -140,7 +150,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
-      if (bagKg != null) parts.push(bagKg + 'kg');
+      if (bagKg != null) parts.push(labelKg(bagKg));
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -176,7 +186,7 @@ function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
-      if (bagKg != null) parts.push(bagKg + 'kg');
+      if (bagKg != null) parts.push(labelKg(bagKg));
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -2029,14 +2039,11 @@ function createMcpServer(database, onWrite, printer) {
         const detail = params.detail || 'sorte';
         const useQr = params.qr || false;
 
-        // Pass per-bag weight when batch has mixed weights
-        const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
-        const mixed = wVals.size > 1;
+        // Jeder Beutel traegt sein eigenes Gewicht -- siehe bagLabelKg in app.js.
         const zpl = bags
-          .map((bagId) => {
-            const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
-            return itemsToZPL(bagLabelItems(bagId, batch, detail, barcodes[bagId], useQr, bk));
-          })
+          .map((bagId) =>
+            itemsToZPL(bagLabelItems(bagId, batch, detail, barcodes[bagId], useQr, bagLabelKg(batch, bagId)))
+          )
           .join('\n');
 
         if (params.preview) {

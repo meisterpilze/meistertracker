@@ -10754,9 +10754,50 @@ function _groupBatchRows(rows, mode) {
 // in Labor renders identical rows rather than a divergent copy — and so this
 // template can be edited without splicing into the middle of a 3,000-character
 // literal, which is how it got corrupted once before.
+// Woraus eine Charge besteht: Größe → wie viele Beutel davon.
+//
+// Eine Charge Körnerbrut darf mehr als eine Größe tragen, und beides, was man
+// darüber wissen will — die Aufstellung und die vorherrschende Größe — ist
+// dieselbe Auszählung. Zweimal gezählt hieße zwei Regeln, die auseinanderlaufen
+// können.
+function grainSizeCounts(b) {
+  const w = b.bagWeights || {};
+  const bags = b.bags && b.bags.length ? b.bags : Object.keys(w);
+  const counts = new Map();
+  for (const bag of bags) {
+    const kg = Number.isFinite(w[bag]) ? w[bag] : b.bagKg;
+    if (!(kg > 0)) continue;
+    counts.set(kg, (counts.get(kg) || 0) + 1);
+  }
+  return counts;
+}
+// "10 × 1 kg · 5 × 2 kg" — als Zeilen für die Liste.
+//
+// In der Spalte Substrat stand für eine Körner-Charge "HW 0% WB 0%": db.js gibt
+// substrate immer als Objekt zurück, und für Körner sind alle Anteile null.
+// Eine Zelle, die für diese Zeilen nichts bedeutete — und die eine Angabe, die
+// sie tragen könnte, stand nirgends in der Liste.
+function grainSizeSummary(b) {
+  const counts = grainSizeCounts(b);
+  if (!counts.size) return null;
+  return [...counts.entries()]
+    .sort((x, y) => x[0] - y[0])
+    .map(([kg, n]) => n + ' × ' + String(kg).replace('.', ',') + ' kg');
+}
+// Die Größe, aus der die meisten Beutel sind. Dieselbe Regel, nach der
+// createGrainBatch das Gewicht der Charge selbst bestimmt.
+function _dominantBagKg(b) {
+  let best = null;
+  for (const [kg, n] of grainSizeCounts(b)) if (!best || n > best[1]) best = [kg, n];
+  if (best) return best[0];
+  return Number.isFinite(b.bagKg) && b.bagKg > 0 ? b.bagKg : null;
+}
 function batchRowHtml(b) {
       const { status } = getStatus(b.batchId);
-      const sub = b.substrate
+      const _grainSizes = b.batchType === 'grain' ? grainSizeSummary(b) : null;
+      const sub = _grainSizes
+        ? _grainSizes.map((x) => `<span class="sub-tag">${esc(x)}</span>`).join('')
+        : b.substrate
         ? [
             `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
             b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
@@ -10976,7 +11017,9 @@ function toggleBatchBags(batchId) {
         const bw = b.bagWeights ? b.bagWeights[bag] : null;
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
-        const wTag = showW ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(bw)}kg</span>` : '';
+        const wTag = showW
+          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(String(bw).replace('.', ','))}kg</span>`
+          : '';
         // A button, not a span: this chip is the only way into the bag sheet
         // that does not involve a barcode, and the sheet is where moving,
         // harvesting, reporting and the history live. On a laptop it is the way in.
@@ -11004,6 +11047,19 @@ function openAddBags(batchId) {
     last: b.bags[b.bags.length - 1]
   });
   document.getElementById('ab-qty').value = 1;
+  // Bei Körnerbrut ist "wieviele" nur die halbe Frage. Vorgeschlagen wird die
+  // Größe, aus der die Charge überwiegend besteht — meistens ergänzt man mehr
+  // davon; wer eine andere braucht, überschreibt sie.
+  const kgWrap = document.getElementById('ab-kg-wrap');
+  const kgEl = document.getElementById('ab-kg');
+  const isGrain = b.batchType === 'grain';
+  if (kgWrap) kgWrap.style.display = isGrain ? '' : 'none';
+  if (kgEl) {
+    const sizes = grainSizeSummary(b);
+    const main = _dominantBagKg(b);
+    kgEl.value = isGrain && main ? String(main).replace('.', ',') : '';
+    kgEl.title = sizes ? sizes.join(' · ') : '';
+  }
   document.getElementById('ab-preview').style.display = 'none';
   document.getElementById('m-addbags').classList.add('open');
   setTimeout(() => document.getElementById('ab-qty').focus(), 80);
@@ -11016,6 +11072,12 @@ function confirmAddBags() {
     fieldError('ab-qty', t('addBags.enterQty'));
     return;
   }
+  const kgEl = document.getElementById('ab-kg');
+  const bagKg = b.batchType === 'grain' && kgEl ? parseDecimal(kgEl.value) || 0 : 0;
+  if (b.batchType === 'grain' && !(bagKg > 0)) {
+    fieldError('ab-kg', t('batch.enterWeight'));
+    return;
+  }
   const confirmBtn = document.getElementById('addbags-confirm-btn');
   if (confirmBtn) confirmBtn.disabled = true;
   const prevBags = b.bags.slice();
@@ -11025,11 +11087,22 @@ function confirmAddBags() {
   b.bags = [...b.bags, ...newBags];
   b.qty = b.bags.length;
   _lastNewBags = newBags;
-  apiPatch('/api/batches/' + encodeURIComponent(b.batchId) + '/bags', { add: newBags, newQty: b.qty })
+  // Lokal mitschreiben, damit Etikett und Liste sofort das Gewicht zeigen, das
+  // gleich auch in der Datenbank steht.
+  if (bagKg > 0) {
+    if (!b.bagWeights) b.bagWeights = {};
+    for (const id of newBags) b.bagWeights[id] = bagKg;
+  }
+  apiPatch('/api/batches/' + encodeURIComponent(b.batchId) + '/bags', {
+    add: newBags,
+    newQty: b.qty,
+    ...(bagKg > 0 ? { bagKg } : {})
+  })
     .then((r) => {
       if (r && r.error) {
         b.bags = prevBags;
         b.qty = prevQty;
+        if (b.bagWeights) for (const id of newBags) delete b.bagWeights[id];
         setFb('err', t('common.error') + ': ' + r.error);
         document.getElementById('ab-phase-input').style.display = '';
         document.getElementById('ab-phase-result').style.display = 'none';
@@ -15659,6 +15732,10 @@ function msQuickOpen(mode, ms) {
   // persists its qty the same way (nbSaveDefaults).
   const qtyEl = document.getElementById('ms-q-qty');
   if (qtyEl) qtyEl.value = _msqLastQty(mode);
+  // Wie die Anzahl: was zuletzt angesetzt wurde, steht wieder da. msQuickRender
+  // faellt danach nicht mehr darueber her, solange niemand hineingetippt hat.
+  _msqSizesTouched = false;
+  msqSeedSizes();
   const strainEl = document.getElementById('ms-q-strain');
   if (strainEl) strainEl.value = '';
   msQuickRender();
@@ -15682,8 +15759,18 @@ function msQuickRender() {
   const isKb = _msqIsGrainspawn();
   const dw = document.getElementById('ms-q-days-wrap');
   if (dw) dw.style.display = mode === 'charge' || isKb ? '' : 'none';
-  const gw = document.getElementById('ms-q-grainkg-wrap');
-  if (gw) gw.style.display = isKb ? '' : 'none';
+  // Koernerbrut zaehlt nach Groesse, alles andere nach Stueck. Die Zeilenliste
+  // und der gemeinsame Anzahl-Zaehler sind zwei Antworten auf dieselbe Frage,
+  // also steht immer nur eine davon da -- sonst haette ein Ansatz aus 10x1 und
+  // 5x2 eine Anzahl darueber, die zu keiner der beiden Zeilen gehoert.
+  const grain = _msqIsGrain();
+  const sw = document.getElementById('ms-q-sizes-wrap');
+  if (sw) sw.style.display = grain ? '' : 'none';
+  const qw = document.getElementById('ms-q-qty-wrap');
+  if (qw) qw.style.display = grain ? 'none' : '';
+  const grid = document.getElementById('ms-q-grid');
+  if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
+  if (grain && !_msqSizesTouched) msqSeedSizes();
   if (!ms) {
     if (subEl) subEl.textContent = t('msq.pickSortePrompt');
     if (goEl) goEl.disabled = true;
@@ -15704,12 +15791,10 @@ function msQuickRender() {
     const d = document.getElementById('ms-q-days');
     if (d) d.value = ms.recIncDays || 14;
   } else if (isKb) {
-    // No block recipe carries a spawn-bag weight, so seed both from the
-    // inventory averages the grain form already uses.
+    // No block recipe carries a spawn-bag weight — msqSeedSizes() gets it from
+    // the inventory average instead, the same figure the grain form uses.
     const d = document.getElementById('ms-q-days');
     if (d && !(parseInt(d.value, 10) > 0)) d.value = 14;
-    const g = document.getElementById('ms-q-grainkg');
-    if (g && !(parseDecimal(g.value) > 0)) g.value = getAvgComp().grainBagKg;
   }
   msQuickPreview();
   msQuickFillCulture();
@@ -15730,9 +15815,18 @@ function _msqIsGrainspawn() {
   const el = document.getElementById('ms-q-labtype');
   return !!el && el.value === 'KB';
 }
+// Koernerbrut in BEIDEM Sinn: als Laborarbeit (Art = KB) und als Charge einer
+// Sorte, deren Rezept auf Koerner lautet. Beide Wege landen in
+// createGrainBatch(), beide wiegen ihre Beutel -- und der zweite hatte bisher
+// gar kein Gewichtsfeld, sondern nahm stumm recGrainKg aus dem Rezept.
+function _msqIsGrain() {
+  if (!_msQuickCtx) return false;
+  if (_msQuickCtx.mode === 'charge') return !!(_msQuickCtx.ms && _msQuickCtx.ms.recBatchType === 'grain');
+  return _msqIsGrainspawn();
+}
 function msQuickLabTypeChanged() {
   // Full re-render, not just the culture list: switching to Grainspawn shows
-  // the days + kg fields and switching away hides them again.
+  // the days field and the size rows, and switching away hides them again.
   msQuickRender();
 }
 function msQuickSorteChanged() {
@@ -15751,6 +15845,132 @@ function msQuickClose() {
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
 }
+// ── Die Groessen einer Koernerbrut, im Schnelldialog ─────────
+//
+// Ein Ansatz geht in Beutel verschiedener Groesse: dieselbe Fluessigkultur,
+// dieselbe Charge, und trotzdem 1 kg neben 2 neben 3. Das lange Formular kann
+// das seit jeher (gs-wline), der Schnelldialog trug eine Zahl -- und seit die
+// Kacheln der Weg zum Anlegen sind, macht niemand mehr das lange Formular auf,
+// um eine zweite Groesse unterzubringen. Also steht hier dieselbe Zeilenliste,
+// schmaler: kg und Anzahl an derselben Zeile, statt einer Anzahl darueber, die
+// fuer alle Groessen zugleich gaelte.
+//
+// Die Anzahl wandert damit aus dem gemeinsamen Zaehler in die Zeile. Fuer alles
+// andere im Dialog -- Petrischalen, Fluessigkultur, Bloecke -- bleibt sie oben,
+// wo sie hingehoert: dort gibt es nur eine Sorte Stueck.
+const MSQ_SIZES_KEY = 'mp-msq-sizes';
+function msqSizeRows() {
+  return Array.from(document.querySelectorAll('#ms-q-sizes .msq-size'));
+}
+// [{kg, qty}] — Zeilen ohne Gewicht oder ohne Anzahl zaehlen nicht, genau wie
+// gsReadLines() sie fallenlaesst. Was hier herauskommt, ist was angelegt wird.
+function msqReadSizes() {
+  const lines = [];
+  for (const row of msqSizeRows()) {
+    const kg = parseDecimal(row.querySelector('.msq-size-kg').value) || 0;
+    const qty = parseInt(row.querySelector('.msq-size-qty').value, 10) || 0;
+    if (kg > 0 && qty > 0) lines.push({ kg, qty });
+  }
+  return lines;
+}
+function _msqSizeRowHtml(kg, qty) {
+  return (
+    '<div class="msq-size" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
+    '<input type="text" inputmode="decimal" class="msq-size-kg" autocomplete="off" value="' +
+    esc(String(kg).replace('.', ',')) +
+    '" style="flex:1;min-width:0;text-align:center" />' +
+    '<span class="fs-meta" style="flex:none;color:var(--c-text-muted)">kg &times;</span>' +
+    '<input type="number" class="msq-size-qty" min="1" max="500" value="' +
+    esc(String(qty)) +
+    '" style="flex:1;min-width:0;text-align:center" />' +
+    '<button type="button" class="btn btn-sm msq-size-rm" aria-label="' +
+    esc(t('msq.removeSize')) +
+    '" title="' +
+    esc(t('msq.removeSize')) +
+    '" style="flex:none;display:none;min-width:var(--tap-sm);min-height:var(--tap-sm);color:var(--c-red)">&times;</button>' +
+    '</div>'
+  );
+}
+function msqRenderSizes(lines) {
+  const box = document.getElementById('ms-q-sizes');
+  if (!box) return;
+  const rows = lines && lines.length ? lines : [{ kg: 1, qty: 10 }];
+  box.innerHTML = rows.map((l) => _msqSizeRowHtml(l.kg, l.qty)).join('');
+  msqUpdateSizeRemove();
+}
+// Das Kreuz erst ab der zweiten Zeile: eine Groesse ist kein Sonderfall, den man
+// wegnehmen koennte, und ein Knopf, der die letzte Zeile loescht, macht den
+// Dialog nur unbrauchbar.
+function msqUpdateSizeRemove() {
+  const rows = msqSizeRows();
+  const multi = rows.length > 1;
+  rows.forEach((r) => {
+    const rm = r.querySelector('.msq-size-rm');
+    if (rm) rm.style.display = multi ? '' : 'none';
+  });
+}
+function msqAddSize() {
+  const box = document.getElementById('ms-q-sizes');
+  if (!box) return;
+  box.insertAdjacentHTML('beforeend', _msqSizeRowHtml(1, 10));
+  msqUpdateSizeRemove();
+  msQuickPreview();
+  const last = msqSizeRows().pop();
+  if (last) last.querySelector('.msq-size-kg').focus();
+}
+function msqRemoveSize(row) {
+  if (msqSizeRows().length < 2) return;
+  row.remove();
+  msqUpdateSizeRemove();
+  msQuickPreview();
+}
+// Was zuletzt angesetzt wurde, steht beim naechsten Mal wieder da -- aus
+// demselben Grund, aus dem _msqLastQty existiert: die Beutelzahl ist die eine
+// Zahl, die kein Rezept liefert, sie aendert sich zwischen zwei Ansaetzen kaum,
+// und sie auf dem Telefon jedesmal neu zu tippen ist die Reibung, gegen die der
+// Schnelldialog gebaut wurde. Die Groessen gehoeren dazu: wer 10x1 und 5x2
+// ansetzt, setzt das naechste Mal wieder so an.
+function _msqLastSizes(mode) {
+  try {
+    const s = JSON.parse(localStorage.getItem(MSQ_SIZES_KEY) || '{}');
+    const lines = Array.isArray(s[mode]) ? s[mode] : null;
+    const clean = (lines || [])
+      .map((l) => ({ kg: Number(l && l.kg), qty: parseInt(l && l.qty, 10) }))
+      .filter((l) => l.kg > 0 && l.qty > 0);
+    if (clean.length) return clean;
+  } catch (e) {
+    /* storage disabled — fall back to the recipe */
+  }
+  return null;
+}
+// Beruehrt heisst: in der Liste wurde getippt oder geklickt. Bis dahin darf
+// jedes Neuzeichnen -- Sortenwechsel, Art gewechselt -- die Zeilen frisch aus
+// Rezept und Gedaechtnis setzen; danach nicht mehr, sonst raeumt ein Wechsel
+// der Sorte die eben getippten Groessen weg.
+let _msqSizesTouched = false;
+function msqSeedSizes() {
+  const mode = _msQuickCtx ? _msQuickCtx.mode : 'labor';
+  const ms = _msQuickCtx ? _msQuickCtx.ms : null;
+  const remembered = _msqLastSizes(mode);
+  if (remembered) {
+    msqRenderSizes(remembered);
+    return;
+  }
+  // Das Rezept der Sorte zuerst -- eine Koerner-Sorte traegt ihre Beutelgroesse
+  // in recGrainKg. Sonst der Lagerschnitt, den das lange Formular auch nimmt.
+  const kg = (ms && ms.recGrainKg > 0 ? ms.recGrainKg : getAvgComp().grainBagKg) || 1;
+  msqRenderSizes([{ kg, qty: 10 }]);
+}
+function _msqSaveSizes(mode, lines) {
+  if (!lines || !lines.length) return;
+  try {
+    const s = JSON.parse(localStorage.getItem(MSQ_SIZES_KEY) || '{}');
+    s[mode] = lines;
+    localStorage.setItem(MSQ_SIZES_KEY, JSON.stringify(s));
+  } catch (e) {
+    /* storage disabled — next open starts from the recipe again */
+  }
+}
 function msqQtyStep(d) {
   const el = document.getElementById('ms-q-qty');
   if (!el) return;
@@ -15766,34 +15986,43 @@ function msQuickPreview() {
     return;
   }
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
-  // Beide Zweige rechnen die Menge ein, also darf keiner mehr "pro Stück:"
-  // darüberschreiben — der Vorspann des Rezepteditors, der dort mit Anzahl 1
-  // rechnet und hier seit jeher die Summe beschriftet hat.
-  if (_msQuickCtx.mode === 'charge') {
-    const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
-    el.textContent = parts.length ? t('msq.needFor', { n: qty }) + ' ' + parts.join(' · ') : '';
-  } else if (_msqIsGrainspawn()) {
+  // Körnerbrut zuerst, auch wenn sie als Charge kommt: eine Körner-Sorte fiel
+  // vorher in den Charge-Zweig und wurde dort mit der Anzahl oben gerechnet —
+  // der Zahl, die es für sie nicht mehr gibt.
+  //
+  // Beide anderen Zweige rechnen die Menge ein, also darf keiner mehr "pro
+  // Stück:" darüberschreiben — der Vorspann des Rezepteditors, der dort mit
+  // Anzahl 1 rechnet und hier seit jeher die Summe beschriftet hat.
+  if (_msqIsGrain()) {
     // Drei Zahlen hingen an einer Überschrift, die zu keiner davon gehörte:
     // "pro Stück: 7.6 kg" stand unter 10 × 2 kg. 2 kg kommt in einen Beutel,
     // 20 kg setzt man an, und 7,6 kg ist davon das trockene Korn, das vom Lager
     // abgeht — ausgerechnet die eine Zahl, die nicht pro Stück gilt. Alle drei
-    // stehen jetzt da, jede benannt.
+    // stehen jetzt da, jede benannt — und die erste ist jetzt die Aufstellung
+    // der Größen, weil ein Ansatz aus mehr als einer bestehen darf.
     //
     // Die Feuchte kommt aus dem Rezept der Sorte, nicht aus getAvgComp():
     // msQuickConfirm schreibt genau diesen Wert nach gs-rh, und createGrainBatch
     // bucht damit (siehe koernerfeuchte-quelle.test.js). Der Schnitt über alle
     // Rezepte kündigte hier eine andere Menge an, als gleich gebucht wird.
-    const kg = parseDecimal((document.getElementById('ms-q-grainkg') || {}).value) || 0;
+    const lines = msqReadSizes();
     const rh = _msQuickCtx.ms.recGrainRhPct != null ? _msQuickCtx.ms.recGrainRhPct : 52;
     const num = (v) => (Math.round(v * 1000) / 1000).toString();
-    el.textContent =
-      qty > 0 && kg > 0
-        ? t('msq.grainPreview', { n: qty }) +
-          ' — ' +
-          t('msq.grainWet', { kg: num(kg), total: num(kg * qty) }) +
-          ' · ' +
-          t('msq.grainDry', { dry: num(qty * mtDryKg(kg, rh)) })
-        : '';
+    const totalQty = lines.reduce((a, l) => a + l.qty, 0);
+    const totalWet = lines.reduce((a, l) => a + l.kg * l.qty, 0);
+    const totalDry = lines.reduce((a, l) => a + l.qty * mtDryKg(l.kg, rh), 0);
+    el.textContent = totalQty
+      ? t('msq.grainPreview', { n: totalQty }) +
+        ' — ' +
+        lines.map((l) => l.qty + ' × ' + num(l.kg) + ' kg').join(' + ') +
+        ' · ' +
+        t('msq.grainTotal', { total: num(totalWet) }) +
+        ' · ' +
+        t('msq.grainDry', { dry: num(totalDry) })
+      : '';
+  } else if (_msQuickCtx.mode === 'charge') {
+    const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
+    el.textContent = parts.length ? t('msq.needFor', { n: qty }) + ' ' + parts.join(' · ') : '';
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
@@ -15858,12 +16087,29 @@ function msQuickConfirm() {
   }
   const ms = _msQuickCtx.ms;
   const mode = _msQuickCtx.mode;
-  const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
-  if (qty < 1) {
-    fieldError('ms-q-qty', t('batch.fillQty'));
-    return;
+  // Körnerbrut bringt ihre Anzahl je Größe mit, alles andere die eine oben.
+  // Geprüft wird HIER, solange der Dialog noch steht: gsReadLines() lässt
+  // Zeilen ohne Gewicht fallen, und eine leere Liste erreichte createGrainBatch
+  // als "keine Zeilen" — dessen Meldung erschien dann gegen einen Dialog, der
+  // längst zu war, und alles Getippte war weg.
+  const grain = _msqIsGrain();
+  const sizes = grain ? msqReadSizes() : [];
+  let qty;
+  if (grain) {
+    if (!sizes.length) {
+      toast(t('batch.enterWeight'), 'err');
+      return;
+    }
+    qty = sizes.reduce((a, l) => a + l.qty, 0);
+    _msqSaveSizes(mode, sizes);
+  } else {
+    qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
+    if (qty < 1) {
+      fieldError('ms-q-qty', t('batch.fillQty'));
+      return;
+    }
+    _msqSaveQty(mode, qty);
   }
-  _msqSaveQty(mode, qty);
   const strainText = (document.getElementById('ms-q-strain').value || '').trim();
   const setv = (id, val) => {
     const el = document.getElementById(id);
@@ -15877,24 +16123,9 @@ function msQuickConfirm() {
     // G-prefixed barcoded bags, so it goes through createGrainBatch like the
     // full Körnerbrut form rather than logLabWork.
     if (labType === 'KB') {
-      const grainKg = parseDecimal((document.getElementById('ms-q-grainkg') || {}).value) || 0;
-      // Validate before closing: gsReadLines drops zero-weight rows, so a 0 here
-      // would reach createGrainBatch as "no lines" and alert against a dialog
-      // that is already gone, discarding everything typed.
-      if (grainKg <= 0) {
-        toast(t('batch.enterWeight'), 'err');
-        return;
-      }
       setv('lw-st', ms.id);
       setv('lw-strain-text', strainText);
-      if (typeof gsResetLines === 'function') gsResetLines();
-      const row = document.querySelector('.gs-wline');
-      if (row) {
-        const kgEl = row.querySelector('.gs-line-kg');
-        const qtyEl = row.querySelector('.gs-line-qty');
-        if (kgEl) kgEl.value = grainKg;
-        if (qtyEl) qtyEl.value = qty;
-      }
+      gsSetLines(sizes);
       setv('gs-days', parseInt(document.getElementById('ms-q-days').value) || 14);
       // Die Feuchte der Sorte, nicht der Schnitt über alle: ms steht hier, und
       // der Zweig 40 Zeilen tiefer liest sie längst so. getAvgComp() mittelt
@@ -15933,14 +16164,9 @@ function msQuickConfirm() {
   if (ms.recBatchType === 'grain') {
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
-    if (typeof gsResetLines === 'function') gsResetLines();
-    const row = document.querySelector('.gs-wline');
-    if (row) {
-      const kgEl = row.querySelector('.gs-line-kg');
-      const qtyEl = row.querySelector('.gs-line-qty');
-      if (kgEl) kgEl.value = ms.recGrainKg || 1;
-      if (qtyEl) qtyEl.value = qty;
-    }
+    // Die Größen aus dem Dialog, nicht mehr recGrainKg: das Rezept hat die
+    // Zeilen beim Öffnen gefüllt, danach gehören sie diesem einen Ansatz.
+    gsSetLines(sizes);
     setv('gs-days', days);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
     fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
@@ -16404,6 +16630,29 @@ function gsUpdateRemoveButtons() {
     r.querySelector('.gs-line-rm').style.display = multi ? '' : 'none';
   });
 }
+// Die Gewichtszeilen des langen Formulars von aussen setzen.
+//
+// Der Schnelldialog fuellte sie vorher selbst: gsResetLines(), dann
+// querySelector('.gs-wline') und zwei Werte hineinschreiben -- an zwei Stellen,
+// und beide konnten nur EINE Zeile fuellen. Genau das war die Grenze: ein
+// Ansatz, eine Groesse. Hier steht der Weg fuer beliebig viele, einmal.
+function gsSetLines(lines) {
+  gsResetLines();
+  const container = document.getElementById('gs-weight-lines');
+  if (!container || !lines || !lines.length) return;
+  for (let i = 1; i < lines.length; i++) gsAddLine();
+  const rows = container.querySelectorAll('.gs-wline');
+  lines.forEach((l, i) => {
+    const row = rows[i];
+    if (!row) return;
+    row.querySelector('.gs-line-kg').value = l.kg;
+    row.querySelector('.gs-line-qty').value = l.qty;
+    row.querySelectorAll('.gs-wbtn').forEach((btn) => {
+      btn.className = 'btn btn-sm gs-wbtn' + (parseFloat(btn.dataset.kg) === l.kg ? ' btn-p' : '');
+    });
+  });
+  gsUpdateRemoveButtons();
+}
 /** Reset grain spawn form to single default line */
 function gsResetLines() {
   const container = document.getElementById('gs-weight-lines');
@@ -16491,9 +16740,15 @@ function createGrainBatch() {
     }
   }
   const bagIds = bags.map((b) => b.id);
-  // Determine batch-level bagKg: single weight if uniform, null if mixed
-  const uniqueWeights = new Set(lines.map((l) => l.kg));
-  const batchBagKg = uniqueWeights.size === 1 ? lines[0].kg : null;
+  // Das Gewicht der CHARGE, wo jeder Beutel schon sein eigenes trägt.
+  //
+  // Bei gemischten Größen stand hier null — und insertBatch schreibt
+  // `b.bagKg || 3` in die Spalte, also trug eine Charge aus 1- und 2-kg-Beuteln
+  // hinterher eine 3, die nie jemand angesetzt hat. Die Zahl ist nicht
+  // folgenlos: addBagsToBatch nimmt sie als Gewicht für nachträglich ergänzte
+  // Beutel, und bagWeights fällt auf sie zurück. Also die Größe, aus der die
+  // meisten Beutel sind — die Antwort, die am seltensten falsch ist.
+  const batchBagKg = lines.reduce((best, l) => (l.qty > best.qty ? l : best), lines[0]).kg;
   batches.push({
     batchId,
     species: sp,
@@ -18107,6 +18362,25 @@ function _bagTotalBadge(batch) {
 function _lineBlockW(y, fontH, badge) {
   return badge && y < badge.y + badge.h && badge.y < y + fontH ? badge.x - 6 : 400;
 }
+// Was auf dem Beutel steht, wenn man sein Gewicht draufschreibt: 1 → "1kg",
+// 2.5 → "2,5kg". Der Punkt ist eine Programmiersprache, das Etikett liest ein
+// Mensch in einer deutschen Halle.
+function labelKg(kg) {
+  return String(Math.round(kg * 1000) / 1000).replace('.', ',') + 'kg';
+}
+// Das Gewicht EINES Beutels, so wie das Etikett es braucht.
+//
+// bagWeights kommt aus db.js und ist immer gefüllt (bag_kg der Zeile, sonst das
+// der Charge). Vorher wurde es nur weitergereicht, wenn eine Charge GEMISCHTE
+// Größen trug — die Idee war, nichts zu drucken, was ohnehin für alle gilt. Nur
+// steht der Beutel später allein im Regal, und dann gilt für ihn gar nichts
+// mehr: 1 kg und 2 kg Körnerbrut sind zwei verschiedene Dinge, und welches man
+// in der Hand hält, sagte das Etikett nur in der einen Hälfte der Fälle.
+function bagLabelKg(batch, bagId) {
+  const w = batch && batch.bagWeights ? batch.bagWeights[bagId] : null;
+  if (Number.isFinite(w) && w > 0) return w;
+  return Number.isFinite(batch && batch.bagKg) && batch.bagKg > 0 ? batch.bagKg : null;
+}
 function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = [];
   // Numeric barcode: lookup from barcode registry, fall back to legacy encoding
@@ -18144,7 +18418,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
-      if (bagKg != null) parts.push(bagKg + 'kg');
+      if (bagKg != null) parts.push(labelKg(bagKg));
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -18176,7 +18450,7 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
       const rawNotes = (batch.notes || '').trim();
       const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
       const parts = [species];
-      if (bagKg != null) parts.push(bagKg + 'kg');
+      if (bagKg != null) parts.push(labelKg(bagKg));
       if (strainTxt) parts.push(strainTxt);
       if (notes) parts.push(notes);
       const line2 = parts.join(' \u2013 ');
@@ -18254,14 +18528,10 @@ function labLabelItems(id, c, detail, qr) {
 
 function makeBagZPL(bags, batch, detail, qr) {
   const legacyFallbackIds = [];
-  // Pass per-bag weight to label items when batch has mixed weights
-  const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
-  const mixed = wVals.size > 1;
   const zpl = bags
-    .map((bagId) => {
-      const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
-      return itemsToZPL(bagLabelItems(bagId, batch, detail, legacyFallbackIds, qr, bk));
-    })
+    .map((bagId) =>
+      itemsToZPL(bagLabelItems(bagId, batch, detail, legacyFallbackIds, qr, bagLabelKg(batch, bagId)))
+    )
     .join('\n');
   if (legacyFallbackIds.length) {
     console.warn('makeBagZPL: numeric barcodes not found for bags, used legacy fallback:', legacyFallbackIds);
@@ -18588,10 +18858,8 @@ function renderBagPreview() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px';
   const allDeferred = [];
-  const wVals = batch.bagWeights ? new Set(Object.values(batch.bagWeights)) : new Set();
-  const mixed = wVals.size > 1;
   batch.bags.forEach((bagId) => {
-    const bk = mixed && batch.bagWeights ? batch.bagWeights[bagId] : null;
+    const bk = bagLabelKg(batch, bagId);
     const { cell, deferred } = buildPreviewCell(bagLabelItems(bagId, batch, mode, null, qr, bk));
     wrap.appendChild(cell);
     allDeferred.push(...deferred);
@@ -25002,6 +25270,27 @@ function initEventListeners() {
   });
   $('gs-weight-lines').addEventListener('input', gsPreview);
   $('gs-add-line').addEventListener('click', gsAddLine);
+  // Dieselben Zeilen im Schnelldialog. Delegiert, weil msqRenderSizes() den
+  // Inhalt neu schreibt — ein Zuhoerer je Zeile waere nach dem ersten
+  // Neuzeichnen weg.
+  if ($('ms-q-sizes')) {
+    $('ms-q-sizes').addEventListener('click', (e) => {
+      const rm = e.target.closest('.msq-size-rm');
+      if (rm) {
+        _msqSizesTouched = true;
+        msqRemoveSize(rm.closest('.msq-size'));
+      }
+    });
+    $('ms-q-sizes').addEventListener('input', () => {
+      _msqSizesTouched = true;
+      msQuickPreview();
+    });
+  }
+  if ($('ms-q-add-size'))
+    $('ms-q-add-size').addEventListener('click', () => {
+      _msqSizesTouched = true;
+      msqAddSize();
+    });
   if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);
