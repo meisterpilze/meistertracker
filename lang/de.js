@@ -50,6 +50,20 @@ window.LANG['de'] = {
   'proj.showDone': 'Erledigte anzeigen ({n})',
   'proj.hideDone': 'Erledigte ausblenden ({n})',
   'proj.moreOn': 'Mehr dazu',
+  // Notizen: formloser Text, der zu einem Reiter gehoert und zu keinem
+  // Datensatz. Der Ansatz traegt sein Ergebnis in einer Zeile; was laenger
+  // ist, steht hier.
+  'proj.notes': 'Notizen',
+  'proj.noteLead': 'Was länger ist als eine Zeile, steht hier — und nicht im Ansatz.',
+  'proj.notePh': 'Beobachtung, Angebot, Entscheidung …',
+  'proj.noteAdd': 'Notiz',
+  'proj.noteNone': 'Noch keine Notiz.',
+  'proj.noteEdit': 'Ändern',
+  'proj.noteEdited': 'geändert',
+  'proj.noteEmpty': 'Die Notiz ist leer.',
+  'proj.noteDelTitle': 'Notiz löschen?',
+  'proj.noteDelMsg': 'Die Notiz ist danach weg. Versuche und Recherche bleiben.',
+  'proj.research': 'Aus der Recherche ({n})',
   // Versuche — ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz.
   'exp.outcome': 'Ausgang',
   'exp.out.open': 'offen',

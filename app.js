@@ -330,6 +330,7 @@ let mushroomStrains = [],
   movements = [],
   manualTasks = [],
   experiments = [],
+  projectNotes = [],
   harvests = [],
   cultures = [],
   inventory = {},
@@ -593,6 +594,7 @@ function applyData(d) {
   movements = d.movements || d.scanLog || [];
   manualTasks = d.manualTasks || [];
   experiments = d.experiments || [];
+  projectNotes = d.projectNotes || [];
   harvests = d.harvests || [];
   cultures = d.cultures || [];
   inventory = d.inventory || defaultInventory();
@@ -15766,30 +15768,185 @@ function pjItem(it) {
       `<button class="btn btn-sm fs-xs" data-pj-copy="1">${esc(t('common.copy'))}</button>`;
   return head + body;
 }
+// ── Notizen ─────────────────────────────────────────────────
+//
+// Der Reiter trug zwei Sorten Text nebeneinander: die Handgriffe eines Tages
+// und die Recherche dahinter. Beide standen als gleich grosse Karten
+// untereinander, und die Recherche war die laengere — ein Dutzend zugeklappter
+// Karten unter den offenen. Am Telefon heisst das scrollen an etwas vorbei,
+// das heute niemand braucht.
+//
+// Jetzt gibt es dafuer eine Tuer, und hinter derselben Tuer steht, was hier
+// selbst entsteht. Das ist derselbe Gedanke wie beim Ansatz, dessen Ergebnis
+// eine Zeile ist: was laenger ist als die Zeile, gehoert nach hinten. Der
+// Versuch bleibt eine Tabelle, die man ueberfliegt.
+function pjNotizDatum(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function pjNotizZeile(n) {
+  return (
+    `<li class="pj-note" data-pj-note-id="${n.id}">` +
+    '<div class="pj-note-top">' +
+    `<span class="pj-note-date">${esc(pjNotizDatum(n.created))}${n.updated ? ' · ' + esc(t('proj.noteEdited')) : ''}</span>` +
+    '<span class="pj-note-btns">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-note-edit="${n.id}">${esc(t('proj.noteEdit'))}</button>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-note-del="${n.id}">${esc(t('common.delete'))}</button>` +
+    '</span></div>' +
+    // Der Text steht doppelt da: einmal gelesen, einmal zum Aendern. Umgeschaltet
+    // wird mit einer Klasse, nicht mit neuem HTML — sonst waere der halb
+    // getippte Satz beim naechsten Datenstand weg.
+    `<div class="pj-note-body">${pjText(n.body)}</div>` +
+    `<textarea class="pj-note-edit" rows="6" maxlength="20000" aria-label="${esc(t('proj.notes'))}">${esc(n.body)}</textarea>` +
+    '<div class="pj-note-bar">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-note-save="${n.id}">${esc(t('common.save'))}</button>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-note-cancel="${n.id}">${esc(t('common.cancel'))}</button>` +
+    '</div></li>'
+  );
+}
+function pjNotizen(key, zu) {
+  const meine = projectNotes.filter((n) => n.tab === key);
+  const liste = meine.length
+    ? '<ul class="pj-notes">' + meine.map(pjNotizZeile).join('') + '</ul>'
+    : `<p class="pj-empty">${esc(t('proj.noteNone'))}</p>`;
+  const recherche = zu.length
+    ? '<details class="pj-fold pj-refs">' +
+      `<summary class="sec">${esc(t('proj.research', { n: zu.length }))}</summary>` +
+      zu
+        .map(
+          (s) =>
+            '<details class="pj-fold pj-ref">' +
+            `<summary class="sec">${pjText(s.t)}</summary>` +
+            s.items.map(pjItem).join('') +
+            '</details>'
+        )
+        .join('') +
+      '</details>'
+    : '';
+  return (
+    '<div class="card pj-sec pj-notebox">' +
+    `<div class="sec">${esc(t('proj.notes'))}</div>` +
+    `<p class="pj-p">${esc(t('proj.noteLead'))}</p>` +
+    `<textarea id="pj-note-new" rows="3" maxlength="20000" placeholder="${esc(t('proj.notePh'))}" aria-label="${esc(t('proj.notes'))}"></textarea>` +
+    '<div class="pj-note-bar">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-note-add="${esc(key)}">${esc(t('proj.noteAdd'))}</button>` +
+    '</div>' +
+    liste +
+    recherche +
+    '</div>'
+  );
+}
+// Anlegen, aendern, wegwerfen. Aendern schaltet nur eine Klasse um und schreibt
+// nichts neu, damit ein halb getippter Satz einen Datenstand ueberlebt.
+function pjNotizClick(e) {
+  const anlegen = e.target.closest('[data-pj-note-add]');
+  if (anlegen) {
+    const feld = document.getElementById('pj-note-new');
+    const body = ((feld && feld.value) || '').trim();
+    if (!body) {
+      toast(t('proj.noteEmpty'), 'err');
+      return true;
+    }
+    const tab = anlegen.dataset.pjNoteAdd;
+    const daten = { tab, body };
+    apiPost('/api/project-notes', daten).then((r) => {
+      if (r && r.id) projectNotes.unshift({ ...daten, id: r.id, created: new Date().toISOString(), updated: '' });
+      renderProjekte(tab);
+    });
+    return true;
+  }
+  const aendern = e.target.closest('[data-pj-note-edit]');
+  if (aendern) {
+    const zeile = aendern.closest('.pj-note');
+    if (zeile) {
+      zeile.classList.add('is-edit');
+      const feld = zeile.querySelector('.pj-note-edit');
+      if (feld) feld.focus();
+    }
+    return true;
+  }
+  const abbrechen = e.target.closest('[data-pj-note-cancel]');
+  if (abbrechen) {
+    const zeile = abbrechen.closest('.pj-note');
+    const n = projectNotes.find((x) => x.id === Number(abbrechen.dataset.pjNoteCancel));
+    if (zeile) {
+      zeile.classList.remove('is-edit');
+      const feld = zeile.querySelector('.pj-note-edit');
+      if (feld && n) feld.value = n.body;
+    }
+    return true;
+  }
+  const sichern = e.target.closest('[data-pj-note-save]');
+  if (sichern) {
+    const id = Number(sichern.dataset.pjNoteSave);
+    const zeile = sichern.closest('.pj-note');
+    const feld = zeile && zeile.querySelector('.pj-note-edit');
+    const body = ((feld && feld.value) || '').trim();
+    if (!body) {
+      toast(t('proj.noteEmpty'), 'err');
+      return true;
+    }
+    const n = projectNotes.find((x) => x.id === id);
+    if (n) {
+      n.body = body;
+      n.updated = new Date().toISOString();
+      apiPatch('/api/project-notes/' + id, { body });
+      renderProjekte(n.tab);
+    }
+    return true;
+  }
+  const weg = e.target.closest('[data-pj-note-del]');
+  if (weg) {
+    const id = Number(weg.dataset.pjNoteDel);
+    const n = projectNotes.find((x) => x.id === id);
+    if (!n) return true;
+    confirm2(t('proj.noteDelTitle'), t('proj.noteDelMsg'), t('common.delete'), () => {
+      projectNotes = projectNotes.filter((x) => x.id !== id);
+      apiDelete('/api/project-notes/' + id);
+      renderProjekte(n.tab);
+    });
+    return true;
+  }
+  return false;
+}
 function renderProjekte(key) {
   const el = document.getElementById('pj-' + key);
   const doc = PJ_DOCS[key];
   if (!el || !doc) return;
-  const abschnitte = doc.sections.filter((s) => !s.fold).concat(doc.sections.filter((s) => s.fold));
+  const offen = doc.sections.filter((s) => !s.fold);
+  const zu = doc.sections.filter((s) => s.fold);
+  // Nur die Forschung hat die Notizen-Tuer. Produkte und Bau behalten ihre
+  // zugeklappten Karten, bis jemand dort dieselbe Ordnung will — dann ist es
+  // diese eine Bedingung.
+  const hinten =
+    key === 'research'
+      ? pjNotizen(key, zu)
+      : zu
+          .map(
+            (s) =>
+              '<details class="card pj-sec pj-fold">' +
+              `<summary class="sec">${pjText(s.t)}</summary>` +
+              s.items.map(pjItem).join('') +
+              '</details>'
+          )
+          .join('');
   el.innerHTML =
     '<div class="card pj-head">' +
     `<div class="pj-title">${pjText(doc.title)}</div>` +
     `<div class="pj-meta">${pjText(doc.meta)}</div>` +
     `<p class="pj-lead">${pjText(doc.lead)}</p>` +
     '</div>' +
-    abschnitte
-      .map((s) =>
-        s.fold
-          ? '<details class="card pj-sec pj-fold">' +
-            `<summary class="sec">${pjText(s.t)}</summary>` +
-            s.items.map(pjItem).join('') +
-            '</details>'
-          : '<div class="card pj-sec">' +
-            `<div class="sec">${pjText(s.t)}</div>` +
-            s.items.map(pjItem).join('') +
-            '</div>'
+    offen
+      .map(
+        (s) =>
+          '<div class="card pj-sec">' +
+          `<div class="sec">${pjText(s.t)}</div>` +
+          s.items.map(pjItem).join('') +
+          '</div>'
       )
-      .join('');
+      .join('') +
+    hinten;
   pjPlansRefresh(el);
 }
 // Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
@@ -15809,6 +15966,7 @@ function pjClick(e) {
     return;
   }
   if (pjVersuchClick(e)) return;
+  if (pjNotizClick(e)) return;
   const mehr = e.target.closest('[data-pj-more]');
   if (mehr) {
     const det = document.getElementById('pjd-' + mehr.dataset.pjMore);

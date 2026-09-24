@@ -427,6 +427,15 @@ CREATE TABLE IF NOT EXISTS experiment_photos (
 );
 CREATE INDEX IF NOT EXISTS idx_exp_photos ON experiment_photos(experiment_id, uploaded_at);
 
+CREATE TABLE IF NOT EXISTS project_notes (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  tab     TEXT NOT NULL,
+  body    TEXT NOT NULL,
+  created TEXT NOT NULL,
+  updated TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_project_notes ON project_notes(tab, id DESC);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -2550,6 +2559,20 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_exp_photos ON experiment_photos(experiment_id, uploaded_at)');
     }
+  },
+  {
+    version: 86,
+    description: 'Notizen je Vorhaben-Reiter',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS project_notes (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        tab     TEXT NOT NULL,
+        body    TEXT NOT NULL,
+        created TEXT NOT NULL,
+        updated TEXT
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_project_notes ON project_notes(tab, id DESC)');
+    }
   }
 ];
 
@@ -3069,6 +3092,7 @@ function readAll(db, opts = {}) {
     pickupLocations,
     barcodes,
     experiments: listExperiments(db),
+    projectNotes: listProjectNotes(db),
     version
   };
 }
@@ -7094,6 +7118,54 @@ function deleteExperimentRun(db, id) {
   return info.changes > 0;
 }
 
+// ── Notizen je Vorhaben-Reiter ──────────────────────────────
+//
+// Die Recherche im Reiter ist Inhalt und steht im Code; sie aendert sich, wenn
+// jemand sie neu schreibt. Eine Notiz ist das Gegenteil: sie entsteht am Tisch,
+// gehoert dem Tag und niemandem sonst, und sie darf formlos sein. Deshalb eine
+// eigene Tabelle statt eines weiteren Abschnitts — und deshalb nur drei Felder.
+//
+// Ein Ansatz traegt sein Ergebnis in einer Zeile: ein paar Messwerte. Alles, was laenger ist als diese Zeile, gehoert hierher und
+// nicht in den Versuch. Das ist der ganze Zweck: der Versuch bleibt eine
+// Tabelle, die man ueberfliegt, und das Drumherum hat trotzdem einen Ort.
+const NOTIZ_REITER = ['research', 'products', 'build'];
+
+function listProjectNotes(db) {
+  return db
+    .prepare('SELECT * FROM project_notes ORDER BY id DESC')
+    .all()
+    .map((n) => ({ id: n.id, tab: n.tab, body: n.body, created: n.created, updated: n.updated || '' }));
+}
+
+function insertProjectNote(db, n) {
+  if (!n.tab || !n.body) throw new Error('tab and body are required');
+  if (!NOTIZ_REITER.includes(n.tab)) throw new Error('invalid tab: ' + n.tab);
+  const info = db
+    .prepare('INSERT INTO project_notes(tab,body,created) VALUES(?,?,?)')
+    .run(n.tab, n.body, n.created || new Date().toISOString());
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+
+function updateProjectNote(db, id, f) {
+  if (f.body === undefined) return false;
+  if (!f.body) throw new Error('body is required');
+  const info = db
+    .prepare('UPDATE project_notes SET body=?, updated=? WHERE id=?')
+    .run(f.body, new Date().toISOString(), id);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
+// Eine Notiz darf weg. Sie ist kein Laborbucheintrag, sondern ein Zettel, und
+// ein Zettel, den man nicht wegwerfen kann, sammelt sich zu dem an, was dieser
+// Reiter gerade loswerden soll.
+function deleteProjectNote(db, id) {
+  const info = db.prepare('DELETE FROM project_notes WHERE id=?').run(id);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
 function listSuppliers(db) {
   return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
 }
@@ -10771,6 +10843,10 @@ module.exports = {
   insertExperimentRun,
   updateExperimentRun,
   deleteExperimentRun,
+  listProjectNotes,
+  insertProjectNote,
+  updateProjectNote,
+  deleteProjectNote,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,

@@ -8029,6 +8029,10 @@ tr.ms-off .ms-prog {
 .pj-t td {
   vertical-align: top;
   line-height: 1.5;
+  /* Die Artentabelle hat sechs Spalten. Ohne das schiebt ein langes Wort wie
+     „Verbundwerkstoff" die Tabelle am schmalsten Schreibtisch über ihre Karte
+     hinaus — anywhere zählt beim Spaltenrechnen mit, break-word nicht. */
+  overflow-wrap: anywhere;
 }
 /* Rezeptkarten. auto-fit mit 232px heißt: drei nebeneinander am Schreibtisch,
    eine untereinander am Telefon, ohne eine einzige Abfrage nach der Fensterbreite. */
@@ -8510,4 +8514,88 @@ tr.ms-off .ms-prog {
 }
 .pj-zurueck:hover {
   color: var(--c-text);
+}
+
+/* ── Notizen ─────────────────────────────────────────────────
+   Ein Zettel neben dem Laborbuch. Ein Ansatz traegt sein Ergebnis in einer
+   Zeile, damit die Tabelle zu ueberfliegen bleibt; alles, was laenger ist,
+   steht hier. Hinter derselben Tuer liegt die Recherche, weil beide dasselbe
+   sind: nachschlagen, nicht lesen. */
+.pj-notebox textarea {
+  width: 100%;
+  margin-top: 8px;
+  font: inherit;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-bg);
+  color: var(--c-text);
+  resize: vertical;
+}
+/* Der Knopf bleibt so breit wie sein Wort. */
+.pj-note-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.pj-notes {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+.pj-note {
+  padding: 12px 0;
+  border-top: 1px solid var(--c-border-light);
+}
+.pj-note-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.pj-note-date {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.pj-note-btns {
+  display: flex;
+  gap: 8px;
+}
+/* Zeilenumbrueche bleiben Zeilenumbrueche: eine Notiz wird getippt, nicht
+   gesetzt. Der Text geht durch pjText, Markup entsteht daraus keins. */
+.pj-note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.55;
+}
+.pj-note .pj-note-edit,
+.pj-note .pj-note-bar {
+  display: none;
+}
+.pj-note.is-edit .pj-note-body {
+  display: none;
+}
+.pj-note.is-edit .pj-note-edit {
+  display: block;
+}
+.pj-note.is-edit .pj-note-bar {
+  display: flex;
+}
+/* Die Recherche sitzt jetzt hinter den Notizen statt als dreizehn eigene
+   Karten darunter: eine Tuer, dahinter die Schubladen. */
+.pj-refs {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border);
+}
+.pj-ref {
+  margin-top: 10px;
+  padding-left: 14px;
+  border-left: 2px solid var(--c-border-light);
 }

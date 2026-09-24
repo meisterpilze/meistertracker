@@ -9220,6 +9220,81 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Notizen je Vorhaben-Reiter ─────────────────────────────
+  //
+  // Formloser Text, der zu einem Reiter gehoert und zu keinem Datensatz. Eine
+  // Notiz darf geloescht werden — anders als ein Versuch, der abgeschlossen
+  // wird. Der Unterschied ist Absicht: ein Laborbuch bewahrt, ein Zettel nicht.
+  const notizTreffer = url.match(/^\/api\/project-notes\/(\d+)$/);
+  if (req.method === 'POST' && url === '/api/project-notes') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['tab', 'body']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { tab: 'string', body: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { tab: 20, body: 20000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        const id = db.insertProjectNote(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'PATCH' && notizTreffer) {
+    const id = parseInt(notizTreffer[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vt = validateTypes(data, { body: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { body: 20000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        db.updateProjectNote(database, id, data);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && notizTreffer) {
+    try {
+      db.deleteProjectNote(database, parseInt(notizTreffer[1]));
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Team Members --
   if (req.method === 'POST' && req.url === '/api/team') {
     if (requireAdmin(req, res)) return;
