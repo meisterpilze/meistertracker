@@ -7907,6 +7907,109 @@ tr.ms-off .ms-prog {
   margin-bottom: 10px;
 }
 
+/* Stamm und "Angesetzt am": derselbe Baustein im Schnelldialog und im
+   Chargen-Assistenten. Auswahl oder Feld nimmt die Breite, der Knopf daneben
+   nur seine eigene — am Telefon bleibt beides in einer Zeile, ohne dass der
+   Knopf zum Balken wird. */
+.stamm-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.stamm-row > input,
+.stamm-row > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.stamm-row > .btn {
+  flex: none;
+}
+/* Im Schnelldialog stehen die Felder mit 8px Abstand untereinander; im
+   Assistenten sorgt .wkf-field selbst dafür. Leer — ohne Sorte — nimmt der Platz
+   gar keinen Raum. */
+#ms-quick-modal .stamm-wrap:not(:empty),
+#ms-quick-modal .anlage-wrap:not(:empty) {
+  margin-top: 8px;
+}
+#wkf-body .anlage-wrap:not(:empty) {
+  margin-bottom: 10px;
+}
+.anlage-zu {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.anlage-k {
+  color: var(--c-text-muted);
+}
+
+/* Die Karte "Stämme" auf der Sortenseite: je Sorte ihre Stämme, und darunter,
+   was an Chargen und Kulturen steht, ohne in der Liste zu sein. */
+.stamm-hint {
+  color: var(--c-text-muted);
+  margin-bottom: 10px;
+}
+.stamm-add {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+.stamm-add > select {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.stamm-add > input {
+  flex: 2 1 200px;
+  min-width: 0;
+}
+.stamm-add > .btn {
+  flex: none;
+}
+.stamm-gruppe {
+  border-top: 1px solid var(--c-border);
+  padding: 10px 0;
+}
+.stamm-sorte {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.stamm-kz {
+  font-family: monospace;
+  color: var(--c-text-muted);
+}
+/* Name und Verwendung links übereinander, die Knöpfe rechts: so bleibt eine
+   Zeile eine Zeile, auch wenn der Name lang ist — als Flex-Reihe brach am
+   Telefon das Kreuz allein in die nächste. */
+.stamm-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.stamm-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.stamm-use {
+  display: block;
+}
+.stamm-use,
+.stamm-fremd,
+.stamm-leer {
+  color: var(--c-text-muted);
+}
+.stamm-fremd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
 /* Kartenkopf mit Motiv: derselbe Strich wie auf den Arbeitsgang-Kacheln, damit
    Substrat ansetzen und Growbags Batch auf einen Blick auseinandergehen. Die
    Zeichnung sitzt hinter der Überschrift und läuft aus der Ecke heraus. */

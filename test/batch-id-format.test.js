@@ -32,6 +32,11 @@ const STRAINS = [
   { id: 2, name: 'Lions Mane', kuerzel: 'LION' }
 ];
 
+// The day the batch was made. createBatch() hands it to both call sites as
+// `wann`; for a batch entered during a stocktake it lies in the past, and the ID
+// carries it, like the label on the bag. A fixed day makes that visible here.
+const WANN = new Date(2026, 8, 3, 12, 0, 0);
+
 function createBatchBody() {
   // `async` since its two material warnings became dialogs rather than
   // window.confirm() — optional here so this keeps matching either way.
@@ -54,8 +59,9 @@ function idsFromCallSites(ms) {
       'ms',
       'mushroomStrains',
       'batches',
+      'wann',
       TEILE_SRC + '\n' + locals + '\nreturn genBatchId(' + arg + ');'
-    )(ms, STRAINS, [])
+    )(ms, STRAINS, [], WANN)
   }));
 }
 
@@ -79,5 +85,23 @@ describe('batch ID prefix', () => {
     const genBatchId = new Function('mushroomStrains', 'batches', TEILE_SRC + '\nreturn genBatchId;')(STRAINS, []);
     assert.match(genBatchId('Enoki'), /^ENOK-\d{6}-01$/);
     assert.match(genBatchId('Reishi'), /^REIS-\d{6}-01$/);
+  });
+
+  it('carries the day the batch was made, on every call site', () => {
+    for (const { arg, id } of idsFromCallSites(STRAINS[0])) {
+      assert.equal(id, 'BPKO-030926-01', 'genBatchId(' + arg + ') ignores the day createBatch() passes it');
+    }
+  });
+
+  it('numbers after the highest number of that day, not after the count', () => {
+    // A stocktake enters batches on days that already have some — and on a day
+    // one of them was deleted, the count hands out an ID that still exists.
+    const vorhanden = [{ batchId: 'LION-030926-01' }, { batchId: 'LION-030926-03' }, { batchId: 'LION-040926-07' }];
+    const genBatchId = new Function('mushroomStrains', 'batches', TEILE_SRC + '\nreturn genBatchId;')(
+      STRAINS,
+      vorhanden
+    );
+    assert.equal(genBatchId('Lions Mane', WANN), 'LION-030926-04');
+    assert.equal(genBatchId('Lions Mane', new Date(2026, 8, 5, 12)), 'LION-050926-01');
   });
 });

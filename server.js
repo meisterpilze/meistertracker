@@ -7222,6 +7222,83 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- Stämme je Pilzsorte (v87) --
+  // Anlegen und Umbenennen darf jeder, der auch Kulturen anlegt: mitten in der
+  // Inventur steht das Glas in der Hand, und ein Umweg über den Admin wäre der
+  // Grund, doch wieder frei zu tippen. Löschen bleibt beim Admin, wie bei der
+  // Sorte.
+  const stammMatch = url.match(/^\/api\/staemme\/(\d+)$/);
+  if (req.method === 'GET' && url === '/api/staemme') {
+    try {
+      jsonOk(res, db.listStaemme(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/staemme') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const fehler =
+        validateRequired(data, ['strainId', 'name']) ||
+        validateTypes(data, { strainId: 'number', name: 'string', notes: 'string' }) ||
+        validateLengths(data, { name: 60, notes: 500 });
+      if (fehler) {
+        jsonErr(res, 400, fehler);
+        return;
+      }
+      try {
+        const id = db.createStamm(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'PATCH' && stammMatch) {
+    const id = parseInt(stammMatch[1], 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      // validateRequired ohne Pflichtfelder prüft nur, dass ein Objekt ankam —
+      // ein Rumpf "null" ließe validateTypes sonst werfen.
+      const fehler =
+        validateRequired(data, []) ||
+        validateTypes(data, { name: 'string', notes: 'string' }) ||
+        validateLengths(data, { name: 60, notes: 500 });
+      if (fehler) {
+        jsonErr(res, 400, fehler);
+        return;
+      }
+      try {
+        db.updateStamm(database, id, data);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && stammMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      db.deleteStamm(database, parseInt(stammMatch[1], 10));
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Substrate batches (v67) --
   // The mix is priced and booked entirely here: the client sends a recipe and a
   // target amount, never a composition or a set of inventory deltas. POST
@@ -7496,7 +7573,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { batchId: 'string', subId: 'string', strainId: 'number', qty: 'number' });
+      // noBooking: Bestand aus der Inventur — angelegt, aber nichts gezogen und
+      // nichts abgebucht. Nur ein echtes true schaltet das Buchen ab.
+      const vt = validateTypes(data, {
+        batchId: 'string',
+        subId: 'string',
+        strainId: 'number',
+        qty: 'number',
+        noBooking: 'boolean'
+      });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
@@ -7513,6 +7598,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       if (!/^[A-Za-z0-9_\-@.:]{1,100}$/.test(data.batchId)) {
         jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
+        return;
+      }
+      // Eine Charge, die schon stand, bevor sie in der App war (Inventur), bringt
+      // ihr Datum mit. Ohne Angabe gilt jetzt, wie bisher.
+      const vd = validateDate(data.created, 'created');
+      if (vd) {
+        jsonErr(res, 400, vd);
         return;
       }
       try {
@@ -8384,9 +8476,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // Five types, not the MCP tool's four: GS is a real type in
           // VALID_CULTURE_PARENT_TYPES, and validating against the shorter list
           // would start rejecting cultures the lab already has.
+          // `created` kommt vom Gerät — seit der Inventur auch mit einem Tag in der
+          // Vergangenheit — und wird an jeder Kultur sortiert und angezeigt.
           const ve =
             validateEnum(c.type, CULTURE_TYPES, 'culture type') ||
-            validateEnum(c.status, CULTURE_STATUSES, 'culture status');
+            validateEnum(c.status, CULTURE_STATUSES, 'culture status') ||
+            validateDate(c.created, 'created');
           if (ve) {
             jsonErr(res, 400, ve);
             return;

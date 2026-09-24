@@ -387,10 +387,10 @@
             <input type="number" id="ms-q-days" min="1" value="14" />
           </div>
         </div>
-        <div style="margin-top: 8px">
-          <label data-i18n="msq.strainText">Stamm/Genetik (optional)</label>
-          <input type="text" id="ms-q-strain" data-i18n-placeholder="msq.strainPlaceholder" placeholder="z. B. XY-1" />
-        </div>
+        <!-- Der Stamm kommt aus der Liste der Sorte (Pilzsorten → Stämme), nicht
+             mehr als freier Text — dieselbe Linie hieß sonst jedes Mal anders.
+             Gefüllt von stammRender(), sobald die Sorte feststeht. -->
+        <div id="ms-q-stamm-wrap" class="stamm-wrap"></div>
         <!-- One "Beimpft mit" field for every kind of inoculant — camera first,
              since the barcode is on the thing in your hand. Applies to a Charge
              and to new Grainspawn alike (scan the LC it came from). -->
@@ -406,6 +406,8 @@
         </div>
         <!-- Kept only so msQuickConfirm can hand a culture to nb-culture/gs-culture. -->
         <select id="ms-q-culture" style="display: none"></select>
+        <!-- Angesetzt am: zu und auf heute, bis es jemand braucht (anlageRender). -->
+        <div id="ms-q-anlage-wrap" class="anlage-wrap"></div>
         <div id="ms-q-preview" class="muted fs-meta" style="margin-top: 8px"></div>
         <div style="display: flex; gap: 8px; margin-top: 12px">
           <button class="btn btn-p" id="ms-q-go" onclick="msQuickConfirm()" data-i18n="msq.create">Anlegen</button>
@@ -3031,6 +3033,10 @@
                     placeholder="z.B. XY-1, Nordlicht, Beispiel-Genetik…"
                     autocomplete="off"
                   />
+                  <!-- Angesetzt am (JJJJ-MM-TT), leer = heute. Nur die Arbeitsgänge
+                       setzen es — bei der Inventur für Bestand, der schon stand.
+                       createBatch() liest und leert es als Erstes. -->
+                  <input type="hidden" id="nb-created" value="" />
                 </div>
                 <div>
                   <label data-i18n="batch.fromProduct">Aus Produkt (optional)</label>
@@ -3490,6 +3496,29 @@
                 </table>
               </div>
             </div>
+          </div>
+          <!-- Stämme je Pilzsorte (v87). Eine eigene Karte statt einer Spalte in der
+               Sortentabelle: die scrollt am Telefon seitwärts, und diese Liste soll
+               man mit dem Daumen pflegen können, während das Glas in der anderen
+               Hand ist. Anlegen geht auch mitten im Arbeitsgang, siehe stammRender. -->
+          <div class="card" id="staemme-card">
+            <div class="sec" data-i18n="stamm.manage">Stämme</div>
+            <div class="fs-meta stamm-hint" data-i18n="stamm.hint">
+              Die Linien einer Pilzsorte, z. B. Nordlicht oder Blue Seestern 01.
+            </div>
+            <div class="stamm-add">
+              <select id="st-sorte" data-i18n-aria-label="strains.pilzsorte" aria-label="Pilzsorte"></select>
+              <input
+                type="text"
+                id="st-name"
+                maxlength="60"
+                autocomplete="off"
+                data-i18n-placeholder="stamm.newPh"
+                placeholder="Name, z. B. Nordlicht"
+              />
+              <button type="button" class="btn btn-p" id="st-add-btn" data-i18n="stamm.add">Hinzufügen</button>
+            </div>
+            <div id="staemme-list"></div>
           </div>
         </div>
 
@@ -4134,6 +4163,9 @@
                       placeholder="z.B. XY-1, Nordlicht, Beispiel-Genetik…"
                       autocomplete="off"
                     />
+                    <!-- Angesetzt am, wie nb-created: leer = heute. logLabWork()
+                         und createGrainBatch() lesen und leeren es. -->
+                    <input type="hidden" id="lw-created" value="" />
                   </div>
                   <div id="lw-parent-row">
                     <label id="lw-parent-lbl" data-i18n="lab.parentCulture">Parent culture</label>

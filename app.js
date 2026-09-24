@@ -325,6 +325,8 @@ function rebuildZoneConstants() {
 
 // ─── DATA ────────────────────────────────────────────────────
 let mushroomStrains = [],
+  // Die Stämme je Pilzsorte (v87) — das Vokabular zum Stamm-Feld, siehe STÄMME.
+  staemme = [],
   batches = [],
   scanLog = [],
   movements = [],
@@ -589,6 +591,7 @@ function applyData(d) {
   // these arrays and every one of them is about to be a different array.
   gsIndexInvalidate();
   mushroomStrains = d.mushroomStrains || [];
+  staemme = d.staemme || [];
   batches = d.batches || [];
   scanLog = d.scanLog || [];
   movements = d.movements || d.scanLog || [];
@@ -2682,17 +2685,26 @@ const abbrev = (s) => {
   if (ms && ms.kuerzel) return ms.kuerzel;
   return s.replace(/\s+/g, '').slice(0, 4).toUpperCase().padEnd(4, 'X');
 };
-const todayStr = () => {
-  const d = new Date();
+// TTMMJJ. Ohne Angabe heute; mit einem Tag der, an dem angesetzt wurde — bei der
+// Inventur trägt die Kennung das Datum, das auch auf dem Glas steht.
+const todayStr = (d = new Date()) => {
   return (
     String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear()).slice(2)
   );
 };
-const genBatchId = (sp) => {
+// Die nächste freie Nummer, nicht die Anzahl plus eins: an einem Tag, von dem
+// eine Charge gelöscht wurde, gäbe die Anzahl eine Kennung, die es schon gibt,
+// und der Server wiese die neue Charge ab. Mit angesetzten Tagen aus der
+// Vergangenheit (Inventur) trifft man solche Tage öfter.
+const genBatchId = (sp, d) => {
   const ab = abbrev(sp),
-    dt = todayStr(),
-    n = batches.filter((b) => b.batchId.startsWith(ab + '-' + dt)).length;
-  return ab + '-' + dt + '-' + String(n + 1).padStart(2, '0');
+    dt = todayStr(d),
+    prefix = ab + '-' + dt + '-',
+    n = batches.reduce((mx, b) => {
+      const k = b.batchId.startsWith(prefix) ? parseInt(b.batchId.slice(prefix.length), 10) : 0;
+      return Number.isFinite(k) && k > mx ? k : mx;
+    }, 0);
+  return prefix + String(n + 1).padStart(2, '0');
 };
 const sbadge = (s) => {
   const m = {
@@ -9070,6 +9082,15 @@ function nbApplyDefaults() {
 // Both internal callers invoke it as their last statement and ignore the result,
 // and $('btn-24') is a click handler, so nothing was waiting on it before either.
 async function createBatch() {
+  // Angesetzt am: gesetzt nur von dem Arbeitsgang, der hierher übergibt, und
+  // gelesen als Erstes — auch wenn gleich eine Prüfung abbricht, soll kein Datum
+  // für die nächste Charge stehen bleiben.
+  const angesetzt = anlageNehmen(document.getElementById('nb-created'));
+  const wann = anlageZeitpunkt(angesetzt);
+  // Ein früherer Tag ist Bestand aus der Inventur: angelegt wird die Charge, mit
+  // ihrer Mischung, aber vom Lager geht nichts ab. Das Material ist längst
+  // verbraucht, und das Regal wird bei der Inventur gezählt (anlageFrueher).
+  const bucht = !angesetzt;
   const strainSel = document.getElementById('nb-strain-sel');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
@@ -9097,14 +9118,15 @@ async function createBatch() {
   const _sbSel = document.getElementById('nb-substrate-batch');
   if (_sbSel && _sbSel.value) {
     createBatchFromSubstrate(
-      genBatchId(ms.name),
+      genBatchId(ms.name, wann),
       _sbSel.value,
       strainId,
       qty,
       bagKg || ms.recBagKg || NB_BAG_KG_DEFAULT,
       days,
       st,
-      strainText
+      strainText,
+      angesetzt ? { created: wann.toISOString() } : undefined
     );
     return;
   }
@@ -9144,7 +9166,9 @@ async function createBatch() {
   // untouched form — the inputs only carry placeholders, so a collapsed
   // "Substrat" section read as 70/30 while actually submitting 0/0, and stock
   // drifted with no signal. Make the no-op explicit instead of silent.
-  if (!hw && !wb && !coir && !grainKg) {
+  // Bei Bestand aus der Inventur bucht die Charge ohnehin nichts ab — die Frage,
+  // ob wirklich nichts abgebucht werden soll, hat dann keine andere Antwort.
+  if (bucht && !hw && !wb && !coir && !grainKg) {
     const weiter = await askConfirm(t('batch.noSubstrateTitle'), t('batch.noSubstrateWarn'), t('common.proceed'));
     if (!weiter) return;
   }
@@ -9163,7 +9187,8 @@ async function createBatch() {
   // over-commit silently clamps to zero with no signal to the worker. They
   // walk away thinking everything's fine, then run out mid-week. Prompt
   // first so they can either top up before submitting or knowingly proceed.
-  {
+  // Not for stocktake entries: they take nothing, so nothing can run short.
+  if (bucht) {
     const _rhPct = (substrate && substrate.rh) || 0;
     const _dryKg = mtDryKg(bagKg, _rhPct);
     const _hwUsed = qty * _dryKg * (hw / 100);
@@ -9202,9 +9227,11 @@ async function createBatch() {
       if (!weiter) return;
     }
   }
-  const batchId = genBatchId(ms.name);
+  const batchId = genBatchId(ms.name, wann);
   spColor(ms.name);
-  const due = new Date();
+  // Fällig ab dem Tag, an dem angesetzt wurde — bei einer Charge aus der
+  // Inventur kann das schon vorbei sein, und dann ist sie es eben.
+  const due = new Date(wann);
   due.setDate(due.getDate() + days);
   const bags = Array.from({ length: qty }, (_, i) => batchId + '-' + String(i + 1).padStart(2, '0'));
   const batchType = 'block';
@@ -9225,7 +9252,7 @@ async function createBatch() {
     sourceId: inocCultureId() || document.getElementById('nb-culture').value || null,
     notes: document.getElementById('nb-notes').value.trim(),
     strainText,
-    created: new Date().toISOString(),
+    created: wann.toISOString(),
     due: due.toISOString(),
     bags
   });
@@ -9235,7 +9262,9 @@ async function createBatch() {
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0, coir: 0 };
   const deltas = [];
   const stockSnapshot = { ...inventory.stock };
-  if (substrate) {
+  // Ohne Buchung (Inventur) bleiben die Deltas leer und der Bestand auf dem
+  // Bildschirm, wie er ist — die Mischung steht trotzdem an der Charge.
+  if (substrate && bucht) {
     const rh = parseDecimal(document.getElementById('nb-rh').value) || 0;
     const dryKgPerBag = mtDryKg(bagKg, rh);
     const hwUsed = qty * dryKgPerBag * (hw / 100);
@@ -9260,7 +9289,7 @@ async function createBatch() {
     }
   }
   // All-in-One raw-grain portion mixed into the block (independent of substrate).
-  if (grainKg > 0) {
+  if (grainKg > 0 && bucht) {
     const grainUsed = qty * mtDryKg(grainKg, grainRh);
     if (grainUsed > 0) {
       inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
@@ -9748,6 +9777,9 @@ function nbSubstrateNeed() {
 function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, strain, strainText, opts) {
   const s = _sbList.find((x) => x.subId === subId);
   const need = qty * bagKg;
+  // Ein Tag wird nur für Bestand aus der Inventur mitgegeben, und der bucht
+  // nichts: keine Kilogramm aus dem Ansatz, keine Körnerbrut vom Lager.
+  const frueher = !!(opts && opts.created);
   const go = async () => {
     const r = await apiPost('/api/batches/from-substrate', {
       batchId,
@@ -9760,7 +9792,10 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       strainText,
       // Der geführte Ablauf bringt seine eigene Notiz mit; das lange Formular
       // liest weiter sein Feld.
-      notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim()
+      notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim(),
+      // Nur bei einer Charge aus der Inventur; sonst setzt der Server jetzt, und
+      // die Fälligkeit rechnet er in beiden Fällen selbst davon aus.
+      ...(frueher ? { created: opts.created, noBooking: true } : {})
     });
     if (!r || r.error) {
       toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
@@ -9775,8 +9810,9 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
   };
   // A mix can come out heavier than the arithmetic said, so this warns rather
   // than blocks — but it has to be said out loud, because the leftover figure is
-  // what the next Charge will be planned against.
-  if (s && need > s.remainingKg + 1e-9) {
+  // what the next Charge will be planned against. A stocktake entry draws
+  // nothing, so there is nothing to overdraw.
+  if (!frueher && s && need > s.remainingKg + 1e-9) {
     confirm2(
       t('sub.overdrawTitle'),
       t('sub.overdrawMsg', { need: need.toFixed(1), left: s.remainingKg.toFixed(1) }),
@@ -16083,6 +16119,9 @@ function goCreateStrain() {
 function renderStrains() {
   const body = document.getElementById('strains-body');
   if (!body) return;
+  // Die Stämme stehen auf derselben Seite und hängen an denselben Daten — also
+  // werden sie mit ihr gezeichnet, an jeder Stelle, die die Sorten neu zeichnet.
+  renderStaemme();
   _msFillRecCopyOptions(parseInt((document.getElementById('ms-edit-id') || {}).value, 10) || null);
   if (!mushroomStrains.length) {
     body.innerHTML = '<tr><td colspan="7" class="empty">' + t('strains.empty') + '</td></tr>';
@@ -16279,6 +16318,455 @@ function deleteMStrain(id) {
     });
   });
 }
+
+// ─── STÄMME ──────────────────────────────────────────────────
+// Die Linien einer Pilzsorte (v87): Nordlicht, Blue Seestern 01, SHIKQ07. An Charge
+// und Kultur steht der Name in strainText — dort, wo vorher der frei getippte
+// Text stand; die Liste ist das Vokabular, aus dem er jetzt gewählt wird. Siehe
+// db.js, listStaemme.
+
+// Wie in der Datenbank zählt Groß- und Kleinschreibung nicht: "nordlicht" ist der
+// Stamm "Nordlicht". Leerzeichen am Rand und doppelte in der Mitte auch nicht.
+function stammNameSauber(v) {
+  return String(v == null ? '' : v)
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+function stammGleich(a, b) {
+  return stammNameSauber(a).toLowerCase() === stammNameSauber(b).toLowerCase();
+}
+function staemmeFor(strainId) {
+  return staemme
+    .filter((s) => s.strainId === strainId)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+// Der Wähler im Schnelldialog ('ms-q') und im Chargen-Assistenten ('wkb'). `wert`
+// ist der gewählte Name, '' für ohne Stamm; `neu` heißt, dass statt der Auswahl
+// gerade das Feld für einen neuen Stamm dasteht, und `getippt`, was darin steht.
+// Der Zustand lebt hier und nicht im DOM, weil beide Dialoge sich bei jedem
+// Wechsel von Sorte, Art oder Schritt neu zeichnen.
+const STAMM = {};
+function stammState(prefix) {
+  return STAMM[prefix] || (STAMM[prefix] = { strainId: null, wert: '', neu: false, getippt: '' });
+}
+function stammReset(prefix) {
+  STAMM[prefix] = { strainId: null, wert: '', neu: false, getippt: '' };
+}
+// Der Name, mit dem gleich angelegt wird — auch einer, der noch getippt im Feld
+// steht (siehe stammFertig). '' für ohne Stamm.
+function stammAnzeige(prefix) {
+  const st = stammState(prefix);
+  return (st.neu && stammNameSauber(st.getippt)) || st.wert;
+}
+// Vor dem Anlegen: Steht noch ein neuer Name im Feld, ohne dass "Hinzufügen"
+// gedrückt wurde, ist das trotzdem die Antwort auf die Frage — also wird er
+// jetzt angelegt, statt still unter den Tisch zu fallen. Gibt den Namen zurück,
+// '' für ohne Stamm, null wenn das Anlegen fehlschlug (gemeldet ist es dann).
+async function stammFertig(prefix) {
+  const st = stammState(prefix);
+  const sel = document.getElementById(prefix + '-stamm');
+  if (sel && !st.neu) st.wert = sel.value;
+  const feld = document.getElementById(prefix + '-stamm-neu');
+  if (feld && st.neu) st.getippt = feld.value;
+  if (st.neu && stammNameSauber(st.getippt)) {
+    const s = await stammAnlegen(st.strainId, st.getippt);
+    if (!s) return null;
+    st.wert = s.name;
+    st.neu = false;
+    st.getippt = '';
+  }
+  return st.wert;
+}
+
+// Zeichnet den Wähler in `<prefix>-stamm-wrap`. Ohne Sorte bleibt er leer —
+// welche Stämme es gibt, hängt an ihr. Wechselt die Sorte, fällt ein Name, den
+// die neue nicht kennt, auf "ohne Stamm" zurück: Nordlicht beim Lions Mane ist kein
+// Stamm des Shiitake.
+//
+// "+ Neu" legt einen Stamm gleich hier an. Bei der Inventur steht das Glas in der
+// Hand, und der Weg über die Sortenseite verwürfe alles, was im Dialog schon
+// eingetragen ist.
+function stammRender(prefix, strainId) {
+  const box = document.getElementById(prefix + '-stamm-wrap');
+  if (!box) return;
+  const st = stammState(prefix);
+  if (st.strainId !== (strainId || null)) {
+    st.strainId = strainId || null;
+    st.neu = false;
+    st.getippt = '';
+    if (st.wert && !staemmeFor(st.strainId).some((s) => stammGleich(s.name, st.wert))) st.wert = '';
+  }
+  if (!st.strainId) {
+    box.innerHTML = '';
+    return;
+  }
+  const zeile = st.neu
+    ? `<input type="text" id="${prefix}-stamm-neu" data-stamm-neu="${prefix}" maxlength="60" autocomplete="off" value="${esc(st.getippt)}" placeholder="${esc(t('stamm.newPh'))}" />` +
+      // Kein Hauptknopf: der Dialog hat schon einen ("Anlegen"), und der legt
+      // einen getippten Stamm ohnehin mit an (stammFertig).
+      `<button type="button" class="btn" data-stamm="save" data-prefix="${prefix}">${esc(t('stamm.add'))}</button>` +
+      `<button type="button" class="btn" data-stamm="cancel" data-prefix="${prefix}" aria-label="${esc(t('common.cancel'))}">&times;</button>`
+    : `<select id="${prefix}-stamm" data-stamm-select="${prefix}"><option value="">${esc(t('stamm.none'))}</option>` +
+      staemmeFor(st.strainId)
+        .map((s) => `<option value="${esc(s.name)}"${stammGleich(s.name, st.wert) ? ' selected' : ''}>${esc(s.name)}</option>`)
+        .join('') +
+      '</select>' +
+      `<button type="button" class="btn" data-stamm="new" data-prefix="${prefix}">${esc(t('stamm.new'))}</button>`;
+  box.innerHTML =
+    `<label for="${prefix}-stamm${st.neu ? '-neu' : ''}">${esc(t('stamm.label'))}</label>` +
+    `<div class="stamm-row">${zeile}</div>`;
+}
+
+async function stammKlick(was, prefix, knopf) {
+  const st = stammState(prefix);
+  if (was === 'new' || was === 'cancel') {
+    st.neu = was === 'new';
+    st.getippt = '';
+    stammRender(prefix, st.strainId);
+    const inp = st.neu && document.getElementById(prefix + '-stamm-neu');
+    if (inp) inp.focus();
+    return;
+  }
+  // Das Feld selbst ist die letzte Wahrheit: eine Tastatur mit Wortvorschlägen
+  // meldet das letzte Wort manchmal erst beim Verlassen.
+  const feld = document.getElementById(prefix + '-stamm-neu');
+  if (feld) st.getippt = feld.value;
+  const name = stammNameSauber(st.getippt);
+  if (!name) {
+    fieldError(prefix + '-stamm-neu', t('stamm.nameMissing'));
+    return;
+  }
+  // Gesperrt, solange die Anfrage läuft: ein zweiter Tipp legte sonst denselben
+  // Namen noch einmal an, und der Server wiese ihn als doppelt ab.
+  if (knopf) knopf.disabled = true;
+  const s = await stammAnlegen(st.strainId, name);
+  if (knopf) knopf.disabled = false;
+  if (!s) return;
+  st.wert = s.name;
+  st.neu = false;
+  st.getippt = '';
+  stammRender(prefix, st.strainId);
+}
+
+// Legt einen Stamm an und gibt ihn zurück — oder den vorhandenen, wenn die Sorte
+// ihn schon hat; dann ohne Anfrage. null bei einem Fehler, der dann schon
+// gemeldet ist.
+async function stammAnlegen(strainId, roh) {
+  const name = stammNameSauber(roh);
+  if (!strainId || !name) return null;
+  const da = staemmeFor(strainId).find((s) => stammGleich(s.name, name));
+  if (da) {
+    toast(t('stamm.exists'));
+    return da;
+  }
+  const r = await apiPost('/api/staemme', { strainId, name });
+  if (!r || r.error) {
+    toast(t('common.error') + ': ' + ((r && r.error) || '?'), 'err');
+    return null;
+  }
+  const s = { id: r.id, strainId, name, notes: '', created: new Date().toISOString(), updated: null };
+  staemme.push(s);
+  renderStaemme();
+  toast(t('stamm.added', { name }));
+  return s;
+}
+
+// ── Die Karte "Stämme" auf der Sortenseite ──
+function renderStaemme() {
+  const box = document.getElementById('staemme-list');
+  if (!box) return;
+  const sorten = mushroomStrains.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const sel = document.getElementById('st-sorte');
+  if (sel) {
+    const opts =
+      `<option value="">${esc(t('stamm.pickSorte'))}</option>` +
+      sorten.map((ms) => `<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
+    // Nur neu schreiben, wenn sich etwas geändert hat — siehe fillStrainSelects.
+    if (sel.innerHTML !== opts) {
+      const cur = sel.value;
+      sel.innerHTML = opts;
+      if (cur) sel.value = cur;
+    }
+  }
+  // Wie oft ein Name an Chargen und Kulturen steht, je Sorte. `lebt` heißt: an
+  // mindestens einer, die nicht verunreinigt ist — in verunreinigten Kulturen
+  // standen Versuchsnotizen im Feld, keine Stämme, und die sollen nicht als
+  // Vorschlag zurückkommen.
+  const zaehler = new Map();
+  const zaehle = (strainId, text, tot) => {
+    const name = stammNameSauber(text);
+    if (!strainId || !name) return;
+    const k = strainId + '|' + name.toLowerCase();
+    const e = zaehler.get(k) || { strainId, name, n: 0, lebt: false };
+    e.n++;
+    if (!tot) e.lebt = true;
+    zaehler.set(k, e);
+  };
+  for (const b of batches) zaehle(b.strainId, b.strainText, false);
+  for (const c of cultures) zaehle(c.strainId, c.strainText, c.status === 'contam');
+  const gruppen = sorten
+    .map((ms) => {
+      const liste = staemmeFor(ms.id);
+      // Was schon an Chargen und Kulturen steht, aber nicht in der Liste: ein Tipp
+      // übernimmt es. So kommt der Bestand aus der Zeit des freien Textes in die
+      // Liste, ohne dass jemand ihn abschreibt.
+      const fremd = [...zaehler.values()].filter(
+        (e) => e.strainId === ms.id && e.lebt && !liste.some((s) => stammGleich(s.name, e.name))
+      );
+      if (!liste.length && !fremd.length) return '';
+      const zeilen = liste
+        .map((s) => {
+          const e = zaehler.get(ms.id + '|' + s.name.toLowerCase());
+          return (
+            `<div class="stamm-zeile"><div class="stamm-name">${esc(s.name)}` +
+            `<span class="fs-meta stamm-use">${esc(e ? t('stamm.used', { n: e.n }) : t('stamm.unused'))}</span></div>` +
+            `<button type="button" class="btn btn-sm" data-st-act="rename" data-id="${s.id}">${esc(t('stamm.rename'))}</button>` +
+            `<button type="button" class="btn btn-sm btn-r" data-st-act="delete" data-id="${s.id}" aria-label="${esc(t('stamm.delete'))}" title="${esc(t('stamm.delete'))}">&#x2715;</button></div>`
+          );
+        })
+        .join('');
+      const vorschlaege = fremd.length
+        ? `<div class="fs-meta stamm-fremd">${esc(t('stamm.adoptHint'))} ` +
+          fremd
+            .map(
+              (e) =>
+                `<button type="button" class="btn btn-sm" data-st-act="adopt" data-sorte="${ms.id}" data-name="${esc(e.name)}" title="${esc(t('stamm.adoptTitle'))}">+ ${esc(e.name)}</button>`
+            )
+            .join(' ') +
+          '</div>'
+        : '';
+      return (
+        `<div class="stamm-gruppe"><div class="stamm-sorte">${esc(ms.name)} <span class="fs-meta stamm-kz">${esc(ms.kuerzel)}</span></div>` +
+        zeilen +
+        vorschlaege +
+        '</div>'
+      );
+    })
+    .join('');
+  box.innerHTML = gruppen || `<div class="fs-meta stamm-leer">${esc(t('stamm.empty'))}</div>`;
+}
+
+async function stammVerwaltungAnlegen() {
+  const sel = document.getElementById('st-sorte');
+  const inp = document.getElementById('st-name');
+  const strainId = parseInt(sel && sel.value, 10) || null;
+  if (!strainId) {
+    fieldError('st-sorte', t('lab.selectPilzsorte'));
+    return;
+  }
+  if (!stammNameSauber(inp && inp.value)) {
+    fieldError('st-name', t('stamm.nameMissing'));
+    return;
+  }
+  const knopf = document.getElementById('st-add-btn');
+  if (knopf) knopf.disabled = true;
+  const s = await stammAnlegen(strainId, inp.value);
+  if (knopf) knopf.disabled = false;
+  if (s) {
+    inp.value = '';
+    inp.focus();
+  }
+}
+
+// Umbenennen zieht Chargen und Kulturen mit, die den alten Namen tragen — der
+// Server tut es in der Datenbank (updateStamm), hier geschieht dasselbe mit dem,
+// was schon geladen ist, damit die Tabellen nicht bis zum nächsten Abgleich den
+// alten Namen zeigen.
+function stammUmbenennen(id) {
+  const s = staemme.find((x) => x.id === id);
+  if (!s) return;
+  prompt2(
+    t('stamm.renameTitle'),
+    t('stamm.newPh'),
+    async (roh) => {
+      const name = stammNameSauber(roh);
+      if (!name || name === s.name) return;
+      if (staemmeFor(s.strainId).some((x) => x.id !== id && stammGleich(x.name, name))) {
+        toast(t('stamm.exists'), 'err');
+        return;
+      }
+      const r = await apiPatch('/api/staemme/' + id, { name });
+      if (!r || r.error) {
+        toast(t('common.error') + ': ' + ((r && r.error) || '?'), 'err');
+        return;
+      }
+      for (const x of [...batches, ...cultures]) {
+        if (x.strainId === s.strainId && stammGleich(x.strainText, s.name)) x.strainText = name;
+      }
+      s.name = name;
+      renderStaemme();
+    },
+    { value: s.name }
+  );
+}
+
+function stammLoeschen(id) {
+  const s = staemme.find((x) => x.id === id);
+  if (!s) return;
+  confirm2(t('stamm.deleteTitle'), t('stamm.deleteMsg', { name: s.name }), t('stamm.delete'), async () => {
+    const r = await apiDelete('/api/staemme/' + id);
+    if (r && r.error) {
+      toast(t('common.error') + ': ' + r.error, 'err');
+      return;
+    }
+    staemme = staemme.filter((x) => x.id !== id);
+    renderStaemme();
+  });
+}
+
+// ─── ANGESETZT AM ────────────────────────────────────────────
+// Bei der Inventur kommt Bestand in die App, der schon steht: eine Flüssigkultur
+// von vor drei Wochen, eine Platte vom Monatsanfang. Mit dem heutigen Tag
+// angelegt, wäre sie auf dem Papier jung und im Regal alt — und ihr Alter ist
+// das, worauf man beim Weiterimpfen schaut. Deshalb darf ein Anlegen einen
+// früheren Tag tragen.
+//
+// Die Vorgabe bleibt heute, und das Feld bleibt zu, bis jemand es braucht: der
+// Normalfall kostet keinen Tipp mehr als vorher. Der Zustand gilt je Dialog
+// ('ms-q', 'wkb') und wird bei jedem Öffnen zurückgesetzt — ein Datum, das für
+// die letzte Inventurzeile galt, soll nicht still an der nächsten hängen.
+const ANLAGE = {};
+function anlageState(prefix) {
+  return ANLAGE[prefix] || (ANLAGE[prefix] = { offen: false, datum: '' });
+}
+function anlageReset(prefix) {
+  ANLAGE[prefix] = { offen: false, datum: '' };
+}
+function anlageRender(prefix) {
+  const box = document.getElementById(prefix + '-anlage-wrap');
+  if (!box) return;
+  const a = anlageState(prefix);
+  if (!a.offen) {
+    // Zu ist es eine Zeile, kein Feld: gelesen wird "angesetzt heute", und wer
+    // es anders braucht, tippt auf den Rest.
+    box.innerHTML =
+      `<div class="anlage-zu fs-meta"><span class="anlage-k">${esc(t('anlage.label'))}</span><b>${esc(t('anlage.today'))}</b>` +
+      `<button type="button" class="wkf-link" data-anlage="open" data-prefix="${prefix}">${esc(t('anlage.change'))}</button></div>`;
+    return;
+  }
+  const heute = localDateStr(new Date());
+  box.innerHTML =
+    `<label for="${prefix}-anlage">${esc(t('anlage.label'))}</label>` +
+    `<div class="stamm-row"><input type="date" id="${prefix}-anlage" data-anlage-input="${prefix}" max="${heute}" value="${esc(a.datum || heute)}" />` +
+    `<button type="button" class="btn" data-anlage="today" data-prefix="${prefix}">${esc(t('anlage.backToday'))}</button></div>` +
+    `<div class="wkf-hint">${esc(t('anlage.hint'))}</div>`;
+}
+function anlageKlick(was, prefix) {
+  const a = anlageState(prefix);
+  a.offen = was === 'open';
+  if (!a.offen) a.datum = '';
+  anlageRender(prefix);
+  anlageGeaendert(prefix);
+  const inp = a.offen && document.getElementById(prefix + '-anlage');
+  if (!inp) return;
+  inp.focus();
+  // Der Tipp auf "anderes Datum" ist schon die Bitte um den Kalender; ohne das
+  // müsste man am Telefon ein zweites Mal ins Feld tippen.
+  try {
+    if (typeof inp.showPicker === 'function') inp.showPicker();
+  } catch (e) {
+    /* ältere Browser: das Feld hat den Fokus, ein Tipp öffnet ihn */
+  }
+}
+
+// Der Schnelldialog nennt unter den Feldern, was vom Lager ginge; ob etwas geht,
+// hängt jetzt am Datum, also rechnet die Zeile neu, sobald es sich ändert. Der
+// Assistent zeichnet seinen zweiten Schritt ohnehin frisch.
+function anlageGeaendert(prefix) {
+  if (prefix === 'ms-q') msQuickPreview();
+}
+
+// Der Tag, an dem angesetzt wurde, als JJJJ-MM-TT — '' heißt heute. null, wenn
+// er in der Zukunft liegt; dann steht die Meldung schon am Feld, und der
+// Aufrufer bricht ab, solange sein Dialog noch offen ist.
+function anlageLesen(prefix) {
+  const a = anlageState(prefix);
+  const inp = document.getElementById(prefix + '-anlage');
+  if (inp) a.datum = inp.value || '';
+  if (!a.offen || !a.datum) return '';
+  const heute = localDateStr(new Date());
+  if (a.datum > heute) {
+    fieldError(prefix + '-anlage', t('anlage.future'));
+    return null;
+  }
+  return a.datum === heute ? '' : a.datum;
+}
+
+// Liegt der gewählte Tag vor heute? Dann ist es Bestand aus der Inventur, und es
+// wird angelegt, ohne etwas abzubuchen: das Material ist längst verbraucht, und
+// das Regal wird bei der Inventur gezählt, nicht nachgerechnet. Still — die
+// Prüfung mit Meldung am Feld macht anlageLesen.
+function anlageFrueher(prefix) {
+  const a = anlageState(prefix);
+  return !!(a.offen && /^\d{4}-\d{2}-\d{2}$/.test(a.datum || '') && a.datum < localDateStr(new Date()));
+}
+
+// JJJJ-MM-TT → der Zeitpunkt, der als `created` gespeichert wird. Ein früherer
+// Tag wird Mittag an diesem Tag, Ortszeit: weit genug von beiden Mitternächten,
+// dass keine Zeitzone und keine Sommerzeitumstellung ihn in den Nachbartag
+// schiebt. Leer heißt jetzt — der Augenblick des Anlegens, wie bisher.
+function anlageZeitpunkt(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '');
+  if (!m) return new Date();
+  return new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0, 0);
+}
+
+// nb-created und lw-created werden nur von den Arbeitsgängen gesetzt, direkt vor
+// dem Anlegen. Gelesen wird einmal, und dabei geleert: stünde ein Datum still
+// weiter darin, bekäme die nächste Charge es mit.
+function anlageNehmen(el) {
+  const v = el ? el.value : '';
+  if (el) el.value = '';
+  return v;
+}
+
+(function wireStaemme() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-stamm],[data-anlage],[data-st-act]');
+    if (!b || b.disabled) return;
+    if (b.dataset.stamm) return stammKlick(b.dataset.stamm, b.dataset.prefix, b);
+    if (b.dataset.anlage) return anlageKlick(b.dataset.anlage, b.dataset.prefix);
+    const id = parseInt(b.dataset.id, 10);
+    if (b.dataset.stAct === 'rename') stammUmbenennen(id);
+    else if (b.dataset.stAct === 'delete') stammLoeschen(id);
+    else if (b.dataset.stAct === 'adopt') stammAnlegen(parseInt(b.dataset.sorte, 10), b.dataset.name);
+  });
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-stamm-select]');
+    if (sel) stammState(sel.dataset.stammSelect).wert = sel.value;
+    const tag = e.target.closest('[data-anlage-input]');
+    if (tag) {
+      anlageState(tag.dataset.anlageInput).datum = tag.value;
+      anlageGeaendert(tag.dataset.anlageInput);
+    }
+  });
+  // Mitschreiben, was im Feld für den neuen Namen steht: der Dialog zeichnet sich
+  // beim Wechsel der Art oder des Schritts neu, und das Getippte soll das
+  // überstehen.
+  document.addEventListener('input', (e) => {
+    const inp = e.target.closest && e.target.closest('[data-stamm-neu]');
+    if (inp) stammState(inp.dataset.stammNeu).getippt = inp.value;
+  });
+  // Enter im Feld für den neuen Namen legt an, wie der Knopf daneben.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.closest) return;
+    const inp = e.target.closest('[data-stamm-neu]');
+    if (!inp) return;
+    e.preventDefault();
+    const knopf = inp.parentNode && inp.parentNode.querySelector('[data-stamm="save"]');
+    stammKlick('save', inp.dataset.stammNeu, knopf);
+  });
+  const add = document.getElementById('st-add-btn');
+  if (add) add.addEventListener('click', stammVerwaltungAnlegen);
+  const name = document.getElementById('st-name');
+  if (name)
+    name.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      stammVerwaltungAnlegen();
+    });
+})();
 
 // ── Sorte production recipe (rec_*) — editor toggle + per-bag need preview ───
 function _msReadRecipe() {
@@ -16584,8 +17072,10 @@ function msQuickOpen(mode, ms) {
   // faellt danach nicht mehr darueber her, solange niemand hineingetippt hat.
   _msqSizesTouched = false;
   msqSeedSizes();
-  const strainEl = document.getElementById('ms-q-strain');
-  if (strainEl) strainEl.value = '';
+  // Stamm und Datum gehören zu genau einem Anlegen: jedes Öffnen fängt bei
+  // "ohne Stamm" und heute an.
+  stammReset('ms-q');
+  anlageReset('ms-q');
   msQuickRender();
   document.getElementById('ms-quick-modal').style.display = 'flex';
 }
@@ -16619,6 +17109,10 @@ function msQuickRender() {
   const grid = document.getElementById('ms-q-grid');
   if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
   if (grain && !_msqSizesTouched) msqSeedSizes();
+  // Der Stamm hängt an der Sorte, das Datum an nichts. Beide behalten beim
+  // Neuzeichnen, was schon gewählt ist.
+  stammRender('ms-q', ms ? ms.id : null);
+  anlageRender('ms-q');
   if (!ms) {
     if (subEl) subEl.textContent = t('msq.pickSortePrompt');
     if (goEl) goEl.disabled = true;
@@ -16874,6 +17368,12 @@ function msQuickPreview() {
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
+  // Die Mengen oben sind, was ein Ansatz von heute nähme. Bestand aus der
+  // Inventur nimmt nichts, und das muss danebenstehen, sonst liest man eine
+  // Abbuchung, die nicht kommt. Kulturen buchen nie etwas, dort fehlt der Satz.
+  if (el.textContent && (_msqIsGrain() || _msQuickCtx.mode === 'charge') && anlageFrueher('ms-q')) {
+    el.textContent += ' — ' + t('anlage.notBooked');
+  }
 }
 // Populate the modal's source-culture select, reusing the same culture filter the
 // old forms use (none for a new MC isolation). Re-runs when the lab type changes.
@@ -16927,7 +17427,7 @@ function msqRestoreAfterScan(prefix) {
   if (m) m.style.display = 'flex';
   msQuickRender();
 }
-function msQuickConfirm() {
+async function msQuickConfirm() {
   if (!_msQuickCtx) return;
   if (!_msQuickCtx.ms) {
     toast(t('msq.pickSortePrompt'), 'err');
@@ -16958,7 +17458,17 @@ function msQuickConfirm() {
     }
     _msqSaveQty(mode, qty);
   }
-  const strainText = (document.getElementById('ms-q-strain').value || '').trim();
+  // Ein Tag in der Zukunft wird hier abgewiesen, solange der Dialog noch steht.
+  const angesetzt = anlageLesen('ms-q');
+  if (angesetzt === null) return;
+  // Steht noch ein getippter, nicht hinzugefügter Stamm im Feld, wird er jetzt
+  // angelegt. Solange das läuft, nimmt der Knopf keinen zweiten Tipp an.
+  const goBtn = document.getElementById('ms-q-go');
+  if (goBtn) goBtn.disabled = true;
+  const strainText = await stammFertig('ms-q');
+  if (goBtn) goBtn.disabled = false;
+  // Fehlgeschlagen (gemeldet ist es), oder der Dialog wurde währenddessen zu.
+  if (strainText === null || !_msQuickCtx) return;
   const setv = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val;
@@ -16973,6 +17483,7 @@ function msQuickConfirm() {
     if (labType === 'KB') {
       setv('lw-st', ms.id);
       setv('lw-strain-text', strainText);
+      setv('lw-created', angesetzt);
       gsSetLines(sizes);
       setv('gs-days', parseInt(document.getElementById('ms-q-days').value) || 14);
       // Die Feuchte der Sorte, nicht der Schnitt über alle: ms steht hier, und
@@ -16992,6 +17503,7 @@ function msQuickConfirm() {
     setv('lw-type', labType);
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
+    setv('lw-created', angesetzt);
     setv('lw-qty', qty);
     setv('lw-source', '');
     setv('lw-notes', '');
@@ -17012,6 +17524,7 @@ function msQuickConfirm() {
   if (ms.recBatchType === 'grain') {
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
+    setv('lw-created', angesetzt);
     // Die Größen aus dem Dialog, nicht mehr recGrainKg: das Rezept hat die
     // Zeilen beim Öffnen gefüllt, danach gehören sie diesem einen Ansatz.
     gsSetLines(sizes);
@@ -17036,7 +17549,7 @@ function msQuickConfirm() {
   // selbst hoch, egal wo man steht.
   msQuickClose();
   nbEnsureReady();
-  nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: _inocPicked });
+  nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: _inocPicked, created: angesetzt });
   createBatch();
 }
 
@@ -17051,7 +17564,8 @@ function msQuickConfirm() {
 //
 // `ms` ist die Sorte. Alles in `o` überschreibt deren Rezept: qty, bagKg,
 // days, hw, wb, rh kommen als Zahlen aus dem Assistenten, strainText und
-// notes als Text, culture als Kultur-Id und inoc als Beimpf-Auswahl.
+// notes als Text, culture als Kultur-Id, inoc als Beimpf-Auswahl und created
+// als der Tag, an dem angesetzt wurde (JJJJ-MM-TT, leer für heute).
 function nbFillFromStrain(ms, o) {
   const opt = o || {};
   const setv = (id, v) => {
@@ -17067,6 +17581,9 @@ function nbFillFromStrain(ms, o) {
   setv('nb-substrate-batch', '');
   setv('nb-strain-sel', ms.id);
   setv('nb-strain-text', opt.strainText || '');
+  // Angesetzt am, JJJJ-MM-TT; leer heißt heute. Immer gesetzt, auch leer — ein
+  // Datum aus dem letzten Anlegen darf nicht an diesem hängen bleiben.
+  setv('nb-created', opt.created || '');
   setv('nb-qty', oder(opt.qty, 1));
   setv('nb-days', oder(opt.days, ms.recIncDays || 14));
   setBagWeight(parseDecimal(oder(opt.bagKg, ms.recBagKg)) || 0);
@@ -17346,13 +17863,18 @@ function lwPreview() {
     return;
   }
   const stRaw = (document.getElementById('lw-strain-text')?.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  const prefix = type + '-' + abbrev(sp) + (stRaw ? '-' + stRaw : '') + '-' + todayStr() + '-';
+  const wann = anlageZeitpunkt(document.getElementById('lw-created')?.value);
+  const prefix = type + '-' + abbrev(sp) + (stRaw ? '-' + stRaw : '') + '-' + todayStr(wann) + '-';
   const base = maxCultureSuffix(prefix);
   prev.textContent = Array.from({ length: qty }, (_, i) => prefix + String(base + i + 1).padStart(2, '0')).join('\n');
   box.style.display = 'block';
 }
 // lw-st change and lw-qty input listeners live in initEventListeners()
 function logLabWork() {
+  // Angesetzt am, wie in createBatch: einmal gelesen und geleert, bevor irgendeine
+  // Prüfung abbricht. Die Kennung trägt diesen Tag, wie das Etikett am Glas.
+  const angesetzt = anlageNehmen(document.getElementById('lw-created'));
+  const wann = anlageZeitpunkt(angesetzt);
   const type = document.getElementById('lw-type').value;
   const strainSel = document.getElementById('lw-st');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
@@ -17367,7 +17889,7 @@ function logLabWork() {
     qty = parseInt(document.getElementById('lw-qty').value) || 1;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
   const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr() + '-';
+  const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr(wann) + '-';
   const base = maxCultureSuffix(prefix);
   const newC = Array.from({ length: qty }, (_, i) => ({
     id: prefix + String(base + i + 1).padStart(2, '0'),
@@ -17382,7 +17904,7 @@ function logLabWork() {
     source: document.getElementById('lw-source')?.value.trim() || null,
     status: 'active',
     notes: document.getElementById('lw-notes').value.trim(),
-    created: new Date().toISOString()
+    created: wann.toISOString()
   }));
   cultures.push(...newC);
   const saved = apiPost('/api/cultures', { cultures: newC }).then((r) => {
@@ -17424,13 +17946,18 @@ function renderLabLog() {
 }
 
 // ─── GRAIN SPAWN (Lab tab) ──────────────────────────────────
-const genGrainBatchId = (sp, strainText) => {
+// `d` ist der Tag, an dem angesetzt wurde (Inventur), sonst heute. Nummeriert
+// nach der höchsten vergebenen Nummer, aus demselben Grund wie genBatchId.
+const genGrainBatchId = (sp, strainText, d) => {
   const ab = abbrev(sp),
-    dt = todayStr(),
+    dt = todayStr(d),
     st = (strainText || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  const prefix = 'G-' + ab + (st ? '-' + st : '') + '-' + dt;
-  const n = batches.filter((b) => b.batchId.startsWith(prefix + '-')).length;
-  return prefix + '-' + String(n + 1).padStart(2, '0');
+  const prefix = 'G-' + ab + (st ? '-' + st : '') + '-' + dt + '-';
+  const n = batches.reduce((mx, b) => {
+    const k = b.batchId.startsWith(prefix) ? parseInt(b.batchId.slice(prefix.length), 10) : 0;
+    return Number.isFinite(k) && k > mx ? k : mx;
+  }, 0);
+  return prefix + String(n + 1).padStart(2, '0');
 };
 /** Read all weight-line rows from the grain spawn form */
 function gsReadLines() {
@@ -17528,8 +18055,9 @@ function gsPreview() {
   const hydrationFactor = mtGrainFactor(grainRh);
   const totalDry = totalWet * hydrationFactor;
   const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
+  const wann = anlageZeitpunkt(document.getElementById('lw-created')?.value);
   document.getElementById('gs-prev').textContent = sp
-    ? genGrainBatchId(sp, lwStrainText) + ' (' + totalQty + ' bags)'
+    ? genGrainBatchId(sp, lwStrainText, wann) + ' (' + totalQty + ' bags)'
     : '\u2014';
   const el = document.getElementById('gs-mat-preview');
   if (!totalQty || !totalWet) {
@@ -17547,6 +18075,12 @@ function gsPreview() {
   el.style.display = 'block';
 }
 function createGrainBatch() {
+  // Angesetzt am, wie in logLabWork: einmal gelesen und geleert, als Erstes. Ein
+  // früherer Tag ist Bestand aus der Inventur und bucht kein Korn ab, wie
+  // createBatch keine Pellets.
+  const angesetzt = anlageNehmen(document.getElementById('lw-created'));
+  const wann = anlageZeitpunkt(angesetzt);
+  const bucht = !angesetzt;
   const strainSel = document.getElementById('lw-st');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
   const ms = strainId ? mushroomStrains.find((x) => x.id === strainId) : null;
@@ -17571,9 +18105,9 @@ function createGrainBatch() {
   const grainRh = grainRhInput ? parseDecimal(grainRhInput.value) || 0 : defaultGrainRh;
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
   const lwStrainText = (document.getElementById('lw-strain-text') || {}).value?.trim() || '';
-  const batchId = genGrainBatchId(sp, lwStrainText);
+  const batchId = genGrainBatchId(sp, lwStrainText, wann);
   spColor(sp);
-  const due = new Date();
+  const due = new Date(wann);
   due.setDate(due.getDate() + days);
   // Generate bags with per-bag weight
   const bags = [];
@@ -17613,7 +18147,7 @@ function createGrainBatch() {
     sourceId: inocCultureId() || document.getElementById('gs-culture').value || null,
     notes: document.getElementById('lw-notes').value.trim(),
     strainText: lwStrainText,
-    created: new Date().toISOString(),
+    created: wann.toISOString(),
     due: due.toISOString(),
     bags: bagIds,
     bagWeights
@@ -17631,7 +18165,7 @@ function createGrainBatch() {
   const hydrationFactor = mtGrainFactor(grainRh);
   const grainUsed = lines.reduce((s, l) => s + l.kg * l.qty * hydrationFactor, 0);
   const deltas = [];
-  if (grainUsed > 0) {
+  if (grainUsed > 0 && bucht) {
     inventory.stock.grain = Math.max(0, (inventory.stock.grain || 0) - grainUsed);
     deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
   }
@@ -27223,6 +27757,9 @@ const WKB = {
   qty: 20,
   bagKg: NB_BAG_KG_DEFAULT,
   subId: '',
+  // Hat jemand den Ansatz selbst gewählt? Dann schlägt wkbQuelleVorgabe nichts
+  // mehr vor.
+  subVonHand: false,
   notes: '',
   custom: false,
   hw: null,
@@ -27272,15 +27809,28 @@ function wkbMischung() {
   return { hw: r.hw, wb: r.wb, rh: r.rh, ausAnsatz: null };
 }
 
+// Woraus die Charge ist, schlägt der Ablauf vor: den ersten offenen Ansatz —
+// außer bei einer Charge aus der Inventur. Die stand schon, bevor es den Ansatz
+// von heute gab, und bucht ohnehin nichts ab; ein vorausgewählter Ansatz wäre
+// dort eine erfundene Herkunft. Wer selbst gewählt hat, behält seine Wahl.
+function wkbQuelleVorgabe() {
+  if (WKB.subVonHand) return;
+  const mixes = wkOpenMixes();
+  WKB.subId = !anlageFrueher('wkb') && mixes.length ? mixes[0].subId : '';
+}
+
 function wkbOpen() {
   WKB.step = 1;
   WKB.notes = '';
   WKB.custom = false;
   WKB.hw = WKB.wb = WKB.rh = WKB.days = null;
+  // Jede Charge fängt bei "ohne Stamm" und heute an — auch "Noch eine Charge".
+  stammReset('wkb');
+  anlageReset('wkb');
   const first = mushroomStrains.filter((x) => x.recBatchType)[0] || mushroomStrains[0];
   WKB.strainId = first ? first.id : null;
-  const mixes = wkOpenMixes();
-  WKB.subId = mixes.length ? mixes[0].subId : '';
+  WKB.subVonHand = false;
+  wkbQuelleVorgabe();
   WKF.kind = 'batch';
   WKF.step = 'detail';
   WKF.receipt = null;
@@ -27349,6 +27899,7 @@ function wkbRender() {
       `<div class="wkf-q">${esc(t('work.bQ1'))}</div>
        <div class="wkf-field"><label>${esc(t('strains.pilzsorte'))}</label>
          <select id="wkb-strain">${list}</select></div>
+       <div id="wkb-stamm-wrap" class="wkf-field stamm-wrap"></div>
        <div class="wkf-two">
          <div class="wkf-field"><label>${esc(t('batch.qty'))}</label>
            <input type="text" inputmode="numeric" id="wkb-qty" value="${WKB.qty}" /></div>
@@ -27358,20 +27909,28 @@ function wkbRender() {
         .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
         .join('') +
       `</div></div>
-       </div>`;
+       </div>
+       <div id="wkb-anlage-wrap" class="anlage-wrap"></div>`;
   } else if (WKB.step === 2) {
     const mixes = wkOpenMixes();
     const rest = mix ? mix.remainingKg - wkbDraw() : null;
+    // Eine Charge aus der Inventur bucht nichts ab. Die Zeilen, die sagen, was
+    // aus dem Ansatz oder vom Lager ginge, wären hier falsch — an ihrer Stelle
+    // steht, dass nichts geht.
+    const frueher = anlageFrueher('wkb');
+    const vomLager = frueher ? '' : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>`;
     body =
       `<div class="wkf-q">${esc(t('work.bQ2'))}</div>` +
+      (frueher ? `<div class="wkf-note">${esc(t('anlage.notBookedNote'))}</div>` : '') +
       (mixes.length
         ? `<div class="wkf-field"><label>${esc(t('sub.fromMix'))}</label><select id="wkb-mix">` +
           mixes
             .map((m) => `<option value="${esc(m.subId)}"${m.subId === WKB.subId ? ' selected' : ''}>${esc(m.subId)} &middot; ${t('work.bLeft', { kg: m.remainingKg.toFixed(0) })}</option>`)
             .join('') +
-          `<option value=""${WKB.subId ? '' : ' selected'}>${esc(t('work.bNoMixOption'))}</option>` +
+          // "vom Lager" stimmt bei Bestand aus der Inventur nicht — von dort geht nichts.
+          `<option value=""${WKB.subId ? '' : ' selected'}>${esc(frueher ? t('anlage.noMix') : t('work.bNoMixOption'))}</option>` +
           '</select></div>' +
-          (mix
+          (mix && !frueher
             ? `<div class="wkf-note${rest != null && rest < -1e-9 ? ' bad' : ''}">${esc(
                 t('work.bDraw', { qty: WKB.qty, kg: WKB.bagKg, need: wkbDraw().toFixed(0) })
               )} &mdash; ${
@@ -27379,9 +27938,13 @@ function wkbRender() {
                   ? esc(t('work.bShort', { kg: (-rest).toFixed(0) }))
                   : esc(t('work.bRest', { kg: (rest || 0).toFixed(0) }))
               }</div>`
-            : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>`)
-        : `<div class="wkf-note">${esc(t('work.bFromShelf'))}</div>
-           <button class="btn" data-wkb="tosub">${esc(t('work.bMixFirst'))}</button>`) +
+            : mix
+              ? ''
+              : vomLager)
+        : vomLager +
+          // Einen Ansatz anzulegen, damit eine Charge von vor drei Wochen daraus
+          // ziehen kann, ergibt keinen Sinn — sie zieht ja nichts.
+          (frueher ? '' : `<button class="btn" data-wkb="tosub">${esc(t('work.bMixFirst'))}</button>`)) +
       // Mit Ansatz steht dessen Mischung da, und zwar fest: sie lässt sich nicht
       // mehr ändern, also darf hier auch kein Feld so tun. Die Inkubationstage
       // gehen weiterhin vom Assistenten an den Server, die bleiben einstellbar.
@@ -27414,12 +27977,22 @@ function wkbRender() {
                <div class="wkf-hint">${esc(t('work.bOnlyThis'))}</div>`
             : ''));
   } else {
+    const frueher = anlageFrueher('wkb');
+    // Was aus dem Ansatz oder vom Lager geht — bei einer Charge aus der Inventur
+    // nichts, und das steht dann auch so da.
+    const quelle = frueher
+      ? (mix ? esc(mix.subId) + ' · ' : '') + esc(t('anlage.notBooked'))
+      : mix
+        ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg'
+        : esc(t('work.bFromShelfShort'));
     body =
       `<div class="wkf-q">${esc(t('work.bQ3'))}</div>
        <div class="wkf-sum-card">
          <div><span class="wkf-r-k">${esc(t('strains.pilzsorte'))}</span><b>${esc(ms ? ms.name : '')}</b></div>
+         <div><span class="wkf-r-k">${esc(t('stamm.label'))}</span>${stammAnzeige('wkb') ? esc(stammAnzeige('wkb')) : '&mdash;'}</div>
+         <div><span class="wkf-r-k">${esc(t('anlage.label'))}</span>${frueher ? '<b>' + esc(fmtDt(anlageZeitpunkt(anlageState('wkb').datum))) + '</b>' : esc(t('anlage.today'))}</div>
          <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
-         <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${mix ? esc(mix.subId) + ' · ' + wkbDraw().toFixed(0) + ' kg' : esc(t('work.bFromShelfShort'))}</div>
+         <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${quelle}</div>
          <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${m.hw}/${m.wb} @ ${m.rh} %${
            m.ausAnsatz ? '' : WKB.custom ? esc(t('work.bChanged')) : ''
          }
@@ -27430,6 +28003,13 @@ function wkbRender() {
          <input type="text" id="wkb-notes" value="${esc(WKB.notes)}" placeholder="${esc(t('work.bNotePh'))}" /></div>`;
   }
   wkf('wkf-body').innerHTML = body;
+  // Stamm und Datum zeichnen sich selbst in ihre Plätze; ihr Zustand überlebt
+  // so jeden Schritt vor und zurück. Das Datum steht im ersten Schritt, weil es
+  // den zweiten bestimmt: eine Charge aus der Inventur zieht aus keinem Ansatz.
+  if (WKB.step === 1) {
+    stammRender('wkb', WKB.strainId);
+    anlageRender('wkb');
+  }
 
   const back = `<button class="btn" data-wkb="back">${esc(t('work.back'))}</button>`;
   wkf('wkf-foot').innerHTML =
@@ -27444,6 +28024,8 @@ function wkbReadStep() {
   if (WKB.step === 1) {
     if (g('wkb-strain')) WKB.strainId = parseInt(g('wkb-strain').value, 10) || WKB.strainId;
     if (g('wkb-qty')) WKB.qty = Math.max(1, parseInt(g('wkb-qty').value, 10) || 1);
+    if (g('wkb-stamm')) stammState('wkb').wert = g('wkb-stamm').value;
+    if (g('wkb-anlage')) anlageState('wkb').datum = g('wkb-anlage').value;
   } else if (WKB.step === 2) {
     if (g('wkb-mix')) WKB.subId = g('wkb-mix').value;
     // Die Inkubationstage stehen auch beim Ansatz-Weg auf dem Bildschirm, wo es
@@ -27464,7 +28046,9 @@ function wkbReadStep() {
 // zieht Rohmaterial vom Lager, fragt danach die Zone ab und druckt Etiketten.
 // Der Ablauf füllt dessen Felder und übergibt, statt denselben Weg noch einmal
 // zu schreiben — eine zweite Fassung wäre die, die irgendwann abweicht.
-function wkbCreateFromShelf() {
+// `stamm` und `angesetzt` kommen aus wkbCreate, schon geprüft: der Name aus der
+// Liste der Sorte ('' für ohne), der Tag als JJJJ-MM-TT ('' für heute).
+function wkbCreateFromShelf(stamm, angesetzt) {
   const ms = wkbStrain();
   if (!ms) return;
   const r = wkbRecipe();
@@ -27483,12 +28067,14 @@ function wkbCreateFromShelf() {
     hw: r.hw,
     wb: r.wb,
     rh: r.rh,
-    notes: WKB.notes.trim()
+    notes: WKB.notes.trim(),
+    strainText: stamm || '',
+    created: angesetzt || ''
   });
   createBatch();
 }
 
-function wkbCreate() {
+async function wkbCreate() {
   wkbReadStep();
   const ms = wkbStrain();
   const mix = wkbMix();
@@ -27503,24 +28089,40 @@ function wkbCreate() {
     wkbRender();
     return;
   }
-  if (!mix) return wkbCreateFromShelf();
+  // Ein Tag in der Zukunft wird abgewiesen, solange der Ablauf noch offen ist.
+  const angesetzt = anlageLesen('wkb');
+  if (angesetzt === null) return;
+  // Ein im ersten Schritt getippter, nicht hinzugefügter Stamm wird jetzt
+  // angelegt; so lange nimmt der Knopf keinen zweiten Tipp an.
+  const knopf = document.querySelector('#m-work-flow [data-wkb="create"]');
+  if (knopf) knopf.disabled = true;
+  const stamm = await stammFertig('wkb');
+  if (knopf) knopf.disabled = false;
+  // Fehlgeschlagen (gemeldet ist es), oder der Ablauf wurde währenddessen zu.
+  if (stamm === null || WKF.kind !== 'batch') return;
+  if (!mix) return wkbCreateFromShelf(stamm, angesetzt);
   const r = wkbRecipe();
-  const batchId = genBatchId(ms.name);
-  // Wie das lange Formular: ohne eigene Stammbezeichnung steht in der Spalte
-  // 'XXX', nicht das Sorten-Kürzel. Sonst bedeutet dieselbe Spalte je nach
-  // Eingabeweg etwas anderes.
-  createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, 'XXX', '', {
+  const wann = anlageZeitpunkt(angesetzt);
+  const batchId = genBatchId(ms.name, wann);
+  // Wie das lange Formular: der Stamm steht in beiden Spalten, und ohne ihn steht
+  // in `strain` 'XXX', nicht das Sorten-Kürzel. Sonst bedeutet dieselbe Spalte je
+  // nach Eingabeweg etwas anderes.
+  createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, stamm || 'XXX', stamm, {
     notes: WKB.notes.trim(),
+    created: angesetzt ? wann.toISOString() : undefined,
     onDone: (res) => {
       const neuId = res.batchId || batchId;
       // Was noch im Ansatz steht, ist die Zahl, gegen die die nächste Charge
       // geplant wird. Sie stand auf der Quittung, die dieser Weg jetzt nicht
-      // mehr zeigt — also geht sie in die Meldung mit.
-      const gezogen = t('work.bDrawn', {
-        kg: (res.drawKg || wkbDraw()).toFixed(0),
-        id: mix.subId,
-        left: (res.remainingKg || 0).toFixed(0)
-      });
+      // mehr zeigt — also geht sie in die Meldung mit. Eine Charge aus der
+      // Inventur hat nichts gezogen, und die Meldung sagt genau das.
+      const gezogen = angesetzt
+        ? t('anlage.notBooked')
+        : t('work.bDrawn', {
+            kg: (res.drawKg || wkbDraw()).toFixed(0),
+            id: mix.subId,
+            left: (res.remainingKg || 0).toFixed(0)
+          });
       // Der Ablauf kann inzwischen verlassen oder ein anderer geöffnet worden
       // sein. Dann gehört WKF nicht mehr uns — die Bestätigung sagt es dem
       // Fenster, statt den fremden Bildschirm zu übernehmen.
@@ -27554,7 +28156,12 @@ function wkbCreate() {
       WKB.bagKg = parseDecimal(el.dataset.val) || NB_BAG_KG_DEFAULT;
     } else if (a === 'next') {
       wkbReadStep();
+      // Ein Tag in der Zukunft hält den ersten Schritt fest, die Meldung steht am
+      // Feld. Geht es in den zweiten, gilt die Vorgabe für den Ansatz neu: sie
+      // hängt am Datum, das eben gewählt wurde.
+      if (WKB.step === 1 && anlageLesen('wkb') === null) return;
       WKB.step++;
+      if (WKB.step === 2) wkbQuelleVorgabe();
     } else if (a === 'back') {
       wkbReadStep();
       WKB.step--;
@@ -27584,6 +28191,7 @@ function wkbCreate() {
   // Menge und Sorte wirken auf die Zeile im zweiten Schritt, also sofort merken.
   flow.addEventListener('change', (e) => {
     if (WKF.kind !== 'batch') return;
+    if (e.target.closest('#wkb-mix')) WKB.subVonHand = true;
     if (e.target.closest('#wkb-strain,#wkb-qty,#wkb-mix')) {
       wkbReadStep();
       wkbRender();

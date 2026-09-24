@@ -48,6 +48,27 @@ components:
           type: string
           format: date-time
           nullable: true
+    Stamm:
+      type: object
+      required: [id, strainId, name, created]
+      properties:
+        id:
+          type: integer
+        strainId:
+          type: integer
+          description: The Pilzsorte it belongs to
+        name:
+          type: string
+          description: Unique per Pilzsorte, case-insensitive
+        notes:
+          type: string
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+          nullable: true
 
 security:
   - cookieAuth: []
@@ -285,6 +306,107 @@ paths:
           description: Strain deleted
         '400':
           description: Strain still in use
+        '403':
+          description: Admin role required
+
+  /api/staemme:
+    get:
+      summary: List all Stämme (strains / genetic lines) of every Pilzsorte
+      description: >-
+        The vocabulary for the strain field on batches and cultures. A batch or
+        culture stores the chosen strain by NAME in `strainText`, not by id, so
+        rows from before this list existed keep their free text. Also part of
+        `/api/data` as `staemme`.
+      responses:
+        '200':
+          description: Array of strains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stamm'
+    post:
+      summary: Add a Stamm to a Pilzsorte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [strainId, name]
+              properties:
+                strainId:
+                  type: integer
+                  description: The Pilzsorte (mushroom_strains.id) the strain belongs to
+                name:
+                  type: string
+                  maxLength: 60
+                  description: >-
+                    Unique per Pilzsorte, case-insensitive. Surrounding and
+                    repeated whitespace is removed.
+                notes:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Strain created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '400':
+          description: >-
+            Validation error — missing fields, unknown Pilzsorte, or
+            "Stamm: already exists"
+
+  /api/staemme/{id}:
+    patch:
+      summary: Rename a Stamm or change its notes
+      description: >-
+        A new `name` is carried into the `strainText` of every batch and
+        culture of the same Pilzsorte that carried the old name
+        (case-insensitive), in one transaction.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 60
+                notes:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Strain updated
+        '400':
+          description: 'Empty name, unknown id, or "Stamm: already exists"'
+    delete:
+      summary: Remove a Stamm from the list (admin only)
+      description: >-
+        Only removes it from the selection. Batches and cultures that carry the
+        name keep it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Strain removed
         '403':
           description: Admin role required
 

@@ -2573,6 +2573,24 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_project_notes ON project_notes(tab, id DESC)');
     }
+  },
+  {
+    version: 87,
+    description: 'Stämme je Pilzsorte',
+    fn(db) {
+      // Das Vokabular zum Stamm-Feld an Charge und Kultur. Eindeutig je Sorte und
+      // ohne Rücksicht auf Groß- und Kleinschreibung: "Nordlicht" und "nordlicht" beim
+      // Lions Mane sind ein Stamm, "Nordlicht" beim Shiitake ein anderer.
+      db.exec(`CREATE TABLE IF NOT EXISTS staemme (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        strain_id INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        name      TEXT NOT NULL,
+        notes     TEXT DEFAULT '',
+        created   TEXT NOT NULL,
+        updated   TEXT
+      )`);
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_staemme_name ON staemme(strain_id, name COLLATE NOCASE)');
+    }
   }
 ];
 
@@ -3070,6 +3088,7 @@ function readAll(db, opts = {}) {
   const version = getDataVersion(db);
   return {
     mushroomStrains,
+    staemme: listStaemme(db),
     // Carried in the main payload rather than fetched separately: the client needs
     // the remaining kilograms on every sync, and /api/data is already the request
     // every sync makes.
@@ -4555,7 +4574,13 @@ function createBagBatchFromSubstrate(db, b, userId) {
   const created = b.created || new Date().toISOString();
   const due = b.due || new Date(new Date(created).getTime() + days * 86400000).toISOString();
 
-  const deltas = spawnKg > 0 ? [{ mat: 'grain', deltaKg: -spawnKg, type: 'spawn' }] : [];
+  // Bestand aus der Inventur (noBooking): die Charge stand schon, bevor sie in
+  // der App war. Sie bleibt mit dem Ansatz verbunden — seine Mischung, sein
+  // Maismehl —, zieht aber 0 kg daraus und bucht keine Körnerbrut ab. Die
+  // Restmenge, die aus den gezogenen Kilogramm abgeleitet wird
+  // (_recalcSubstrateRemaining), bleibt damit, wie sie war.
+  const bucht = b.noBooking !== true;
+  const deltas = bucht && spawnKg > 0 ? [{ mat: 'grain', deltaKg: -spawnKg, type: 'spawn' }] : [];
   const res = insertBatch(
     db,
     {
@@ -4585,7 +4610,7 @@ function createBagBatchFromSubstrate(db, b, userId) {
       // afterwards would leave a window where the bags exist and the mix still
       // says it is full — and the two disagreeing is the exact bookkeeping error
       // this whole change is meant to remove.
-      substrateBatch: { subId: b.subId, id: sub.id, drawKg }
+      substrateBatch: { subId: b.subId, id: sub.id, drawKg: bucht ? drawKg : 0 }
     },
     deltas,
     userId
@@ -4593,15 +4618,15 @@ function createBagBatchFromSubstrate(db, b, userId) {
   const after = db.prepare('SELECT remaining_kg FROM substrate_batches WHERE sub_id=?').get(b.subId);
   return {
     ...res,
-    drawKg,
-    spawnKg,
+    drawKg: bucht ? drawKg : 0,
+    spawnKg: bucht ? spawnKg : 0,
     // The due date is worked out here from the Sorte's incubation days, so the
     // caller has no other way to learn it — and the calendar push drops any
     // batch that arrives without one.
     created,
     due,
     remainingKg: after ? after.remaining_kg : 0,
-    over: drawKg > sub.remaining_kg + 1e-9
+    over: bucht && drawKg > sub.remaining_kg + 1e-9
   };
 }
 
@@ -8670,6 +8695,112 @@ function deleteMushroomStrain(db, id) {
   return result.changes > 0;
 }
 
+// ── Stämme je Pilzsorte (v87) ────────────────────────────────
+//
+// Die Pilzsorte sagt, was wächst; der Stamm sagt, welche Linie davon: Nordlicht,
+// Blue Seestern 01, SHIKQ07. Bis hierher war der Stamm freier Text an Charge und
+// Kultur, und dieselbe Linie hieß an einem Tag "Nordlicht" und am nächsten
+// "nordlicht 1". Diese Liste ist das Vokabular dazu — einmal angelegt, danach nur
+// noch ausgewählt, wie die Sorte selbst.
+//
+// An Charge und Kultur steht weiterhin der NAME in strain_text, keine Id. Alles,
+// was den Stamm anzeigt, druckt oder in eine Kennung schreibt, liest diese
+// Spalte, und die Altbestände mit frei getipptem Text bleiben lesbar, wie sie
+// sind. Die Verbindung zur Liste ist deshalb der Name innerhalb der Sorte.
+
+// Leerzeichen am Rand und doppelte in der Mitte sind Tippspuren, keine
+// Unterscheidung: "Blue  Seestern 01 " ist derselbe Stamm.
+function _stammName(v) {
+  return String(v == null ? '' : v)
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function listStaemme(db) {
+  return db
+    .prepare('SELECT * FROM staemme ORDER BY strain_id, name COLLATE NOCASE')
+    .all()
+    .map((r) => ({
+      id: r.id,
+      strainId: r.strain_id,
+      name: r.name,
+      notes: r.notes || '',
+      created: r.created,
+      updated: r.updated || null
+    }));
+}
+
+function createStamm(db, data) {
+  const d = data || {};
+  const name = _stammName(d.name);
+  if (!name) throw new Error('Stamm: name is required');
+  const strainId = Number(d.strainId);
+  if (!Number.isInteger(strainId) || !db.prepare('SELECT 1 FROM mushroom_strains WHERE id=?').get(strainId)) {
+    throw new Error('Pilzsorte nicht gefunden');
+  }
+  try {
+    const info = db
+      .prepare('INSERT INTO staemme(strain_id, name, notes, created) VALUES(?, ?, ?, ?)')
+      .run(strainId, name, _stammName(d.notes), new Date().toISOString());
+    incrementDataVersion(db);
+    return info.lastInsertRowid;
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE')) throw new Error('Stamm: already exists');
+    throw e;
+  }
+}
+
+// Umbenennen zieht die Chargen und Kulturen mit, die den alten Namen tragen —
+// sonst stünde ein Tippfehler, der in der Liste korrigiert ist, weiter auf jedem
+// Etikett, das danach noch gedruckt wird. Nur innerhalb derselben Sorte.
+function updateStamm(db, id, data) {
+  const d = data || {};
+  const alt = db.prepare('SELECT * FROM staemme WHERE id=?').get(id);
+  if (!alt) throw new Error('Stamm: not found');
+  const fields = {};
+  if (d.name !== undefined) {
+    fields.name = _stammName(d.name);
+    if (!fields.name) throw new Error('Stamm: name is required');
+  }
+  if (d.notes !== undefined) fields.notes = _stammName(d.notes);
+  if (!Object.keys(fields).length) return false;
+  fields.updated = new Date().toISOString();
+  const cols = Object.keys(fields);
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE staemme SET ${cols.map((c) => c + '=?').join(',')} WHERE id=?`).run(
+      ...cols.map((c) => fields[c]),
+      id
+    );
+    if (fields.name && fields.name !== alt.name) {
+      for (const tabelle of ['batches', 'cultures']) {
+        db.prepare(`UPDATE ${tabelle} SET strain_text=? WHERE strain_id=? AND TRIM(strain_text)=? COLLATE NOCASE`).run(
+          fields.name,
+          alt.strain_id,
+          alt.name
+        );
+      }
+    }
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    if (e.message && e.message.includes('UNIQUE')) throw new Error('Stamm: already exists');
+    throw e;
+  }
+  return true;
+}
+
+// Löschen nimmt den Stamm nur aus der Auswahl. Chargen und Kulturen behalten
+// ihren Text — er steht auf Etiketten, die schon an Gläsern kleben, und eine
+// Linie, die man nicht mehr ansetzt, hat trotzdem die Kulturen gemacht, die
+// noch im Regal stehen.
+function deleteStamm(db, id) {
+  const info = db.prepare('DELETE FROM staemme WHERE id=?').run(id);
+  if (info.changes > 0) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
 // ── Targeted queries for MCP tools (avoid full readAll) ─────
 // `bagRows` is an array of {bag_id, bag_kg} for THIS batch — caller fetches
 // however they want (single .all() for one batch, pre-built bagsByBatch map
@@ -9661,7 +9792,10 @@ const SAFE_ERROR_PREFIXES = [
   // and a generic message there would leave a packed crate unexplained.
   'addHarvestRelease:',
   // Photo upload — server.js (every message is prefixed `photo:`)
-  'photo:'
+  'photo:',
+  // Stämme je Pilzsorte — "gibt es schon" soll am Telefon ankommen, nicht als
+  // "Internal server error".
+  'Stamm:'
 ];
 
 const SAFE_ERROR_BARE = new Set([
@@ -10927,6 +11061,10 @@ module.exports = {
   createMushroomStrain,
   updateMushroomStrain,
   deleteMushroomStrain,
+  listStaemme,
+  createStamm,
+  updateStamm,
+  deleteStamm,
   assignBarcode,
   assignBarcodes,
   lookupBarcode,

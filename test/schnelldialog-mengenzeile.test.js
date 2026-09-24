@@ -55,6 +55,11 @@ const CODE = [
   hebeFunktion('_msqIsGrain', SRC),
   hebeFunktion('msqSizeRows', SRC),
   hebeFunktion('msqReadSizes', SRC),
+  // Seit der Inventur hängt die Zeile auch am Datum: früher angesetzt bucht
+  // nichts ab, und das steht dann dahinter.
+  hebeFunktion('localDateStr', SRC),
+  hebeFunktion('anlageState', SRC),
+  hebeFunktion('anlageFrueher', SRC),
   hebeFunktion('msQuickPreview', SRC)
 ].join('\n');
 
@@ -70,7 +75,7 @@ function zeile(kg, qty) {
 // Ein Lauf des Dialogs: Felder rein, Vorschauzeile raus. `groessen` ist die
 // Liste, die im Dialog steht — [kg, Anzahl] je Zeile. Die alte Kurzform
 // (qty + grainKg) ist dieselbe Liste mit genau einer Zeile.
-function vorschau({ ms, mode, qty, grainKg, groessen, labType, lang }) {
+function vorschau({ ms, mode, qty, grainKg, groessen, labType, lang, angesetzt }) {
   const zeilen = (groessen || [[grainKg, qty]]).map(([kg, n]) => zeile(kg, n));
   const felder = {
     'ms-q-qty': { value: String(qty == null ? '' : qty) },
@@ -81,11 +86,14 @@ function vorschau({ ms, mode, qty, grainKg, groessen, labType, lang }) {
     getElementById: (id) => felder[id] || null,
     querySelectorAll: () => zeilen
   };
-  new Function('document', 'LANG', 'currentLang', '_msQuickCtx', CODE + '\nmsQuickPreview();')(
+  // `angesetzt` ist das Feld "Angesetzt am", JJJJ-MM-TT; ohne Angabe zu (heute).
+  const ANLAGE = { 'ms-q': angesetzt ? { offen: true, datum: angesetzt } : { offen: false, datum: '' } };
+  new Function('document', 'LANG', 'currentLang', '_msQuickCtx', 'ANLAGE', CODE + '\nmsQuickPreview();')(
     doc,
     woerterbuecher(),
     lang || 'de',
-    { mode, ms }
+    { mode, ms },
+    ANLAGE
   );
   return felder['ms-q-preview'].textContent;
 }
@@ -224,5 +232,40 @@ describe('Mengenzeile im Schnelldialog', () => {
       assert.match(s, /20 kg/, lang + ': die Gesamtmenge fehlt');
       assert.match(s, /10 × 2 kg/, lang + ': die Aufstellung der Größen fehlt');
     }
+  });
+});
+
+describe('Mengenzeile bei Bestand aus der Inventur', () => {
+  // Früher angesetzt heißt: angelegt, aber nichts abgebucht. Die Zeile nennt
+  // weiter, was ein Ansatz von heute nähme — und muss dann sagen, dass es
+  // diesmal nicht geschieht, sonst liest man eine Abbuchung, die nicht kommt.
+  const tag = (versatz) => {
+    const d = new Date();
+    d.setDate(d.getDate() + versatz);
+    return (
+      d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+    );
+  };
+
+  it('sagt bei Körnerbrut mit früherem Tag, dass nichts abgebucht wird', () => {
+    const s = vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 2, angesetzt: tag(-14) });
+    assert.match(s, /7\.6 kg trockenes Korn vom Lager — nichts abgebucht, früher angesetzt$/);
+  });
+
+  it('und bei einer Charge ebenso', () => {
+    const s = vorschau({ ms: SORTE(), mode: 'charge', qty: 10, angesetzt: tag(-3) });
+    assert.match(s, /für 10 Stück:.* — nichts abgebucht, früher angesetzt$/);
+  });
+
+  it('lässt die Zeile, wie sie war, solange der Tag heute ist', () => {
+    for (const angesetzt of [undefined, tag(0)]) {
+      const s = vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 2, angesetzt });
+      assert.doesNotMatch(s, /nichts abgebucht/);
+    }
+  });
+
+  it('schweigt bei Kulturen, die buchen ohnehin nie etwas', () => {
+    const s = vorschau({ ms: SORTE(), mode: 'labor', labType: 'LC', qty: 4, angesetzt: tag(-14) });
+    assert.doesNotMatch(s, /nichts abgebucht/);
   });
 });
