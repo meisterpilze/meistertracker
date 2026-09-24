@@ -43,6 +43,11 @@ window.LANG['pt'] = {
   'proj.asTask': 'Criar tarefa',
   'proj.taskAdded': 'Criada como tarefa para hoje',
   'proj.taskExists': 'Já está na lista de tarefas',
+  'proj.allDone': 'Tudo concluído.',
+  'proj.resetChecks': 'Limpar marcações',
+  'proj.doneOf': '{n} de {sum} concluídos',
+  'proj.showDone': 'Mostrar concluídos ({n})',
+  'proj.hideDone': 'Ocultar concluídos ({n})',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Levantamentos',
   'pickups.desc':

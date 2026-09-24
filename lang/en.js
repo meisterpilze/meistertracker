@@ -44,6 +44,11 @@ window.LANG['en'] = {
   'proj.asTask': 'Add as task',
   'proj.taskAdded': 'Added as a task for today',
   'proj.taskExists': 'Already on the task list',
+  'proj.allDone': 'All ticked off.',
+  'proj.resetChecks': 'Reset ticks',
+  'proj.doneOf': '{n} of {sum} done',
+  'proj.showDone': 'Show done ({n})',
+  'proj.hideDone': 'Hide done ({n})',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':

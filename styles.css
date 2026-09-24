@@ -8154,3 +8154,99 @@ tr.ms-off .ms-prog {
     gap: 2px;
   }
 }
+
+/* Der Tagesplan. Eine Zeile ist ein Handgriff, und abgehakt heisst weg: am
+   Tisch zeigt die Liste, was noch zu tun ist. Durchgestrichene Zeilen kosten
+   genau dort Platz, wo der nächste Schritt stehen müsste. */
+.pj-chk {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.pj-chk input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--c-primary);
+  cursor: pointer;
+}
+.pj-chk label {
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.5;
+}
+.pj-chk input:checked + label {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.pj-chk.is-done {
+  display: none;
+}
+.pj-plan.pj-show-done .pj-chk.is-done {
+  display: flex;
+}
+/* Wo der Handgriff passiert: Einkauf, Bank, Autoklav, Flow. Eine eigene Zeile
+   über dem Text, weil sie am Telefon sonst die halbe Breite nimmt. */
+.pj-tag {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.pj-empty {
+  margin: 0;
+  padding: 14px 0 2px;
+  font-size: max(0.8125rem, var(--fs-min));
+  color: var(--c-text-muted);
+}
+.pj-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.pj-count {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+/* Nachschlagen, nicht lesen. Die Recherche steht unter dem Tagesplan und ist
+   zu: aufgeklappt ist sie ein Bericht, zugeklappt eine Zeile, und während der
+   Autoklav läuft will niemand einen Bericht scrollen. */
+.pj-fold > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-height: max(24px, var(--tap-min));
+}
+.pj-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.pj-fold > summary::before {
+  content: '▸';
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+.pj-fold[open] > summary::before {
+  content: '▾';
+}
+.pj-fold[open] > summary {
+  margin-bottom: 10px;
+}
+.pj-fold > summary:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

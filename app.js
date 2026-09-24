@@ -15302,6 +15302,85 @@ function pjTasks(tasks) {
     '</ul>'
   );
 }
+// Der Tagesplan. Eine Zeile ist ein Handgriff, die Marke links sagt wo
+// (Einkauf, Bank, Autoklav, Flow), und abgehakt heisst weg — am Tisch zeigt
+// die Liste, was noch zu tun ist, nicht was schon war. Ausgeblendet, nicht
+// geloescht: ein Knopf holt die erledigten zum Korrigieren zurueck. Dieselbe
+// Mechanik und dieselben Worte wie die Laborliste, die es vorher schon gab, damit nicht
+// zwei Werkzeuge zwei Sprachen sprechen.
+//
+// Der Haken liegt im Browser, nicht auf dem Server: er gilt fuer einen Ansatz
+// an einem Tag an einem Geraet, und dafuer waere eine Tabelle mit Sync die
+// falsche Groesse. Ist der Versuch durch, setzt der Knopf alles zurueck.
+const PJ_CHK = 'mp_vorhaben_chk';
+function pjChkLoad() {
+  try {
+    return JSON.parse(localStorage.getItem(PJ_CHK) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+function pjChkSave(d) {
+  try {
+    localStorage.setItem(PJ_CHK, JSON.stringify(d));
+  } catch (e) {
+    /* privater Modus, voller Speicher: die Liste funktioniert, sie merkt es sich nur nicht */
+  }
+}
+function pjPlan(pl) {
+  const st = pjChkLoad();
+  const rows = pl.items
+    .map((it, i) => {
+      const k = pl.key + '-' + i;
+      const id = 'pjc-' + k;
+      const an = !!st[k];
+      return (
+        `<div class="pj-chk${an ? ' is-done' : ''}">` +
+        `<input type="checkbox" id="${id}" data-pj-chk="${esc(k)}"${an ? ' checked' : ''}>` +
+        `<label for="${id}"><span class="pj-tag">${pjText(it[0])}</span>${pjText(it[1])}</label></div>`
+      );
+    })
+    .join('');
+  return (
+    `<div class="pj-plan" data-pj-plan="${esc(pl.key)}">` +
+    rows +
+    `<p class="pj-empty" hidden>${esc(t('proj.allDone'))}</p>` +
+    '<div class="pj-bar">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-show="${esc(pl.key)}" hidden></button>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-reset="${esc(pl.key)}" hidden>${esc(t('proj.resetChecks'))}</button>` +
+    '<span class="pj-count"></span></div></div>'
+  );
+}
+/** Zaehlt, blendet aus und beschriftet die beiden Knoepfe — eine Stelle für alles. */
+function pjPlanRefresh(box) {
+  if (!box) return;
+  const st = pjChkLoad();
+  const key = box.dataset.pjPlan;
+  const zeilen = box.querySelectorAll('.pj-chk');
+  let fertig = 0;
+  zeilen.forEach((row, i) => {
+    const an = !!st[key + '-' + i];
+    if (an) fertig++;
+    row.classList.toggle('is-done', an);
+    const cb = row.querySelector('input');
+    if (cb) cb.checked = an;
+  });
+  const zeigt = box.classList.contains('pj-show-done');
+  const zahl = box.querySelector('.pj-count');
+  if (zahl) zahl.textContent = t('proj.doneOf', { n: fertig, sum: zeilen.length });
+  const leer = box.querySelector('.pj-empty');
+  if (leer) leer.hidden = !(fertig === zeilen.length && !zeigt);
+  const zeigen = box.querySelector('[data-pj-show]');
+  if (zeigen) {
+    zeigen.hidden = !fertig;
+    zeigen.textContent = t(zeigt ? 'proj.hideDone' : 'proj.showDone', { n: fertig });
+  }
+  const zurueck = box.querySelector('[data-pj-reset]');
+  if (zurueck) zurueck.hidden = !fertig;
+}
+function pjPlansRefresh(wurzel) {
+  (wurzel || document).querySelectorAll('.pj-plan').forEach(pjPlanRefresh);
+}
 function pjItem(it) {
   const head = it.t ? `<div class="pj-h">${pjText(it.t)}</div>` : '';
   let body = '';
@@ -15313,6 +15392,7 @@ function pjItem(it) {
   else if (it.cards) body = pjCards(it.cards);
   else if (it.steps) body = pjSteps(it.steps);
   else if (it.tasks) body = pjTasks(it.tasks);
+  else if (it.plan) body = pjPlan(it.plan);
   else if (it.copy)
     body =
       `<pre class="pj-pre">${esc(it.copy.text)}</pre>` +
@@ -15330,19 +15410,59 @@ function renderProjekte(key) {
     `<p class="pj-lead">${pjText(doc.lead)}</p>` +
     '</div>' +
     doc.sections
-      .map(
-        (s) =>
-          '<div class="card pj-sec">' +
-          `<div class="sec">${pjText(s.t)}</div>` +
-          s.items.map(pjItem).join('') +
-          '</div>'
+      .map((s) =>
+        s.fold
+          ? '<details class="card pj-sec pj-fold">' +
+            `<summary class="sec">${pjText(s.t)}</summary>` +
+            s.items.map(pjItem).join('') +
+            '</details>'
+          : '<div class="card pj-sec">' +
+            `<div class="sec">${pjText(s.t)}</div>` +
+            s.items.map(pjItem).join('') +
+            '</div>'
       )
       .join('');
+  pjPlansRefresh(el);
 }
 // Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
 // Inhalt wird bei jedem Reiterwechsel neu geschrieben, und Zuhörer, die an den
 // Knöpfen selbst hängen, gingen dabei jedes Mal mit verloren.
 function pjClick(e) {
+  // Ein Tipp auf die Beschriftung schaltet den Kasten, und der Klick des
+  // Kastens landet hier — ein Zuhoerer je Seite statt einer je Zeile, weil
+  // der Inhalt bei jedem Reiterwechsel neu geschrieben wird.
+  const kasten = e.target.closest('[data-pj-chk]');
+  if (kasten) {
+    const stand = pjChkLoad();
+    if (kasten.checked) stand[kasten.dataset.pjChk] = 1;
+    else delete stand[kasten.dataset.pjChk];
+    pjChkSave(stand);
+    pjPlanRefresh(kasten.closest('.pj-plan'));
+    return;
+  }
+  const zeigen = e.target.closest('[data-pj-show]');
+  if (zeigen) {
+    const feld = zeigen.closest('.pj-plan');
+    if (feld) {
+      feld.classList.toggle('pj-show-done');
+      pjPlanRefresh(feld);
+    }
+    return;
+  }
+  const zuruecksetzen = e.target.closest('[data-pj-reset]');
+  if (zuruecksetzen) {
+    const feld = zuruecksetzen.closest('.pj-plan');
+    const schluessel = feld && feld.dataset.pjPlan;
+    if (!schluessel) return;
+    const stand = pjChkLoad();
+    Object.keys(stand).forEach((k) => {
+      if (k.indexOf(schluessel + '-') === 0) delete stand[k];
+    });
+    pjChkSave(stand);
+    feld.classList.remove('pj-show-done');
+    pjPlanRefresh(feld);
+    return;
+  }
   const kopieren = e.target.closest('[data-pj-copy]');
   if (kopieren) {
     const pre = kopieren.previousElementSibling;

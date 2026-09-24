@@ -44,6 +44,11 @@ window.LANG['de'] = {
   'proj.asTask': 'Als Aufgabe',
   'proj.taskAdded': 'Als Aufgabe für heute angelegt',
   'proj.taskExists': 'Steht schon auf der Aufgabenliste',
+  'proj.allDone': 'Alles abgehakt.',
+  'proj.resetChecks': 'Haken zurücksetzen',
+  'proj.doneOf': '{n} von {sum} erledigt',
+  'proj.showDone': 'Erledigte anzeigen ({n})',
+  'proj.hideDone': 'Erledigte ausblenden ({n})',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Abholungen',
   'pickups.desc':
