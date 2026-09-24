@@ -1608,6 +1608,22 @@
             <path d="M12 8v1m0 6v1m-4-4h1m6 0h1" /></svg
           ><span data-i18n="nav.strains">Pilzsorten</span>
         </button>
+        <button class="sb-btn" id="n-proj" data-page="proj">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 18h6" />
+            <path d="M10 22h4" />
+            <path d="M12 2a7 7 0 00-4 12.7V18h8v-3.3A7 7 0 0012 2z" /></svg
+          ><span data-i18n="nav.projects">Vorhaben</span>
+        </button>
         <div class="sb-group-label" data-i18n="nav.sales">Verkauf</div>
         <button class="sb-btn" id="n-pickups" data-page="pickups">
           <svg
@@ -6234,6 +6250,25 @@
         <!-- ══ ZONEN (Location Management) ══ -->
         <!-- Zone edit modal -->
 
+        <!-- Drei Unterlagen, je eine für die Reiter Forschung, Produkte
+             und Bau.
+             Sie stehen hier, weil sie an der Werkbank gebraucht werden und
+             nicht am Schreibtisch — ein PDF, das man erst suchen muss,
+             wird beim Ansetzen nicht gelesen.
+
+             Die Panels sind leer: ihren Inhalt schreibt renderProjekte() aus
+             PJ_DOCS in app.js. Der Text ist Inhalt und geht deshalb nicht durch
+             t(); die drei Reiter darüber schon. -->
+        <div class="page" id="p-proj">
+          <div class="stabs" data-stab-home="nav.projects">
+            <button class="stab active" id="st-proj-research" data-i18n="proj.tabResearch">Forschung</button>
+            <button class="stab" id="st-proj-products" data-i18n="proj.tabProducts">Produkte</button>
+            <button class="stab" id="st-proj-build" data-i18n="proj.tabBuild">Bau</button>
+          </div>
+          <div class="sp active" id="sp-proj-research"><div id="pj-research"></div></div>
+          <div class="sp" id="sp-proj-products"><div id="pj-products"></div></div>
+          <div class="sp" id="sp-proj-build"><div id="pj-build"></div></div>
+        </div>
         <div class="page" id="p-zones">
           <div class="card" style="margin-bottom: 16px">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">

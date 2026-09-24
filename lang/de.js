@@ -23,6 +23,7 @@ window.LANG['de'] = {
   'nav.zones': 'Zonen',
   'nav.print': 'Drucken',
   'nav.strains': 'Pilzsorten',
+  'nav.projects': 'Vorhaben',
   'nav.admin': 'Admin',
   'nav.calendar': 'Kalender',
   'nav.orders': 'Bestellungen',
@@ -34,6 +35,15 @@ window.LANG['de'] = {
   'nav.adminSales': 'Verkauf',
   'nav.adminDevices': 'Ger\u00e4te',
   'nav.adminSystem': 'System',
+  // Vorhaben — Forschung, Produktideen, Bau. Der Inhalt der drei Unterlagen
+  // steht in PJ_DOCS (app.js) und wird nicht übersetzt; hier stehen die
+  // Beschriftungen darum herum.
+  'proj.tabResearch': 'Forschung',
+  'proj.tabProducts': 'Produkte',
+  'proj.tabBuild': 'Bau',
+  'proj.asTask': 'Als Aufgabe',
+  'proj.taskAdded': 'Als Aufgabe für heute angelegt',
+  'proj.taskExists': 'Steht schon auf der Aufgabenliste',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Abholungen',
   'pickups.desc':

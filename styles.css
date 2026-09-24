@@ -7942,3 +7942,215 @@ tr.ms-off .ms-prog {
 .wkf-foot .btn {
   min-height: max(44px, var(--tap-min));
 }
+
+/* ── Vorhaben (Forschung · Produkte · Bau) ───────────────────
+   Drei Unterlagen zum Lesen, nicht zum Ausfüllen: eine Recherche, ein paar
+   Rezepte und ein Bauplan. Das ist die einzige Stelle dieser Anwendung, an der
+   längerer Fließtext steht, und Fließtext braucht anderes als eine Tabelle —
+   eine Zeilenhöhe, mit der man einen Absatz zu Ende liest, und eine Zeile, die
+   nicht quer über einen 27-Zoll-Schirm läuft.
+
+   Die Tabellen bringen ihr Telefonverhalten selbst mit: sie tragen .t-cards und
+   werden unter 769px zu Karten wie die zwölf anderen. Deshalb steht hier keine
+   einzige Tabellenregel für das Telefon. */
+.pj-head {
+  border-left: 3px solid var(--c-primary);
+}
+.pj-title {
+  font-size: max(1.0625rem, var(--fs-min));
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 4px;
+}
+.pj-meta {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  margin-bottom: 10px;
+}
+.pj-lead {
+  font-size: max(0.875rem, var(--fs-min));
+  line-height: 1.6;
+  margin: 0;
+  max-width: 68ch;
+}
+/* Die Zwischenüberschrift eines Abschnitts. .sec ist die Überschrift der Karte
+   und schon vergeben; diese hier steht darunter und ist deshalb leiser gesetzt,
+   aber nicht kleiner — unter dem Mindestmaß fängt das Suchen an. */
+.pj-h {
+  font-size: max(0.8125rem, var(--fs-min));
+  font-weight: 700;
+  color: var(--c-text);
+  margin: 18px 0 6px;
+}
+.pj-sec > .pj-h:first-of-type {
+  margin-top: 0;
+}
+.pj-p {
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.65;
+  color: var(--c-text);
+  margin: 0 0 10px;
+  max-width: 72ch;
+}
+.pj-ul {
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.6;
+  color: var(--c-text);
+  margin: 0 0 10px;
+  padding-left: 20px;
+  max-width: 72ch;
+}
+.pj-ul li {
+  margin-bottom: 6px;
+}
+/* Der Einschub. Zwei Tonlagen: bernstein für „das ist der Haken an der Sache",
+   rot für „das geht schief, wenn du es überliest". Mehr Abstufungen wären eine
+   Farbenlehre, die niemand liest. */
+.pj-note {
+  background: var(--c-amber-light);
+  border-left: 3px solid var(--c-amber);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 12px;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.55;
+  color: var(--c-text);
+  margin: 0 0 10px;
+  max-width: 72ch;
+}
+.pj-note-warn {
+  background: var(--c-red-light);
+  border-left-color: var(--c-red);
+}
+.pj-t {
+  margin-bottom: 12px;
+}
+/* Prosa in einer Zelle: oben ausgerichtet, sonst schwimmt eine einzeilige
+   Spalte in der Mitte einer vierzeiligen. */
+.pj-t td {
+  vertical-align: top;
+  line-height: 1.5;
+}
+/* Rezeptkarten. auto-fit mit 232px heißt: drei nebeneinander am Schreibtisch,
+   eine untereinander am Telefon, ohne eine einzige Abfrage nach der Fensterbreite. */
+.pj-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(232px, 100%), 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pj-rx {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-bg);
+  padding: 12px 14px;
+}
+.pj-rx-t {
+  font-weight: 700;
+  font-size: max(0.8125rem, var(--fs-min));
+  margin-bottom: 2px;
+}
+.pj-rx-sub {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  margin-bottom: 8px;
+}
+.pj-ing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.pj-ing li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--c-border-light);
+  line-height: 1.4;
+}
+.pj-ing li:last-child {
+  border-bottom: 0;
+}
+.pj-v {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pj-rx-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border);
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  line-height: 1.45;
+}
+/* Der Ablauf über der Zeit: links wann, rechts was. Unter 769px stapelt sich
+   das, weil „Tag 12–13" und ein Satz nebeneinander auf einem Telefon zwei
+   Spalten von je elf Zeichen wären. */
+.pj-steps {
+  margin-bottom: 12px;
+  border-top: 1px solid var(--c-border-light);
+}
+.pj-step {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--c-border-light);
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.55;
+}
+.pj-step-k {
+  font-weight: 700;
+  color: var(--c-primary);
+}
+/* Ein Schritt mit einem Knopf daneben. Der Knopf bleibt so breit wie sein Wort
+   — eine Zeile, die zur Aufgabe werden kann, ist kein Formular-Absenden. */
+.pj-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.pj-tasks li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border-light);
+  line-height: 1.5;
+}
+.pj-tasks li:last-child {
+  border-bottom: 0;
+}
+.pj-tasks li > span {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.pj-add {
+  flex: 0 0 auto;
+}
+/* Der Anfragetext, so wie er in die Mail gehört. pre-wrap, damit die Zeilen
+   umbrechen statt die Seite breiter zu machen: ein <pre> mit einem deutschen
+   Absatz darin ist sonst 900px breit und das Telefon 360. */
+.pj-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-family: inherit;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.55;
+  color: var(--c-text);
+  margin: 0 0 10px;
+}
+@media (max-width: 768px) {
+  .pj-step {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

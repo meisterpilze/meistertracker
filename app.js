@@ -1183,6 +1183,14 @@ function go(page, btnId) {
   if (page === 'dash') renderOverviewKPIs();
   if (page === 'dash' && !kpiHistoryData) loadKpiHistory();
   if (page === 'strains') renderStrains();
+  // Dieselbe Regel wie bei Admin und Bestellungen: welcher Reiter aufgeht,
+  // entscheidet die Leiste und nicht diese Liste. Der Reiter weiß selbst, was
+  // sein Panel braucht, und es ist derselbe Weg, den ein Tipp auf die Leiste
+  // nimmt — eine Verdrahtung je Unterseite statt zwei.
+  if (page === 'proj') {
+    const stab = document.querySelector('#p-proj .stab.active');
+    if (stab) stab.click();
+  }
   // Same rule as Admin above, and for the same reason: the strip handler already
   // knows what its panel needs. Rendering the inbox here instead drew a list the
   // user may not have asked for, every time — the four other views then drew
@@ -1263,6 +1271,7 @@ function openStab(page, sub) {
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
+  if (page === 'proj') renderProjekte(sub);
   // A phone shows one sub-page at a time, with a back row where the strip was.
   // Every route into a sub-page runs through here — the strip, the admin
   // drawer, and the dozen `openStab(...)` calls that land somewhere after a
@@ -1374,6 +1383,14 @@ function refresh() {
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
+  // Der Inhalt dieser Seite hängt nicht an den Daten — er steht im Quelltext.
+  // Gezeichnet wird trotzdem, aber nur, wenn noch nichts dasteht: das deckt den
+  // Fall ab, für den diese Liste da ist (die offene Seite bleibt leer), ohne
+  // alle 30 Sekunden ein Dokument neu zu bauen, während jemand darin liest.
+  if (id === 'proj') {
+    const offen = document.querySelector('#p-proj .sp.active > div');
+    if (offen && !offen.innerHTML) renderProjekte(offen.id.replace('pj-', ''));
+  }
   if (id === 'orders') _refreshOrdersActive();
   // Pickups arrive on the feed's own schedule, not on any action taken here, so
   // this page has no other way to notice that something changed.
@@ -15196,6 +15213,180 @@ async function printQrSheet(items, title) {
   setTimeout(() => window.print(), 600);
 }
 
+// ─── VORHABEN (Forschung · Produkte · Bau) ───────────────────
+//
+// Drei Unterlagen, je eine für die Reiter Forschung, Produkte und
+// Bau. Sie stehen hier,
+// weil sie an der Werkbank gebraucht werden und nicht am Schreibtisch — ein
+// PDF, das man erst suchen muss, wird beim Ansetzen nicht gelesen.
+//
+// Der Text ist Inhalt, keine Oberfläche, und geht deshalb nicht durch t().
+// Übersetzt werden die Reiter und die Knöpfe. Das ist dieselbe Grenze, die eine
+// Zone oder ein Substratrezept schon hat: wie die Dinge heißen, steht in der
+// Datenbank und bleibt wie es ist; was man mit ihnen tun kann, steht im
+// Wörterbuch. Drei Rechercheberichte in drei Sprachen zu halten hieße, sie
+// dreimal zu pflegen, und gepflegt würde dann einer.
+//
+// Bausteine je Abschnitt: p, ul, ol, note, table, cards, steps, tasks, copy.
+// Mehr braucht keines der drei Dokumente, und was ein Dokument nicht braucht,
+// kann auch nicht veralten.
+const PJ_DOCS = {
+  research: { title: '', sections: [] },
+  products: { title: '', sections: [] },
+  build: { title: '', sections: [] }
+};
+
+// **fett** ist die einzige Auszeichnung, die diese drei Dokumente brauchen, und
+// sie wird nach dem Escapen eingesetzt: der Inhalt geht durch esc(), erst danach
+// entsteht Markup. Andersherum wäre jedes Sternchen im Text ein offenes Tor.
+function pjText(s) {
+  return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+function pjTable(tb) {
+  // .t-cards ist der Kartenmodus, den zwölf Tabellen dieser Anwendung unter
+  // 769px schon benutzen: thead aus, jede Zeile eine Karte, und die
+  // Beschriftung kommt aus data-mlabel. Deshalb sind die Spaltenköpfe hier
+  // kurz — sie stehen am Telefon in einer 84px breiten Spalte.
+  const head = tb.head.map((h) => `<th>${pjText(h)}</th>`).join('');
+  const rows = tb.rows
+    .map(
+      (r) =>
+        '<tr>' + r.map((c, i) => `<td data-mlabel="${esc(tb.head[i] || '')}">${pjText(c)}</td>`).join('') + '</tr>'
+    )
+    .join('');
+  return `<table class="t-cards pj-t"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+function pjCards(cards) {
+  return (
+    '<div class="pj-cards">' +
+    cards
+      .map((c) => {
+        const rows = (c.rows || [])
+          .map((r) => `<li><span class="pj-k">${pjText(r[0])}</span><span class="pj-v">${pjText(r[1])}</span></li>`)
+          .join('');
+        return (
+          '<div class="pj-rx">' +
+          `<div class="pj-rx-t">${pjText(c.t)}</div>` +
+          (c.sub ? `<div class="pj-rx-sub">${pjText(c.sub)}</div>` : '') +
+          `<ul class="pj-ing">${rows}</ul>` +
+          (c.foot ? `<div class="pj-rx-foot">${pjText(c.foot)}</div>` : '') +
+          '</div>'
+        );
+      })
+      .join('') +
+    '</div>'
+  );
+}
+function pjSteps(steps) {
+  return (
+    '<div class="pj-steps">' +
+    steps.map((s) => `<div class="pj-step"><div class="pj-step-k">${pjText(s.k)}</div><div>${pjText(s.v)}</div></div>`).join('') +
+    '</div>'
+  );
+}
+// Ein Schritt, den man anfassen kann. Die Liste allein ist eine Liste; was
+// daraus wird, entscheidet sich erst, wenn sie im Kalender steht — deshalb
+// trägt jede Zeile ihren eigenen Knopf. Angelegt wird eine ganz normale
+// manuelle Aufgabe, mit heutigem Datum, weil eine Aufgabe ohne Datum im
+// Kalender nicht gezeichnet wird (renderCalendar überspringt sie).
+function pjTasks(tasks) {
+  return (
+    '<ul class="pj-tasks">' +
+    tasks
+      .map(
+        (x) =>
+          `<li><span>${pjText(x)}</span>` +
+          `<button class="btn btn-sm fs-xs pj-add" data-pj-task="${esc(x)}">${esc(t('proj.asTask'))}</button></li>`
+      )
+      .join('') +
+    '</ul>'
+  );
+}
+function pjItem(it) {
+  const head = it.t ? `<div class="pj-h">${pjText(it.t)}</div>` : '';
+  let body = '';
+  if (it.p) body = `<p class="pj-p">${pjText(it.p)}</p>`;
+  else if (it.ul) body = '<ul class="pj-ul">' + it.ul.map((x) => `<li>${pjText(x)}</li>`).join('') + '</ul>';
+  else if (it.ol) body = '<ol class="pj-ul">' + it.ol.map((x) => `<li>${pjText(x)}</li>`).join('') + '</ol>';
+  else if (it.note) body = `<div class="pj-note${it.tone === 'warn' ? ' pj-note-warn' : ''}">${pjText(it.note)}</div>`;
+  else if (it.table) body = pjTable(it.table);
+  else if (it.cards) body = pjCards(it.cards);
+  else if (it.steps) body = pjSteps(it.steps);
+  else if (it.tasks) body = pjTasks(it.tasks);
+  else if (it.copy)
+    body =
+      `<pre class="pj-pre">${esc(it.copy.text)}</pre>` +
+      `<button class="btn btn-sm fs-xs" data-pj-copy="1">${esc(t('common.copy'))}</button>`;
+  return head + body;
+}
+function renderProjekte(key) {
+  const el = document.getElementById('pj-' + key);
+  const doc = PJ_DOCS[key];
+  if (!el || !doc) return;
+  el.innerHTML =
+    '<div class="card pj-head">' +
+    `<div class="pj-title">${pjText(doc.title)}</div>` +
+    `<div class="pj-meta">${pjText(doc.meta)}</div>` +
+    `<p class="pj-lead">${pjText(doc.lead)}</p>` +
+    '</div>' +
+    doc.sections
+      .map(
+        (s) =>
+          '<div class="card pj-sec">' +
+          `<div class="sec">${pjText(s.t)}</div>` +
+          s.items.map(pjItem).join('') +
+          '</div>'
+      )
+      .join('');
+}
+// Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
+// Inhalt wird bei jedem Reiterwechsel neu geschrieben, und Zuhörer, die an den
+// Knöpfen selbst hängen, gingen dabei jedes Mal mit verloren.
+function pjClick(e) {
+  const kopieren = e.target.closest('[data-pj-copy]');
+  if (kopieren) {
+    const pre = kopieren.previousElementSibling;
+    if (pre) copyToClipboardWithFeedback(pre.textContent, kopieren);
+    return;
+  }
+  const btn = e.target.closest('[data-pj-task]');
+  if (!btn) return;
+  const text = btn.dataset.pjTask;
+  // Zweimal tippen darf nicht zweimal anlegen. Der Vergleich geht über den
+  // Text, weil das die einzige Kennung ist, die diese Seite und eine schon
+  // bestehende Aufgabe teilen.
+  if (manualTasks.some((x) => x.text === text && !x.done)) {
+    toast(t('proj.taskExists'));
+    return;
+  }
+  const task = {
+    text,
+    priority: 'med',
+    done: false,
+    created: new Date().toISOString(),
+    assignee: (currentUser && currentUser.username) || null,
+    dueDate: localDateStr(new Date()),
+    dueTime: null,
+    dueEndTime: null,
+    description: '',
+    caldavUid: null,
+    caldavSynced: null,
+    private: false,
+    recurrence: null,
+    recurrenceUntil: null
+  };
+  manualTasks.push(task);
+  apiPost('/api/tasks', task).then((r) => {
+    if (r && r.id) {
+      task.id = r.id;
+      if (caldav.enabled) pushTaskCaldav(task);
+    }
+    renderCalendar();
+    updateTodoBadge();
+  });
+  toast(t('proj.taskAdded'));
+}
+
 // ─── MUSHROOM STRAINS ────────────────────────────────────────
 function fillStrainSelects() {
   const opts =
@@ -24689,6 +24880,11 @@ function initEventListeners() {
     go('strains', 'n-strains');
     renderStrains();
   });
+  $('n-proj').addEventListener('click', () => go('proj', 'n-proj'));
+  $('st-proj-research').addEventListener('click', () => openStab('proj', 'research'));
+  $('st-proj-products').addEventListener('click', () => openStab('proj', 'products'));
+  $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));
+  $('p-proj').addEventListener('click', pjClick);
   const pickupsSchalter = $('pickups-past-btn');
   if (pickupsSchalter)
     pickupsSchalter.addEventListener('click', () => {

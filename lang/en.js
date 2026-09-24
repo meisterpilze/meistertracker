@@ -23,6 +23,7 @@ window.LANG['en'] = {
   'nav.zones': 'Zones',
   'nav.print': 'Print',
   'nav.strains': 'Strains',
+  'nav.projects': 'Projects',
   'nav.admin': 'Admin',
   'nav.calendar': 'Calendar',
   'nav.orders': 'Orders',
@@ -34,6 +35,15 @@ window.LANG['en'] = {
   'nav.adminSales': 'Sales',
   'nav.adminDevices': 'Devices',
   'nav.adminSystem': 'System',
+  // Projects — research, product ideas, build. The three documents themselves
+  // live in PJ_DOCS (app.js) and are not translated; what is below is the
+  // chrome around them.
+  'proj.tabResearch': 'Research',
+  'proj.tabProducts': 'Products',
+  'proj.tabBuild': 'Build',
+  'proj.asTask': 'Add as task',
+  'proj.taskAdded': 'Added as a task for today',
+  'proj.taskExists': 'Already on the task list',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':

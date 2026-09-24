@@ -23,6 +23,7 @@ window.LANG['pt'] = {
   'nav.zones': 'Zonas',
   'nav.print': 'Imprimir',
   'nav.strains': 'Variedades',
+  'nav.projects': 'Projetos',
   'nav.admin': 'Admin',
   'nav.calendar': 'Calendário',
   'nav.orders': 'Encomendas',
@@ -34,6 +35,14 @@ window.LANG['pt'] = {
   'nav.adminSales': 'Vendas',
   'nav.adminDevices': 'Dispositivos',
   'nav.adminSystem': 'Sistema',
+  // Projetos — pesquisa, ideias de produtos, obra. Os três documentos ficam
+  // em PJ_DOCS (app.js) e não são traduzidos; aqui estão apenas os rótulos.
+  'proj.tabResearch': 'Pesquisa',
+  'proj.tabProducts': 'Produtos',
+  'proj.tabBuild': 'Obra',
+  'proj.asTask': 'Criar tarefa',
+  'proj.taskAdded': 'Criada como tarefa para hoje',
+  'proj.taskExists': 'Já está na lista de tarefas',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Levantamentos',
   'pickups.desc':
