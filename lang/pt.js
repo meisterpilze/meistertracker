@@ -68,7 +68,7 @@ window.LANG['pt'] = {
   'exp.conclusionPh': 'O que respondeu, o que muda da próxima vez',
   'exp.archive': 'Arquivo ({n})',
   'exp.newCodePh': 'E1',
-  'exp.newTitlePh': 'O que vai ser preparado?',
+  'exp.newTitlePh': 'Título',
   'exp.new': 'Novo ensaio',
   'exp.needCode': 'O recipiente precisa de um código.',
   'exp.needCodeTitle': 'Faltam código e título.',

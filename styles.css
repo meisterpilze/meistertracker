@@ -8310,20 +8310,43 @@ tr.ms-off .ms-prog {
   padding: 8px 0;
   border-bottom: 1px solid var(--c-border-light);
 }
+.pj-run-kopf {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.pj-run-tools {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .pj-run-code {
   flex: 0 0 auto;
   font-weight: 700;
   font-size: max(0.8125rem, var(--fs-min));
-  min-width: 68px;
 }
 .pj-run-what {
-  flex: 1 1 110px;
+  flex: 1 1 auto;
   min-width: 0;
   font-size: var(--fs-xs);
   color: var(--c-text-muted);
 }
+/* Das Etikett steht oben neben dem Code und nicht unten neben der Auswahl:
+   unten nahm es dem Ergebnisfeld die Breite, und getippt wird ins Feld. */
+.pj-run-etikett {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 .pj-run-res {
-  flex: 2 1 150px;
+  /* Klein starten, dann waechst es in den Rest. 150 px Basis hiessen am Telefon:
+     Feld, Auswahl und Etikett brauchen zusammen 346 von 330 verfuegbaren, und
+     der Knopf brach in eine dritte Zeile um. */
+  flex: 1 1 90px;
   min-width: 0;
 }
 .pj-run-new {

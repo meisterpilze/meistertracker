@@ -6917,7 +6917,7 @@ function listExperiments(db) {
   const runs = db.prepare('SELECT * FROM experiment_runs ORDER BY sort, id').all();
   const fotos = db.prepare('SELECT * FROM experiment_photos ORDER BY uploaded_at, id').all();
   return db
-    .prepare('SELECT * FROM experiments ORDER BY started DESC, id DESC')
+    .prepare('SELECT * FROM experiments ORDER BY started DESC, id ASC')
     .all()
     .map((e) => ({
       id: e.id,

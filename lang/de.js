@@ -69,7 +69,7 @@ window.LANG['de'] = {
   'exp.conclusionPh': 'Was hat der Versuch beantwortet, was läuft nächstes Mal anders',
   'exp.archive': 'Archiv ({n})',
   'exp.newCodePh': 'E1',
-  'exp.newTitlePh': 'Was wird angesetzt?',
+  'exp.newTitlePh': 'Titel',
   'exp.new': 'Experiment anlegen',
   'exp.needCode': 'Das Gefäß braucht einen Code.',
   'exp.needCodeTitle': 'Code und Titel fehlen.',

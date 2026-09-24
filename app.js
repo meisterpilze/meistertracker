@@ -15387,16 +15387,22 @@ function pjListe() {
     pjArchiv()
   );
 }
+// Zwei Zeilen je Gefaess, auf jedem Geraet gleich: oben der Code und wofuer es
+// steht, unten das Ergebnis, der Ausgang und das Etikett. Alles in eine Zeile zu
+// zwingen hiess am Telefon drei Zeilen, weil der Etikettenknopf allein umbrach —
+// und drei Gefaesse waren dann neun Zeilen fuer drei Kolben.
 function pjGefaessZeile(r) {
   return (
     `<div class="pj-run" data-pj-runrow="${r.id}">` +
-    `<div class="pj-run-code">${esc(r.code)}</div>` +
-    `<div class="pj-run-what">${esc(r.what)}</div>` +
+    '<div class="pj-run-kopf">' +
+    `<span class="pj-run-code">${esc(r.code)}</span>` +
+    (r.what ? `<span class="pj-run-what">${esc(r.what)}</span>` : '') +
+    `<button type="button" class="btn btn-sm fs-xs pj-run-etikett" data-pj-label="${r.id}">${esc(t('exp.label'))}</button>` +
+    '</div><div class="pj-run-tools">' +
     `<input class="pj-run-res" data-pj-run="${r.id}" data-pj-feld="result" value="${esc(r.result)}" ` +
     `placeholder="${esc(t('exp.resultPh'))}" maxlength="1000">` +
     pjAusgangSelect(r) +
-    `<button type="button" class="btn btn-sm fs-xs" data-pj-label="${r.id}">${esc(t('exp.label'))}</button>` +
-    '</div>'
+    '</div></div>'
   );
 }
 function pjFotoKachel(v, f) {
