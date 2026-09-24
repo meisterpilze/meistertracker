@@ -329,6 +329,7 @@ let mushroomStrains = [],
   scanLog = [],
   movements = [],
   manualTasks = [],
+  experiments = [],
   harvests = [],
   cultures = [],
   inventory = {},
@@ -591,6 +592,7 @@ function applyData(d) {
   scanLog = d.scanLog || [];
   movements = d.movements || d.scanLog || [];
   manualTasks = d.manualTasks || [];
+  experiments = d.experiments || [];
   harvests = d.harvests || [];
   cultures = d.cultures || [];
   inventory = d.inventory || defaultInventory();
@@ -15312,6 +15314,224 @@ function pjTasks(tasks) {
 // Der Haken liegt im Browser, nicht auf dem Server: er gilt fuer einen Ansatz
 // an einem Tag an einem Geraet, und dafuer waere eine Tabelle mit Sync die
 // falsche Groesse. Ist der Versuch durch, setzt der Knopf alles zurueck.
+// ── Versuche ────────────────────────────────────────────────
+//
+// Ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz, ein Fazit am Ende. Ein
+// Ansatz ist ein Kolben oder ein Glas — derselbe Zeilentyp, weil beide
+// dasselbe brauchen: einen Code, ein Etikett und in zwei Wochen eine Zahl.
+//
+// Abgeschlossen wird, nicht geloescht. Der abgeschlossene Versuch faellt aus der
+// laufenden Ansicht und steht im Archiv darunter, zugeklappt.
+const PJ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
+function pjRunning() {
+  return experiments.find((v) => v.status === 'running' && !v.archived) || null;
+}
+function pjAusgangSelect(r) {
+  return (
+    `<select class="pj-out" data-pj-run="${r.id}" data-pj-feld="outcome" aria-label="${esc(t('exp.outcome'))}">` +
+    PJ_AUSGANG.map(
+      (o) => `<option value="${o}"${r.outcome === o ? ' selected' : ''}>${esc(t('exp.out.' + o))}</option>`
+    ).join('') +
+    '</select>'
+  );
+}
+function pjRunRow(r) {
+  return (
+    `<div class="pj-run" data-pj-runrow="${r.id}">` +
+    `<div class="pj-run-code">${esc(r.code)}</div>` +
+    `<div class="pj-run-what">${esc(r.what)}</div>` +
+    `<input class="pj-run-res" data-pj-run="${r.id}" data-pj-feld="result" value="${esc(r.result)}" ` +
+    `placeholder="${esc(t('exp.resultPh'))}" maxlength="1000">` +
+    pjAusgangSelect(r) +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-label="${r.id}">${esc(t('exp.label'))}</button>` +
+    '</div>'
+  );
+}
+function pjVersuchKarte(v) {
+  const kopf =
+    '<div class="pj-v-head">' +
+    `<div><span class="pj-v-code">${esc(v.code)}</span> <span class="pj-v-title">${esc(v.title)}</span>` +
+    `<div class="pj-v-meta">${esc(t('exp.since', { d: v.started }))}</div></div>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-finish="${v.id}">${esc(t('exp.finish'))}</button>` +
+    '</div>';
+  const zeilen = v.runs.length
+    ? v.runs.map(pjRunRow).join('')
+    : `<p class="pj-empty">${esc(t('exp.noRuns'))}</p>`;
+  const neu =
+    '<div class="pj-run pj-run-new">' +
+    `<input id="pj-new-code" placeholder="${esc(t('exp.codePh'))}" maxlength="40">` +
+    `<input id="pj-new-what" placeholder="${esc(t('exp.whatPh'))}" maxlength="200">` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-addrun="${v.id}">${esc(t('exp.addRun'))}</button>` +
+    '</div>';
+  const felder =
+    '<details class="pj-v-more"><summary>' +
+    esc(t('exp.recipeAndResult')) +
+    '</summary>' +
+    `<label for="pj-v-recipe">${esc(t('exp.recipe'))}</label>` +
+    `<textarea id="pj-v-recipe" data-pj-exp="${v.id}" data-pj-feld="recipe" rows="3" ` +
+    `placeholder="${esc(t('exp.recipePh'))}">${esc(v.recipe)}</textarea>` +
+    `<label for="pj-v-outcome">${esc(t('exp.conclusion'))}</label>` +
+    `<textarea id="pj-v-outcome" data-pj-exp="${v.id}" data-pj-feld="outcome" rows="3" ` +
+    `placeholder="${esc(t('exp.conclusionPh'))}">${esc(v.outcome)}</textarea>` +
+    '</details>';
+  return kopf + zeilen + neu + felder;
+}
+function pjArchiv() {
+  const alte = experiments.filter((v) => v.status !== 'running' || v.archived);
+  if (!alte.length) return '';
+  return (
+    '<details class="card pj-sec pj-fold"><summary class="sec">' +
+    esc(t('exp.archive', { n: alte.length })) +
+    '</summary>' +
+    alte
+      .map(
+        (v) =>
+          '<div class="pj-arch">' +
+          `<div class="pj-v-head"><div><span class="pj-v-code">${esc(v.code)}</span> ` +
+          `<span class="pj-v-title">${esc(v.title)}</span>` +
+          `<div class="pj-v-meta">${esc(v.started)}${v.ended ? ' – ' + esc(v.ended) : ''}</div></div></div>` +
+          (v.outcome ? `<p class="pj-p">${esc(v.outcome)}</p>` : '') +
+          v.runs
+            .map(
+              (r) =>
+                `<div class="pj-run pj-run-ro"><div class="pj-run-code">${esc(r.code)}</div>` +
+                `<div class="pj-run-what">${esc(r.what)}</div>` +
+                `<div class="pj-run-res">${esc(r.result || '—')}</div>` +
+                `<span class="pj-out-${esc(r.outcome)}">${esc(t('exp.out.' + r.outcome))}</span></div>`
+            )
+            .join('') +
+          '</div>'
+      )
+      .join('') +
+    '</details>'
+  );
+}
+function pjVersuche() {
+  const v = pjRunning();
+  const karte = v
+    ? pjVersuchKarte(v)
+    : '<div class="pj-run pj-run-new">' +
+      `<input id="pj-new-vcode" placeholder="${esc(t('exp.newCodePh'))}" maxlength="20">` +
+      `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
+      `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
+      '</div>';
+  return '<div class="card pj-sec pj-versuche">' + karte + '</div>';
+}
+// Ein Etikett fuer einen Ansatz — dieselbe Vorlage, die die Kulturen drucken.
+// Ein Kolben und ein Glas bekommen damit dasselbe Etikett, und das ist der
+// Punkt: am Regal unterscheidet sie nur der Code.
+async function pjPrintRun(id) {
+  const v = pjRunning();
+  const r = v && v.runs.find((x) => x.id === id);
+  if (!r) return;
+  const zpl = itemsToZPL(
+    labLabelItems(
+      r.code,
+      {
+        species: v.code + (r.what ? ' · ' + r.what : ''),
+        strainText: '',
+        notes: '',
+        created: v.started,
+        parentId: null
+      },
+      'full',
+      false
+    )
+  );
+  const fehler = await sendToPrinter(zpl);
+  if (fehler) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = r.code + '_label.zpl';
+    a.click();
+  } else {
+    printedFb(t('exp.printed', { code: r.code }));
+  }
+}
+
+// Tippen speichert beim Verlassen des Feldes, nicht bei jedem Zeichen: ein
+// Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
+// eine Zeile Nutzen und hundert Anfragen.
+function pjChange(e) {
+  const feld = e.target.closest('[data-pj-feld]');
+  if (!feld) return;
+  const name = feld.dataset.pjFeld;
+  const wert = feld.value;
+  if (feld.dataset.pjRun) {
+    const id = Number(feld.dataset.pjRun);
+    const v = pjRunning();
+    const r = v && v.runs.find((x) => x.id === id);
+    if (r) r[name] = wert;
+    apiPatch('/api/experiment-runs/' + id, { [name]: wert });
+    if (name === 'outcome') renderProjekte('research');
+    return;
+  }
+  if (feld.dataset.pjExp) {
+    const id = Number(feld.dataset.pjExp);
+    const v = experiments.find((x) => x.id === id);
+    if (v) v[name] = wert;
+    apiPatch('/api/experiments/' + id, { [name]: wert });
+  }
+}
+function pjVersuchClick(e) {
+  const drucken = e.target.closest('[data-pj-label]');
+  if (drucken) {
+    pjPrintRun(Number(drucken.dataset.pjLabel));
+    return true;
+  }
+  const ansatz = e.target.closest('[data-pj-addrun]');
+  if (ansatz) {
+    const code = (document.getElementById('pj-new-code').value || '').trim();
+    if (!code) {
+      toast(t('exp.needCode'), 'err');
+      return true;
+    }
+    const daten = {
+      experimentId: Number(ansatz.dataset.pjAddrun),
+      code,
+      what: (document.getElementById('pj-new-what').value || '').trim()
+    };
+    apiPost('/api/experiment-runs', daten).then((r) => {
+      const v = experiments.find((x) => x.id === daten.experimentId);
+      if (v && r && r.id) v.runs.push({ ...daten, id: r.id, result: '', outcome: 'open' });
+      renderProjekte('research');
+    });
+    return true;
+  }
+  const neu = e.target.closest('[data-pj-newexp]');
+  if (neu) {
+    const code = (document.getElementById('pj-new-vcode').value || '').trim();
+    const title = (document.getElementById('pj-new-vtitle').value || '').trim();
+    if (!code || !title) {
+      toast(t('exp.needCodeTitle'), 'err');
+      return true;
+    }
+    const daten = { code, title, started: localDateStr(new Date()) };
+    apiPost('/api/experiments', daten).then((r) => {
+      if (r && r.id) experiments.push({ ...daten, id: r.id, ended: null, status: 'running', archived: false, recipe: '', outcome: '', runs: [] });
+      renderProjekte('research');
+    });
+    return true;
+  }
+  // Abschliessen heisst: Enddatum setzen und aus der laufenden Ansicht nehmen.
+  // Die Zeilen bleiben, das Fazit bleibt, alles wandert ins Archiv darunter.
+  const fertig = e.target.closest('[data-pj-finish]');
+  if (fertig) {
+    const id = Number(fertig.dataset.pjFinish);
+    const v = experiments.find((x) => x.id === id);
+    if (!v) return true;
+    confirm2(t('exp.finishTitle'), t('exp.finishMsg', { code: v.code }), t('exp.finish'), () => {
+      v.status = 'done';
+      v.ended = localDateStr(new Date());
+      apiPatch('/api/experiments/' + id, { status: 'done', ended: v.ended });
+      renderProjekte('research');
+    });
+    return true;
+  }
+  return false;
+}
+
 const PJ_CHK = 'mp_vorhaben_chk';
 function pjChkLoad() {
   try {
@@ -15412,12 +15632,15 @@ function renderProjekte(key) {
   const doc = PJ_DOCS[key];
   if (!el || !doc) return;
   const abschnitte = doc.sections.filter((s) => !s.fold).concat(doc.sections.filter((s) => s.fold));
+  const versuche = key === 'research' ? pjVersuche() : '';
+  const archiv = key === 'research' ? pjArchiv() : '';
   el.innerHTML =
     '<div class="card pj-head">' +
     `<div class="pj-title">${pjText(doc.title)}</div>` +
     `<div class="pj-meta">${pjText(doc.meta)}</div>` +
     `<p class="pj-lead">${pjText(doc.lead)}</p>` +
     '</div>' +
+    versuche +
     abschnitte
       .map((s) =>
         s.fold
@@ -15430,7 +15653,8 @@ function renderProjekte(key) {
             s.items.map(pjItem).join('') +
             '</div>'
       )
-      .join('');
+      .join('') +
+    archiv;
   pjPlansRefresh(el);
 }
 // Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
@@ -15449,6 +15673,7 @@ function pjClick(e) {
     pjPlanRefresh(kasten.closest('.pj-plan'));
     return;
   }
+  if (pjVersuchClick(e)) return;
   const mehr = e.target.closest('[data-pj-more]');
   if (mehr) {
     const det = document.getElementById('pjd-' + mehr.dataset.pjMore);
@@ -25024,6 +25249,7 @@ function initEventListeners() {
   $('st-proj-products').addEventListener('click', () => openStab('proj', 'products'));
   $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));
   $('p-proj').addEventListener('click', pjClick);
+  $('p-proj').addEventListener('change', pjChange);
   const pickupsSchalter = $('pickups-past-btn');
   if (pickupsSchalter)
     pickupsSchalter.addEventListener('click', () => {

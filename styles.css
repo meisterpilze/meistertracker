@@ -8276,3 +8276,101 @@ tr.ms-off .ms-prog {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* ── Versuch und Ansätze ─────────────────────────────────────
+   Eine Zeile je Ansatz: Code, was es ist, Ergebnis, Ausgang, Etikett. Flex mit
+   Umbruch statt Rasterspalten — dieselbe Zeile liegt am Schreibtisch
+   nebeneinander und am Telefon untereinander, ohne eine zweite Beschreibung
+   desselben Layouts in einer Medienabfrage. */
+.pj-v-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pj-v-code {
+  font-weight: 700;
+  font-size: max(0.875rem, var(--fs-min));
+}
+.pj-v-title {
+  font-size: max(0.875rem, var(--fs-min));
+}
+.pj-v-meta {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  margin-top: 2px;
+}
+.pj-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.pj-run-code {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: max(0.8125rem, var(--fs-min));
+  min-width: 68px;
+}
+.pj-run-what {
+  flex: 1 1 110px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.pj-run-res {
+  flex: 2 1 150px;
+  min-width: 0;
+}
+.pj-run-new {
+  border-bottom: 0;
+  padding-top: 12px;
+}
+.pj-run-new input {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+.pj-out {
+  flex: 0 0 auto;
+  width: auto;
+}
+/* Mengen und Fazit gehören zum Versuch und nicht in seine Zeile: man schreibt
+   sie einmal am Anfang und einmal am Ende. */
+.pj-v-more {
+  margin-top: 12px;
+}
+.pj-v-more > summary {
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  min-height: max(24px, var(--tap-min));
+  display: flex;
+  align-items: center;
+}
+.pj-v-more label {
+  display: block;
+  margin-top: 8px;
+}
+.pj-arch + .pj-arch {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border);
+}
+.pj-run-ro .pj-run-res {
+  flex: 2 1 150px;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.pj-out-good {
+  color: var(--c-green-dark);
+}
+.pj-out-contam {
+  color: var(--c-red-dark);
+}
+.pj-out-discarded,
+.pj-out-open {
+  color: var(--c-text-muted);
+}

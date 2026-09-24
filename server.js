@@ -8938,6 +8938,155 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Versuche und ihre Ansaetze ─────────────────────────────
+  //
+  // Angelegt wird ein Versuch, darunter haengen die Ansaetze. Geloescht wird ein
+  // Versuch nicht: er wird abgeschlossen und archiviert, und das ist ein PATCH.
+  // Ein Laborbuch, aus dem man Seiten herausreissen kann, ist keins.
+  const versuchTreffer = url.match(/^\/api\/experiments\/(\d+)$/);
+  const ansatzTreffer = url.match(/^\/api\/experiment-runs\/(\d+)$/);
+  if (req.method === 'POST' && url === '/api/experiments') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['code', 'title']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { code: 'string', title: 'string', recipe: 'string', outcome: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { code: 20, title: 200, recipe: 20000, outcome: 20000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      if (data.started) {
+        const vd = validateDate(data.started, 'started');
+        if (vd) {
+          jsonErr(res, 400, vd);
+          return;
+        }
+      }
+      try {
+        const id = db.insertExperiment(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'PATCH' && versuchTreffer) {
+    const id = parseInt(versuchTreffer[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vt = validateTypes(data, { title: 'string', recipe: 'string', outcome: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { title: 200, recipe: 20000, outcome: 20000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      for (const feld of ['started', 'ended']) {
+        if (!data[feld]) continue;
+        const vd = validateDate(data[feld], feld);
+        if (vd) {
+          jsonErr(res, 400, vd);
+          return;
+        }
+      }
+      try {
+        db.updateExperiment(database, id, data);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/experiment-runs') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['experimentId', 'code']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { code: 'string', what: 'string', result: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { code: 40, what: 200, result: 1000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        const id = db.insertExperimentRun(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'PATCH' && ansatzTreffer) {
+    const id = parseInt(ansatzTreffer[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vt = validateTypes(data, { code: 'string', what: 'string', result: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { code: 40, what: 200, result: 1000 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        db.updateExperimentRun(database, id, data);
+        broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && ansatzTreffer) {
+    try {
+      db.deleteExperimentRun(database, parseInt(ansatzTreffer[1]));
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // -- Team Members --
   if (req.method === 'POST' && req.url === '/api/team') {
     if (requireAdmin(req, res)) return;

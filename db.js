@@ -386,6 +386,31 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created DESC);
 
+CREATE TABLE IF NOT EXISTS experiments (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  code     TEXT NOT NULL UNIQUE,
+  title    TEXT NOT NULL,
+  started  TEXT NOT NULL,
+  ended    TEXT,
+  status   TEXT NOT NULL DEFAULT 'running',
+  archived INTEGER NOT NULL DEFAULT 0,
+  recipe   TEXT DEFAULT '',
+  outcome  TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS experiment_runs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+  code          TEXT NOT NULL,
+  what          TEXT DEFAULT '',
+  result        TEXT DEFAULT '',
+  outcome       TEXT NOT NULL DEFAULT 'open',
+  culture_id    TEXT REFERENCES cultures(id) ON DELETE SET NULL,
+  batch_id      TEXT REFERENCES batches(batch_id) ON DELETE SET NULL,
+  sort          INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_exp_runs ON experiment_runs(experiment_id, sort);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -2456,6 +2481,38 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE substrate_batches ADD COLUMN burst_bags INTEGER NOT NULL DEFAULT 0');
     }
+  },
+  {
+    version: 84,
+    description: 'Versuche und ihre Ansaetze',
+    fn(db) {
+      // Die Schema-DDL legt beide Tabellen auf einer neuen Datenbank an; hier
+      // kommen sie in eine, die es schon gibt. Dieselbe Definition, damit die
+      // beiden Wege nicht auseinanderlaufen.
+      db.exec(`CREATE TABLE IF NOT EXISTS experiments (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        code     TEXT NOT NULL UNIQUE,
+        title    TEXT NOT NULL,
+        started  TEXT NOT NULL,
+        ended    TEXT,
+        status   TEXT NOT NULL DEFAULT 'running',
+        archived INTEGER NOT NULL DEFAULT 0,
+        recipe   TEXT DEFAULT '',
+        outcome  TEXT DEFAULT ''
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS experiment_runs (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+        code          TEXT NOT NULL,
+        what          TEXT DEFAULT '',
+        result        TEXT DEFAULT '',
+        outcome       TEXT NOT NULL DEFAULT 'open',
+        culture_id    TEXT REFERENCES cultures(id) ON DELETE SET NULL,
+        batch_id      TEXT REFERENCES batches(batch_id) ON DELETE SET NULL,
+        sort          INTEGER NOT NULL DEFAULT 0
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_exp_runs ON experiment_runs(experiment_id, sort)');
+    }
   }
 ];
 
@@ -2974,6 +3031,7 @@ function readAll(db, opts = {}) {
     suppliers,
     pickupLocations,
     barcodes,
+    experiments: listExperiments(db),
     version
   };
 }
@@ -6799,6 +6857,159 @@ function updateRhythmStart(db, from) {
 }
 
 // ── Supplier CRUD ──────────────────────────────────────────
+// ── Versuche ────────────────────────────────────────────────
+//
+// Ein Versuch ist ein Vorhaben mit einem Datum und einem Ausgang: "V1, ab
+// 01.01." Darunter haengen seine Ansaetze — ein Kolben, ein
+// Glas, eine Platte. Mehr Begriffe braucht es nicht. Ein Ansatz ist genau das,
+// was am Ende ein Etikett traegt und in zwei Wochen ein Ergebnis bekommt.
+//
+// Warum eine eigene Tabelle und nicht die Kulturen: nicht jedes Gefaess ist
+// eine Kultur, ein Kolben schon, und der Versuch haelt alle zusammen. Wo es eine
+// Kultur oder eine Charge gibt, zeigt der Ansatz darauf (culture_id/batch_id) —
+// die Abstammung und die Kontaminationsberichte bleiben, wo sie hingehoeren,
+// und der Versuch dupliziert sie nicht.
+//
+// Archiviert wird, nicht geloescht: ein abgeschlossener Versuch verschwindet aus
+// der laufenden Ansicht und bleibt lesbar. Das ist der ganze Unterschied
+// zwischen einem Laborbuch und einem Notizzettel.
+const VERSUCH_STATUS = ['running', 'done'];
+const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
+
+function listExperiments(db) {
+  const runs = db.prepare('SELECT * FROM experiment_runs ORDER BY sort, id').all();
+  return db
+    .prepare('SELECT * FROM experiments ORDER BY started DESC, id DESC')
+    .all()
+    .map((e) => ({
+      id: e.id,
+      code: e.code,
+      title: e.title,
+      started: e.started,
+      ended: e.ended,
+      status: e.status,
+      archived: e.archived === 1,
+      recipe: e.recipe || '',
+      outcome: e.outcome || '',
+      runs: runs
+        .filter((r) => r.experiment_id === e.id)
+        .map((r) => ({
+          id: r.id,
+          experimentId: r.experiment_id,
+          code: r.code,
+          what: r.what || '',
+          result: r.result || '',
+          outcome: r.outcome,
+          cultureId: r.culture_id,
+          batchId: r.batch_id,
+          sort: r.sort
+        }))
+    }));
+}
+
+function insertExperiment(db, e) {
+  if (!e.code || !e.title) throw new Error('code and title are required');
+  if (e.status && !VERSUCH_STATUS.includes(e.status)) throw new Error('invalid status: ' + e.status);
+  const info = db
+    .prepare('INSERT INTO experiments(code,title,started,ended,status,archived,recipe,outcome) VALUES(?,?,?,?,?,?,?,?)')
+    .run(
+      e.code,
+      e.title,
+      e.started || new Date().toISOString().slice(0, 10),
+      e.ended || null,
+      e.status || 'running',
+      e.archived ? 1 : 0,
+      e.recipe || '',
+      e.outcome || ''
+    );
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+
+function updateExperiment(db, id, f) {
+  const spalten = {
+    title: 'title',
+    started: 'started',
+    ended: 'ended',
+    status: 'status',
+    recipe: 'recipe',
+    outcome: 'outcome'
+  };
+  const setzen = [];
+  const werte = [];
+  for (const [k, spalte] of Object.entries(spalten)) {
+    if (f[k] === undefined) continue;
+    if (k === 'status' && f[k] !== null && !VERSUCH_STATUS.includes(f[k])) throw new Error('invalid status: ' + f[k]);
+    setzen.push(spalte + '=?');
+    werte.push(f[k]);
+  }
+  if (f.archived !== undefined) {
+    setzen.push('archived=?');
+    werte.push(f.archived ? 1 : 0);
+  }
+  if (!setzen.length) return false;
+  werte.push(id);
+  const info = db.prepare('UPDATE experiments SET ' + setzen.join(',') + ' WHERE id=?').run(...werte);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
+function insertExperimentRun(db, r) {
+  if (!r.experimentId || !r.code) throw new Error('experimentId and code are required');
+  if (r.outcome && !ANSATZ_AUSGANG.includes(r.outcome)) throw new Error('invalid outcome: ' + r.outcome);
+  const vorhanden = db.prepare('SELECT id FROM experiments WHERE id=?').get(r.experimentId);
+  if (!vorhanden) throw new Error('unknown experiment: ' + r.experimentId);
+  // Ans Ende, ohne dass der Aufrufer zaehlen muss.
+  const max = db.prepare('SELECT MAX(sort) AS m FROM experiment_runs WHERE experiment_id=?').get(r.experimentId);
+  const info = db
+    .prepare(
+      'INSERT INTO experiment_runs(experiment_id,code,what,result,outcome,culture_id,batch_id,sort) VALUES(?,?,?,?,?,?,?,?)'
+    )
+    .run(
+      r.experimentId,
+      r.code,
+      r.what || '',
+      r.result || '',
+      r.outcome || 'open',
+      r.cultureId || null,
+      r.batchId || null,
+      r.sort != null ? r.sort : (max && max.m != null ? max.m : 0) + 1
+    );
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+
+function updateExperimentRun(db, id, f) {
+  const spalten = {
+    code: 'code',
+    what: 'what',
+    result: 'result',
+    outcome: 'outcome',
+    cultureId: 'culture_id',
+    batchId: 'batch_id',
+    sort: 'sort'
+  };
+  const setzen = [];
+  const werte = [];
+  for (const [k, spalte] of Object.entries(spalten)) {
+    if (f[k] === undefined) continue;
+    if (k === 'outcome' && !ANSATZ_AUSGANG.includes(f[k])) throw new Error('invalid outcome: ' + f[k]);
+    setzen.push(spalte + '=?');
+    werte.push(f[k]);
+  }
+  if (!setzen.length) return false;
+  werte.push(id);
+  const info = db.prepare('UPDATE experiment_runs SET ' + setzen.join(',') + ' WHERE id=?').run(...werte);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
+function deleteExperimentRun(db, id) {
+  const info = db.prepare('DELETE FROM experiment_runs WHERE id=?').run(id);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
+}
+
 function listSuppliers(db) {
   return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
 }
@@ -10467,6 +10678,12 @@ module.exports = {
   updateInventoryConfig,
   updateLabThresholds,
   updateRhythmStart,
+  listExperiments,
+  insertExperiment,
+  updateExperiment,
+  insertExperimentRun,
+  updateExperimentRun,
+  deleteExperimentRun,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,
