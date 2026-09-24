@@ -8419,3 +8419,72 @@ tr.ms-off .ms-prog {
   line-height: 1;
   cursor: pointer;
 }
+
+/* ── Die Liste der Experimente ───────────────────────────────
+   Eine Zeile je Ansatz, und die ganze Zeile ist der Knopf: am Telefon trifft
+   man einen Bereich ueber die volle Breite, nicht ein Pfeilchen am Rand. */
+.pj-liste-zeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--c-border-light);
+  background: none;
+  font: inherit;
+  color: inherit;
+  padding: 11px 0;
+  cursor: pointer;
+  min-height: max(44px, var(--tap-min));
+}
+.pj-liste-zeile:last-child {
+  border-bottom: 0;
+}
+.pj-liste-zeile:hover {
+  background: var(--c-bg);
+}
+.pj-liste-code {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: max(0.8125rem, var(--fs-min));
+  min-width: 34px;
+}
+.pj-liste-mitte {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pj-liste-titel {
+  display: block;
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.35;
+}
+.pj-liste-meta {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  line-height: 1.35;
+}
+.pj-liste-rechts {
+  flex: 0 0 auto;
+  text-align: right;
+}
+.pj-liste-pfeil {
+  flex: 0 0 auto;
+  color: var(--c-text-muted);
+}
+/* Der Weg zurueck. Steht ueber dem Titel, weil dort die Hand ohnehin ist,
+   wenn sie gerade hineingetippt hat. */
+.pj-zurueck {
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  padding: 0 8px 4px 0;
+  min-height: max(24px, var(--tap-min));
+}
+.pj-zurueck:hover {
+  color: var(--c-text);
+}

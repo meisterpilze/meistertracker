@@ -15320,17 +15320,27 @@ function pjTasks(tasks) {
 // Der Haken liegt im Browser, nicht auf dem Server: er gilt fuer einen Ansatz
 // an einem Tag an einem Geraet, und dafuer waere eine Tabelle mit Sync die
 // falsche Groesse. Ist der Versuch durch, setzt der Knopf alles zurueck.
-// ── Versuche ────────────────────────────────────────────────
+// ── Experimente ─────────────────────────────────────────────
 //
-// Ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz, ein Fazit am Ende. Ein
-// Ansatz ist ein Kolben oder ein Glas — derselbe Zeilentyp, weil beide
-// dasselbe brauchen: einen Code, ein Etikett und in zwei Wochen eine Zahl.
+// Ein Experiment ist ein Ansatz: "Ansatz A", "Ansatz B". Die
+// Gefaesse darin sind seine Wiederholungen und seine Kontrolle — A-01, A-02,
+// A-K. Das ist die Ebene, auf der eine Frage beantwortet wird, und deshalb
+// die Ebene, die ein Ergebnis, ein Rezept und Fotos traegt.
 //
-// Abgeschlossen wird, nicht geloescht. Der abgeschlossene Versuch faellt aus der
-// laufenden Ansicht und steht im Archiv darunter, zugeklappt.
+// Vorher hing alles an einem Versuchstag, mit allen Gefaessen in einer
+// flachen Liste. Das war die falsche Ebene: Zeilen, die nicht sagen,
+// welche zusammengehoeren, und ein Fazit fuer alles zusammen, wo es doch mehrere
+// verschiedene Fragen waren.
+//
+// Zwei Ansichten: die Liste und ein Experiment. Ein Tipp auf die Zeile geht
+// hinein, der Pfeil wieder heraus.
 const PJ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
-function pjRunning() {
-  return experiments.find((v) => v.status === 'running' && !v.archived) || null;
+let pjOffen = null; // id des geoeffneten Experiments, null = Liste
+function pjLaufend() {
+  return experiments.filter((v) => v.status === 'running' && !v.archived);
+}
+function pjExp(id) {
+  return experiments.find((v) => v.id === id) || null;
 }
 function pjAusgangSelect(r) {
   return (
@@ -15341,7 +15351,43 @@ function pjAusgangSelect(r) {
     '</select>'
   );
 }
-function pjRunRow(r) {
+// Eine Zeile in der Liste sagt in einem Blick, was der Ansatz ist, woraus er
+// besteht und wie weit er ist. Alles andere steht drinnen.
+function pjListenzeile(v) {
+  const gefaesse = v.runs.map((r) => r.code).join(', ');
+  const offen = v.runs.filter((r) => r.outcome === 'open').length;
+  const zustand = v.runs.length
+    ? offen
+      ? t('exp.openOf', { n: offen, sum: v.runs.length })
+      : t('exp.allIn')
+    : t('exp.noVessels');
+  return (
+    `<button type="button" class="pj-liste-zeile" data-pj-open="${v.id}">` +
+    `<span class="pj-liste-code">${esc(v.code)}</span>` +
+    `<span class="pj-liste-mitte"><span class="pj-liste-titel">${esc(v.title)}</span>` +
+    `<span class="pj-liste-meta">${esc(gefaesse || '—')}</span></span>` +
+    `<span class="pj-liste-rechts"><span class="pj-liste-meta">${esc(zustand)}</span>` +
+    (v.photos.length ? `<span class="pj-liste-meta">${esc(t('exp.photos', { n: v.photos.length }))}</span>` : '') +
+    '</span><span class="pj-liste-pfeil" aria-hidden="true">›</span></button>'
+  );
+}
+function pjListe() {
+  const laufend = pjLaufend();
+  return (
+    '<div class="card pj-sec">' +
+    `<div class="sec">${esc(t('exp.running', { n: laufend.length }))}</div>` +
+    (laufend.length
+      ? '<div class="pj-liste">' + laufend.map(pjListenzeile).join('') + '</div>'
+      : `<p class="pj-empty">${esc(t('exp.none'))}</p>`) +
+    '<div class="pj-run pj-run-new">' +
+    `<input id="pj-new-vcode" placeholder="${esc(t('exp.newCodePh'))}" maxlength="20">` +
+    `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
+    '</div></div>' +
+    pjArchiv()
+  );
+}
+function pjGefaessZeile(r) {
   return (
     `<div class="pj-run" data-pj-runrow="${r.id}">` +
     `<div class="pj-run-code">${esc(r.code)}</div>` +
@@ -15353,34 +15399,55 @@ function pjRunRow(r) {
     '</div>'
   );
 }
-function pjVersuchKarte(v) {
+function pjFotoKachel(v, f) {
+  const url = '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid);
+  return (
+    `<figure class="pj-foto"><a href="${esc(url)}" target="_blank" rel="noopener">` +
+    `<img src="${esc(url)}?thumb=1" alt="" loading="lazy"></a>` +
+    `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
+    `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('common.delete'))}">&times;</button>` +
+    '</figure>'
+  );
+}
+// Ein Experiment, von oben nach unten so, wie der Tag laeuft: was drinsteht,
+// wie es aussieht, womit es angesetzt wurde, was dabei herauskam.
+function pjDetail(v) {
   const kopf =
+    '<div class="card pj-sec">' +
     '<div class="pj-v-head">' +
-    `<div><span class="pj-v-code">${esc(v.code)}</span> <span class="pj-v-title">${esc(v.title)}</span>` +
-    `<div class="pj-v-meta">${esc(t('exp.since', { d: v.started }))}</div></div>` +
-    `<button type="button" class="btn btn-sm fs-xs" data-pj-finish="${v.id}">${esc(t('exp.finish'))}</button>` +
-    '</div>';
-  const zeilen = v.runs.length
-    ? v.runs.map(pjRunRow).join('')
-    : `<p class="pj-empty">${esc(t('exp.noRuns'))}</p>`;
-  const neu =
+    `<div><button type="button" class="pj-zurueck" data-pj-back="1">← ${esc(t('exp.back'))}</button>` +
+    `<div><span class="pj-v-code">${esc(v.code)}</span> <span class="pj-v-title">${esc(v.title)}</span></div>` +
+    `<div class="pj-v-meta">${esc(t('exp.since', { d: v.started }))}${v.ended ? ' – ' + esc(v.ended) : ''}</div></div>` +
+    (v.status === 'running'
+      ? `<button type="button" class="btn btn-sm fs-xs" data-pj-finish="${v.id}">${esc(t('exp.finish'))}</button>`
+      : '') +
+    '</div>' +
+    (v.runs.length ? v.runs.map(pjGefaessZeile).join('') : `<p class="pj-empty">${esc(t('exp.noVessels'))}</p>`) +
     '<div class="pj-run pj-run-new">' +
     `<input id="pj-new-code" placeholder="${esc(t('exp.codePh'))}" maxlength="40">` +
     `<input id="pj-new-what" placeholder="${esc(t('exp.whatPh'))}" maxlength="200">` +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-addrun="${v.id}">${esc(t('exp.addRun'))}</button>` +
+    '</div></div>';
+  const fotos =
+    '<div class="card pj-sec">' +
+    `<div class="sec">${esc(t('exp.photos', { n: v.photos.length }))}</div>` +
+    '<div class="pj-fotos">' +
+    v.photos.map((f) => pjFotoKachel(v, f)).join('') +
+    '</div>' +
+    '<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
+    '<span class="pj-count" id="pj-cam-status"></span>' +
     '</div>';
-  const felder =
-    '<details class="pj-v-more"><summary>' +
-    esc(t('exp.recipeAndResult')) +
-    '</summary>' +
+  const text =
+    '<div class="card pj-sec">' +
     `<label for="pj-v-recipe">${esc(t('exp.recipe'))}</label>` +
     `<textarea id="pj-v-recipe" data-pj-exp="${v.id}" data-pj-feld="recipe" rows="3" ` +
     `placeholder="${esc(t('exp.recipePh'))}">${esc(v.recipe)}</textarea>` +
     `<label for="pj-v-outcome">${esc(t('exp.conclusion'))}</label>` +
     `<textarea id="pj-v-outcome" data-pj-exp="${v.id}" data-pj-feld="outcome" rows="3" ` +
     `placeholder="${esc(t('exp.conclusionPh'))}">${esc(v.outcome)}</textarea>` +
-    '</details>';
-  return kopf + zeilen + neu + felder;
+    '</div>';
+  return kopf + fotos + text;
 }
 function pjArchiv() {
   const alte = experiments.filter((v) => v.status !== 'running' || v.archived);
@@ -15388,46 +15455,22 @@ function pjArchiv() {
   return (
     '<details class="card pj-sec pj-fold"><summary class="sec">' +
     esc(t('exp.archive', { n: alte.length })) +
-    '</summary>' +
-    alte
-      .map(
-        (v) =>
-          '<div class="pj-arch">' +
-          `<div class="pj-v-head"><div><span class="pj-v-code">${esc(v.code)}</span> ` +
-          `<span class="pj-v-title">${esc(v.title)}</span>` +
-          `<div class="pj-v-meta">${esc(v.started)}${v.ended ? ' – ' + esc(v.ended) : ''}</div></div></div>` +
-          (v.outcome ? `<p class="pj-p">${esc(v.outcome)}</p>` : '') +
-          v.runs
-            .map(
-              (r) =>
-                `<div class="pj-run pj-run-ro"><div class="pj-run-code">${esc(r.code)}</div>` +
-                `<div class="pj-run-what">${esc(r.what)}</div>` +
-                `<div class="pj-run-res">${esc(r.result || '—')}</div>` +
-                `<span class="pj-out-${esc(r.outcome)}">${esc(t('exp.out.' + r.outcome))}</span></div>`
-            )
-            .join('') +
-          '</div>'
-      )
-      .join('') +
-    '</details>'
+    '</summary><div class="pj-liste">' +
+    alte.map(pjListenzeile).join('') +
+    '</div></details>'
   );
 }
-function pjVersuche() {
-  const v = pjRunning();
-  const karte = v
-    ? pjVersuchKarte(v)
-    : '<div class="pj-run pj-run-new">' +
-      `<input id="pj-new-vcode" placeholder="${esc(t('exp.newCodePh'))}" maxlength="20">` +
-      `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
-      `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
-      '</div>';
-  return '<div class="card pj-sec pj-versuche">' + karte + '</div>';
+function renderVersuch() {
+  const el = document.getElementById('pj-versuch');
+  if (!el) return;
+  const v = pjOffen ? pjExp(pjOffen) : null;
+  el.innerHTML = v ? pjDetail(v) : pjListe();
 }
-// Ein Etikett fuer einen Ansatz — dieselbe Vorlage, die die Kulturen drucken.
-// Ein Kolben und ein Glas bekommen damit dasselbe Etikett, und das ist der
-// Punkt: am Regal unterscheidet sie nur der Code.
+// Ein Etikett je Gefaess — dieselbe Vorlage, die die Kulturen drucken. Ein
+// Kolben und ein Glas bekommen dasselbe Etikett, und das ist der Punkt: am
+// Regal unterscheidet sie nur der Code.
 async function pjPrintRun(id) {
-  const v = pjRunning();
+  const v = pjExp(pjOffen);
   const r = v && v.runs.find((x) => x.id === id);
   if (!r) return;
   const zpl = itemsToZPL(
@@ -15455,71 +15498,10 @@ async function pjPrintRun(id) {
     printedFb(t('exp.printed', { code: r.code }));
   }
 }
-
-// ── Die Versuchsseite ───────────────────────────────────────
-//
-// Ein Versuch, fuenf Bloecke, feste Reihenfolge: Ansaetze, Fotos, Mengen,
-// Fazit, Archiv. Das ist die Tafel, die gewuenscht war, nur ohne Schieben —
-// eine Tafel, die man jedes Mal einraeumen muss, ist am Telefon mit einer Hand
-// nicht zu bedienen, und die Reihenfolge der fuenf Bloecke ist ohnehin die
-// Reihenfolge des Arbeitstages.
-//
-// Oben steht, was man taeglich anfasst (Ergebnis je Ansatz, Foto), unten, was
-// man einmal am Anfang und einmal am Ende schreibt.
-function pjFotoKachel(v, f) {
-  const url = '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid);
-  return (
-    `<figure class="pj-foto"><a href="${esc(url)}" target="_blank" rel="noopener">` +
-    `<img src="${esc(url)}?thumb=1" alt="" loading="lazy"></a>` +
-    `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
-    `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('common.delete'))}">&times;</button>` +
-    '</figure>'
-  );
-}
-function pjFotoBlock(v) {
-  return (
-    '<div class="card pj-sec">' +
-    `<div class="sec">${esc(t('exp.photos', { n: v.photos.length }))}</div>` +
-    '<div class="pj-fotos">' +
-    v.photos.map((f) => pjFotoKachel(v, f)).join('') +
-    '</div>' +
-    `<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>` +
-    `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
-    `<span class="pj-count" id="pj-cam-status"></span>` +
-    '</div>'
-  );
-}
-function renderVersuch() {
-  const el = document.getElementById('pj-versuch');
-  if (!el) return;
-  const v = pjRunning();
-  if (!v) {
-    el.innerHTML =
-      '<div class="card pj-sec">' +
-      `<div class="sec">${esc(t('exp.none'))}</div>` +
-      '<div class="pj-run pj-run-new">' +
-      `<input id="pj-new-vcode" placeholder="${esc(t('exp.newCodePh'))}" maxlength="20">` +
-      `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
-      `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
-      '</div></div>' +
-      pjArchiv();
-    return;
-  }
-  el.innerHTML =
-    '<div class="card pj-sec pj-versuche">' +
-    pjVersuchKarte(v) +
-    '</div>' +
-    pjFotoBlock(v) +
-    pjArchiv();
-}
 // Der Griff zur Kamera. `capture="environment"` oeffnet am Telefon direkt die
-// Ruecklinse statt der Galerie — ein Tipp, Bild, fertig. Am Schreibtisch ist es
-// ein Dateiauswahlfenster, und das ist dort auch richtig.
-//
-// Zusammengedrueckt wird im Browser, mit derselben Funktion, die die
-// Kontaminationsfotos benutzt: 1280 px lange Kante fuers Bild, 200 px fuer die
-// Kachel. Ein Telefonfoto sind 4 MB, und vier davon je Ansatz waeren in einem
-// Jahr mehr Platte als die ganze uebrige Anwendung.
+// Ruecklinse statt der Galerie. Zusammengedrueckt wird im Browser mit derselben
+// Funktion, die die Kontaminationsfotos benutzt: 1280 px fuers Bild, 200 px
+// fuer die Kachel — ein Telefonfoto sind sonst 4 MB.
 async function pjKamera(versuchId, dateien) {
   const status = document.getElementById('pj-cam-status');
   const bilder = Array.from(dateien || []).filter((f) => f && f.type && f.type.startsWith('image/'));
@@ -15547,7 +15529,6 @@ async function pjKamera(versuchId, dateien) {
     if (status) status.textContent = t('exp.uploadErr');
   }
 }
-
 // Tippen speichert beim Verlassen des Feldes, nicht bei jedem Zeichen: ein
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
 // eine Zeile Nutzen und hundert Anfragen.
@@ -15565,7 +15546,7 @@ function pjChange(e) {
   const wert = feld.value;
   if (feld.dataset.pjRun) {
     const id = Number(feld.dataset.pjRun);
-    const v = pjRunning();
+    const v = pjExp(pjOffen);
     const r = v && v.runs.find((x) => x.id === id);
     if (r) r[name] = wert;
     apiPatch('/api/experiment-runs/' + id, { [name]: wert });
@@ -15574,15 +15555,21 @@ function pjChange(e) {
   }
   if (feld.dataset.pjExp) {
     const id = Number(feld.dataset.pjExp);
-    const v = experiments.find((x) => x.id === id);
+    const v = pjExp(id);
     if (v) v[name] = wert;
     apiPatch('/api/experiments/' + id, { [name]: wert });
   }
 }
 function pjVersuchClick(e) {
-  const drucken = e.target.closest('[data-pj-label]');
-  if (drucken) {
-    pjPrintRun(Number(drucken.dataset.pjLabel));
+  const rein = e.target.closest('[data-pj-open]');
+  if (rein) {
+    pjOffen = Number(rein.dataset.pjOpen);
+    renderVersuch();
+    return true;
+  }
+  if (e.target.closest('[data-pj-back]')) {
+    pjOffen = null;
+    renderVersuch();
     return true;
   }
   const kamera = e.target.closest('[data-pj-cam]');
@@ -15605,20 +15592,25 @@ function pjVersuchClick(e) {
     });
     return true;
   }
-  const ansatz = e.target.closest('[data-pj-addrun]');
-  if (ansatz) {
+  const drucken = e.target.closest('[data-pj-label]');
+  if (drucken) {
+    pjPrintRun(Number(drucken.dataset.pjLabel));
+    return true;
+  }
+  const gefaess = e.target.closest('[data-pj-addrun]');
+  if (gefaess) {
     const code = (document.getElementById('pj-new-code').value || '').trim();
     if (!code) {
       toast(t('exp.needCode'), 'err');
       return true;
     }
     const daten = {
-      experimentId: Number(ansatz.dataset.pjAddrun),
+      experimentId: Number(gefaess.dataset.pjAddrun),
       code,
       what: (document.getElementById('pj-new-what').value || '').trim()
     };
     apiPost('/api/experiment-runs', daten).then((r) => {
-      const v = experiments.find((x) => x.id === daten.experimentId);
+      const v = pjExp(daten.experimentId);
       if (v && r && r.id) v.runs.push({ ...daten, id: r.id, result: '', outcome: 'open' });
       renderVersuch();
     });
@@ -15634,22 +15626,38 @@ function pjVersuchClick(e) {
     }
     const daten = { code, title, started: localDateStr(new Date()) };
     apiPost('/api/experiments', daten).then((r) => {
-      if (r && r.id) experiments.push({ ...daten, id: r.id, ended: null, status: 'running', archived: false, recipe: '', outcome: '', runs: [] });
+      if (r && r.id) {
+        experiments.push({
+          ...daten,
+          id: r.id,
+          ended: null,
+          status: 'running',
+          archived: false,
+          recipe: '',
+          outcome: '',
+          runs: [],
+          photos: []
+        });
+        // Direkt hinein: wer gerade einen Ansatz angelegt hat, will jetzt die
+        // Gefaesse dazuschreiben und nicht erst eine Liste ansehen.
+        pjOffen = r.id;
+      }
       renderVersuch();
     });
     return true;
   }
-  // Abschliessen heisst: Enddatum setzen und aus der laufenden Ansicht nehmen.
-  // Die Zeilen bleiben, das Fazit bleibt, alles wandert ins Archiv darunter.
+  // Abgeschlossen heisst: Enddatum setzen und aus der laufenden Liste nehmen.
+  // Die Gefaesse bleiben, das Fazit bleibt, alles steht im Archiv darunter.
   const fertig = e.target.closest('[data-pj-finish]');
   if (fertig) {
     const id = Number(fertig.dataset.pjFinish);
-    const v = experiments.find((x) => x.id === id);
+    const v = pjExp(id);
     if (!v) return true;
     confirm2(t('exp.finishTitle'), t('exp.finishMsg', { code: v.code }), t('exp.finish'), () => {
       v.status = 'done';
       v.ended = localDateStr(new Date());
       apiPatch('/api/experiments/' + id, { status: 'done', ended: v.ended });
+      pjOffen = null;
       renderVersuch();
     });
     return true;
