@@ -78,6 +78,14 @@ window.LANG['de'] = {
   'exp.finishTitle': 'Versuch abschließen?',
   'exp.finishMsg': '{code} wandert ins Archiv. Ergebnisse und Fazit bleiben lesbar.',
   'exp.printed': 'Etikett {code} gedruckt',
+  'proj.tabVersuch': 'Versuch',
+  'exp.photos': 'Fotos ({n})',
+  'exp.takePhoto': 'Foto aufnehmen',
+  'exp.none': 'Kein laufender Versuch',
+  'exp.uploading': '{n} Foto(s) werden gespeichert…',
+  'exp.uploadErr': 'Speichern fehlgeschlagen',
+  'exp.photoDelTitle': 'Foto löschen?',
+  'exp.photoDelMsg': 'Das Bild wird vom Server entfernt und ist weg.',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Abholungen',
   'pickups.desc':

@@ -411,6 +411,22 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_exp_runs ON experiment_runs(experiment_id, sort);
 
+CREATE TABLE IF NOT EXISTS experiment_photos (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+  run_id        INTEGER REFERENCES experiment_runs(id) ON DELETE SET NULL,
+  uuid          TEXT NOT NULL UNIQUE,
+  rel_path      TEXT NOT NULL,
+  thumb_path    TEXT NOT NULL,
+  width         INTEGER,
+  height        INTEGER,
+  bytes         INTEGER NOT NULL,
+  sha256        TEXT NOT NULL,
+  uploaded_at   TEXT NOT NULL,
+  uploaded_by   INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exp_photos ON experiment_photos(experiment_id, uploaded_at);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -2512,6 +2528,27 @@ const MIGRATIONS = [
         sort          INTEGER NOT NULL DEFAULT 0
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_exp_runs ON experiment_runs(experiment_id, sort)');
+    }
+  },
+  {
+    version: 85,
+    description: 'Fotos am Versuch',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS experiment_photos (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+        run_id        INTEGER REFERENCES experiment_runs(id) ON DELETE SET NULL,
+        uuid          TEXT NOT NULL UNIQUE,
+        rel_path      TEXT NOT NULL,
+        thumb_path    TEXT NOT NULL,
+        width         INTEGER,
+        height        INTEGER,
+        bytes         INTEGER NOT NULL,
+        sha256        TEXT NOT NULL,
+        uploaded_at   TEXT NOT NULL,
+        uploaded_by   INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_exp_photos ON experiment_photos(experiment_id, uploaded_at)');
     }
   }
 ];
@@ -6878,6 +6915,7 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 
 function listExperiments(db) {
   const runs = db.prepare('SELECT * FROM experiment_runs ORDER BY sort, id').all();
+  const fotos = db.prepare('SELECT * FROM experiment_photos ORDER BY uploaded_at, id').all();
   return db
     .prepare('SELECT * FROM experiments ORDER BY started DESC, id DESC')
     .all()
@@ -6891,6 +6929,16 @@ function listExperiments(db) {
       archived: e.archived === 1,
       recipe: e.recipe || '',
       outcome: e.outcome || '',
+      photos: fotos
+        .filter((f) => f.experiment_id === e.id)
+        .map((f) => ({
+          id: f.id,
+          uuid: f.uuid,
+          runId: f.run_id,
+          width: f.width,
+          height: f.height,
+          uploadedAt: f.uploaded_at
+        })),
       runs: runs
         .filter((r) => r.experiment_id === e.id)
         .map((r) => ({
@@ -6952,6 +7000,42 @@ function updateExperiment(db, id, f) {
   const info = db.prepare('UPDATE experiments SET ' + setzen.join(',') + ' WHERE id=?').run(...werte);
   if (info.changes) incrementDataVersion(db);
   return info.changes > 0;
+}
+
+function addExperimentPhoto(db, experimentId, runId, foto) {
+  const info = db
+    .prepare(
+      'INSERT INTO experiment_photos(experiment_id,run_id,uuid,rel_path,thumb_path,width,height,bytes,sha256,uploaded_at,uploaded_by) ' +
+        'VALUES(?,?,?,?,?,?,?,?,?,?,?)'
+    )
+    .run(
+      experimentId,
+      runId || null,
+      foto.uuid,
+      foto.rel_path,
+      foto.thumb_path,
+      foto.width,
+      foto.height,
+      foto.bytes,
+      foto.sha256,
+      foto.uploaded_at,
+      foto.uploaded_by
+    );
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
+}
+function getExperimentPhotoByUuid(db, uuid) {
+  return db.prepare('SELECT * FROM experiment_photos WHERE uuid=?').get(uuid) || null;
+}
+// Gibt die Zeile zurueck, damit der Aufrufer die Datei hinterherraeumen kann:
+// die Platte ist nicht Teil der Transaktion, also muss jemand wissen, was da
+// lag.
+function deleteExperimentPhoto(db, id) {
+  const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
+  if (!zeile) return null;
+  db.prepare('DELETE FROM experiment_photos WHERE id=?').run(id);
+  incrementDataVersion(db);
+  return zeile;
 }
 
 function insertExperimentRun(db, r) {
@@ -10679,6 +10763,9 @@ module.exports = {
   updateLabThresholds,
   updateRhythmStart,
   listExperiments,
+  addExperimentPhoto,
+  getExperimentPhotoByUuid,
+  deleteExperimentPhoto,
   insertExperiment,
   updateExperiment,
   insertExperimentRun,

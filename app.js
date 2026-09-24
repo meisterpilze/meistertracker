@@ -1273,7 +1273,10 @@ function openStab(page, sub) {
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
-  if (page === 'proj') renderProjekte(sub);
+  if (page === 'proj') {
+    if (sub === 'versuch') renderVersuch();
+    else renderProjekte(sub);
+  }
   // A phone shows one sub-page at a time, with a back row where the strip was.
   // Every route into a sub-page runs through here — the strip, the admin
   // drawer, and the dozen `openStab(...)` calls that land somewhere after a
@@ -1391,7 +1394,10 @@ function refresh() {
   // alle 30 Sekunden ein Dokument neu zu bauen, während jemand darin liest.
   if (id === 'proj') {
     const offen = document.querySelector('#p-proj .sp.active > div');
-    if (offen && !offen.innerHTML) renderProjekte(offen.id.replace('pj-', ''));
+    if (offen && !offen.innerHTML) {
+      if (offen.id === 'pj-versuch') renderVersuch();
+      else renderProjekte(offen.id.replace('pj-', ''));
+    }
   }
   if (id === 'orders') _refreshOrdersActive();
   // Pickups arrive on the feed's own schedule, not on any action taken here, so
@@ -15450,10 +15456,109 @@ async function pjPrintRun(id) {
   }
 }
 
+// ── Die Versuchsseite ───────────────────────────────────────
+//
+// Ein Versuch, fuenf Bloecke, feste Reihenfolge: Ansaetze, Fotos, Mengen,
+// Fazit, Archiv. Das ist die Tafel, die gewuenscht war, nur ohne Schieben —
+// eine Tafel, die man jedes Mal einraeumen muss, ist am Telefon mit einer Hand
+// nicht zu bedienen, und die Reihenfolge der fuenf Bloecke ist ohnehin die
+// Reihenfolge des Arbeitstages.
+//
+// Oben steht, was man taeglich anfasst (Ergebnis je Ansatz, Foto), unten, was
+// man einmal am Anfang und einmal am Ende schreibt.
+function pjFotoKachel(v, f) {
+  const url = '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid);
+  return (
+    `<figure class="pj-foto"><a href="${esc(url)}" target="_blank" rel="noopener">` +
+    `<img src="${esc(url)}?thumb=1" alt="" loading="lazy"></a>` +
+    `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
+    `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('common.delete'))}">&times;</button>` +
+    '</figure>'
+  );
+}
+function pjFotoBlock(v) {
+  return (
+    '<div class="card pj-sec">' +
+    `<div class="sec">${esc(t('exp.photos', { n: v.photos.length }))}</div>` +
+    '<div class="pj-fotos">' +
+    v.photos.map((f) => pjFotoKachel(v, f)).join('') +
+    '</div>' +
+    `<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
+    `<span class="pj-count" id="pj-cam-status"></span>` +
+    '</div>'
+  );
+}
+function renderVersuch() {
+  const el = document.getElementById('pj-versuch');
+  if (!el) return;
+  const v = pjRunning();
+  if (!v) {
+    el.innerHTML =
+      '<div class="card pj-sec">' +
+      `<div class="sec">${esc(t('exp.none'))}</div>` +
+      '<div class="pj-run pj-run-new">' +
+      `<input id="pj-new-vcode" placeholder="${esc(t('exp.newCodePh'))}" maxlength="20">` +
+      `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
+      `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
+      '</div></div>' +
+      pjArchiv();
+    return;
+  }
+  el.innerHTML =
+    '<div class="card pj-sec pj-versuche">' +
+    pjVersuchKarte(v) +
+    '</div>' +
+    pjFotoBlock(v) +
+    pjArchiv();
+}
+// Der Griff zur Kamera. `capture="environment"` oeffnet am Telefon direkt die
+// Ruecklinse statt der Galerie — ein Tipp, Bild, fertig. Am Schreibtisch ist es
+// ein Dateiauswahlfenster, und das ist dort auch richtig.
+//
+// Zusammengedrueckt wird im Browser, mit derselben Funktion, die die
+// Kontaminationsfotos benutzt: 1280 px lange Kante fuers Bild, 200 px fuer die
+// Kachel. Ein Telefonfoto sind 4 MB, und vier davon je Ansatz waeren in einem
+// Jahr mehr Platte als die ganze uebrige Anwendung.
+async function pjKamera(versuchId, dateien) {
+  const status = document.getElementById('pj-cam-status');
+  const bilder = Array.from(dateien || []).filter((f) => f && f.type && f.type.startsWith('image/'));
+  if (!bilder.length) return;
+  const fertig = [];
+  for (const datei of bilder.slice(0, 8)) {
+    if (status) status.textContent = t('contam.compressing', { name: datei.name });
+    try {
+      fertig.push(await _crCompressFile(datei));
+    } catch (e) {
+      if (status) status.textContent = t('contam.compressErr');
+      return;
+    }
+  }
+  if (status) status.textContent = t('exp.uploading', { n: fertig.length });
+  try {
+    await apiPost('/api/experiment-photos', { experimentId: versuchId, photos: fertig });
+    // Kein vorlaeufiges Einhaengen: die Kennung des Bildes vergibt der Server,
+    // und eine Kachel ohne sie zeigt ein kaputtes Bild. Einmal nachladen ist
+    // schneller geschrieben und immer richtig.
+    if (status) status.textContent = '';
+    await loadData();
+    renderVersuch();
+  } catch (e) {
+    if (status) status.textContent = t('exp.uploadErr');
+  }
+}
+
 // Tippen speichert beim Verlassen des Feldes, nicht bei jedem Zeichen: ein
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
 // eine Zeile Nutzen und hundert Anfragen.
 function pjChange(e) {
+  if (e.target.id === 'pj-cam') {
+    const id = Number(e.target.dataset.pjFor);
+    const dateien = e.target.files;
+    e.target.value = '';
+    if (id) pjKamera(id, dateien);
+    return;
+  }
   const feld = e.target.closest('[data-pj-feld]');
   if (!feld) return;
   const name = feld.dataset.pjFeld;
@@ -15464,7 +15569,7 @@ function pjChange(e) {
     const r = v && v.runs.find((x) => x.id === id);
     if (r) r[name] = wert;
     apiPatch('/api/experiment-runs/' + id, { [name]: wert });
-    if (name === 'outcome') renderProjekte('research');
+    if (name === 'outcome') renderVersuch();
     return;
   }
   if (feld.dataset.pjExp) {
@@ -15478,6 +15583,26 @@ function pjVersuchClick(e) {
   const drucken = e.target.closest('[data-pj-label]');
   if (drucken) {
     pjPrintRun(Number(drucken.dataset.pjLabel));
+    return true;
+  }
+  const kamera = e.target.closest('[data-pj-cam]');
+  if (kamera) {
+    const eingabe = document.getElementById('pj-cam');
+    if (eingabe) {
+      eingabe.dataset.pjFor = kamera.dataset.pjCam;
+      eingabe.click();
+    }
+    return true;
+  }
+  const fotoWeg = e.target.closest('[data-pj-photodel]');
+  if (fotoWeg) {
+    const id = Number(fotoWeg.dataset.pjPhotodel);
+    confirm2(t('exp.photoDelTitle'), t('exp.photoDelMsg'), t('common.delete'), () => {
+      apiDelete('/api/experiment-photos/' + id).then(async () => {
+        await loadData();
+        renderVersuch();
+      });
+    });
     return true;
   }
   const ansatz = e.target.closest('[data-pj-addrun]');
@@ -15495,7 +15620,7 @@ function pjVersuchClick(e) {
     apiPost('/api/experiment-runs', daten).then((r) => {
       const v = experiments.find((x) => x.id === daten.experimentId);
       if (v && r && r.id) v.runs.push({ ...daten, id: r.id, result: '', outcome: 'open' });
-      renderProjekte('research');
+      renderVersuch();
     });
     return true;
   }
@@ -15510,7 +15635,7 @@ function pjVersuchClick(e) {
     const daten = { code, title, started: localDateStr(new Date()) };
     apiPost('/api/experiments', daten).then((r) => {
       if (r && r.id) experiments.push({ ...daten, id: r.id, ended: null, status: 'running', archived: false, recipe: '', outcome: '', runs: [] });
-      renderProjekte('research');
+      renderVersuch();
     });
     return true;
   }
@@ -15525,7 +15650,7 @@ function pjVersuchClick(e) {
       v.status = 'done';
       v.ended = localDateStr(new Date());
       apiPatch('/api/experiments/' + id, { status: 'done', ended: v.ended });
-      renderProjekte('research');
+      renderVersuch();
     });
     return true;
   }
@@ -15632,15 +15757,12 @@ function renderProjekte(key) {
   const doc = PJ_DOCS[key];
   if (!el || !doc) return;
   const abschnitte = doc.sections.filter((s) => !s.fold).concat(doc.sections.filter((s) => s.fold));
-  const versuche = key === 'research' ? pjVersuche() : '';
-  const archiv = key === 'research' ? pjArchiv() : '';
   el.innerHTML =
     '<div class="card pj-head">' +
     `<div class="pj-title">${pjText(doc.title)}</div>` +
     `<div class="pj-meta">${pjText(doc.meta)}</div>` +
     `<p class="pj-lead">${pjText(doc.lead)}</p>` +
     '</div>' +
-    versuche +
     abschnitte
       .map((s) =>
         s.fold
@@ -15653,8 +15775,7 @@ function renderProjekte(key) {
             s.items.map(pjItem).join('') +
             '</div>'
       )
-      .join('') +
-    archiv;
+      .join('');
   pjPlansRefresh(el);
 }
 // Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
@@ -25245,6 +25366,7 @@ function initEventListeners() {
     renderStrains();
   });
   $('n-proj').addEventListener('click', () => go('proj', 'n-proj'));
+  $('st-proj-versuch').addEventListener('click', () => openStab('proj', 'versuch'));
   $('st-proj-research').addEventListener('click', () => openStab('proj', 'research'));
   $('st-proj-products').addEventListener('click', () => openStab('proj', 'products'));
   $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));

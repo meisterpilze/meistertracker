@@ -1286,6 +1286,11 @@ function _isJpegMagic(buf) {
 // server share the same error class.
 function savePhotoToDisk(reportId, photo, authUser) {
   if (!photo || typeof photo !== 'object') return null;
+  // reportId ist der Ordnername unter data/photos/{Jahr}/{Monat}/. Er kam immer
+  // aus einer Zeilennummer und kommt jetzt auch als 'exp-12' herein; beides
+  // baut der Server selbst. Die Pruefung steht hier trotzdem, weil ein Ordner-
+  // name aus einem Aufrufer der Weg aus dem Verzeichnis heraus waere.
+  if (!/^[A-Za-z0-9_-]+$/.test(String(reportId))) throw new Error('photo: invalid scope');
   const main = _parseImageDataUrl(photo.data_url);
   if (!main) throw new Error('photo: invalid data_url (must be data:image/jpeg;base64,...)');
   if (!_isJpegMagic(main)) throw new Error('photo: payload is not a JPEG');
@@ -1337,6 +1342,10 @@ function savePhotoToDisk(reportId, photo, authUser) {
 // locker hinein; die Grenze ist da, damit ein kaputter Aufrufer nicht 10.000 Berichte
 // in eine Transaktion schreibt, nicht als Arbeitsgrenze.
 const CONTAM_MAX_TARGETS = 50;
+// Ein Griff zur Kamera sind ein paar Bilder, keine Bibliothek. Die Grenze
+// schuetzt die Platte und den Arbeitsspeicher: jedes Bild reist als Base64
+// durch den Hauptspeicher, bevor es geschrieben wird.
+const EXP_MAX_PHOTOS_PER_CALL = 8;
 
 // Die Beutel, die ein Bericht abdeckt.
 //
@@ -9079,6 +9088,130 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'DELETE' && ansatzTreffer) {
     try {
       db.deleteExperimentRun(database, parseInt(ansatzTreffer[1]));
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // ── Fotos am Versuch ───────────────────────────────────────
+  //
+  // Dieselbe Platte, dieselbe Deckelung, derselbe Weg wie die Fotos am
+  // Kontaminationsbericht: data/photos/{Jahr}/{Monat}/exp-{id}/. Der Ordner
+  // heisst nach dem Versuch, damit man ihn auch ausserhalb der Anwendung
+  // wiederfindet — ein Karton je Versuch, nicht ein Haufen.
+  const fotoTreffer = url.match(/^\/api\/experiments\/(\d+)\/photos\/([a-f0-9-]+)$/);
+  if (req.method === 'GET' && fotoTreffer) {
+    const versuchId = parseInt(fotoTreffer[1], 10);
+    const wantThumb = /[?&]thumb=1/.test(req.url);
+    try {
+      const foto = db.getExperimentPhotoByUuid(database, fotoTreffer[2]);
+      if (!foto || foto.experiment_id !== versuchId) {
+        jsonErr(res, 404, 'photo not found');
+        return;
+      }
+      const abs = path.join(DIR, 'data', wantThumb ? foto.thumb_path : foto.rel_path);
+      // Wie beim Kontaminationsbericht: nichts ausserhalb von data/photos, auch
+      // wenn in der Zeile etwas anderes steht.
+      if (!abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
+        jsonErr(res, 400, 'invalid path');
+        return;
+      }
+      if (!fs.existsSync(abs)) {
+        jsonErr(res, 404, 'photo file missing');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=31536000, immutable' });
+      const strom = fs.createReadStream(abs);
+      strom.on('error', (e) => {
+        log('warn', 'Photo stream error', { error: e.message });
+        res.destroy();
+      });
+      strom.pipe(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/experiment-photos') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['experimentId']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { experimentId: 'number', photos: 'array' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      if (!Array.isArray(data.photos) || !data.photos.length) {
+        jsonErr(res, 400, 'photos must be a non-empty array');
+        return;
+      }
+      if (data.photos.length > EXP_MAX_PHOTOS_PER_CALL) {
+        jsonErr(res, 400, 'photos: at most ' + EXP_MAX_PHOTOS_PER_CALL + ' per request');
+        return;
+      }
+      const versuch = database.prepare('SELECT id FROM experiments WHERE id=?').get(data.experimentId);
+      if (!versuch) {
+        jsonErr(res, 404, 'unknown experiment');
+        return;
+      }
+      // Auf der Platte gilt keine Transaktion. Was geschrieben wurde, merken wir
+      // uns, damit ein Fehler in der Mitte keine verwaisten Dateien hinterlaesst.
+      const geschrieben = [];
+      const ids = [];
+      try {
+        database.exec('BEGIN');
+        try {
+          for (const foto of data.photos) {
+            const gespeichert = savePhotoToDisk('exp-' + data.experimentId, foto, req.authUser);
+            geschrieben.push(path.join(DIR, 'data', gespeichert.rel_path));
+            geschrieben.push(path.join(DIR, 'data', gespeichert.thumb_path));
+            ids.push(db.addExperimentPhoto(database, data.experimentId, data.runId || null, gespeichert));
+          }
+          database.exec('COMMIT');
+        } catch (inner) {
+          database.exec('ROLLBACK');
+          throw inner;
+        }
+        broadcastSSE(res);
+        jsonOk(res, { ids });
+      } catch (err) {
+        for (const datei of geschrieben) {
+          try {
+            fs.unlinkSync(datei);
+          } catch {
+            /* schon weg, oder nie geschrieben */
+          }
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const fotoWegTreffer = url.match(/^\/api\/experiment-photos\/(\d+)$/);
+  if (req.method === 'DELETE' && fotoWegTreffer) {
+    try {
+      const zeile = db.deleteExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10));
+      if (zeile) {
+        for (const rel of [zeile.rel_path, zeile.thumb_path]) {
+          const abs = path.join(DIR, 'data', rel);
+          if (!abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) continue;
+          try {
+            fs.unlinkSync(abs);
+          } catch {
+            /* Datei war schon weg */
+          }
+        }
+      }
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {

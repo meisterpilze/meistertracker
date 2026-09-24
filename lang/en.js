@@ -78,6 +78,14 @@ window.LANG['en'] = {
   'exp.finishTitle': 'Finish experiment?',
   'exp.finishMsg': '{code} moves to the archive. Results and conclusion stay readable.',
   'exp.printed': 'Label {code} printed',
+  'proj.tabVersuch': 'Experiment',
+  'exp.photos': 'Photos ({n})',
+  'exp.takePhoto': 'Take photo',
+  'exp.none': 'No experiment running',
+  'exp.uploading': 'Saving {n} photo(s)…',
+  'exp.uploadErr': 'Saving failed',
+  'exp.photoDelTitle': 'Delete photo?',
+  'exp.photoDelMsg': 'The image is removed from the server and gone.',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':

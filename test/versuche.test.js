@@ -124,6 +124,41 @@ describe('Versuche', () => {
     assert.equal(uebrig.c, 0);
   });
 
+  it('haengt Fotos an den Versuch und gibt sie mit der Liste zurueck', () => {
+    const v = db.listExperiments(d).find((x) => x.code === 'V1');
+    const id = db.addExperimentPhoto(d, v.id, v.runs[0].id, {
+      uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      rel_path: 'photos/2026/09/exp-1/a.jpg',
+      thumb_path: 'photos/2026/09/exp-1/a_thumb.jpg',
+      width: 1280,
+      height: 960,
+      bytes: 123456,
+      sha256: 'x'.repeat(64),
+      uploaded_at: '2026-09-24T09:15:00.000Z',
+      uploaded_by: null
+    });
+    const nachher = db.listExperiments(d).find((x) => x.id === v.id);
+    assert.equal(nachher.photos.length, 1);
+    // Datum UND Uhrzeit: bei einem Lauf ueber vierzehn Tage ist "wann" die
+    // halbe Information, und ein Datum allein beantwortet sie nicht.
+    assert.equal(nachher.photos[0].uploadedAt, '2026-09-24T09:15:00.000Z');
+    assert.equal(nachher.photos[0].runId, v.runs[0].id);
+    assert.ok(nachher.photos[0].uuid, 'die Kennung kommt mit, sonst laedt kein Bild');
+    assert.equal(db.getExperimentPhotoByUuid(d, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee').id, id);
+  });
+
+  it('gibt beim Loeschen die Zeile zurueck, damit die Datei mitgeht', () => {
+    // Die Platte ist nicht Teil der Transaktion. Wer loescht, muss erfahren,
+    // welche Datei jetzt niemandem mehr gehoert — sonst waechst data/photos
+    // weiter, waehrend die Anwendung nichts mehr davon weiss.
+    const v = db.listExperiments(d).find((x) => x.code === 'V1');
+    const zeile = db.deleteExperimentPhoto(d, v.photos[0].id);
+    assert.equal(zeile.rel_path, 'photos/2026/09/exp-1/a.jpg');
+    assert.equal(zeile.thumb_path, 'photos/2026/09/exp-1/a_thumb.jpg');
+    assert.equal(db.deleteExperimentPhoto(d, 999999), null);
+    assert.deepEqual(db.listExperiments(d).find((x) => x.id === v.id).photos, []);
+  });
+
   it('reicht die Versuche mit der Nutzlast an die Oberflaeche durch', () => {
     const daten = db.readAll(d);
     assert.ok(Array.isArray(daten.experiments), 'readAll traegt experiments');

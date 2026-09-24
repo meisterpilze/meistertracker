@@ -77,6 +77,14 @@ window.LANG['pt'] = {
   'exp.finishTitle': 'Concluir o ensaio?',
   'exp.finishMsg': '{code} vai para o arquivo. Resultados e conclusão continuam legíveis.',
   'exp.printed': 'Etiqueta {code} impressa',
+  'proj.tabVersuch': 'Ensaio',
+  'exp.photos': 'Fotos ({n})',
+  'exp.takePhoto': 'Tirar foto',
+  'exp.none': 'Nenhum ensaio a decorrer',
+  'exp.uploading': 'A guardar {n} foto(s)…',
+  'exp.uploadErr': 'Falha ao guardar',
+  'exp.photoDelTitle': 'Apagar foto?',
+  'exp.photoDelMsg': 'A imagem é removida do servidor e desaparece.',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Levantamentos',
   'pickups.desc':
