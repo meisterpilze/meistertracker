@@ -49,6 +49,7 @@ window.LANG['en'] = {
   'proj.doneOf': '{n} of {sum} done',
   'proj.showDone': 'Show done ({n})',
   'proj.hideDone': 'Hide done ({n})',
+  'proj.moreOn': 'More on this',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':

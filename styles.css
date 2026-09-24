@@ -8180,9 +8180,35 @@ tr.ms-off .ms-prog {
   font-size: max(0.8125rem, var(--fs-min));
   line-height: 1.5;
 }
-.pj-chk input:checked + label {
+.pj-body {
+  flex: 1;
+  min-width: 0;
+}
+.pj-chk input:checked + .pj-body > label {
   opacity: 0.45;
   text-decoration: line-through;
+}
+/* Das Detail zur Zeile. Zu, bis jemand danach fragt — die Mengen stehen dort,
+   die Begruendung auch, und beides braucht man einmal und dann nie wieder. */
+.pj-more {
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0 6px;
+  min-width: max(24px, var(--tap-min));
+  min-height: max(24px, var(--tap-min));
+}
+.pj-more:hover {
+  color: var(--c-text);
+}
+.pj-det {
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--c-text-muted);
 }
 .pj-chk.is-done {
   display: none;

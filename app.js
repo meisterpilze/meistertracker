@@ -15334,10 +15334,18 @@ function pjPlan(pl) {
       const k = pl.key + '-' + i;
       const id = 'pjc-' + k;
       const an = !!st[k];
+      // Die Zeile ist kurz. Was daran noch zu wissen ist — Mengen, Temperaturen,
+      // die Begruendung — steht dahinter und kommt erst auf Antippen. Eine
+      // Liste, die man lesen muss, ist keine Liste mehr.
+      const det = it[2]
+        ? `<button type="button" class="pj-more" data-pj-more="${esc(k)}" aria-expanded="false" aria-label="${esc(t('proj.moreOn'))}">…</button>` +
+          `<div class="pj-det" id="pjd-${esc(k)}" hidden>${pjText(it[2])}</div>`
+        : '';
       return (
         `<div class="pj-chk${an ? ' is-done' : ''}">` +
         `<input type="checkbox" id="${id}" data-pj-chk="${esc(k)}"${an ? ' checked' : ''}>` +
-        `<label for="${id}"><span class="pj-tag">${pjText(it[0])}</span>${pjText(it[1])}</label></div>`
+        `<div class="pj-body"><span class="pj-tag">${pjText(it[0])}</span>` +
+        `<label for="${id}">${pjText(it[1])}</label>${det}</div></div>`
       );
     })
     .join('');
@@ -15439,6 +15447,16 @@ function pjClick(e) {
     else delete stand[kasten.dataset.pjChk];
     pjChkSave(stand);
     pjPlanRefresh(kasten.closest('.pj-plan'));
+    return;
+  }
+  const mehr = e.target.closest('[data-pj-more]');
+  if (mehr) {
+    const det = document.getElementById('pjd-' + mehr.dataset.pjMore);
+    if (det) {
+      det.hidden = !det.hidden;
+      mehr.setAttribute('aria-expanded', det.hidden ? 'false' : 'true');
+      mehr.textContent = det.hidden ? '…' : '×';
+    }
     return;
   }
   const zeigen = e.target.closest('[data-pj-show]');

@@ -49,6 +49,7 @@ window.LANG['de'] = {
   'proj.doneOf': '{n} von {sum} erledigt',
   'proj.showDone': 'Erledigte anzeigen ({n})',
   'proj.hideDone': 'Erledigte ausblenden ({n})',
+  'proj.moreOn': 'Mehr dazu',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Abholungen',
   'pickups.desc':
