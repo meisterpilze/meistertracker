@@ -15403,13 +15403,14 @@ function renderProjekte(key) {
   const el = document.getElementById('pj-' + key);
   const doc = PJ_DOCS[key];
   if (!el || !doc) return;
+  const abschnitte = doc.sections.filter((s) => !s.fold).concat(doc.sections.filter((s) => s.fold));
   el.innerHTML =
     '<div class="card pj-head">' +
     `<div class="pj-title">${pjText(doc.title)}</div>` +
     `<div class="pj-meta">${pjText(doc.meta)}</div>` +
     `<p class="pj-lead">${pjText(doc.lead)}</p>` +
     '</div>' +
-    doc.sections
+    abschnitte
       .map((s) =>
         s.fold
           ? '<details class="card pj-sec pj-fold">' +
