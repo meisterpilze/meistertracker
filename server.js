@@ -509,6 +509,71 @@ function precompressStaticAssets() {
     }
   }
 }
+// ── App-Stand ───────────────────────────────────────────────────
+// Die Dateien, die zusammen die App im Browser sind, und ein Fingerabdruck über
+// sie. Ändert sich eine davon — START.bat zieht main und startet neu —, ändert
+// sich der Stand, und jedes offene Telefon merkt, dass es alten Code ausführt:
+// der Stand steht in /api/data, in der ersten Zeile des Ereignisstroms und als
+// X-App-Build an jeder dieser Dateien. Vorher lief eine App, die im Hintergrund
+// offen blieb, tagelang mit dem Code von vor dem Deploy weiter, und niemand
+// konnte es sehen.
+//
+// Je Datei wird nur neu gerechnet, wenn sich Größe oder Änderungszeit bewegt
+// haben; ein Aufruf kostet sonst ein paar stat()-Aufrufe.
+function shellFiles() {
+  const out = ['index.html', 'app.js', 'styles.css', 'sw.js'];
+  try {
+    for (const f of fs.readdirSync(path.join(DIR, 'lang')).sort()) if (f.endsWith('.js')) out.push('lang/' + f);
+  } catch {
+    /* no lang dir — nothing to add */
+  }
+  return out;
+}
+const _fileTags = new Map();
+function fileTag(absPath) {
+  const st = fs.statSync(absPath);
+  const hit = _fileTags.get(absPath);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.tag;
+  const tag = crypto.createHash('sha256').update(fs.readFileSync(absPath)).digest('hex').slice(0, 16);
+  _fileTags.set(absPath, { mtimeMs: st.mtimeMs, size: st.size, tag });
+  return tag;
+}
+function appBuild() {
+  const h = crypto.createHash('sha256');
+  for (const f of shellFiles()) {
+    let tag = 'missing';
+    try {
+      tag = fileTag(path.join(DIR, f));
+    } catch {
+      /* a file that cannot be read counts as missing */
+    }
+    h.update(f + ':' + tag + '\n');
+  }
+  return h.digest('hex').slice(0, 12);
+}
+// Die URLs dieser Dateien. Sie werden mit ETag und "no-cache" ausgeliefert
+// statt fünf Minuten lang ungefragt aus dem Browser-Cache: ein Neuladen gleich
+// nach dem Deploy hätte sonst das alte app.js bekommen, und das Neuladen, das
+// den neuen Stand holen soll, hätte den alten geholt.
+function isShellUrl(url) {
+  return (
+    url === '/' ||
+    url === '/index.html' ||
+    url === '/app.js' ||
+    url === '/styles.css' ||
+    url === '/sw.js' ||
+    /^\/lang\/[a-zA-Z-]+\.js$/.test(url)
+  );
+}
+// If-None-Match kann eine Liste sein, und "*" passt auf alles.
+function etagMatches(header, tag) {
+  if (!header || !tag) return false;
+  return String(header)
+    .split(',')
+    .map((s) => s.trim())
+    .some((s) => s === '*' || s === tag);
+}
+
 // Files already reported as having a stale compressed copy, so the warning is
 // logged once per asset per boot instead of once per request.
 const _staleCompressed = new Set();
@@ -6931,7 +6996,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // SSE endpoint for real-time sync
   if (req.method === 'GET' && req.url === '/api/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write('data: {"type":"connected"}\n\n');
+    // Der Stand der App-Dateien reist mit. Nach einem Deploy startet der Server
+    // neu, jedes offene Telefon verbindet sich wieder und erfährt es hier,
+    // ohne auf die nächste Abfrage zu warten.
+    res.write('data: ' + JSON.stringify({ type: 'connected', build: appBuild() }) + '\n\n');
     sseClients.add(res);
     req.on('close', () => sseClients.delete(res));
     return;
@@ -6973,7 +7041,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch {
       /* meta absent — fall through to 0 */
     }
-    const etag = '"v' + version + '-u' + (req.authUser.user_id || 0) + '-n' + unread + '"';
+    // Der Stand der App-Dateien gehört mit hinein. Ohne ihn bekäme ein Telefon
+    // nach einem Deploy weiter 304 — die Daten sind ja dieselben —, und die
+    // Nachricht "hier läuft alter Code" käme nie an.
+    const build = appBuild();
+    const etag = '"v' + version + '-u' + (req.authUser.user_id || 0) + '-n' + unread + '-b' + build + '"';
     if (req.headers['if-none-match'] === etag) {
       res.writeHead(304, { ETag: etag, 'Cache-Control': 'private, no-cache' });
       res.end();
@@ -7014,6 +7086,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // avoid. This is presentation only; the check that matters runs in
     // addHarvestRelease.
     payload.harvestRelease = { on: db.mayRelease(req.authUser) };
+    // Welcher Stand der App hier ausgeliefert wird; das Telefon vergleicht ihn
+    // mit dem, den es geladen hat (siehe appBuild()).
+    payload.build = build;
     res.writeHead(200, {
       'Content-Type': 'application/json',
       ETag: etag,
@@ -12565,6 +12640,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   const ext = path.extname(filePath).toLowerCase();
+
+  // Die Dateien der App: mit ETag, damit "no-cache" nichts kostet, solange sich
+  // nichts geändert hat — der Browser fragt nach, der Server antwortet 304 ohne
+  // Inhalt. Und mit dem Stand der ganzen App (X-App-Build), den der Service
+  // Worker der Seite meldet: so weiß sie, welchen Code sie wirklich ausführt,
+  // auch wenn app.js aus seinem Zwischenspeicher kam.
+  let shell = null;
+  if (isShellUrl(url)) {
+    try {
+      shell = { etag: 'W/"' + fileTag(filePath) + '"', build: appBuild() };
+    } catch {
+      shell = null; // unreadable — the 404 below says so
+    }
+    if (shell && etagMatches(req.headers['if-none-match'], shell.etag)) {
+      res.writeHead(304, staticHeaders(ext, url, null, shell));
+      res.end();
+      return;
+    }
+  }
+
   // P-01: serve pre-compressed variant when client accepts it. Skip images
   // (already compressed) and any extension we didn't precompute (e.g. .ico).
   const acceptEncoding = req.headers['accept-encoding'];
@@ -12582,7 +12677,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             res.end('Not found');
             return;
           }
-          writeStaticResponse(res, raw, filePath, ext, url, null);
+          writeStaticResponse(res, raw, filePath, ext, url, null, shell);
         });
         return;
       }
@@ -12590,11 +12685,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       res.end('Not found');
       return;
     }
-    writeStaticResponse(res, data, filePath, ext, url, picked && picked.encoding);
+    writeStaticResponse(res, data, filePath, ext, url, picked && picked.encoding, shell);
   });
 }
 
-function writeStaticResponse(res, data, filePath, ext, url, encoding) {
+function writeStaticResponse(res, data, filePath, ext, url, encoding, shell) {
+  res.writeHead(200, staticHeaders(ext, url, encoding, shell));
+  res.end(data);
+}
+
+// The headers of a static response, shared by the 200 and the 304 so a
+// revalidated copy carries the same caching rules and the same app stand.
+function staticHeaders(ext, url, encoding, shell) {
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
   // Cache immutable vendor libs and per-locale lang files aggressively;
   // cache HTML/CSS/SW short-term.
@@ -12610,13 +12712,15 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   } else if (url.startsWith('/lib/')) {
     // Pinned vendor builds — the file at this path genuinely never changes.
     headers['Cache-Control'] = 'public, max-age=31536000, immutable';
-  } else if (url.startsWith('/lang/')) {
-    // NOT immutable: /lang/de.js has no version in its URL but its contents
-    // change on every deploy that touches a string. Marked immutable it was
-    // pinned in the browser for a year, so newly added keys never arrived and
-    // t() printed the raw key ("msq.scan") on a client that had loaded the file
-    // once. Same short window as the other code assets.
-    headers['Cache-Control'] = 'public, max-age=300';
+  } else if (shell) {
+    // The app's own files: index.html, app.js, styles.css, sw.js, /lang/*.js.
+    // None has a version in its URL, and each changes with the deploy. They
+    // used to get five minutes of max-age (lang included — marked immutable it
+    // was pinned for a year and t() printed raw keys), which meant a reload
+    // right after a deploy could still get the previous app.js from the
+    // browser's own cache. "no-cache" asks every time; the ETag set below keeps
+    // the answer a body-less 304 while nothing has changed.
+    headers['Cache-Control'] = 'no-cache';
   } else if (ext === '.png' || ext === '.ico' || ext === '.svg') {
     headers['Cache-Control'] = 'public, max-age=86400';
   } else if (ext === '.css' || ext === '.js') {
@@ -12631,8 +12735,13 @@ function writeStaticResponse(res, data, filePath, ext, url, encoding) {
   if (encoding) {
     headers['Content-Encoding'] = encoding;
   }
-  res.writeHead(200, headers);
-  res.end(data);
+  if (shell) {
+    // Weak: the same file travels raw, as gzip and as brotli, and a weak tag
+    // is what says "same content" across those three.
+    headers['ETag'] = shell.etag;
+    headers['X-App-Build'] = shell.build;
+  }
+  return headers;
 }
 
 // ── TLS HOT-RELOAD ──────────────────────────────────────────

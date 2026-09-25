@@ -6676,6 +6676,15 @@
       <button type="button" id="undo-btn" data-i18n="dash.undo">Rückgängig</button>
     </div>
 
+    <!-- Eine neue Version der App ist auf dem Server, hier läuft noch die alte.
+         Meistens sieht man den Balken gar nicht: die App lädt sich in einem
+         ruhigen Moment selbst neu (app.js, checkForUpdate). Er steht nur, solange
+         gerade etwas offen oder eingetippt ist. -->
+    <div id="update-bar" class="update-bar" role="status" aria-live="polite" hidden>
+      <span data-i18n="update.available">Neue Version der App da.</span>
+      <button type="button" id="update-btn" data-i18n="update.reload">Neu laden</button>
+    </div>
+
     <script src="/app.js" defer></script>
   </body>
 </html>

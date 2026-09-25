@@ -472,6 +472,8 @@ window.LANG['pt'] = {
   'dash.moreRows': '{n} mais',
   'dash.fewerRows': 'mostrar menos',
   'dash.undo': 'Desfazer',
+  'update.available': 'Nova versão do app disponível.',
+  'update.reload': 'Recarregar',
   'dash.undone': '{n} sacos de volta',
   'dash.remove': 'Remover',
   'dash.zoneSpawn': 'Fase Spawn',

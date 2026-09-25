@@ -5320,6 +5320,52 @@ body:has(#m-camscan.open) #m-move-batch {
   }
 }
 
+/* "Neue Version der App da" — oben, weil unten schon der Rückgängig-Balken, der
+   Scannen-Knopf und die Leiste stehen. Er schwebt, statt die Seite
+   herunterzuschieben: er steht meist nur Sekunden, bis die App sich selbst neu
+   lädt. Die [hidden]-Regel ist nötig, weil display:flex die des Browsers schlägt. */
+.update-bar[hidden] {
+  display: none;
+}
+.update-bar {
+  position: fixed;
+  left: 50%;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: min(92vw, 420px);
+  padding: 6px 6px 6px 16px;
+  border-radius: 12px;
+  background: #1e3a5f;
+  color: #e0ecff;
+  font-size: max(0.875rem, var(--fs-min));
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.5);
+}
+.update-bar #update-btn {
+  flex: none;
+  min-height: var(--tap-sm-min);
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #e0ecff;
+  color: #1e3a5f;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* Über der Kamera nicht: dort wird gescannt, und neu geladen wird ohnehin erst,
+   wenn sie zu ist. */
+body:has(#m-camscan.open) .update-bar {
+  display: none;
+}
+
 /* Batch tasks and Alerts: side by side on a desk, stacked in a hand. These four
    were an inline style, and an inline value outranks every rule in the sheet — so
    the phone block below could turn the row into a column and could not touch the

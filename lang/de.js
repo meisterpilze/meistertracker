@@ -709,6 +709,8 @@ window.LANG['de'] = {
   'dash.moreRows': '{n} weitere',
   'dash.fewerRows': 'weniger anzeigen',
   'dash.undo': 'Rückgängig',
+  'update.available': 'Neue Version der App da.',
+  'update.reload': 'Neu laden',
   'dash.undone': '{n} Beutel zurück',
   'dash.remove': 'Entfernen',
   'dash.zoneSpawn': 'Spawn-Phase',

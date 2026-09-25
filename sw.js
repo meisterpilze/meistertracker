@@ -2,7 +2,7 @@
 // Prod uses stale-while-revalidate (instant nav + offline fallback); the
 // worktree/test instance (port 3001) is forced network-first below so code
 // changes always show on reload. Bumping this version evicts the old cache.
-const CACHE = 'meistertracker-v56';
+const CACHE = 'meistertracker-v57';
 
 // Test/worktree instance detection. The worktree server runs on port 3001
 // (prod is 3000 / 443). On the worktree we never serve static assets from
@@ -399,6 +399,30 @@ function _warnUnreachable(url, reason) {
   );
 }
 
+// Welchen Stand der App die Seite gerade bekommen hat. Der Server hängt ihn als
+// X-App-Build an app.js; hier wird er der Seite gemeldet, die das app.js
+// angefordert hat — auch und gerade, wenn es aus dem Zwischenspeicher kam, weil
+// das Netz zu langsam war. Die Seite vergleicht ihn mit dem Stand, den der
+// Server nennt, und weiß so, ob sie alten Code ausführt; ohne diese Meldung
+// hielte sie den Stand des Servers für ihren eigenen. Gibt die Antwort
+// unverändert weiter, auch wenn sie leer ist.
+function meldeAppStand(e, res) {
+  try {
+    const build = res && res.headers && res.headers.get('X-App-Build');
+    if (build && e.clientId && new URL(e.request.url).pathname === '/app.js') {
+      self.clients
+        .get(e.clientId)
+        .then((c) => {
+          if (c) c.postMessage({ type: 'app-build', build: build });
+        })
+        .catch(() => {});
+    }
+  } catch {
+    /* a report that cannot be made must not break the response */
+  }
+  return res;
+}
+
 // ── Fetch handler ───────────────────────────────────────────
 self.addEventListener('fetch', (e) => {
   // API calls
@@ -480,7 +504,11 @@ self.addEventListener('fetch', (e) => {
   // truly offline (localhost rarely is). Prod keeps stale-while-revalidate
   // below for fast navigation + offline PWA use.
   if (IS_WORKTREE) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    e.respondWith(
+      fetch(e.request)
+        .catch(() => caches.match(e.request))
+        .then((res) => meldeAppStand(e, res))
+    );
     return;
   }
   // Compute the pathname once — used by the login guard and the app-shell
@@ -531,6 +559,7 @@ self.addEventListener('fetch', (e) => {
           return res;
         })
         .catch(() => caches.match(e.request))
+        .then((res) => meldeAppStand(e, res))
     );
     return;
   }

@@ -809,10 +809,10 @@ describe('Kamera-Leiste: Aufbau und Stil', () => {
   });
 
   it('fragt nach, sobald die App aus dem Hintergrund zurückkommt', () => {
-    const i = APP.indexOf(
-      "document.addEventListener('visibilitychange', function () {\n  if (document.hidden) return;"
-    );
+    // Der Handler prüft beim Weggehen inzwischen auch, ob eine neue Version da
+    // ist (test/neue-version.test.js); das Nachfragen steht hinter dem return.
+    const i = APP.indexOf("document.addEventListener('visibilitychange', function () {\n  if (document.hidden) {");
     assert.ok(i > 0, 'kein Handler, der beim Zurückkommen nachfragt');
-    assert.match(APP.slice(i, i + 200), /pollSync\(\);/);
+    assert.match(APP.slice(i, i + 400), /return;\s*\}\s*_resumedAt = Date\.now\(\);\s*pollSync\(\);/);
   });
 });

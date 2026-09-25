@@ -569,6 +569,10 @@ async function loadData() {
     // against, so they have to move with every sync — but they come down inside
     // /api/data now rather than costing a second round-trip on every SSE event.
     if (typeof refreshSubstrateBatches === 'function') refreshSubstrateBatches(d.substrateBatches);
+    // Nach einem Neuladen wegen einer neuen Version: zurück auf die Seite, auf
+    // der man war. Dann erst der Stand-Vergleich, der selbst neu laden kann.
+    restoreAfterUpdate();
+    noteServerBuild(d.build);
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   }
@@ -915,6 +919,8 @@ async function pollSync(opts) {
       lastSyncTime = lastSyncTime || Date.now();
     }
     ok = true;
+    // Ein 200 nach einem Deploy: der Stand im ETag hat sich bewegt.
+    noteServerBuild(d.build);
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   } finally {
@@ -933,6 +939,136 @@ async function pollSync(opts) {
 async function syncNow() {
   for (let i = 0; i < 30 && _mutating > 0; i++) await new Promise((r) => setTimeout(r, 100));
   return (await pollSync({ force: true })) === true;
+}
+
+// ─── NEUE VERSION ────────────────────────────────────────────
+// Nach einem Deploy lief auf jedem Telefon, das die App offen hatte, der alte
+// Code weiter — tagelang, wenn niemand neu lud, und ohne dass es jemand sah.
+// Der Server nennt den Stand seiner App-Dateien (appBuild() in server.js) bei
+// jeder Abfrage und beim Verbinden des Ereignisstroms. Welcher Stand hier läuft,
+// meldet der Service Worker beim Ausliefern von app.js; ohne diese Meldung gilt
+// der erste Stand, den der Server nach dem Laden nennt.
+//
+// Weichen die beiden ab, lädt die App sich selbst neu — aber nur, wo es
+// niemanden stört: beim Start, wenn sie aus dem Hintergrund zurückkommt oder
+// dorthin verschwindet, und nie, solange etwas offen, unterwegs oder eingetippt
+// ist. Sonst sagt ein Balken oben, dass eine neue Version da ist, mit einem
+// Knopf dafür; beim nächsten ruhigen Moment lädt sie trotzdem von selbst.
+let _loadedBuild = null;
+let _serverBuild = null;
+const _pageLoadedAt = Date.now();
+let _resumedAt = 0;
+// So lange nach dem Start oder dem Zurückkommen stört ein Neuladen niemanden:
+// man hat noch nichts angefangen.
+const UPDATE_QUIET_MS = 5000;
+
+function noteServerBuild(build) {
+  if (!build) return;
+  _serverBuild = build;
+  if (!_loadedBuild) _loadedBuild = build;
+  checkForUpdate();
+}
+// Der Stand des app.js, das diese Seite wirklich bekommen hat. Er geht dem
+// ersten Stand vom Server vor: kam app.js aus dem Zwischenspeicher, wäre der
+// Stand des Servers der neue, obwohl hier der alte läuft.
+function noteLoadedBuild(build) {
+  if (!build) return;
+  _loadedBuild = build;
+  checkForUpdate();
+}
+function appOutdated() {
+  return !!(_loadedBuild && _serverBuild && _loadedBuild !== _serverBuild);
+}
+function checkForUpdate() {
+  const alt = appOutdated();
+  const bar = document.getElementById('update-bar');
+  if (bar) bar.hidden = !alt;
+  if (!alt) return;
+  const ruhig = document.hidden || Date.now() - Math.max(_pageLoadedAt, _resumedAt) < UPDATE_QUIET_MS;
+  if (ruhig && reloadIsSafe() && updateReloadAllowed()) reloadForUpdate();
+}
+
+// Ist gerade etwas offen, unterwegs oder eingetippt, das ein Neuladen verlöre?
+function reloadIsSafe() {
+  if (_mutating > 0) return false;
+  if (leaveGuards.some((g) => askGuard(g))) return false;
+  // Jedes Fenster, die Kamera eingeschlossen — sie ist auch eines.
+  if (document.querySelector('.modal-bg.open')) return false;
+  const huelle = document.getElementById('scan-overlay');
+  if (huelle && huelle.classList.contains('open')) return false;
+  const ernte = document.getElementById('harvest-panel');
+  if (ernte && ernte.style.display === 'block') return false;
+  const fokus = document.activeElement;
+  if (fokus && (/^(INPUT|TEXTAREA|SELECT)$/.test(fokus.tagName) || fokus.isContentEditable)) return false;
+  return !pageHasTypedText();
+}
+// Ein sichtbares Textfeld auf der offenen Seite, in dem etwas steht, das beim
+// Laden nicht drin stand. Die meisten Eingaben laufen über Fenster (oben schon
+// abgefangen); das hier sind die Formulare, die auf einer Seite selbst stehen.
+// Suchfelder zählen nicht, Auswahllisten auch nicht — die füllt das Programm
+// selbst vor, und eine Auswahl ist schnell wieder getroffen.
+function pageHasTypedText() {
+  const seite = document.querySelector('.page.active');
+  if (!seite) return false;
+  for (const el of seite.querySelectorAll('input, textarea')) {
+    if (el.disabled || el.readOnly || el.offsetParent === null) continue;
+    const art = el.tagName === 'TEXTAREA' ? 'text' : el.type || 'text';
+    if (!/^(text|number|email|tel|url|password)$/.test(art)) continue;
+    if (el.value && el.value !== el.defaultValue) return true;
+  }
+  return false;
+}
+
+// Die Marke gegen eine Schleife: kommt nach dem Neuladen wieder der alte Code
+// (das Netz war zu langsam, app.js kam aus dem Zwischenspeicher), lädt die App
+// nicht gleich noch einmal, sondern zeigt den Balken.
+function updateReloadAllowed() {
+  try {
+    const m = JSON.parse(sessionStorage.getItem('mp-update-reload') || 'null');
+    return !(m && m.build === _serverBuild && Date.now() - m.at < 2 * 60 * 1000);
+  } catch {
+    return true;
+  }
+}
+// Neu laden, und danach dort weitermachen, wo man war. Ohne das landete jedes
+// Neuladen auf der Startseite, und wer auf "Chargen" gestanden hatte, suchte.
+function reloadForUpdate() {
+  try {
+    sessionStorage.setItem('mp-update-reload', JSON.stringify({ build: _serverBuild, at: Date.now() }));
+    sessionStorage.setItem('mp-update-where', JSON.stringify({ ...whereAmI(), at: Date.now() }));
+  } catch {
+    /* storage blocked — reload anyway, just without the way back */
+  }
+  location.reload();
+}
+function whereAmI() {
+  const seite = document.querySelector('.page.active');
+  const nav = document.querySelector('.sb-nav .sb-btn.active, .sb-footer .sb-btn.active');
+  const reiter = seite ? seite.querySelector('.stab.active') : null;
+  return {
+    page: seite ? seite.id.replace(/^p-/, '') : null,
+    btnId: nav ? nav.id : null,
+    stab: reiter ? reiter.id : null,
+    drilled: !!(seite && seite.classList.contains('stab-drilled'))
+  };
+}
+function restoreAfterUpdate() {
+  let w = null;
+  try {
+    w = JSON.parse(sessionStorage.getItem('mp-update-where') || 'null');
+    sessionStorage.removeItem('mp-update-where');
+  } catch {
+    return;
+  }
+  if (!w || Date.now() - w.at > 60 * 1000) return;
+  if (!w.page || !w.btnId || !document.getElementById('p-' + w.page) || !document.getElementById(w.btnId)) return;
+  go(w.page, w.btnId);
+  // Den Reiter wie mit einem Tipp öffnen. Am Telefon nur, wenn man in ihm
+  // stand — sonst stand man auf der Liste der Reiter, und dort landet go().
+  if (w.stab && (w.drilled || !sbIsPhone())) {
+    const r = document.getElementById(w.stab);
+    if (r) r.click();
+  }
 }
 
 // Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
@@ -977,7 +1113,12 @@ function connectSSE() {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'data-changed') scheduleSsePoll();
-        if (msg.type === 'connected') setSyncStatus('ok', 'Connected');
+        if (msg.type === 'connected') {
+          setSyncStatus('ok', 'Connected');
+          // Nach einem Deploy startet der Server neu, und hier kommt als Erstes
+          // sein Stand an — noch bevor die nächste Abfrage fällig wäre.
+          noteServerBuild(msg.build);
+        }
       } catch (e) {
         /* ignore parse errors */
       }
@@ -25779,10 +25920,18 @@ setInterval(pollSync, 30000);
 // Sofort nachfragen, statt bis zu 30 Sekunden gegen den alten Stand zu scannen:
 // ein Etikett, das in der Pause gedruckt wurde, wäre in diesem Fenster
 // "unbekannt".
+//
+// Und der Moment, in dem eine veraltete App sich neu lädt: beim Weggehen, weil
+// dann niemand hinsieht, und beim Zurückkommen, bevor man etwas anfängt.
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden) return;
+  if (document.hidden) {
+    if (appOutdated()) checkForUpdate();
+    return;
+  }
+  _resumedAt = Date.now();
   pollSync();
   connectSSE();
+  if (appOutdated()) checkForUpdate();
 });
 
 // ── The roles the card mode takes away (finding T7) ────────────────────────
@@ -25847,6 +25996,8 @@ if ('serviceWorker' in navigator) {
     if (e.data && e.data.type === 'offline-queue-update') {
       updateOfflineBadge(e.data.pendingCount);
     }
+    // Welcher Stand der App diese Seite bekommen hat (sw.js, meldeAppStand).
+    if (e.data && e.data.type === 'app-build') noteLoadedBuild(e.data.build);
     // I-12: SW dropped a queued MOVE because the server returned 409
     // (the bag was moved by another user while this entry was offline).
     // Surface a toast so the user knows their MOVE didn't apply.
@@ -26410,6 +26561,12 @@ function initEventListeners() {
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-torch').addEventListener('click', toggleTorch);
   $('btn-cam-contam').addEventListener('click', toggleContamScan);
+  // Der Knopf im Balken "neue Version": jetzt neu laden, ohne auf einen ruhigen
+  // Moment zu warten. Ungespeichertes fragt der Browser vorher selbst ab
+  // (beforeunload und die leaveGuards). Abgesichert wie die Serien-Knöpfe:
+  // ein altes index.html kennt den Balken nicht.
+  const neuLaden = $('update-btn');
+  if (neuLaden) neuLaden.addEventListener('click', reloadForUpdate);
   // Die drei neuen Serien-Knöpfe, abgesichert: app.js und index.html kommen
   // getrennt aus dem Netz, und jedes fällt nach drei Sekunden auf den Cache
   // zurück (sw.js). Ein neues app.js über einem alten index.html fände sie

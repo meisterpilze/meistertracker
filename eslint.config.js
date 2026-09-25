@@ -94,6 +94,7 @@ module.exports = [
         navigator: 'readonly',
         location: 'writable',
         localStorage: 'readonly',
+        sessionStorage: 'readonly',
         alert: 'readonly',
         confirm: 'readonly',
         prompt: 'readonly',

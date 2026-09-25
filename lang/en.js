@@ -704,6 +704,8 @@ window.LANG['en'] = {
   'dash.moreRows': '{n} more',
   'dash.fewerRows': 'show fewer',
   'dash.undo': 'Undo',
+  'update.available': 'New version of the app available.',
+  'update.reload': 'Reload',
   'dash.undone': '{n} bags moved back',
   'dash.remove': 'Remove',
   'dash.zoneSpawn': 'Spawn Run',
