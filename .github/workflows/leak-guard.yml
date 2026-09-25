@@ -26,8 +26,22 @@ on:
 # Nothing is granted by default; each job asks for exactly what it uses.
 permissions: {}
 
+# A run may be cancelled only by a newer run over the same text, so the group
+# names both the trigger and the thing it reads.
+#
+# The trigger, because opening a pull request fires `pull_request` and
+# `pull_request_target` at the same moment. Keyed on the number alone, the later
+# of the two cancelled the earlier, and that pull request's commit messages, or
+# its title and body, were never scanned.
+#
+# The thing, as narrowly as each run reads it. A newer run over a pull request
+# or an issue reads the whole of it again — the full body, the full
+# `base..head` — so a second edit or push may cancel the first. A comment run
+# reads one comment, and a push run only its own `before..after`; nothing later
+# covers either, so each gets a group of its own. A review with several inline
+# comments fires them all in the same second.
 concurrency:
-  group: leak-guard-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  group: leak-guard-${{ github.event_name }}-${{ github.event.comment.id || github.event.pull_request.number || github.event.issue.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
