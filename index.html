@@ -1252,7 +1252,12 @@
         <!-- Camera scan HUD: compact status shown during continuous scanning -->
         <div id="cam-scan-hud" class="cam-hud">
           <div id="cam-hud-toast" class="cam-hud-toast"></div>
-          <div class="cam-hud-chips">
+          <!-- Vorgang, Ziel, Zähler: die Sprache der gedruckten Etiketten. Wer mit
+               den Knöpfen darunter arbeitet, braucht sie nicht — der leuchtende
+               Knopf sagt, was läuft, und seine Zahl, wieviel. updateCamHud()
+               zeigt die Reihe nur, solange ein gedrucktes Etikett einen Vorgang
+               ohne Knopf gesetzt hat (ADD, MOVE_BATCH) oder ein Ziel fehlt. -->
+          <div class="cam-hud-chips" id="cam-hud-chips">
             <span class="cam-chip" id="cam-chip-action"
               ><span class="cam-chip-l">Action</span> <span id="ch-action">&mdash;</span></span
             >
@@ -1265,7 +1270,72 @@
             >
             <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
           </div>
-          <div class="cam-hud-btns">
+          <!-- Die vier Vorgänge, die man in Serie macht: ein Knopf, dann Beutel
+               für Beutel scannen, bis der Knopf wieder aus ist. Mit Wort, nicht
+               nur als Zeichen — sie ändern, was der nächste Scan tut, und das
+               muss man lesen können, ohne es zu kennen. Vorher ging das nur über
+               gedruckte Etiketten (MOVE, HARVEST, REMOVE), und die hat in der
+               Kammer niemand dabei. -->
+          <div class="cam-hud-modes" id="cam-hud-modes">
+            <!-- Umziehen: Ziel einmal wählen, dann zieht jeder Scan seinen Beutel
+                 dorthin. An, steht hier das Ziel statt des Worts. -->
+            <button
+              id="btn-cam-move"
+              class="cam-mode-btn cam-mode-move"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="cam.moveAria"
+              aria-label="Umziehen: Ziel wählen, dann Beutel scannen"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+              <span class="cam-mode-l" id="cam-move-idle" data-i18n="cam.move">Umziehen</span>
+              <span class="cam-mode-l" id="cam-move-to" hidden></span>
+              <!-- Wieviele Beutel in diesem Durchgang schon am Ziel sind. -->
+              <span class="cam-hud-badge" id="cam-move-count" hidden>0</span>
+            </button>
+            <!-- Ernten: jeder Scan öffnet das Gewicht für seinen Beutel; nach dem
+                 Speichern geht es zurück in die Kamera, Ernten bleibt an. -->
+            <button
+              id="btn-cam-harvest"
+              class="cam-mode-btn cam-mode-harvest"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="cam.harvestAria"
+              aria-label="Ernten: dann Beutel scannen und Gewicht eingeben"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="6" r="3" />
+                <path d="M8.12 8.12 12 12" />
+                <path d="M20 4 8.12 15.88" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M14.8 14.8 20 20" />
+              </svg>
+              <span class="cam-mode-l" data-i18n="cam.harvest">Ernten</span>
+              <span class="cam-hud-badge" id="cam-harvest-count" hidden>0</span>
+            </button>
             <!-- Reporting contamination is done standing in front of a bad bag
                  with the phone already in hand. The scanner could only be put
                  into CONTAM mode by scanning the printed CONTAM barcode, which
@@ -1273,7 +1343,7 @@
                  this button already existed; it just had no door on a phone. -->
             <button
               id="btn-cam-contam"
-              class="cam-hud-btn cam-hud-btn-contam"
+              class="cam-mode-btn cam-mode-contam"
               type="button"
               aria-pressed="false"
               data-i18n-aria-label="scan.contamAria"
@@ -1290,17 +1360,51 @@
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <path d="M12 9v4" />
                 <path d="M12 17h.01" />
                 <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               </svg>
+              <span class="cam-mode-l" data-i18n="cam.contam">Kontamination</span>
               <!-- Wieviele Beutel schon gesammelt sind. Solange die Kamera das
                    Bild füllt, ist diese Zahl die einzige Rückmeldung darüber —
                    und der Knopf, der sie trägt, ist zugleich der Weg ins
                    Formular. -->
               <span class="cam-hud-badge" id="cam-contam-count" hidden>0</span>
             </button>
+            <!-- Entsorgen: jeder Scan bucht einen Beutel als entsorgt. Die
+                 Bestätigung ist dieser Knopf; ↩ nimmt den letzten zurück. -->
+            <button
+              id="btn-cam-trash"
+              class="cam-mode-btn cam-mode-trash"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="cam.trashAria"
+              aria-label="Entsorgen: jeder gescannte Beutel wird als entsorgt gebucht"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+              </svg>
+              <span class="cam-mode-l" data-i18n="cam.trash">Entsorgen</span>
+              <span class="cam-hud-badge" id="cam-trash-count" hidden>0</span>
+            </button>
+          </div>
+          <div class="cam-hud-btns">
             <button
               id="btn-cam-torch"
               class="cam-hud-btn"

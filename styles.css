@@ -1293,8 +1293,11 @@ body:has(.modal-bg.open) .cam-fab {
     opacity 0.25s ease;
   opacity: 0;
 }
+/* Platz für drei Zeilen. Eine Fehlermeldung sagt jetzt, was los ist UND was zu
+   tun ist, und das passt nicht in die zwei Zeilen, die 60px hergaben — der Rest
+   wurde abgeschnitten, und abgeschnitten war immer der Teil mit dem Ausweg. */
 .cam-hud-toast.visible {
-  max-height: 60px;
+  max-height: 96px;
   padding: 8px 14px;
   opacity: 1;
 }
@@ -1404,6 +1407,13 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-btn:active {
   background: rgba(255, 255, 255, 0.3);
 }
+/* Ohne diese Zeile wirkte `hidden` hier nicht: die display-Angabe oben ist eine
+   Autoren-Regel und schlägt die [hidden]-Regel des Browsers (dasselbe wie bei
+   .btn[hidden]). Die Taschenlampe stand darum auf jedem Telefon da, auch auf
+   denen ohne Lampe, wo ein Tipp darauf nichts tut. */
+.cam-hud-btn[hidden] {
+  display: none;
+}
 /* Torch toggle — visible glow when the flashlight is on so the worker doesn't
    leave the camera flash burning unintentionally after a scan. */
 .cam-hud-btn.torch-on {
@@ -1414,25 +1424,109 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-hud-btn.torch-on:active {
   background: rgba(250, 204, 21, 0.6);
 }
+
+/* Die vier Serien-Vorgänge als Kacheln: Umziehen, Ernten, Kontamination,
+   Entsorgen. Ein Tipp, dann Beutel für Beutel scannen — so einfach muss es
+   sein, sonst benutzt es niemand. Sie tun etwas anderes als Lampe und
+   Rückgängig in der Reihe darunter: sie ändern, was der nächste Scan tut, und
+   das muss man lesen können, ohne es zu kennen. Darum mit Wort, und darum nicht
+   in der Werkzeugreihe — dort war schon für sechs runde Knöpfe zu 56px kein
+   Platz (386px auf 358px). Zwei Spalten, damit auch "Kontamination" ganz
+   dasteht. */
+.cam-hud-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 380px;
+}
+.cam-mode-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: max(44px, var(--tap-min));
+  padding: 0 12px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-family: inherit;
+  font-size: max(0.875rem, var(--fs-min));
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.cam-mode-btn[hidden],
+.cam-mode-btn [hidden] {
+  display: none;
+}
+.cam-mode-btn svg {
+  flex: none;
+}
+.cam-mode-btn:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+/* Ein langer Zielname wird gekürzt statt umgebrochen; ganz steht er in der
+   Meldung nach jedem Scan. */
+.cam-mode-l {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An leuchtet jeder Knopf in seiner Farbe. Ein Vorgang, der unbemerkt
+   weiterläuft, gehorcht dem nächsten Scan stumm — das ist bei der Lampe so und
+   hier erst recht, also muss "an" von weitem zu sehen sein. */
+.cam-mode-btn.cam-mode-move.on {
+  background: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.6);
+}
+.cam-mode-btn.cam-mode-move.on:active {
+  background: #1e40af;
+}
+.cam-mode-btn.cam-mode-harvest.on {
+  background: var(--c-amber-strong);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(217, 119, 6, 0.6);
+}
 /* CONTAM toggle. Armed, every bag scanned opens a contamination report, so it
    has to be as obvious as the torch that it is on — the failure mode is the
-   same shape: a mode left running that the next scan silently obeys. Unarmed it
-   stays quiet, because it sits beside the torch and the flip on a HUD that is
-   mostly camera. */
-.cam-hud-btn.on {
+   same shape: a mode left running that the next scan silently obeys. */
+.cam-mode-btn.cam-mode-contam.on {
   background: rgba(220, 38, 38, 0.55);
   color: #fff;
   box-shadow: 0 0 16px rgba(220, 38, 38, 0.55);
 }
-.cam-hud-btn.on:active {
+.cam-mode-btn.cam-mode-contam.on:active {
   background: rgba(220, 38, 38, 0.7);
 }
-/* Zähler der gesammelten Beutel, auf dem CONTAM-Knopf. Der Knopf ist rund und
-   randlos, also sitzt die Zahl als eigene Scheibe an seiner Ecke — im Knopf
-   wäre sie unter dem Warndreieck. */
-.cam-hud-btn {
-  position: relative;
+/* Entsorgen hell auf dunkel: eine vierte Farbe wäre zu nah am Rot der
+   Kontamination, und die zwei darf man nicht verwechseln. */
+.cam-mode-btn.cam-mode-trash.on {
+  background: #f5f5f4;
+  color: #1c1917;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
 }
+.cam-mode-move .cam-hud-badge {
+  color: #1d4ed8;
+}
+.cam-mode-harvest .cam-hud-badge {
+  color: var(--c-amber-strong);
+}
+.cam-mode-trash .cam-hud-badge {
+  background: #1c1917;
+  color: #fff;
+}
+/* Zähler auf den Serien-Knöpfen: wieviele Beutel der laufende Durchgang schon
+   hat (bei der Kontamination: gesammelt). Die Zahl sitzt als eigene Scheibe an
+   der Ecke. */
 .cam-hud-badge {
   position: absolute;
   top: -2px;
@@ -4558,6 +4652,14 @@ tr.ms-off .ms-prog {
 }
 #m-confirm {
   z-index: 210;
+}
+/* Die Zielliste über der Kamera. Beide sind .modal-bg mit z-index 200, und bei
+   Gleichstand malt das spätere Element oben — m-camscan steht in index.html
+   hinter m-move-batch. Die Liste, die das "Nach"-Feld der Kamera öffnete, ging
+   darum HINTER dem Kamerabild auf: der Tipp tat scheinbar nichts, und der
+   nächste Tipp daneben schloss die Kamera. Unter m-confirm (210) bleibt sie. */
+body:has(#m-camscan.open) #m-move-batch {
+  z-index: 205;
 }
 .modal {
   background: var(--c-surface);

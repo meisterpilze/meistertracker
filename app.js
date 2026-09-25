@@ -543,10 +543,23 @@ function showAdminSubTab(sub) {
 }
 
 // ─── SYNC ────────────────────────────────────────────────────
+// Die Antwort auf /api/data, oder ein Fehler, wenn es keine Daten sind.
+//
+// Ohne Server antwortet nicht der Browser mit einem Fehler, sondern der Service
+// Worker mit einem 503 und {error:'offline'} (sw.js, _apiFailureBody). Das ist
+// gültiges JSON, und applyData() nahm es als Stand: jede Liste leer, das
+// Barcode-Register leer, die Anzeige "synchronisiert". Ein kurzer Aussetzer im
+// WLAN reichte, und danach war jedes Etikett "unbekannt", bis die nächste
+// Abfrage durchkam — oder bis jemand die App neu startete, was am Ende der
+// einzige Ausweg war, den man sah.
+async function dataResponse(r) {
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
 async function loadData() {
   setSyncStatus('busy', 'Syncing...');
   try {
-    const d = await authFetch('/api/data').then((r) => r.json());
+    const d = await authFetch('/api/data').then(dataResponse);
     lastHash = JSON.stringify(d);
     applyData(d);
     lastSyncTime = Date.now();
@@ -850,23 +863,42 @@ setInterval(() => {
 }, 5000);
 let _polling = false;
 let _lastEtag = null;
-async function pollSync() {
-  if (_mutating > 0 || _polling) return;
+// Wer auf eine schon laufende Abfrage wartet (syncNow), statt eine zweite
+// danebenzustellen. Bekommt deren Ergebnis.
+const _pollWaiters = [];
+// Wie lange eine Abfrage höchstens laufen darf. Eine, die hängt — das Telefon
+// schlief mitten in der Anfrage, das WLAN wechselte —, hielt _polling für immer
+// auf true, und damit ließ jede weitere Abfrage sich selbst aus: das Telefon
+// blieb auf seinem alten Stand, bis die App neu startete. Eine Minute reicht
+// auch für langsames Netz.
+const POLL_TIMEOUT_MS = 60000;
+// Ergebnis: true, wenn der Server geantwortet hat (neuer Stand oder "nichts
+// Neues"); false, wenn nicht; null, wenn die Abfrage ausgelassen wurde, weil
+// gerade gespeichert wird. opts.force lässt sie trotzdem laufen.
+async function pollSync(opts) {
+  if (_polling) return new Promise((res) => _pollWaiters.push(res));
+  if (_mutating > 0 && !(opts && opts.force)) return null;
   _polling = true;
+  let ok = false;
   try {
     // P-04: send If-None-Match so the server can short-circuit with 304
     // when nothing has changed. Server sets ETag from the monotonic
     // data_version counter, so a cached version is authoritative.
-    const headers = _lastEtag ? { 'If-None-Match': _lastEtag } : undefined;
-    const r = await authFetch('/api/data', headers ? { headers } : undefined);
+    const init = {};
+    if (_lastEtag) init.headers = { 'If-None-Match': _lastEtag };
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      init.signal = AbortSignal.timeout(POLL_TIMEOUT_MS);
+    }
+    const r = await authFetch('/api/data', init);
     if (r.status === 304) {
       // No change — keep the existing data, just refresh the "synced at" time.
       lastSyncTime = lastSyncTime || Date.now();
       setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
-      return;
+      ok = true;
+      return ok;
     }
     const newEtag = r.headers && r.headers.get ? r.headers.get('ETag') : null;
-    const d = await r.json();
+    const d = await dataResponse(r);
     const h = JSON.stringify(d);
     if (h !== lastHash) {
       lastHash = h;
@@ -882,11 +914,25 @@ async function pollSync() {
       if (newEtag) _lastEtag = newEtag;
       lastSyncTime = lastSyncTime || Date.now();
     }
+    ok = true;
   } catch (e) {
     if (e.message !== 'unauthorized') setSyncStatus('err', 'Sync error');
   } finally {
     _polling = false;
+    for (const res of _pollWaiters.splice(0)) res(ok);
   }
+  return ok;
+}
+
+// Den Stand jetzt holen, statt auf den nächsten Takt zu warten. Läuft gerade
+// eine Speicherung, kurz warten — pollSync() lässt sonst aus, damit der
+// Server-Stand die eigene, noch unterwegs befindliche Änderung nicht
+// überschreibt. Hängt sie, geht die Abfrage nach drei Sekunden trotzdem raus:
+// ein Scanner, der auf eine tote Speicherung wartet, hilft niemandem.
+// true, wenn der Server geantwortet hat.
+async function syncNow() {
+  for (let i = 0; i < 30 && _mutating > 0; i++) await new Promise((r) => setTimeout(r, 100));
+  return (await pollSync({ force: true })) === true;
 }
 
 // Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
@@ -914,6 +960,7 @@ function scheduleSsePoll() {
 let _sse = null;
 let _sseReconnectTimer = null;
 let _sseRetryDelay = 1000;
+let _sseOpenedOnce = false;
 function connectSSE() {
   if (_sse) return;
   try {
@@ -921,6 +968,10 @@ function connectSSE() {
     _sse.onopen = function () {
       _sseRetryDelay = 1000; // Reset backoff on successful connection
       setSyncStatus('ok', 'Connected');
+      // Nach dem Wiederverbinden: was in der Lücke geändert wurde, kam als
+      // Ereignis nie an. Einmal nachfragen, statt auf den nächsten Takt zu warten.
+      if (_sseOpenedOnce) scheduleSsePoll();
+      _sseOpenedOnce = true;
     };
     _sse.onmessage = function (ev) {
       try {
@@ -10345,7 +10396,23 @@ function postScanEntries(entries, opts) {
     }
     if (r && r.error) {
       if (isRetry) {
-        setFb('err', 'Scan gespeichert lokal, Server-Sync fehlgeschlagen: ' + r.error);
+        // Nicht gespeichert. Hier stand "Scan gespeichert lokal" — das stimmte
+        // nie: einen Speicher dafür gibt es nur in der Warteschlange des Service
+        // Workers, und die hätte mit {queued:true} geantwortet. Der Eintrag auf
+        // dem Telefon war ein Trugbild, das die nächste Abfrage wegwischte. Also
+        // gleich raus damit (wie bei handleZoneMismatch), und sagen, was hilft.
+        for (const e of entries) {
+          const i = scanLog.lastIndexOf(e);
+          if (i >= 0) scanLog.splice(i, 1);
+          const j = movements.lastIndexOf(e);
+          if (j >= 0) movements.splice(j, 1);
+          modeRunUntally(e);
+        }
+        const was =
+          entries.length === 1 ? entries[0].bag || entries[0].batch : t('scanFb.nBags', { n: entries.length });
+        setFb('err', t('scanFb.notSaved', { what: was, reason: r.error }));
+        if (typeof renderStatus === 'function') renderStatus();
+        updateSD();
         return;
       }
       console.warn('Scan log POST failed, retrying:', r.error);
@@ -11265,7 +11332,13 @@ function delBatch(id) {
 }
 
 // ─── HARVESTS ────────────────────────────────────────────────
+// Kam der Beutel aus der Kamera? Dann geht es nach dem Speichern dorthin zurück,
+// mit Ernten noch an — der nächste Beutel liegt schon in der Hand. Vorher
+// öffnete "Speichern & weiter" die grüne Scan-Hülle für den Handscanner, und am
+// Telefon hieß das: für jeden Beutel die Kamera neu aufmachen.
+let _hpFromCam = false;
 function showHarvestPanel(bagId, batchId) {
+  _hpFromCam = document.getElementById('m-camscan').classList.contains('open');
   const b = batches.find((x) => x.batchId === batchId);
   scan.harvestBag = { bagId, batchId, species: b?.species, strain: b?.strain };
   document.getElementById('hp-lbl').textContent = t('harvest.logHarvest') + ' \u2014 ' + bagId;
@@ -11367,17 +11440,29 @@ function confirmHarvest(keepScanning) {
   sessionEntries.push(sEntry);
   scan.harvestBag = null;
   scan.count++;
+  // Mitgezählt für den Ernten-Knopf, solange Ernten an ist.
+  if (scan.action === 'HARVEST') modeRunTally('HARVEST', null, sEntry);
   document.getElementById('harvest-panel').style.display = 'none';
+  // Zurück in die Kamera, wenn sie der Weg hierher war: das zählt für Enter wie
+  // für beide Knöpfe. Synchron, noch im Tipp — iOS gibt die Kamera sonst nicht.
+  const zurueck = _hpFromCam;
+  _hpFromCam = false;
+  if (zurueck) openCamScan();
   setFb('ok', t('harvest.logged', { bag: p.bagId, g: g, f: f }), sEntry);
   updateSD();
   // Chain: reopen the scanner so the next bag flows straight into a fresh
   // harvest panel (scan.action stays HARVEST) instead of ejecting the worker
   // and making them re-open the scanner between every bag.
-  if (keepScanning) openScanModal();
+  if (keepScanning && !zurueck) openScanModal();
 }
 function cancelHarvest() {
   scan.harvestBag = null;
   document.getElementById('harvest-panel').style.display = 'none';
+  // Diesen Beutel nicht — aber Ernten bleibt an, und aus der Kamera geht es
+  // dorthin zurück.
+  const zurueck = _hpFromCam;
+  _hpFromCam = false;
+  if (zurueck) openCamScan();
   setFb('info', t('harvest.cancelled'));
 }
 document.getElementById('hp-grams').addEventListener('keydown', (e) => {
@@ -20716,6 +20801,7 @@ function undoSuccessRow(btn) {
   });
   if (mi !== -1) movements.splice(mi, 1);
   sessionEntries.splice(idx, 1);
+  modeRunUntally(entry);
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
   // _queued: the SW holds it offline, so there is no server row to DELETE and
   // none is coming until replay — pull it out of the queue instead.
@@ -20723,7 +20809,7 @@ function undoSuccessRow(btn) {
   else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
   scan.count = Math.max(0, scan.count - 1);
   _scanBeep(400, 100);
-  setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
+  setFb('info', undoneMsg(entry));
   updateSD();
   renderStatus();
   renderScanSuccesses();
@@ -20755,9 +20841,14 @@ if (scanChannel) {
 // Duplicate detection
 let _pendingDupe = null;
 let _pendingDupeTimer = null;
-// Remove confirmation
-let _pendingRemove = null;
-let _pendingRemoveTimer = null;
+// Beim Umziehen ein Beutel ohne Platz im System (nie eingelagert, oder als
+// entfernt gebucht): der zweite Scan desselben Beutels legt ihn am Ziel ein.
+let _pendingPlace = null;
+let _pendingPlaceTimer = null;
+// Wie lange ein "nochmal scannen zum Bestätigen" gilt. Die Kamera nimmt dasselbe
+// Etikett frühestens nach SCAN_DEDUP_MS (3 s) wieder an — mit den 3 s, die die
+// Doppel-Warnung hier hatte, ließ sich der zweite Scan mit der Kamera nie treffen.
+const CONFIRM_SCAN_MS = 8000;
 
 function openScanModal() {
   document.getElementById('scan-overlay').classList.add('open');
@@ -20835,7 +20926,7 @@ function setFb(type, msg, opts) {
   el.textContent = msg;
   requestAnimationFrame(() => el.classList.add('visible'));
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove('visible'), type === 'err' ? 4000 : 3000);
+  _toastTimer = setTimeout(() => el.classList.remove('visible'), fbShowMs(type));
   if (type === 'err') sessionErrors++;
   if (type === 'ok') {
     _scanBeepOk();
@@ -20855,12 +20946,19 @@ function _showCamHudToast(type, msg) {
   el.textContent = msg;
   requestAnimationFrame(() => el.classList.add('visible'));
   clearTimeout(_camHudToastTimer);
-  _camHudToastTimer = setTimeout(() => el.classList.remove('visible'), type === 'err' ? 4000 : 3000);
+  _camHudToastTimer = setTimeout(() => el.classList.remove('visible'), fbShowMs(type));
+}
+// Wie lange eine Rückmeldung stehen bleibt. Fehler sagen jetzt, was los ist und
+// was hilft — das liest niemand in vier Sekunden. Der nächste Scan ersetzt die
+// Meldung ohnehin; lang steht sie nur, wenn man sie braucht.
+function fbShowMs(type) {
+  return type === 'err' ? 7000 : type === 'warn' ? 5000 : 3000;
 }
 function updateCamHud() {
   document.getElementById('ch-action').textContent = scan.action || '—';
   document.getElementById('ch-from').textContent = scan.from || '—';
-  document.getElementById('ch-to').textContent = scan.to || '—';
+  // Der Name des Platzes, wie auf dem Umziehen-Knopf daneben — nicht "TENT1".
+  document.getElementById('ch-to').textContent = scan.to ? zoneDisplayName(scan.to) : '—';
   document.getElementById('ch-count').textContent = scan.count;
   // Action chip color
   const actionChip = document.getElementById('cam-chip-action');
@@ -20886,11 +20984,26 @@ function updateCamHud() {
     !scan.action || scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
   toChip.className = 'cam-chip' + (wantsTo && scan.to ? ' ch-set' : '');
   toChip.style.display = wantsTo ? '' : 'none';
-  const toPulse = wantsTo && !scan.to;
+  // Pulsieren nur, wenn ein Vorgang wirklich auf sein Ziel wartet. Ohne Vorgang
+  // ist Scannen ein vollwertiger Zustand (Beutel scannen zeigt seine Infos), und
+  // der Weg ins Umziehen ist jetzt der beschriftete Knopf darunter — ein
+  // blinkendes Feld daneben zog den Blick auf die kleinere der zwei Türen.
+  const toPulse = !!scan.action && wantsTo && !scan.to;
   toChip.classList.toggle('ch-pulse', toPulse);
   // Count chip highlight
   const countChip = document.getElementById('cam-chip-count');
   countChip.className = 'cam-chip' + (scan.count > 0 ? ' ch-set' : '');
+  // Die ganze Reihe nur, wenn sie etwas sagt, was kein Knopf sagt: ein Vorgang
+  // von einem gedruckten Etikett, für den es keinen Knopf gibt (ADD,
+  // MOVE_BATCH), oder ein Umzug, dem das Ziel noch fehlt. Sonst sagt der
+  // leuchtende Knopf, was läuft, und seine Zahl, wieviel — "ACTION — TO — 0"
+  // daneben war nur Rauschen in der Sprache der Etiketten.
+  const reihe = document.getElementById('cam-hud-chips');
+  if (reihe) {
+    const brauchtReihe =
+      scan.action === 'ADD' || scan.action === 'MOVE_BATCH' || (scan.action === 'MOVE' && !scan.to);
+    reihe.style.display = brauchtReihe ? '' : 'none';
+  }
 }
 // Put the scanner into an action mode.
 //
@@ -20917,9 +21030,7 @@ function armScanAction(val, opts) {
   const hp = document.getElementById('harvest-panel');
   if (hp) hp.style.display = 'none';
   _pendingDupe = null;
-  _pendingRemove = null;
   clearTimeout(_pendingDupeTimer);
-  clearTimeout(_pendingRemoveTimer);
   updateSD();
   setFb(
     'ok',
@@ -20978,6 +21089,162 @@ function updateCamContamBtn() {
   );
 }
 
+// ── Vorgänge in Serie: Umziehen, Ernten, Kontamination, Entsorgen ─────────
+// Ein Knopf, dann Beutel für Beutel scannen, bis der Knopf wieder aus ist. So
+// einfach muss es sein, sonst benutzt es niemand. Der Scanner konnte das schon
+// (ein gesetzter Vorgang bleibt stehen), nur lag die Tür dazu hinter gedruckten
+// Etiketten (MOVE, HARVEST, REMOVE) oder dem kleinen "Nach"-Feld, dessen Liste
+// hinter der Kamera aufging. Am Telefon blieb so nur der Umweg über das
+// Beutel-Fenster — für jeden Beutel von vorn.
+//
+// _modeRun zählt den Durchgang: welcher Vorgang, wohin (nur beim Umziehen),
+// wieviele Beutel schon, wann zuletzt etwas geschah. Ob ein Knopf an ist, steht
+// NICHT hier, sondern in scan — ein MOVE mit Ziel ist ein Umzug, egal durch
+// welche Tür er kam. Die Kontamination zählt ihre Beutel selbst (_crTargets).
+let _modeRun = null;
+// Wie lange ein Umzug oder eine Ernte die geschlossene Kamera überlebt. Ein
+// Anruf, die Bildschirmsperre oder ein Tipp neben das Bild schließen sie mitten
+// in der Reihe; wer gleich weitermacht, soll nicht wieder bei null anfangen. Wer
+// erst nach einer Pause wiederkommt, bekommt den neutralen Scanner wie bisher.
+// Entsorgen überlebt sie nie: wer die Kamera später aufmacht, um nach einem
+// Beutel zu sehen, darf ihn nicht versehentlich wegbuchen.
+const MODE_RUN_KEEP_MS = 15 * 60 * 1000;
+
+function toggleMoveScan() {
+  if (scan.action === 'MOVE' && scan.to) {
+    const to = scan.to;
+    const n = modeRunCount('MOVE', to);
+    endModeRun();
+    setFb('ok', t('cam.moveEnded', { n: n, loc: zoneDisplayName(to) }));
+    return;
+  }
+  if (contamPending()) return;
+  _openZonePicker(t('cam.movePick'), armMoveRun);
+}
+
+// Ernten und Entsorgen: ein Tipp stellt den Vorgang scharf, der zweite nimmt
+// ihn zurück — wie beim Umziehen, nur ohne Ziel.
+function toggleModeScan(action) {
+  if (scan.action === action) {
+    const n = modeRunCount(action, null);
+    endModeRun();
+    setFb('ok', t(action === 'HARVEST' ? 'cam.harvestEnded' : 'cam.trashEnded', { n: n }));
+    return;
+  }
+  if (contamPending()) return;
+  armMode(action, null);
+  setFb('ok', t(action === 'HARVEST' ? 'cam.harvestArmed' : 'cam.trashArmed'));
+}
+
+// Gesammelte Kontaminations-Beutel gingen beim Umschalten still verloren:
+// CONTAM wäre weg, die Liste bliebe liegen, und kein Knopf zeigte sie mehr an.
+function contamPending() {
+  if (scan.action !== 'CONTAM' || !_crTargets.length) return false;
+  setFb('err', t('cam.moveContamPending', { n: _crTargets.length }));
+  return true;
+}
+
+function endModeRun() {
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  scan.harvestBag = null;
+  _modeRun = null;
+  updateSD();
+}
+
+// Stellt einen Vorgang scharf: dieselben Aufräumschritte wie armScanAction().
+// Derselbe Vorgang mit demselben Ziel noch einmal (das Platz-Etikett des
+// laufenden Umzugs gescannt, das Ziel erneut gewählt) setzt den Durchgang fort,
+// statt die Zahl auf dem Knopf zu löschen.
+function armMode(action, to) {
+  const weiter =
+    scan.action === action && scan.to === to && _modeRun && _modeRun.action === action && _modeRun.to === to;
+  scan.action = action;
+  scan.to = to;
+  scan.from = null;
+  scan.harvestBag = null;
+  const hp = document.getElementById('harvest-panel');
+  if (hp) hp.style.display = 'none';
+  _pendingDupe = null;
+  _pendingPlace = null;
+  clearTimeout(_pendingDupeTimer);
+  clearTimeout(_pendingPlaceTimer);
+  _modeRun = { action: action, to: to, n: weiter ? _modeRun.n : 0, at: Date.now() };
+  updateSD();
+}
+
+function armMoveRun(dest) {
+  armMode('MOVE', dest);
+  rememberDest(dest);
+  setFb('ok', t('cam.moveArmed', { loc: zoneDisplayName(dest) }));
+}
+
+// Wieviele Beutel der laufende Durchgang schon hat.
+function modeRunCount(action, to) {
+  return _modeRun && _modeRun.action === action && _modeRun.to === to ? _modeRun.n : 0;
+}
+// Ein Beutel mehr im Durchgang. Ein Vorgang, der durch eine andere Tür kam
+// (gedrucktes Etikett, Platz-Etikett), beginnt hier seinen Durchgang. Der
+// Eintrag wird markiert, damit nur zurückgenommen wird, was auch gezählt wurde.
+function modeRunTally(action, to, entry) {
+  if (!_modeRun || _modeRun.action !== action || _modeRun.to !== to) {
+    _modeRun = { action: action, to: to, n: 0, at: Date.now() };
+  }
+  _modeRun.n++;
+  _modeRun.at = Date.now();
+  if (entry) entry._run = action;
+  return _modeRun.n;
+}
+// Rückgängig, oder vom Server abgelehnt: der Beutel zählt doch nicht.
+function modeRunUntally(entry) {
+  if (!entry || !entry._run || !_modeRun || _modeRun.action !== entry._run) return;
+  if (entry._run === 'MOVE' && _modeRun.to !== entry.to) return;
+  _modeRun.n = Math.max(0, _modeRun.n - 1);
+}
+// Darf der Scannen-Knopf den Vorgang stehen lassen, statt neutral aufzumachen?
+function modeRunResumable() {
+  if (!_modeRun || scan.action !== _modeRun.action) return false;
+  if (_modeRun.action !== 'MOVE' && _modeRun.action !== 'HARVEST') return false;
+  if (_modeRun.action === 'MOVE' && (!scan.to || scan.to !== _modeRun.to)) return false;
+  return Date.now() - _modeRun.at < MODE_RUN_KEEP_MS;
+}
+
+// Die drei Knöpfe, die hier gezählt werden. Die Kontamination hat ihren eigenen
+// (updateCamContamBtn), weil ihr Knopf mehr tut: mit gesammelten Beuteln öffnet
+// er das Formular.
+function updateCamModeBtns() {
+  const moveOn = scan.action === 'MOVE' && !!scan.to;
+  const loc = moveOn ? zoneDisplayName(scan.to) : '';
+  const knoepfe = [
+    ['move', moveOn, moveOn ? t('cam.moveOnAria', { loc: loc }) : t('cam.moveAria'), modeRunCount('MOVE', scan.to)],
+    ['harvest', scan.action === 'HARVEST', t('cam.harvestAria'), modeRunCount('HARVEST', null)],
+    ['trash', scan.action === 'REMOVE', t('cam.trashAria'), modeRunCount('REMOVE', null)]
+  ];
+  for (const [name, on, aria, zahl] of knoepfe) {
+    const b = document.getElementById('btn-cam-' + name);
+    if (!b) continue;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.setAttribute('aria-label', aria);
+    const badge = document.getElementById('cam-' + name + '-count');
+    if (badge) {
+      const n = on ? zahl : 0;
+      badge.textContent = String(n);
+      badge.hidden = !n;
+    }
+  }
+  // Umziehen an zeigt statt des Worts sein Ziel. Nur der Name: der Pfeil davor
+  // ist schon das Zeichen des Knopfs.
+  const idle = document.getElementById('cam-move-idle');
+  if (idle) idle.hidden = moveOn;
+  const ziel = document.getElementById('cam-move-to');
+  if (ziel) {
+    ziel.hidden = !moveOn;
+    ziel.textContent = loc;
+  }
+}
+
 function updateSD() {
   document.getElementById('s-action').textContent = scan.action || '—';
   document.getElementById('s-from').textContent = scan.from || '—';
@@ -21019,29 +21286,26 @@ function updateSD() {
   // Also sync camera HUD if it exists
   updateCamHud();
   updateCamContamBtn();
+  updateCamModeBtns();
 }
 // Tap the To chip (scan modal or camera HUD) to set the destination by hand.
 // Normally it comes from scanning a location barcode, but a shelf label can be
 // missing, damaged or out of reach — this opens the same zone picker the other
 // move flows use, so the scanner is no longer barcode-only. Mirrors what
 // scanning a location does: sets the target for ADD/MOVE/MOVE_BATCH, and with
-// no action chosen yet it starts a MOVE to that destination.
+// no action chosen yet it starts a MOVE to that destination — the same Umzug
+// the Umziehen button starts, so it counts and lights up the same way.
 function scanPickDestination() {
   const act = scan.action;
   if (act && act !== 'ADD' && act !== 'MOVE' && act !== 'MOVE_BATCH') return;
   _openZonePicker(t('scan.pickDest'), function (dest) {
-    if (!scan.action) {
-      scan.action = 'MOVE';
-      scan.from = null;
-      scan.harvestBag = null;
-      _pendingDupe = null;
-      _pendingRemove = null;
-      clearTimeout(_pendingDupeTimer);
-      clearTimeout(_pendingRemoveTimer);
+    if (!scan.action || scan.action === 'MOVE') {
+      armMoveRun(dest);
+      return;
     }
     scan.to = dest;
     updateSD();
-    setFb('ok', t('scanFb.to', { loc: dest }));
+    setFb('ok', t('scanFb.to', { loc: zoneDisplayName(dest) }));
   });
 }
 function resetScan() {
@@ -21051,17 +21315,28 @@ function resetScan() {
   // über sie schreiben wollte.
   _crTargets = [];
   _crResumeForm = false;
+  // Und ein laufender Umzug ist vorbei — der Scannen-Knopf soll ihn danach
+  // nicht wieder aufnehmen.
+  _modeRun = null;
   // It clears scan.action, and it is bound to a button inside the open camera
   // HUD — so without this the CONTAM toggle beside it stayed lit and pressed
   // over a disarmed scanner, and the next bad bag got the neutral sheet.
   updateCamContamBtn();
   document.getElementById('harvest-panel').style.display = 'none';
   _pendingDupe = null;
-  _pendingRemove = null;
+  _pendingPlace = null;
   clearTimeout(_pendingDupeTimer);
-  clearTimeout(_pendingRemoveTimer);
+  clearTimeout(_pendingPlaceTimer);
   updateSD();
   setFb('info', t('scanFb.setAction'));
+}
+// Was ein Rückgängig gerade bewirkt hat, in Worten statt "Undo: MOVE BO-…-03".
+function undoneMsg(entry) {
+  const was = entry.bag || entry.batch;
+  if (entry.action === 'MOVE' && entry.from) {
+    return t('scanFb.undoneMove', { bag: was, loc: zoneDisplayName(entry.from) });
+  }
+  return t('scanFb.undone', { bag: was });
 }
 // Undo a single scan entry by clicking the ↩ button
 function undoScanEntry(btn) {
@@ -21077,6 +21352,7 @@ function undoScanEntry(btn) {
   const mi = movements.findIndex((e) => e._tempId === tempId);
   if (mi !== -1) movements.splice(mi, 1);
   sessionEntries.splice(idx, 1);
+  modeRunUntally(entry);
   // Delete from server
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
   // _queued: the SW holds it offline, so there is no server row to DELETE and
@@ -21087,7 +21363,7 @@ function undoScanEntry(btn) {
   if (row) row.remove();
   scan.count = Math.max(0, scan.count - 1);
   _scanBeep(400, 100);
-  setFb('info', 'Undo: ' + entry.action + ' ' + (entry.bag || entry.batch));
+  setFb('info', undoneMsg(entry));
   updateSD();
   renderStatus();
   if (typeof renderScanSuccesses === 'function') renderScanSuccesses();
@@ -21271,13 +21547,24 @@ function handleZoneMismatch(r, entries) {
     if (i >= 0) scanLog.splice(i, 1);
     const j = movements.lastIndexOf(e);
     if (j >= 0) movements.splice(j, 1);
+    modeRunUntally(e);
   }
-  const cur = r.current_zone ? zoneDisplayName(r.current_zone) : 'unbekannt';
-  const msg = `MOVE rejected: bag ${r.bag} was moved by another user. Current zone: ${cur}`;
-  if (typeof setFb === 'function') setFb('err', msg);
+  if (typeof setFb === 'function') setFb('err', movedMeanwhileMsg(r.bag, r.current_zone));
   if (typeof renderStatus === 'function') renderStatus();
   if (typeof updateSD === 'function') updateSD();
+  // Der eigene Stand war alt, sonst gäbe es den Konflikt nicht. Gleich den neuen
+  // holen: dann geht der nächste Scan desselben Beutels durch, statt wieder
+  // gegen denselben alten Platz zu laufen.
+  if (typeof syncNow === 'function') syncNow();
   return true;
+}
+// Ein Umzug, den der Server abgelehnt hat, weil der Beutel inzwischen woanders
+// ist. Auf Deutsch, mit dem Namen des Platzes, und mit dem, was jetzt zu tun ist
+// — vorher stand hier "MOVE rejected: bag … was moved by another user".
+function movedMeanwhileMsg(bag, zone) {
+  return zone
+    ? t('scanFb.movedMeanwhile', { bag: bag || '', loc: zoneDisplayName(zone) })
+    : t('scanFb.movedMeanwhileGone', { bag: bag || '' });
 }
 
 // I-11: idempotency key for scan-log POSTs. The offline queue (sw.js) replays
@@ -21301,7 +21588,27 @@ function newScanUuid() {
   return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(r() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
 }
 
-function processScan(raw) {
+// Etwas Gescanntes ist auf diesem Telefon unbekannt. Bevor die Meldung "nicht
+// im System" lautet, einmal den Stand vom Server holen und denselben Scan noch
+// einmal durchlaufen lassen: die Listen hier sind nur so neu wie die letzte
+// Abfrage, und eine App, die im Hintergrund lag oder kurz kein Netz hatte, kann
+// weit zurück sein. "Unbekannter Barcode: 1234567" stand dann über einem
+// Etikett, das der Server sehr wohl kannte — und der einzige Ausweg, den man
+// fand, war die App neu zu starten.
+function scanAfterSync(raw) {
+  setFb('info', t('scanFb.checking'));
+  syncNow().then(function (ok) {
+    if (!ok) {
+      // Weder hier bekannt noch nachzufragen: dann sagen, woran es liegt, und
+      // was hilft — nicht so tun, als gäbe es das Etikett nicht.
+      setFb('err', t('scanFb.unknownOffline'));
+      return;
+    }
+    processScan(raw, { synced: true });
+  });
+}
+
+function processScan(raw, opts) {
   // Underscore/hyphen convention:
   // - Location barcodes use UNDERSCORES (e.g. INC_MUSTER_01, SPAWN_R1) — kept as-is
   // - Action commands use UNDERSCORES — kept as-is
@@ -21311,13 +21618,23 @@ function processScan(raw) {
   // use hyphens would break this logic — always use underscores for locations.
   let val = raw.trim().toUpperCase();
   if (!val) return;
+  // Zweiter Durchlauf nach frischem Stand (scanAfterSync): was jetzt noch
+  // unbekannt ist, ist es wirklich, und die Meldung darf das sagen.
+  const synced = !!(opts && opts.synced);
 
   // ── Numeric barcode lookup (new system: 7+ digit numbers) ──
   const numVal = parseInt(val, 10);
   if (/^\d{7,}$/.test(val) && numVal >= 1000000) {
     const entry = barcodeRegistry.get(numVal);
     if (!entry) {
-      setFb('err', 'Unbekannter Barcode: ' + val);
+      if (!synced) {
+        scanAfterSync(raw);
+        return;
+      }
+      // Die Nummern, die diese App druckt, haben sieben Stellen. Längere sind
+      // Produkt-Barcodes (EAN hat dreizehn) — die kennt hier niemand, und es
+      // hilft, das zu sagen, statt "gelöscht?" zu fragen.
+      setFb('err', val.length <= 8 ? t('scanFb.labelNotInSystem') : t('scanFb.notOurLabel'));
       return;
     }
     if (entry.type === 'bag') {
@@ -21372,6 +21689,10 @@ function processScan(raw) {
         val = matchBatch.batchId + '-' + scannedBag;
         setFb('info', t('scanFb.matched', { val: val, batch: matchBatch.batchId }));
       } else {
+        if (!synced) {
+          scanAfterSync(raw);
+          return;
+        }
         setFb('err', t('scanFb.noBatchFound', { val: val }));
         return;
       }
@@ -21396,37 +21717,28 @@ function processScan(raw) {
       );
       return;
     }
-    if ((scan.action === 'MOVE' || scan.action === 'MOVE_BATCH') && !scan.to) {
+    // Kein Vorgang oder Umziehen: ein Platz-Etikett heißt "ab jetzt hierhin" —
+    // derselbe Umzug, den der Umziehen-Knopf startet. Mit schon gesetztem Ziel
+    // war das vorher ein Fehler, der mitten im laufenden Umzug verlangte, man
+    // solle erst einen Vorgang scannen.
+    if (!scan.action || scan.action === 'MOVE') {
+      armMoveRun(val);
+      if (isZoneWithRacks) setFb('warn', t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id }));
+      return;
+    }
+    if (scan.action === 'MOVE_BATCH') {
       scan.to = val;
       updateSD();
       setFb(
         isZoneWithRacks ? 'warn' : 'ok',
         isZoneWithRacks
           ? t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id })
-          : t('scanFb.to', { loc: val })
+          : t('scanFb.to', { loc: zoneDisplayName(val) })
       );
       return;
     }
-    // No action set? Auto-set to MOVE with this location as destination
-    if (!scan.action) {
-      scan.action = 'MOVE';
-      scan.to = val;
-      scan.from = null;
-      scan.harvestBag = null;
-      _pendingDupe = null;
-      _pendingRemove = null;
-      clearTimeout(_pendingDupeTimer);
-      clearTimeout(_pendingRemoveTimer);
-      updateSD();
-      setFb(
-        isZoneWithRacks ? 'warn' : 'ok',
-        isZoneWithRacks
-          ? t('scanFb.preferRack', { loc: val, example: zoneObj.racks[0].id })
-          : 'MOVE → ' + val + ' — jetzt Bags scannen'
-      );
-      return;
-    }
-    setFb('err', t('scanFb.setAction'));
+    // Ernten, Entfernen, Kontamination: da gibt es keinen Platz zu wählen.
+    setFb('err', t('scanFb.locNotNeeded', { loc: zoneDisplayName(val), action: scanActionName(scan.action) }));
     return;
   }
   // Culture ID scan → auto-fill parent (lab work) or source (new batch), else open lineage
@@ -21444,13 +21756,17 @@ function processScan(raw) {
     if (_inocScanPrefix) {
       const hit = cultures.find((x) => x.id.toUpperCase() === val);
       if (!hit) {
+        if (!synced) {
+          scanAfterSync(raw);
+          return;
+        }
         _scanBeep(300, 150);
-        setFb('err', t('scanFb.unknown', { val }));
+        setFb('err', t('scanFb.cultureNotInSystem', { id: val }));
         return;
       }
       if (hit.status === 'used' || hit.status === 'contam') {
         _scanBeep(300, 150);
-        setFb('err', t('scanFb.cultureNotUsable', { id: hit.id, status: hit.status }));
+        setFb('err', cultureRefusal(hit));
         return;
       }
       const addErr = inocAdd(hit.id);
@@ -21468,7 +21784,7 @@ function processScan(raw) {
     const c = cultures.find((x) => x.id.toUpperCase() === val);
     if (c) {
       if (c.status === 'used' || c.status === 'contam') {
-        setFb('err', t('scanFb.cultureNotUsable', { id: c.id, status: c.status }));
+        setFb('err', cultureRefusal(c));
         return;
       }
       closeCamScan();
@@ -21506,10 +21822,32 @@ function processScan(raw) {
       setFb('ok', t('scanFb.cultureScanned', { val: val }));
       return;
     }
+    // Eine Kultur-Nummer, die hier keiner kennt. Ohne diese Stelle lief sie
+    // weiter in die Beutel-Logik (sie endet auf -NN wie ein Beutel) und kam als
+    // "Charge MC-… gibt es nicht" heraus.
+    if (!synced) {
+      scanAfterSync(raw);
+      return;
+    }
+    setFb('err', t('scanFb.cultureNotInSystem', { id: val }));
+    return;
   }
   const isBag = /-\d{2}$/.test(val);
   const batchId = isBag ? val.split('-').slice(0, -1).join('-') : val;
   const batch = batches.find((b) => b.batchId.toUpperCase() === batchId.toUpperCase());
+  // Ein Beutel, dessen Charge hier niemand kennt. Vorher ging er trotzdem in die
+  // Vorgänge und kam als "hat keinen bekannten Standort — erst mit ADD
+  // platzieren" heraus: eine Anweisung, die nicht helfen kann, weil es die
+  // Charge gar nicht gibt — oder weil das Telefon sie noch nicht kennt. Die
+  // Inventur ist ausgenommen; ihr Abgleich will auch fremde Beutel sehen.
+  if (isBag && !batch && !_zcScanMode) {
+    if (!synced) {
+      scanAfterSync(raw);
+      return;
+    }
+    setFb('err', t('scanFb.batchNotInSystem', { bag: val, batch: batchId }));
+    return;
+  }
   // When the bag-select modal is open and we scan a bag, toggle it in the selection
   // instead of opening a new bag-info modal.
   if (
@@ -21618,12 +21956,14 @@ function processScan(raw) {
       moveBatchTo(batch, scan.to, function (moved, skipped) {
         if (!moved) {
           _scanBeep(500, 120);
+          // Alle schon am Ziel ist kein Fehler, sondern nichts zu tun.
           setFb(
-            'err',
-            'Batch ' +
-              batch.batchId +
-              ': keine Bags zum Verschieben' +
-              (skipped ? ' (' + skipped + ' bereits in ' + scan.to + ')' : '')
+            skipped ? 'warn' : 'err',
+            batch.batchId +
+              ': ' +
+              (skipped
+                ? t('batch.allAlreadyAt', { n: skipped, loc: zoneDisplayName(scan.to) })
+                : t('batch.noBagsToMove'))
           );
           updateSD();
           return;
@@ -21643,8 +21983,18 @@ function processScan(raw) {
       });
       return;
     }
+    // Was dieser Scan bucht. Meist der Vorgang selbst — beim Umziehen wird ein
+    // Beutel ohne Platz im System am Ziel eingelagert statt umgezogen (unten).
+    let act = scan.action;
     // MOVE: auto-derive FROM from bag's last known location
     if (scan.action === 'MOVE') {
+      // Umgezogen wird Beutel für Beutel; eine Chargen-Nummer allein hat keinen
+      // Platz, den man ändern könnte.
+      if (!isBag) {
+        _scanBeep(300, 150);
+        setFb('err', t('scanFb.moveNeedsBag', { batch: batchId }));
+        return;
+      }
       const bagLast = [...scanLog]
         .reverse()
         .find(
@@ -21652,51 +22002,72 @@ function processScan(raw) {
             (e.bag || '').toUpperCase() === val.toUpperCase() &&
             (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
         );
-      if (!bagLast) {
-        _scanBeep(300, 150);
-        setFb('err', t('scanFb.bagNotPlaced', { bag: val }));
-        return;
+      if (!bagLast || bagLast.action === 'REMOVE') {
+        // Laut System liegt der Beutel nirgends: nie eingelagert, oder als
+        // entfernt gebucht. Wer ihn in der Hand hat, weiß es besser. Hier stand
+        // "erst mit ADD platzieren" — ein Weg, den es am Telefon nicht gibt, und
+        // die Reihe blieb an diesem Beutel hängen. Jetzt reicht derselbe Beutel
+        // ein zweites Mal, dann wird er am Ziel eingelagert; ein einzelner
+        // versehentlicher Scan bucht nichts.
+        const key = val + '>' + scan.to;
+        if (_pendingPlace !== key) {
+          _pendingPlace = key;
+          clearTimeout(_pendingPlaceTimer);
+          _pendingPlaceTimer = setTimeout(() => {
+            _pendingPlace = null;
+          }, CONFIRM_SCAN_MS);
+          _scanBeep(300, 150);
+          setFb(
+            'warn',
+            t(bagLast ? 'scanFb.bagRemovedPlace' : 'scanFb.bagNotPlacedPlace', {
+              bag: val,
+              loc: zoneDisplayName(scan.to)
+            })
+          );
+          return;
+        }
+        clearTimeout(_pendingPlaceTimer);
+        _pendingPlace = null;
+        act = 'ADD';
+        scan.from = null;
+      } else {
+        const curLoc = bagLast.to || null;
+        if (curLoc && curLoc.toUpperCase() === scan.to.toUpperCase()) {
+          // Schon da: kein Fehler, nur nichts zu tun.
+          _scanBeep(500, 120);
+          setFb('warn', t('scanFb.bagAlreadyAt', { bag: val, loc: zoneDisplayName(scan.to) }));
+          return;
+        }
+        scan.from = curLoc;
       }
-      if (bagLast.action === 'REMOVE') {
-        _scanBeep(300, 150);
-        setFb('err', t('scanFb.bagRemoved', { bag: val }));
-        return;
-      }
-      const curLoc = bagLast.to || null;
-      if (curLoc && curLoc.toUpperCase() === scan.to.toUpperCase()) {
-        _scanBeep(500, 120);
-        setFb('err', t('scanFb.bagAlreadyAt', { bag: val, loc: scan.to }));
-        return;
-      }
-      scan.from = curLoc;
     }
-    // REMOVE: auto-derive FROM from bag's last known location
+    // REMOVE: auto-derive FROM from bag's last known location.
+    //
+    // Entsorgen ist ein Scan pro Beutel. Hier stand eine Doppel-Bestätigung:
+    // jeden Beutel zweimal scannen, mit drei Sekunden dazwischen, weil die
+    // Kamera dasselbe Etikett so lange nicht wieder annimmt. Für eine Reihe
+    // verschimmelter Beutel hieß das: niemand benutzt es. Die Bestätigung ist
+    // jetzt der Knopf, der dafür an sein muss; jeder Beutel steht mit seinem
+    // Rückgängig im Protokoll, und ↩ in der Kamera nimmt den letzten zurück.
     if (scan.action === 'REMOVE') {
       const bagLastR = [...scanLog]
         .reverse()
-        .find((e) => (e.bag || '').toUpperCase() === val.toUpperCase() && (e.action === 'ADD' || e.action === 'MOVE'));
-      scan.from = bagLastR ? bagLastR.to : null;
-    }
-    // REMOVE confirmation: require scanning same bag twice within 5s
-    if (scan.action === 'REMOVE') {
-      if (_pendingRemove && _pendingRemove.val === val) {
-        clearTimeout(_pendingRemoveTimer);
-        _pendingRemove = null;
-        // Confirmed — fall through to log it
-      } else {
-        _pendingRemove = { val };
-        clearTimeout(_pendingRemoveTimer);
-        _pendingRemoveTimer = setTimeout(() => {
-          _pendingRemove = null;
-        }, 5000);
-        _scanBeep(300, 150);
-        setFb('err', 'REMOVE ' + val + '? Nochmal scannen zum Bestätigen.');
+        .find(
+          (e) =>
+            (e.bag || '').toUpperCase() === val.toUpperCase() &&
+            (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'REMOVE')
+        );
+      // Schon entsorgt: nichts zu tun. Vorher bekam er einen zweiten Eintrag.
+      if (isBag && bagLastR && bagLastR.action === 'REMOVE') {
+        _scanBeep(500, 120);
+        setFb('warn', t('scanFb.alreadyRemoved', { bag: val }));
         return;
       }
+      scan.from = bagLastR ? bagLastR.to : null;
     }
     // Duplicate detection: warn if same bag+action+to already in session
-    const dupeKey = val + '|' + scan.action + '|' + scan.to;
-    if (scan.action !== 'REMOVE') {
+    const dupeKey = val + '|' + act + '|' + scan.to;
+    if (act !== 'REMOVE') {
       const hasDupe = sessionEntries.some((e) => (e.bag || e.batch) + '|' + e.action + '|' + e.to === dupeKey);
       if (hasDupe) {
         if (_pendingDupe === dupeKey) {
@@ -21708,28 +22079,21 @@ function processScan(raw) {
           clearTimeout(_pendingDupeTimer);
           _pendingDupeTimer = setTimeout(() => {
             _pendingDupe = null;
-          }, 3000);
+          }, CONFIRM_SCAN_MS);
           _scanBeep(500, 120);
-          setFb(
-            'err',
-            val +
-              ' bereits gescannt als ' +
-              scan.action +
-              (scan.to ? ' → ' + scan.to : '') +
-              '. Nochmal scannen zum Bestätigen.'
-          );
+          setFb('warn', t('scanFb.dupeConfirm', { bag: val }));
           return;
         }
       }
     }
     const tempId = 's' + ++_scanTempIdCounter;
-    const isMove = scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
+    const isMove = act === 'MOVE' || act === 'MOVE_BATCH';
     const entry = {
       time: new Date().toISOString(),
-      action: scan.action,
+      action: act,
       batch: batchId,
       bag: isBag ? val : null,
-      from: scan.from,
+      from: act === 'ADD' ? null : scan.from,
       to: scan.to,
       species: batch?.species,
       strain: batch?.strain,
@@ -21755,12 +22119,29 @@ function processScan(raw) {
     // entry and toasts, without retrying into the same 409.
     postScanEntries([entry]);
     _lastScanVal = isBag ? val : batchId;
-    const fbTo =
-      scan.action === 'MOVE' && scan.from
-        ? ' ' + scan.from + ' \u2192 ' + scan.to
-        : scan.to
-          ? ' \u2192 ' + scan.to
-          : '';
+    // Umziehen: mit den Namen der Plätze statt ihrer Kürzel, und mitgezählt —
+    // die Zahl steht auch auf dem Knopf, solange die Kamera das Bild füllt.
+    if (scan.action === 'MOVE') {
+      const n = modeRunTally('MOVE', entry.to, entry);
+      const zu = zoneDisplayName(entry.to);
+      setFb(
+        'ok',
+        act === 'ADD'
+          ? t('scanFb.placedLogged', { bag: val, to: zu, n: n })
+          : t('scanFb.moveLogged', { bag: val, from: entry.from ? zoneDisplayName(entry.from) : '?', to: zu, n: n }),
+        entry
+      );
+      updateSD();
+      return;
+    }
+    // Entsorgen: der Beutel beim Namen, und mitgezählt wie beim Umziehen.
+    if (act === 'REMOVE') {
+      const n = modeRunTally('REMOVE', null, entry);
+      setFb('ok', t('scanFb.trashLogged', { bag: val, n: n }), entry);
+      updateSD();
+      return;
+    }
+    const fbTo = scan.to ? ' \u2192 ' + zoneDisplayName(scan.to) : '';
     setFb('ok', t('scanFb.logged', { action: scan.action, val: val, to: fbTo, n: scan.count }), entry);
     updateSD();
     return;
@@ -21770,7 +22151,24 @@ function processScan(raw) {
     setFb('info', 'QR-Code enthält URL: ' + raw.trim().slice(0, 80) + (raw.trim().length > 80 ? '…' : ''));
     return;
   }
+  // Nichts davon. Ein neuer Platz oder eine neue Charge kann aber jünger sein als
+  // der Stand auf diesem Telefon — erst nachfragen, dann urteilen.
+  if (!synced) {
+    scanAfterSync(raw);
+    return;
+  }
   setFb('err', t('scanFb.unknown', { val: val }));
+}
+
+// Der Vorgang in Worten, für Meldungen. Die Kürzel (MOVE, HARVEST …) stehen auf
+// den gedruckten Etiketten und im Log; wer eine Meldung liest, braucht das Wort.
+function scanActionName(a) {
+  const s = t('scanAct.' + a);
+  return s === 'scanAct.' + a ? a : s;
+}
+// Warum eine Kultur nicht genommen werden kann, in Worten statt "ist contam".
+function cultureRefusal(c) {
+  return c.status === 'contam' ? t('scanFb.cultureContam', { id: c.id }) : t('scanFb.cultureUsed', { id: c.id });
 }
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
 const _scanBuf = { chars: [], timer: null };
@@ -25298,6 +25696,9 @@ document.addEventListener('keydown', function (e) {
     // whatever had it, and Escape is the route that most needs it — it can be
     // opened by accident in the middle of a form.
     'm-search',
+    // The zone picker opens on top of whatever asked for it — the camera
+    // included, since the Umziehen button — so Escape takes it off first.
+    'm-move-batch',
     'm-work-flow',
     'm-camscan',
     'm-cal-entry',
@@ -25315,9 +25716,8 @@ document.addEventListener('keydown', function (e) {
     // sich nur ueber "Abbrechen" verlassen liess.
     'm-dayqty',
     'm-rhythm',
-    // m-move-batch before the two list modals below: the zone picker opens on
-    // top of them, so Escape should dismiss it first.
-    'm-move-batch',
+    // (m-move-batch moved up, above m-camscan: it also sits over the two list
+    // modals below, so Escape still dismisses it before them.)
     'm-zonecheck',
     'm-worklist'
   ];
@@ -25374,6 +25774,16 @@ loadData();
 // Primary: SSE for instant updates. Fallback: poll every 30s (was 5s) for stale detection.
 connectSSE();
 setInterval(pollSync, 30000);
+// Kommt die App aus dem Hintergrund zurück, ist ihr Stand so alt wie die Pause:
+// Takt und Ereignisstrom standen still, solange das Telefon sie schlafen ließ.
+// Sofort nachfragen, statt bis zu 30 Sekunden gegen den alten Stand zu scannen:
+// ein Etikett, das in der Pause gedruckt wurde, wäre in diesem Fenster
+// "unbekannt".
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) return;
+  pollSync();
+  connectSSE();
+});
 
 // ── The roles the card mode takes away (finding T7) ────────────────────────
 // Below the card breakpoint every table element gets `display: block`, and a
@@ -25441,11 +25851,9 @@ if ('serviceWorker' in navigator) {
     // (the bag was moved by another user while this entry was offline).
     // Surface a toast so the user knows their MOVE didn't apply.
     if (e.data && e.data.type === 'scan-replay-rejected') {
-      const cur = e.data.current_zone ? zoneDisplayName(e.data.current_zone) : 'unbekannt';
-      const bag = e.data.bag || '';
       try {
         if (typeof setFb === 'function') {
-          setFb('err', `MOVE rejected: bag ${bag} was moved by another user. Current zone: ${cur}`);
+          setFb('err', movedMeanwhileMsg(e.data.bag, e.data.current_zone));
         }
       } catch {
         /* setFb not yet wired — drop silently */
@@ -25583,6 +25991,7 @@ function openCamScan() {
   // The mode survives the camera being closed and reopened, so the button has
   // to say what is actually armed rather than what it looked like last time.
   updateCamContamBtn();
+  updateCamModeBtns();
   // Anything other than idle is an in-flight transition; the modal is already
   // open visually so this no-op is fine (e.g. user double-tapped the FAB).
   if (_camState !== CAM_IDLE) return;
@@ -25621,6 +26030,10 @@ function openCamScan() {
       },
       function (decoded) {
         if (scanner !== _camScanner) return;
+        // Solange die Zielliste über dem Bild liegt, wird nichts gelesen: ein
+        // Beutel, der dabei noch im Bild ist, würde sonst gebucht, bevor das
+        // Ziel feststeht — oder sein Beutel-Fenster öffnete sich über der Liste.
+        if (document.getElementById('m-move-batch').classList.contains('open')) return;
         // Dedup: same code re-decoded inside the dedup window is silently
         // dropped. Workers running through 20 bags don't see ghost re-fires
         // when a 1D label lingers in frame across the pause boundary.
@@ -25997,6 +26410,18 @@ function initEventListeners() {
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-torch').addEventListener('click', toggleTorch);
   $('btn-cam-contam').addEventListener('click', toggleContamScan);
+  // Die drei neuen Serien-Knöpfe, abgesichert: app.js und index.html kommen
+  // getrennt aus dem Netz, und jedes fällt nach drei Sekunden auf den Cache
+  // zurück (sw.js). Ein neues app.js über einem alten index.html fände sie
+  // nicht, und ein Fehler hier bräche jede Bindung darunter ab.
+  for (const [id, fn] of [
+    ['btn-cam-move', toggleMoveScan],
+    ['btn-cam-harvest', () => toggleModeScan('HARVEST')],
+    ['btn-cam-trash', () => toggleModeScan('REMOVE')]
+  ]) {
+    const knopf = $(id);
+    if (knopf) knopf.addEventListener('click', fn);
+  }
   $('btn-cam-undo').addEventListener('click', camUndoLastScan);
   $('btn-cam-reset').addEventListener('click', function () {
     resetScan();
@@ -27038,12 +27463,29 @@ document.addEventListener('DOMContentLoaded', function () {
     fab.addEventListener('click', function () {
       // Front-door scan: always start neutral so scanning a bag opens its
       // action sheet, never a leftover armed mode from an earlier session.
-      scan.action = null;
-      scan.to = null;
-      scan.from = null;
-      scan.harvestBag = null;
+      //
+      // Bis auf einen Umzug oder eine Ernte, die eben noch liefen: ein Anruf,
+      // die Sperre oder ein Tipp neben das Bild schließen die Kamera mitten in
+      // der Reihe, und wer gleich weitermacht, soll nicht wieder von vorn
+      // anfangen. Was "eben" heißt und warum Entsorgen nie dazugehört, steht an
+      // MODE_RUN_KEEP_MS. Die Meldung sagt, dass er noch läuft — ein Vorgang,
+      // von dem man nichts weiß, bucht den nächsten Beutel.
+      const weiter = modeRunResumable();
+      if (!weiter) {
+        scan.action = null;
+        scan.to = null;
+        scan.from = null;
+        scan.harvestBag = null;
+        _modeRun = null;
+      }
       updateSD();
       openCamScan();
+      if (weiter) {
+        _showCamHudToast(
+          'info',
+          scan.action === 'MOVE' ? t('cam.moveResumed', { loc: zoneDisplayName(scan.to) }) : t('cam.harvestResumed')
+        );
+      }
     });
 
   // Back rows for the sub-tab strips. Here rather than in initEventListeners()
