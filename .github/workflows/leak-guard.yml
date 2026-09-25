@@ -17,6 +17,8 @@ on:
     types: [created, edited]
   pull_request_review_comment:
     types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
   # Code surfaces.
   pull_request:
     branches: [main]
@@ -36,155 +38,65 @@ permissions: {}
 #
 # The thing, as narrowly as each run reads it. A newer run over a pull request
 # or an issue reads the whole of it again — the full body, the full
-# `base..head` — so a second edit or push may cancel the first. A comment run
-# reads one comment, and a push run only its own `before..after`; nothing later
-# covers either, so each gets a group of its own. A review with several inline
-# comments fires them all in the same second.
+# `base..head` — so a second edit or push may cancel the first. A comment or
+# review run reads that one comment or review, and a push run only its own
+# `before..after`; nothing later covers either, so each gets a group of its own.
+# A review with several inline comments fires them all in the same second.
 concurrency:
-  group: leak-guard-${{ github.event_name }}-${{ github.event.comment.id || github.event.pull_request.number || github.event.issue.number || github.sha }}
+  group: leak-guard-${{ github.event_name }}-${{ github.event.comment.id || github.event.review.id || github.event.pull_request.number || github.event.issue.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  # Titles, bodies and comments — the surfaces that leak.
+  # Titles, bodies, comments and reviews — the surfaces that leak.
   #
   # On the `pull_request_target` trigger: ci.yml deliberately avoids it, and that
   # reasoning still holds there, because ci.yml checks out and executes pull
-  # request code. This job does neither. It never checks out the head ref, never
-  # runs `npm ci` (the scanner has no dependencies), and reads nothing but the
-  # event payload. What it gains is the reason a guard needs it at all: a
+  # request code. This job does neither. It checks out main, never the head ref,
+  # never runs `npm ci` (the scanner has no dependencies), and reads nothing but
+  # the event payload. What it gains is the reason a guard needs it at all: a
   # `pull_request` workflow runs in the version from the contributor's branch,
   # so the person it is meant to check can edit or delete it. `pull_request_target`
   # always runs the copy on main.
+  #
+  # The two review triggers have no `_target` twin. GitHub runs them from the
+  # pull request's merge commit, so for them this file is the pull request's
+  # own copy, and on a pull request from a fork the token is read-only. The
+  # checkout below still takes main, so the scanner and the code that decides
+  # what to redact are main's on every trigger. What a fork's review run cannot
+  # do is write: it fails, and the redaction is left to a maintainer.
   prose:
     if: >-
       github.event_name == 'pull_request_target' ||
       github.event_name == 'issues' ||
       github.event_name == 'issue_comment' ||
-      github.event_name == 'pull_request_review_comment'
+      github.event_name == 'pull_request_review_comment' ||
+      github.event_name == 'pull_request_review'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
       pull-requests: write
     steps:
-      # No `ref:` — on every trigger above this resolves to the base branch, so
-      # the code that runs is the code on main, never the contributor's.
+      # Main, by name. Left to itself, the checkout would take the pull
+      # request's merge commit on the review triggers, and the scanner that ran
+      # would be the contributor's.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
+      # All of it lives in scripts/leak-guard-prose.js — main's copy, from the
+      # checkout above — where the tests can reach it.
       - name: Scan and redact
         uses: actions/github-script@v7
         with:
           script: |
-            const guard = require(`${process.env.GITHUB_WORKSPACE}/scripts/leak-scan.js`);
-            const opts = { surface: 'prose' };
-            const p = context.payload;
-
-            // Never chase our own tail: the redaction below edits text, which
-            // fires `edited` again, and our explanatory comment is a comment.
-            if (p.comment && p.comment.user && p.comment.user.type === 'Bot') return;
-
-            let kind, title = '', body = '';
-            switch (context.eventName) {
-              case 'pull_request_target':
-                kind = 'pull request';
-                title = p.pull_request.title || '';
-                body = p.pull_request.body || '';
-                break;
-              case 'issues':
-                kind = 'issue';
-                title = p.issue.title || '';
-                body = p.issue.body || '';
-                break;
-              default:
-                kind = 'comment';
-                body = p.comment.body || '';
-            }
-
-            const findings = [
-              ...guard.scan(title, { ...opts, label: `${kind} title` }),
-              ...guard.scan(body, { ...opts, label: `${kind} body` }),
-            ];
-            if (findings.length === 0) {
-              core.info('leak-guard: clean');
-              return;
-            }
-
-            // Locations only. This log is public on a public repository, so
-            // printing the match here would leak on the very runs that fire.
-            core.warning(`leak-guard: redacting ${findings.length} finding(s) in this ${kind}`);
-            core.info(guard.formatFindings(findings));
-
-            const newTitle = guard.redact(title, opts);
-            const newBody = guard.redact(body, opts);
-            const repo = { owner: context.repo.owner, repo: context.repo.repo };
-
-            try {
-              switch (context.eventName) {
-                case 'pull_request_target':
-                  await github.rest.pulls.update({
-                    ...repo,
-                    pull_number: p.pull_request.number,
-                    title: newTitle,
-                    body: newBody,
-                  });
-                  break;
-                case 'issues':
-                  await github.rest.issues.update({
-                    ...repo,
-                    issue_number: p.issue.number,
-                    title: newTitle,
-                    body: newBody,
-                  });
-                  break;
-                case 'issue_comment':
-                  await github.rest.issues.updateComment({
-                    ...repo,
-                    comment_id: p.comment.id,
-                    body: newBody,
-                  });
-                  break;
-                case 'pull_request_review_comment':
-                  await github.rest.pulls.updateReviewComment({
-                    ...repo,
-                    comment_id: p.comment.id,
-                    body: newBody,
-                  });
-                  break;
-              }
-            } catch (err) {
-              core.setFailed(
-                'leak-guard found something and could not redact it. Edit it by hand, now: ' +
-                  err.message
-              );
-              return;
-            }
-
-            const number = (p.pull_request || p.issue || {}).number;
-            if (!number) return;
-            await github.rest.issues.createComment({
-              ...repo,
-              issue_number: number,
-              body: [
-                '**leak-guard redacted this automatically.**',
-                '',
-                `It carried something that must not be public — see the run log for the`,
-                `location (never the value). The text has been replaced with a placeholder.`,
-                '',
-                '**This is not the end of it.** GitHub keeps an edit history and shows it to',
-                'anyone who can see this page, so the original is still one click away. A',
-                'maintainer needs to open the "edited" dropdown and delete the earlier',
-                'revision. If what leaked was an address, treat it as public from now on and',
-                'rotate it.',
-                '',
-                'The rules and the placeholders to use instead are in `CLAUDE.md`.',
-              ].join('\n'),
-            });
+            const { guardProse } = require(`${process.env.GITHUB_WORKSPACE}/scripts/leak-guard-prose.js`);
+            await guardProse({ github, context, core });
 
   # Files and commit messages. `npm test` covers the tree as well, on purpose —
   # this job repeats it so the guard still holds if that test is ever changed.

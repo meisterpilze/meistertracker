@@ -90,6 +90,12 @@ const on = {
     sha: `merge-${number}`,
     event: { action, pull_request: { number }, comment: { id } }
   }),
+  review: (number, id, action = 'submitted') => ({
+    event_name: 'pull_request_review',
+    ref: `refs/pull/${number}/merge`,
+    sha: `merge-${number}`,
+    event: { action, pull_request: { number }, review: { id } }
+  }),
   push: (before, after) => ({
     event_name: 'push',
     ref: 'refs/heads/main',
@@ -112,6 +118,7 @@ describe('leak-guard: which runs may cancel each other', () => {
       on.issue(7, 'opened', 'body'),
       on.issueComment(7, 7),
       on.reviewComment(7, 7),
+      on.review(7, 7),
       on.push('aaa1', 'bbb2')
     ].map(group);
     assert.equal(new Set(groups).size, groups.length, groups.join('\n'));
@@ -125,13 +132,16 @@ describe('leak-guard: which runs may cancel each other', () => {
     assert.equal(group(on.pullRequest(7, 'opened', 'aaa1')), group(on.pullRequest(7, 'synchronize', 'bbb2')));
     assert.equal(group(on.issue(8, 'opened', 'first')), group(on.issue(8, 'edited', 'second')));
     assert.equal(group(on.issueComment(7, 101)), group(on.issueComment(7, 101, 'edited')));
+    assert.equal(group(on.review(7, 301)), group(on.review(7, 301, 'edited')));
   });
 
-  it('gives every comment a group of its own', () => {
+  it('gives every comment and every review a group of its own', () => {
     // A review with several inline comments fires one event per comment, all
-    // in the same second, and each run reads only its own comment.
+    // in the same second, and each run reads only its own comment. A review's
+    // own run reads only that review's summary.
     assert.notEqual(group(on.reviewComment(7, 201)), group(on.reviewComment(7, 202)));
     assert.notEqual(group(on.issueComment(7, 101)), group(on.issueComment(7, 102)));
+    assert.notEqual(group(on.review(7, 301)), group(on.review(7, 302)));
   });
 
   it('gives every push to main a group of its own', () => {
