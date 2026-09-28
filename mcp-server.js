@@ -138,76 +138,256 @@ function bagLabelKg(batch, bagId) {
   if (Number.isFinite(w) && w > 0) return w;
   return Number.isFinite(batch && batch.bagKg) && batch.bagKg > 0 ? batch.bagKg : null;
 }
-function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
+// Width a centred text line may use. The bottom-right badge sits over the band
+// the last line(s) occupy, so any line overlapping it vertically is narrowed to
+// stop short — the text re-centres in the space left rather than running under
+// the box. Lines clear of the badge keep the full width they always had.
+function _lineBlockW(y, fontH, badge) {
+  return badge && y < badge.y + badge.h && badge.y < y + fontH ? badge.x - 6 : 400;
+}
+// ─── Jede Zeile passt ────────────────────────────────────────
+// Ein Textfeld auf dem Etikett ist ein ^FB-Block für eine Zeile, und der
+// schneidet nichts ab: was nicht hineinpasst, bricht der Drucker um und druckt
+// es ÜBER die Zeile. So stand einmal "KQ07" mitten auf "Ganoderma" —
+// "Reishi – 2,5kg – Ganoderma multipileum KQ07" war für eine Zeile zu lang.
+// Deshalb geht keine Zeile mehr zum Drucker, die nicht passt: sie wird hier
+// gemessen, und was zu lang ist, kommt in die zweite Zeile. Eine Nummer wird
+// stattdessen kleiner geschrieben, die liest man in einem Stück.
+//
+// Die Breiten sind die von Helvetica Bold, in Tausendsteln der Schriftbreite.
+// Schrift 0 des Druckers (CG Triumvirate Bold Condensed), an diesem Etikett
+// nachgemessen, ist bei Großbuchstaben so breit, bei Ziffern und
+// Kleinbuchstaben schmaler; nur den Bindestrich zieht sie breiter, er steht mit
+// 600. Dazu 5 % Luft in labelTextW(): was hier passt, passt auf dem Etikett.
+// Ein Zeichen, das nicht in der Liste steht, zählt ganz breit.
+//
+// Dieser Block steht wortgleich in app.js und in mcp-server.js, die beide
+// Etiketten drucken; test/etiketten-zeilen.test.js hält die zwei gleich.
+const _LABEL_EM = [
+  [" \u00a0,./\\|ijlI'\u00b7", 278],
+  ['!():;[]ft', 333],
+  ['r*{}', 389],
+  ['z', 500],
+  ['0123456789acekvsxyJ_#$"', 556],
+  ['+<=>~', 584],
+  ['-', 600],
+  ['bdghnopquFLTZ?\u00df', 611],
+  ['EPSVXY', 667],
+  ['ABCDHKNRU&', 722],
+  ['GOQw', 778],
+  ['M', 833],
+  ['m%', 889],
+  ['W', 944],
+  ['@', 975]
+];
+let _labelEmMap = null;
+function labelTextW(text, fontW) {
+  if (!_labelEmMap) {
+    _labelEmMap = new Map();
+    for (const [zeichen, breite] of _LABEL_EM) for (const c of zeichen) _labelEmMap.set(c, breite);
+  }
+  let em = 0;
+  // Umlaute und Akzente zählen wie ihr Grundbuchstabe: ä wie a.
+  for (const c of String(text)) em += _labelEmMap.get(c) || _labelEmMap.get(c.normalize('NFD')[0]) || 1000;
+  return (em * fontW * 1.05) / 1000;
+}
+// Zeichen, die Schrift 0 nicht hat. Der Gedankenstrich zwischen "Reishi" und
+// "2,0kg" kam auf demselben Etikett gar nicht erst heraus, an seiner Stelle
+// stand eine Lücke. Ersetzt wird im Text der Zeile selbst und nicht erst beim
+// Drucken: so misst labelTextW(), was gedruckt wird, und die Vorschau zeigt es.
+const _LABEL_ERSATZ = {
+  '\u2013': '-',
+  '\u2014': '-',
+  '\u2026': '...',
+  '\u2190': '<-',
+  '\u2192': '->',
+  '\u2018': "'",
+  '\u2019': "'",
+  '\u201a': "'",
+  '\u201c': '"',
+  '\u201d': '"',
+  '\u201e': '"'
+};
+function labelGlyphs(s) {
+  return String(s || '').replace(
+    /[\u2013\u2014\u2026\u2190\u2192\u2018-\u201a\u201c-\u201e]/g,
+    (c) => _LABEL_ERSATZ[c]
+  );
+}
+// Bricht `text` in höchstens `maxZeilen` Zeilen, keine breiter als `breite(i)`
+// — wieviel Platz eine Zeile hat, hängt davon ab, wo sie steht, neben dem
+// Zähler unten rechts ist es weniger. Umbrochen wird an Leerzeichen, ein Wort,
+// das allein zu lang ist, hinter seinem letzten Bindestrich, der noch passt.
+// Bleibt dann noch etwas übrig, endet die letzte Zeile mit "...", und das
+// Ergebnis trägt `gekuerzt`.
+//
+// Der Gedankenstrich zwischen zwei Angaben steht nie am Anfang oder Ende einer
+// Zeile, dort trennt schon der Umbruch. Ein geschütztes Leerzeichen hält
+// zusammen, was zusammengehört ("<- PD-…"), und wird gedruckt wie ein normales.
+function labelWrap(text, fontW, breite, maxZeilen) {
+  const w = (s) => labelTextW(s, fontW);
+  const rest = String(text || '')
+    .split(' ')
+    .filter(Boolean)
+    .map((s) => ({ s: labelGlyphs(s).replace(/\u00a0/g, ' '), trenner: s === '\u2013' }));
+  const alsZeile = (toks) => {
+    let a = 0;
+    let e = toks.length;
+    while (a < e && toks[a].trenner) a++;
+    while (e > a && toks[e - 1].trenner) e--;
+    return toks
+      .slice(a, e)
+      .map((x) => x.s)
+      .join(' ');
+  };
+  const zeilen = [];
+  while (zeilen.length < maxZeilen) {
+    while (rest.length && rest[0].trenner) rest.shift();
+    if (!rest.length) break;
+    const max = breite(zeilen.length);
+    const toks = [];
+    while (rest.length && w(alsZeile(toks.concat(rest[0]))) <= max) toks.push(rest.shift());
+    if (!toks.length) {
+      // Schon das erste Wort allein ist zu breit für die Zeile.
+      const wort = rest[0].s;
+      let n = Math.max(1, wort.length - 1);
+      while (n > 1 && w(wort.slice(0, n)) > max) n--;
+      const strich = wort.lastIndexOf('-', n - 1);
+      if (strich > 0) n = strich + 1;
+      toks.push({ s: wort.slice(0, n), trenner: false });
+      if (n < wort.length) rest[0] = { s: wort.slice(n), trenner: false };
+      else rest.shift();
+    }
+    zeilen.push(alsZeile(toks));
+  }
+  while (rest.length && rest[0].trenner) rest.shift();
+  if (rest.length && zeilen.length) {
+    // Lieber ein ganzes Wort weglassen als eines anschneiden. Angeschnitten wird
+    // nur, was allein in der Zeile steht.
+    const max = breite(zeilen.length - 1);
+    const woerter = zeilen[zeilen.length - 1].split(' ');
+    while (woerter.length > 1 && w(woerter.join(' ') + '...') > max) woerter.pop();
+    let letzte = woerter.join(' ');
+    while (letzte && w(letzte + '...') > max) letzte = letzte.slice(0, -1);
+    zeilen[zeilen.length - 1] = letzte.replace(/[\s-]+$/, '') + '...';
+    zeilen.gekuerzt = true;
+  }
+  return zeilen;
+}
+// Setzt Absätze untereinander, ab `y`. Ein Absatz ist { text, fontH, bold,
+// maxZeilen, minH, kuerzbar }. Jede Zeile bekommt die Breite, die auf ihrer
+// Höhe frei ist, und steht 4 Punkte unter der vorigen — die Abstände, die das
+// Etikett immer hatte. Zurück kommen die Zeilen und die Unterkante der letzten.
+//
+// Mit minH ist der Absatz eine Nummer, und die liest man am besten in einem
+// Stück: sie wird erst kleiner, bis minH, solange sie dann in eine Zeile
+// passt. Passt sie auch so nicht, bekommt sie die größte Schrift, in der sie
+// in ihren Zeilen ganz dasteht — umbrochen, aber nicht auch noch winzig.
+function labelLines(absaetze, y, badge) {
   const items = [];
-  const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
-  if (qr) {
-    items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
-    items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: bagId });
-    if (detail === 'sorte' || detail === 'full') {
-      const species = batch.strainName || batch.species || '';
-      const strainTxt = (batch.strainText || '').trim();
-      const rawNotes = (batch.notes || '').trim();
-      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-      const parts = [species];
-      if (bagKg != null) parts.push(labelKg(bagKg));
-      if (strainTxt) parts.push(strainTxt);
-      if (notes) parts.push(notes);
-      const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', y: 185, blockW: 400, fontH: 24, text: line2 });
+  let unten = y;
+  for (const a of absaetze) {
+    if (!a.text) continue;
+    const setze = (h) => {
+      const zeileY = (i) => y + i * (h + 4);
+      const breite = (i) => _lineBlockW(zeileY(i), h, badge);
+      const max = a.maxZeilen === undefined ? 1 : a.maxZeilen;
+      return { h, zeileY, breite, zeilen: labelWrap(a.text, h, (i) => breite(i) - 6, max) };
+    };
+    let satz = null;
+    if (a.minH) {
+      const groessen = [];
+      for (let h = a.fontH; h >= a.minH; h -= 2) groessen.push(h);
+      const versuche = groessen.map(setze);
+      satz =
+        versuche.find((s) => s.zeilen.length === 1 && !s.zeilen.gekuerzt) ||
+        versuche.find((s) => !s.zeilen.gekuerzt) ||
+        versuche[versuche.length - 1];
+    } else {
+      satz = setze(a.fontH);
     }
-    if (detail === 'full' && batch.due) {
-      const due = new Date(batch.due);
-      const dueStr =
-        String(due.getDate()).padStart(2, '0') +
-        '.' +
-        String(due.getMonth() + 1).padStart(2, '0') +
-        '.' +
-        due.getFullYear();
-      items.push({
-        type: 'text',
-        y: 215,
-        blockW: 400,
-        fontH: 24,
-        text: 'F\u00e4llig: ' + dueStr,
-        bold: true
-      });
-    }
-  } else {
-    const bcY = 40,
-      bcH = 90;
-    const bc = bcParams(bcVal);
-    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-    const line1Y = bcY + bcH + 6;
-    items.push({ type: 'text', y: line1Y, blockW: 400, fontH: 24, text: bagId });
-    if (detail === 'sorte' || detail === 'full') {
-      const species = batch.strainName || batch.species || '';
-      const strainTxt = (batch.strainText || '').trim();
-      const rawNotes = (batch.notes || '').trim();
-      const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
-      const parts = [species];
-      if (bagKg != null) parts.push(labelKg(bagKg));
-      if (strainTxt) parts.push(strainTxt);
-      if (notes) parts.push(notes);
-      const line2 = parts.join(' \u2013 ');
-      if (line2) items.push({ type: 'text', y: line1Y + 28, blockW: 400, fontH: 24, text: line2 });
-    }
-    if (detail === 'full' && batch.due) {
-      const due = new Date(batch.due);
-      const dueStr =
-        String(due.getDate()).padStart(2, '0') +
-        '.' +
-        String(due.getMonth() + 1).padStart(2, '0') +
-        '.' +
-        due.getFullYear();
-      items.push({ type: 'text', y: line1Y + 56, fontH: 28, text: 'F\u00e4llig: ' + dueStr, bold: true });
+    satz.zeilen.forEach((text, i) => {
+      const item = { type: 'text', y: satz.zeileY(i), blockW: satz.breite(i), fontH: satz.h, text: text };
+      if (a.bold) item.bold = true;
+      items.push(item);
+    });
+    if (satz.zeilen.length) {
+      unten = satz.zeileY(satz.zeilen.length - 1) + satz.h;
+      y = unten + 4;
     }
   }
-  return items;
+  return { items: items, unten: unten };
+}
+// Tiefer als die Unterkante des Zählers unten rechts (232) steht kein Text.
+const LABEL_UNTEN = 234;
+// Code und Zeilen zu einem Etikett. Passt der Text nicht unter den Code, wird
+// ein kürzbarer Absatz — die Angaben zur Sorte — eine Zeile kürzer, und seine
+// letzte endet mit "...". Reicht auch eine Zeile nicht (unter einem QR, neben
+// einer Kultur mit langer Herkunft), fällt er ganz weg. Die Nummer und das
+// Datum kürzt nichts.
+function labelLayout(bcVal, qr, absaetze, badge) {
+  let liste = absaetze;
+  for (;;) {
+    const versuch = qr ? _labelQr(bcVal, liste, badge) : _labelBarcode(bcVal, liste, badge);
+    const i = liste.findIndex((a) => a.kuerzbar && a.maxZeilen > 0);
+    if (versuch.passt || i < 0) return versuch.items;
+    liste = liste.map((a, j) => (j === i ? Object.assign({}, a, { maxZeilen: a.maxZeilen - 1 }) : a));
+  }
+}
+// Strichcode oben, die Zeilen darunter, das Ganze senkrecht mittig, aber nie
+// über y=40: darüber schneidet dieses Material ab. Braucht der Text mehr Platz,
+// als unter einem 90 Punkte hohen Code frei ist, gibt der Code Höhe ab, in
+// Schritten bis 60 — 7,5 mm liest jede Kamera noch.
+function _labelBarcode(bcVal, absaetze, badge) {
+  const bc = bcParams(bcVal);
+  const hoehe = labelLines(absaetze, 0, null).unten;
+  let versuch = null;
+  for (let bcH = 90; bcH >= 60; bcH -= 6) {
+    const bcY = Math.max(40, Math.round((240 - (bcH + 6 + hoehe)) / 2));
+    const text = labelLines(absaetze, bcY + bcH + 6, badge);
+    const code = { type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw };
+    versuch = { passt: text.unten <= LABEL_UNTEN, items: [code].concat(text.items) };
+    if (versuch.passt) break;
+  }
+  return versuch;
+}
+// QR oben links, mag 5 → 125 Punkte (25 Module), die Zeilen darunter über die
+// ganze Breite.
+function _labelQr(bcVal, absaetze, badge) {
+  const text = labelLines(absaetze, 155, badge);
+  const code = { type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal };
+  return { passt: text.unten <= 240, items: [code].concat(text.items) };
+}
+function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
+  const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');
+  // Dieselben Zeilen wie in app.js: die Nummer (lieber kleiner als umbrochen),
+  // die Angaben zur Sorte bis zwei Zeilen, bei "full" das Fälligkeitsdatum.
+  const absaetze = [{ text: bagId, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }];
+  if (detail === 'sorte' || detail === 'full') {
+    const species = batch.strainName || batch.species || '';
+    const strainTxt = (batch.strainText || '').trim();
+    const rawNotes = (batch.notes || '').trim();
+    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
+    const parts = [species];
+    if (bagKg != null) parts.push(labelKg(bagKg));
+    if (strainTxt) parts.push(strainTxt);
+    if (notes) parts.push(notes);
+    absaetze.push({ text: parts.filter(Boolean).join(' \u2013 '), fontH: 24, maxZeilen: 2, kuerzbar: true });
+  }
+  if (detail === 'full' && batch.due) {
+    const due = new Date(batch.due);
+    const dueStr =
+      String(due.getDate()).padStart(2, '0') +
+      '.' +
+      String(due.getMonth() + 1).padStart(2, '0') +
+      '.' +
+      due.getFullYear();
+    absaetze.push({ text: 'F\u00e4llig: ' + dueStr, fontH: qr ? 24 : 28, minH: 18, bold: true });
+  }
+  return labelLayout(bcVal, qr, absaetze, null);
 }
 
 function labLabelItems(id, c, detail, barcodeNum, qr) {
-  const items = [];
   // Build info line matching batch label pattern: strainName – strainText – notes(13)
   const species = c.strainName || c.species || '';
   const strainTxt = (c.strainText || '').trim();
@@ -216,44 +396,19 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const spParts = [species];
   if (strainTxt) spParts.push(strainTxt);
   if (notes) spParts.push(notes);
-  const sp = spParts.join(' \u2013 ');
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
-  if (qr) {
-    // QR mode: QR top-left, text centered full-width below.
-    items.push({ type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal });
-    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-    items.push({ type: 'text', y: 155, blockW: 400, fontH: 28, text: line1Text });
-    if (detail === 'sorte' || detail === 'full') {
-      if (sp) items.push({ type: 'text', y: 185, blockW: 400, fontH: 24, text: sp });
-    }
-    if (detail === 'full' && c.created) {
-      const line3Y = sp ? 215 : 185;
-      items.push({
-        type: 'text',
-        y: line3Y,
-        blockW: 400,
-        fontH: 24,
-        text: fmtDt(c.created),
-        bold: true
-      });
-    }
-  } else {
-    const bcY = 40,
-      bcH = 90;
-    const bc = bcParams(bcVal);
-    items.push({ type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw });
-    const line1Y = bcY + bcH + 6;
-    const line1Text = c.parentId ? id + ' \u2190 ' + c.parentId : id;
-    items.push({ type: 'text', x: 0, y: line1Y, blockW: 400, fontH: 24, text: line1Text });
-    if (detail === 'sorte' || detail === 'full') {
-      if (sp) items.push({ type: 'text', x: 0, y: line1Y + 28, blockW: 400, fontH: 24, text: sp });
-    }
-    if (detail === 'full' && c.created) {
-      const line3Y = line1Y + (sp ? 56 : 28);
-      items.push({ type: 'text', x: 0, y: line3Y, blockW: 400, fontH: 28, text: fmtDt(c.created), bold: true });
-    }
+  // Die Herkunft hängt mit einem geschützten Leerzeichen an ihrem Pfeil, wie
+  // in app.js: bricht die erste Zeile um, steht "<- PD-…" zusammen darunter.
+  const absaetze = [
+    { text: c.parentId ? id + ' \u2190\u00a0' + c.parentId : id, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }
+  ];
+  if (detail === 'sorte' || detail === 'full') {
+    absaetze.push({ text: spParts.filter(Boolean).join(' \u2013 '), fontH: 24, maxZeilen: 2, kuerzbar: true });
   }
-  return items;
+  if (detail === 'full' && c.created) {
+    absaetze.push({ text: fmtDt(c.created), fontH: qr ? 24 : 28, minH: 18, bold: true });
+  }
+  return labelLayout(bcVal, qr, absaetze, null);
 }
 
 // ── MCP Server Factory ────────────────────────────────────
@@ -2147,5 +2302,8 @@ module.exports = {
   itemsToZPL,
   bagLabelItems,
   labLabelItems,
+  labelTextW,
+  labelWrap,
+  labelGlyphs,
   fmtDt
 };

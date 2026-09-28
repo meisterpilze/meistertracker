@@ -875,19 +875,28 @@ describe('MCP label printing', () => {
       assert.equal(items[1].text, 'FB-2025-001-01');
     });
 
+    // The species line may take two lines now (see etiketten-zeilen.test.js):
+    // a line too long for its field used to be printed over itself.
+    const infoText = (items) =>
+      items
+        .slice(2)
+        .filter((i) => i.type === 'text' && !i.bold)
+        .map((i) => i.text)
+        .join(' ');
+
     it('sorte: adds species/strain line', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, false);
-      assert.equal(items.length, 3);
       assert.equal(items[2].type, 'text');
-      assert.ok(items[2].text.includes('Pleurotus ostreatus HK35'));
+      const info = infoText(items);
+      for (const teil of ['Pleurotus ostreatus HK35', 'HK35', 'Test batch']) assert.ok(info.includes(teil), info);
     });
 
     it('full: adds due date line', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'full', 42, false);
-      assert.equal(items.length, 4);
-      const dueLine = items[3];
+      const dueLine = items[items.length - 1];
       assert.equal(dueLine.bold, true);
       assert.ok(dueLine.text.includes('22.03.2025'));
+      assert.equal(items.filter((i) => i.bold).length, 1);
     });
 
     it('uses barcodeNum as barcode value when provided', () => {
@@ -916,17 +925,17 @@ describe('MCP label printing', () => {
     });
 
     it('truncates long notes to 13 chars + ellipsis', () => {
+      // Three dots, not the ellipsis character: font 0 has no glyph for it.
       const longBatch = { ...batch, notes: 'This is a very long note that should be truncated' };
       const items = bagLabelItems('FB-2025-001-01', longBatch, 'sorte', 42, false);
-      const line2 = items[2].text;
-      assert.ok(line2.includes('\u2026'), 'should contain ellipsis');
+      assert.ok(infoText(items).endsWith('This is a ver...'), infoText(items));
     });
 
     it('omits due date line when batch.due is null', () => {
       const noDueBatch = { ...batch, due: null };
       const items = bagLabelItems('FB-2025-001-01', noDueBatch, 'full', 42, false);
       // Should have barcode + ID + species line, but no due date
-      assert.equal(items.length, 3);
+      assert.equal(items.filter((i) => i.bold).length, 0);
     });
   });
 
@@ -950,8 +959,9 @@ describe('MCP label printing', () => {
     });
 
     it('shows parentId with arrow in line 1', () => {
+      // "<-", not the arrow character: font 0 has no glyph for it.
       const items = labLabelItems('PD-001', culture, 'minimal', 55, false);
-      assert.equal(items[1].text, 'PD-001 \u2190 MC-001');
+      assert.equal(items[1].text, 'PD-001 <- MC-001');
     });
 
     it('omits parentId arrow when parentId is null', () => {
@@ -962,28 +972,28 @@ describe('MCP label printing', () => {
 
     it('sorte: adds species + strainText + notes line', () => {
       const items = labLabelItems('PD-001', culture, 'sorte', 55, false);
-      assert.equal(items.length, 3);
-      assert.ok(items[2].text.includes('Pleurotus ostreatus HK35'));
-      assert.ok(items[2].text.includes('XY-1'));
-      assert.ok(items[2].text.includes('Test note'));
+      const info = items
+        .slice(2)
+        .map((i) => i.text)
+        .join(' ');
+      for (const teil of ['Pleurotus ostreatus HK35', 'XY-1', 'Test note']) assert.ok(info.includes(teil), info);
     });
 
     it('full: adds created date line', () => {
       const items = labLabelItems('PD-001', culture, 'full', 55, false);
-      assert.equal(items.length, 4);
-      const dateLine = items[3];
+      const dateLine = items[items.length - 1];
       assert.equal(dateLine.bold, true);
       assert.equal(dateLine.text, '01.02.25');
     });
 
-    it('full without species: date at offset 28', () => {
+    it('full without species: date one line below the ID', () => {
       const noSpecies = { ...culture, strainName: null, species: null, strainText: '', notes: '' };
       const items = labLabelItems('PD-001', noSpecies, 'full', 55, false);
       // Should have barcode, ID line, date line (no species line)
       const dateLine = items.find((i) => i.bold);
       assert.ok(dateLine, 'must have a date line');
-      // line1Y = 40+90+6 = 136, date at 136+28 = 164 (no species line to skip)
-      assert.equal(dateLine.y, 164);
+      // ID (24 dots) plus the 4-dot gap every line keeps, no species line between
+      assert.equal(dateLine.y, items[1].y + 28);
     });
 
     it('with QR: encodes numeric barcode value, not culture ID', () => {
@@ -1100,7 +1110,7 @@ describe('MCP label printing', () => {
       }
 
       // PD-001 should show parent arrow
-      assert.ok(zpl.includes('PD-001 \u2190 MC-001'), 'PD-001 label must show parent');
+      assert.ok(zpl.includes('PD-001 <- MC-001'), 'PD-001 label must show parent');
     });
 
     it('returns null for non-existent culture', () => {
@@ -1147,8 +1157,8 @@ describe('MCP label printing', () => {
       // Text line 1: bagId
       assert.ok(mcpZpl.includes('^FDFB-2025-001-01^FS'), 'bag ID text');
 
-      // Text line 2: species
-      assert.ok(mcpZpl.includes('^FDPleurotus ostreatus HK35 \u2013 Test^FS'), 'species line');
+      // Text line 2: species, with a hyphen the printer's font actually has
+      assert.ok(mcpZpl.includes('^FDPleurotus ostreatus HK35 - Test^FS'), 'species line');
 
       // Text line 3: due date (bold = doubled)
       assert.ok(mcpZpl.includes('^FDF\u00e4llig: 22.03.2025^FS'), 'due date line');
@@ -1172,12 +1182,16 @@ describe('MCP label printing', () => {
 
       // Structural checks
       assert.ok(mcpZpl.startsWith('^XA^PW400^LL'), 'header');
+      // The species line needs two lines here, so the barcode gives up height
+      // (never below 60) instead of the text running off the label.
       const expectedBc = bcParams('200');
-      assert.ok(
-        mcpZpl.includes('^FO' + expectedBc.x + ',40^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD200^FS'),
-        'barcode command'
-      );
-      assert.ok(mcpZpl.includes('PD-001 \u2190 MC-001'), 'ID with parent arrow');
+      const bc = mcpZpl.match(/\^FO(\d+),40\^BY(\d),2\.0,(\d+)\^BCN,(\d+),N,N,N\^FD200\^FS/);
+      assert.ok(bc, 'barcode command');
+      assert.equal(Number(bc[1]), expectedBc.x);
+      assert.equal(Number(bc[2]), expectedBc.mw);
+      assert.equal(bc[3], bc[4]);
+      assert.ok(Number(bc[3]) >= 60 && Number(bc[3]) < 90, 'barcode height ' + bc[3]);
+      assert.ok(mcpZpl.includes('PD-001 <- MC-001'), 'ID with parent arrow');
       assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35'), 'species name');
       assert.ok(mcpZpl.includes('XY-1'), 'strainText');
       assert.ok(mcpZpl.includes('Test note'), 'notes');
