@@ -9209,7 +9209,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
       }
       try {
-        const id = db.insertExperiment(database, data);
+        const id = db.insertExperiment(database, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -9244,13 +9244,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
       }
       try {
-        db.updateExperiment(database, id, data);
+        db.updateExperiment(database, id, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
       }
     });
+    return;
+  }
+  // Der Verlauf eines Versuchs: wer wann was geaendert hat, an ihm, seinen
+  // Gefaessen und seinen Fotos. Nur lesen. Eine Route, die ihn aendert oder
+  // loescht, gibt es nicht, und die Tabelle liesse es auch nicht zu.
+  const verlaufTreffer = url.match(/^\/api\/experiments\/(\d+)\/history$/);
+  if (req.method === 'GET' && verlaufTreffer) {
+    try {
+      jsonOk(res, { entries: db.listExperimentHistory(database, parseInt(verlaufTreffer[1], 10)) });
+    } catch (err) {
+      safeErr(res, err);
+    }
     return;
   }
   if (req.method === 'POST' && url === '/api/experiment-runs') {
@@ -9275,7 +9287,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.insertExperimentRun(database, data);
+        const id = db.insertExperimentRun(database, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -9302,7 +9314,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.updateExperimentRun(database, id, data);
+        db.updateExperimentRun(database, id, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
@@ -9313,7 +9325,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'DELETE' && ansatzTreffer) {
     try {
-      db.deleteExperimentRun(database, parseInt(ansatzTreffer[1]));
+      db.deleteExperimentRun(database, parseInt(ansatzTreffer[1]), req.authUser);
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
@@ -9401,7 +9413,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             const gespeichert = savePhotoToDisk('exp-' + data.experimentId, foto, req.authUser);
             geschrieben.push(path.join(DIR, 'data', gespeichert.rel_path));
             geschrieben.push(path.join(DIR, 'data', gespeichert.thumb_path));
-            ids.push(db.addExperimentPhoto(database, data.experimentId, data.runId || null, gespeichert));
+            ids.push(db.addExperimentPhoto(database, data.experimentId, data.runId || null, gespeichert, req.authUser));
           }
           database.exec('COMMIT');
         } catch (inner) {
@@ -9426,7 +9438,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const fotoWegTreffer = url.match(/^\/api\/experiment-photos\/(\d+)$/);
   if (req.method === 'DELETE' && fotoWegTreffer) {
     try {
-      const zeile = db.deleteExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10));
+      const zeile = db.deleteExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10), req.authUser);
       if (zeile) {
         for (const rel of [zeile.rel_path, zeile.thumb_path]) {
           const abs = path.join(DIR, 'data', rel);
@@ -9474,7 +9486,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.insertProjectNote(database, data);
+        const id = db.insertProjectNote(database, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -9501,7 +9513,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.updateProjectNote(database, id, data);
+        db.updateProjectNote(database, id, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
@@ -9512,7 +9524,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'DELETE' && notizTreffer) {
     try {
-      db.deleteProjectNote(database, parseInt(notizTreffer[1]));
+      db.deleteProjectNote(database, parseInt(notizTreffer[1]), req.authUser);
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {

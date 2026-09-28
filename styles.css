@@ -8885,3 +8885,44 @@ body:has(#m-camscan.open) .update-bar {
   padding-left: 14px;
   border-left: 2px solid var(--c-border-light);
 }
+
+/* ── Verlauf ─────────────────────────────────────────────────
+   Wer wann was an einem Experiment geaendert hat, das Neueste oben. Der Kopf
+   klein und grau wie das Datum einer Notiz. Der alte Wert durchgestrichen, der
+   neue schlicht, beide mit ihren Zeilenumbruechen: ein Fazit hat Absaetze, und
+   ein Verlauf, der sie zusammenzieht, zeigt einen Text, den es nie gab. */
+.pj-hist-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pj-hist {
+  padding: 10px 0;
+  border-top: 1px solid var(--c-border-light);
+}
+.pj-hist:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.pj-hist-kopf {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.pj-hist-was {
+  font-size: max(0.8125rem, var(--fs-min));
+  font-weight: 600;
+  margin-top: 2px;
+}
+.pj-hist-wert {
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-top: 2px;
+}
+.pj-hist-wert del {
+  color: var(--c-text-muted);
+}
+.pj-hist-wert ins {
+  text-decoration: none;
+}

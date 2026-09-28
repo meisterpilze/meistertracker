@@ -443,6 +443,32 @@ CREATE TABLE IF NOT EXISTS project_docs (
   updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Who changed what in experiments, runs, photos and notes. See migration v89:
+-- append-only, and without foreign keys on purpose.
+CREATE TABLE IF NOT EXISTS lab_history (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  at            TEXT NOT NULL,
+  user_id       INTEGER,
+  username      TEXT NOT NULL DEFAULT '',
+  entity        TEXT NOT NULL,
+  entity_id     INTEGER NOT NULL,
+  experiment_id INTEGER,
+  action        TEXT NOT NULL,
+  field         TEXT,
+  old_value     TEXT,
+  new_value     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_lab_history_exp ON lab_history(experiment_id, id);
+CREATE INDEX IF NOT EXISTS idx_lab_history_entity ON lab_history(entity, entity_id, id);
+CREATE TRIGGER IF NOT EXISTS lab_history_no_update BEFORE UPDATE ON lab_history
+BEGIN
+  SELECT RAISE(ABORT, 'lab_history is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS lab_history_no_delete BEFORE DELETE ON lab_history
+BEGIN
+  SELECT RAISE(ABORT, 'lab_history is append-only');
+END;
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -2609,6 +2635,70 @@ const MIGRATIONS = [
         updated    TEXT NOT NULL,
         updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
       )`);
+    }
+  },
+  {
+    version: 89,
+    description: 'Verlauf des Laborbuchs',
+    fn(db) {
+      // Wer wann was geaendert hat, an Versuchen, Gefaessen, Fotos und Notizen.
+      // Was die Spalten bedeuten, steht im Abschnitt "Verlauf" bei den Versuchen.
+      //
+      // Kein Fremdschluessel, weder auf users noch auf die Datensaetze: ON DELETE
+      // SET NULL oder CASCADE waeren Aenderungen an einer Tabelle, die sich nie
+      // aendern soll, und die Trigger unten wuerden das Loeschen eines Benutzers
+      // oder Versuchs dann ganz verhindern. Der Name steht deshalb als Abschrift
+      // mit drin: ein Eintrag sagt auch dann noch, wer es war, wenn es das Konto
+      // nicht mehr gibt.
+      db.exec(`CREATE TABLE IF NOT EXISTS lab_history (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        at            TEXT NOT NULL,
+        user_id       INTEGER,
+        username      TEXT NOT NULL DEFAULT '',
+        entity        TEXT NOT NULL,
+        entity_id     INTEGER NOT NULL,
+        experiment_id INTEGER,
+        action        TEXT NOT NULL,
+        field         TEXT,
+        old_value     TEXT,
+        new_value     TEXT
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_lab_history_exp ON lab_history(experiment_id, id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_lab_history_entity ON lab_history(entity, entity_id, id)');
+      // Nur anhaengen. Die Anwendung hat keinen Weg, einen Eintrag zu aendern
+      // oder zu loeschen; die Trigger halten auch jeden anderen auf, der ueber
+      // dieselbe Datei kommt. Wer wirklich einmal etwas herausnehmen muss, muss
+      // sie erst mit DROP TRIGGER entfernen, und das ist dann eine bewusste
+      // Handlung.
+      db.exec(`CREATE TRIGGER IF NOT EXISTS lab_history_no_update BEFORE UPDATE ON lab_history
+        BEGIN
+          SELECT RAISE(ABORT, 'lab_history is append-only');
+        END`);
+      db.exec(`CREATE TRIGGER IF NOT EXISTS lab_history_no_delete BEFORE DELETE ON lab_history
+        BEGIN
+          SELECT RAISE(ABORT, 'lab_history is append-only');
+        END`);
+      // Ein Ausgangsstand je vorhandenem Datensatz. Ohne ihn beginge der erste
+      // Eintrag nach dieser Migration bei einem "vorher", das nirgends steht,
+      // und ein Gefaess, das nie wieder angefasst wird, kaeme im Verlauf gar
+      // nicht vor. Wer es angelegt hat und wann, weiss niemand mehr; der Eintrag
+      // sagt deshalb nur, was da war, als der Verlauf begann.
+      const jetzt = new Date().toISOString();
+      const eintragen = db.prepare(
+        'INSERT INTO lab_history(at,entity,entity_id,experiment_id,action,new_value) VALUES(?,?,?,?,?,?)'
+      );
+      for (const e of db.prepare('SELECT * FROM experiments ORDER BY id').all()) {
+        eintragen.run(jetzt, 'experiment', e.id, e.id, 'baseline', JSON.stringify(_versuchStand(e)));
+      }
+      for (const r of db.prepare('SELECT * FROM experiment_runs ORDER BY id').all()) {
+        eintragen.run(jetzt, 'run', r.id, r.experiment_id, 'baseline', JSON.stringify(_ansatzStand(r)));
+      }
+      for (const f of db.prepare('SELECT * FROM experiment_photos ORDER BY id').all()) {
+        eintragen.run(jetzt, 'photo', f.id, f.experiment_id, 'baseline', JSON.stringify(_fotoStand(f)));
+      }
+      for (const n of db.prepare('SELECT * FROM project_notes ORDER BY id').all()) {
+        eintragen.run(jetzt, 'note', n.id, null, 'baseline', JSON.stringify(_notizStand(n)));
+      }
     }
   },
   {
@@ -7004,6 +7094,161 @@ function updateRhythmStart(db, from) {
 const VERSUCH_STATUS = ['running', 'done'];
 const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 
+// ── Verlauf ─────────────────────────────────────────────────
+//
+// Versuch, Gefaess, Foto und Notiz werden an Ort und Stelle ueberschrieben.
+// Ohne Verlauf steht nach einem PATCH nur der neue Stand da, und niemand kann
+// sagen, was vorher drinstand, wann es sich geaendert hat und wer es war. Fuer
+// ein Laborbuch ist das die halbe Sache.
+//
+// Geschrieben wird in derselben Funktion, die aendert, und in derselben
+// Transaktion (_mitVerlauf): eine Aenderung ohne Eintrag gibt es nicht und einen
+// Eintrag ohne Aenderung auch nicht. Nur echte Aenderungen zaehlen. Ein PATCH mit
+// dem Wert, der schon dasteht, schreibt nichts, weder in die Zeile noch hierher.
+//
+// Eine Zeile in lab_history:
+//   at, user_id, username  wann und wer; der Name als Abschrift, siehe v89
+//   entity, entity_id      'experiment' | 'run' | 'photo' | 'note' und seine id
+//   experiment_id          der Versuch, zu dem das gehoert (bei Notizen NULL),
+//                          damit ein Gefaess auch nach dem Loeschen noch im
+//                          Verlauf seines Versuchs steht
+//   action                 'baseline' der Stand, als der Verlauf begann (v89)
+//                          'create'   angelegt, new_value ist der Datensatz
+//                          'update'   ein Feld, old_value -> new_value
+//                          'remove'   entfernt, old_value ist der Datensatz
+//   field                  nur bei 'update', mit dem Namen aus der API
+//
+// Ein Datensatz steht als JSON in der Form, die die API zeigt, ohne id und
+// Reihenfolge. Die Reihenfolge der Gefaesse ist Anordnung, kein Befund, und
+// kommt deshalb auch als Aenderung nicht in den Verlauf.
+function _versuchStand(e) {
+  return {
+    code: e.code,
+    title: e.title,
+    started: e.started,
+    ended: e.ended,
+    status: e.status,
+    archived: e.archived === 1,
+    recipe: e.recipe || '',
+    outcome: e.outcome || ''
+  };
+}
+function _ansatzStand(r) {
+  return {
+    code: r.code,
+    what: r.what || '',
+    result: r.result || '',
+    outcome: r.outcome,
+    cultureId: r.culture_id,
+    batchId: r.batch_id
+  };
+}
+function _fotoStand(f) {
+  return {
+    uuid: f.uuid,
+    runId: f.run_id,
+    sha256: f.sha256,
+    bytes: f.bytes,
+    width: f.width,
+    height: f.height,
+    uploadedAt: f.uploaded_at,
+    uploadedBy: f.uploaded_by
+  };
+}
+function _notizStand(n) {
+  return { tab: n.tab, body: n.body, created: n.created, updated: n.updated || '' };
+}
+
+// Wer aendert: die Sitzung aus req.authUser. Ohne Sitzung (Tests, Skripte)
+// bleibt der Eintrag ohne Namen, statt jemanden zu erfinden.
+function _verlauf(db, wer, e) {
+  db.prepare(
+    'INSERT INTO lab_history(at,user_id,username,entity,entity_id,experiment_id,action,field,old_value,new_value) ' +
+      'VALUES(?,?,?,?,?,?,?,?,?,?)'
+  ).run(
+    new Date().toISOString(),
+    wer && wer.user_id != null ? wer.user_id : null,
+    (wer && wer.username) || '',
+    e.entity,
+    e.entityId,
+    e.experimentId ?? null,
+    e.action,
+    e.field ?? null,
+    e.old ?? null,
+    e.new ?? null
+  );
+}
+
+// Was ein PATCH wirklich aendert, Feld fuer Feld. null, undefined und '' gelten
+// als gleich: ein leeres Fazit, das jemand leer speichert, ist keine Aenderung,
+// und ein Enddatum, das von NULL auf '' ginge, auch nicht.
+function _aenderungen(vorher, f, felder) {
+  const text = (x) => (x == null ? '' : String(x));
+  const aus = [];
+  for (const feld of felder) {
+    if (f[feld] === undefined) continue;
+    if (text(vorher[feld]) === text(f[feld])) continue;
+    aus.push({ feld, alt: vorher[feld], neu: f[feld] });
+  }
+  return aus;
+}
+function _alsText(x) {
+  return x == null ? null : String(x);
+}
+
+// Aenderung und Eintrag gehen zusammen oder gar nicht. Ein SAVEPOINT statt
+// BEGIN, weil der Foto-Upload seine Zeilen schon in einer eigenen Transaktion
+// schreibt und ein BEGIN darin scheitern wuerde.
+function _mitVerlauf(db, fn) {
+  db.exec('SAVEPOINT mt_verlauf');
+  try {
+    const ergebnis = fn();
+    db.exec('RELEASE mt_verlauf');
+    return ergebnis;
+  } catch (e) {
+    try {
+      db.exec('ROLLBACK TO mt_verlauf');
+      db.exec('RELEASE mt_verlauf');
+    } catch {
+      /* der erste Fehler ist der, der etwas erklaert */
+    }
+    throw e;
+  }
+}
+
+// Der Verlauf eines Versuchs: er selbst, seine Gefaesse und seine Fotos, in der
+// Reihenfolge, in der es passiert ist. Ein Datensatz kommt als Objekt zurueck,
+// nicht als JSON-Text, damit die Oberflaeche nichts parsen muss.
+function listExperimentHistory(db, experimentId) {
+  return db
+    .prepare('SELECT * FROM lab_history WHERE experiment_id=? ORDER BY id')
+    .all(experimentId)
+    .map((z) => {
+      const e = {
+        id: z.id,
+        at: z.at,
+        userId: z.user_id,
+        user: z.username,
+        entity: z.entity,
+        entityId: z.entity_id,
+        action: z.action
+      };
+      if (z.action === 'update') {
+        e.field = z.field;
+        e.from = z.old_value;
+        e.to = z.new_value;
+        return e;
+      }
+      const roh = z.action === 'remove' ? z.old_value : z.new_value;
+      try {
+        e.record = roh ? JSON.parse(roh) : null;
+      } catch {
+        e.record = null;
+      }
+      return e;
+    });
+}
+
 function listExperiments(db) {
   const runs = db.prepare('SELECT * FROM experiment_runs ORDER BY sort, id').all();
   const fotos = db.prepare('SELECT * FROM experiment_photos ORDER BY uploaded_at, id').all();
@@ -7046,74 +7291,110 @@ function listExperiments(db) {
     }));
 }
 
-function insertExperiment(db, e) {
+// `wer` ist bei allen schreibenden Funktionen dieses Abschnitts die Sitzung aus
+// req.authUser; sie landet im Verlauf.
+function insertExperiment(db, e, wer) {
   if (!e.code || !e.title) throw new Error('code and title are required');
   if (e.status && !VERSUCH_STATUS.includes(e.status)) throw new Error('invalid status: ' + e.status);
-  const info = db
-    .prepare('INSERT INTO experiments(code,title,started,ended,status,archived,recipe,outcome) VALUES(?,?,?,?,?,?,?,?)')
-    .run(
-      e.code,
-      e.title,
-      e.started || new Date().toISOString().slice(0, 10),
-      e.ended || null,
-      e.status || 'running',
-      e.archived ? 1 : 0,
-      e.recipe || '',
-      e.outcome || ''
-    );
-  incrementDataVersion(db);
-  return info.lastInsertRowid;
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'INSERT INTO experiments(code,title,started,ended,status,archived,recipe,outcome) VALUES(?,?,?,?,?,?,?,?)'
+      )
+      .run(
+        e.code,
+        e.title,
+        e.started || new Date().toISOString().slice(0, 10),
+        e.ended || null,
+        e.status || 'running',
+        e.archived ? 1 : 0,
+        e.recipe || '',
+        e.outcome || ''
+      );
+    const zeile = db.prepare('SELECT * FROM experiments WHERE id=?').get(info.lastInsertRowid);
+    _verlauf(db, wer, {
+      entity: 'experiment',
+      entityId: zeile.id,
+      experimentId: zeile.id,
+      action: 'create',
+      new: JSON.stringify(_versuchStand(zeile))
+    });
+    incrementDataVersion(db);
+    return info.lastInsertRowid;
+  });
 }
 
-function updateExperiment(db, id, f) {
-  const spalten = {
-    title: 'title',
-    started: 'started',
-    ended: 'ended',
-    status: 'status',
-    recipe: 'recipe',
-    outcome: 'outcome'
-  };
-  const setzen = [];
-  const werte = [];
-  for (const [k, spalte] of Object.entries(spalten)) {
-    if (f[k] === undefined) continue;
-    if (k === 'status' && f[k] !== null && !VERSUCH_STATUS.includes(f[k])) throw new Error('invalid status: ' + f[k]);
-    setzen.push(spalte + '=?');
-    werte.push(f[k]);
+function updateExperiment(db, id, f, wer) {
+  if (f.status !== undefined && f.status !== null && !VERSUCH_STATUS.includes(f.status)) {
+    throw new Error('invalid status: ' + f.status);
   }
-  if (f.archived !== undefined) {
-    setzen.push('archived=?');
-    werte.push(f.archived ? 1 : 0);
-  }
-  if (!setzen.length) return false;
-  werte.push(id);
-  const info = db.prepare('UPDATE experiments SET ' + setzen.join(',') + ' WHERE id=?').run(...werte);
-  if (info.changes) incrementDataVersion(db);
-  return info.changes > 0;
+  const zeile = db.prepare('SELECT * FROM experiments WHERE id=?').get(id);
+  if (!zeile) return false;
+  // Spalte und Feld heissen hier gleich. archived kommt als Wahrheitswert und
+  // steht als 0/1 in der Zeile.
+  const neu = f.archived === undefined ? f : { ...f, archived: !!f.archived };
+  const aenderungen = _aenderungen(_versuchStand(zeile), neu, [
+    'title',
+    'started',
+    'ended',
+    'status',
+    'archived',
+    'recipe',
+    'outcome'
+  ]);
+  if (!aenderungen.length) return false;
+  _mitVerlauf(db, () => {
+    db.prepare('UPDATE experiments SET ' + aenderungen.map((a) => a.feld + '=?').join(',') + ' WHERE id=?').run(
+      ...aenderungen.map((a) => (a.feld === 'archived' ? (a.neu ? 1 : 0) : a.neu)),
+      id
+    );
+    for (const a of aenderungen) {
+      _verlauf(db, wer, {
+        entity: 'experiment',
+        entityId: zeile.id,
+        experimentId: zeile.id,
+        action: 'update',
+        field: a.feld,
+        old: _alsText(a.alt),
+        new: _alsText(a.neu)
+      });
+    }
+    incrementDataVersion(db);
+  });
+  return true;
 }
 
-function addExperimentPhoto(db, experimentId, runId, foto) {
-  const info = db
-    .prepare(
-      'INSERT INTO experiment_photos(experiment_id,run_id,uuid,rel_path,thumb_path,width,height,bytes,sha256,uploaded_at,uploaded_by) ' +
-        'VALUES(?,?,?,?,?,?,?,?,?,?,?)'
-    )
-    .run(
-      experimentId,
-      runId || null,
-      foto.uuid,
-      foto.rel_path,
-      foto.thumb_path,
-      foto.width,
-      foto.height,
-      foto.bytes,
-      foto.sha256,
-      foto.uploaded_at,
-      foto.uploaded_by
-    );
-  incrementDataVersion(db);
-  return info.lastInsertRowid;
+function addExperimentPhoto(db, experimentId, runId, foto, wer) {
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'INSERT INTO experiment_photos(experiment_id,run_id,uuid,rel_path,thumb_path,width,height,bytes,sha256,uploaded_at,uploaded_by) ' +
+          'VALUES(?,?,?,?,?,?,?,?,?,?,?)'
+      )
+      .run(
+        experimentId,
+        runId || null,
+        foto.uuid,
+        foto.rel_path,
+        foto.thumb_path,
+        foto.width,
+        foto.height,
+        foto.bytes,
+        foto.sha256,
+        foto.uploaded_at,
+        foto.uploaded_by
+      );
+    const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(info.lastInsertRowid);
+    _verlauf(db, wer, {
+      entity: 'photo',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'create',
+      new: JSON.stringify(_fotoStand(zeile))
+    });
+    incrementDataVersion(db);
+    return info.lastInsertRowid;
+  });
 }
 function getExperimentPhotoByUuid(db, uuid) {
   return db.prepare('SELECT * FROM experiment_photos WHERE uuid=?').get(uuid) || null;
@@ -7121,68 +7402,113 @@ function getExperimentPhotoByUuid(db, uuid) {
 // Gibt die Zeile zurueck, damit der Aufrufer die Datei hinterherraeumen kann:
 // die Platte ist nicht Teil der Transaktion, also muss jemand wissen, was da
 // lag.
-function deleteExperimentPhoto(db, id) {
+function deleteExperimentPhoto(db, id, wer) {
   const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
   if (!zeile) return null;
-  db.prepare('DELETE FROM experiment_photos WHERE id=?').run(id);
-  incrementDataVersion(db);
+  _mitVerlauf(db, () => {
+    db.prepare('DELETE FROM experiment_photos WHERE id=?').run(id);
+    _verlauf(db, wer, {
+      entity: 'photo',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'remove',
+      old: JSON.stringify(_fotoStand(zeile))
+    });
+    incrementDataVersion(db);
+  });
   return zeile;
 }
 
-function insertExperimentRun(db, r) {
+function insertExperimentRun(db, r, wer) {
   if (!r.experimentId || !r.code) throw new Error('experimentId and code are required');
   if (r.outcome && !ANSATZ_AUSGANG.includes(r.outcome)) throw new Error('invalid outcome: ' + r.outcome);
   const vorhanden = db.prepare('SELECT id FROM experiments WHERE id=?').get(r.experimentId);
   if (!vorhanden) throw new Error('unknown experiment: ' + r.experimentId);
-  // Ans Ende, ohne dass der Aufrufer zaehlen muss.
-  const max = db.prepare('SELECT MAX(sort) AS m FROM experiment_runs WHERE experiment_id=?').get(r.experimentId);
-  const info = db
-    .prepare(
-      'INSERT INTO experiment_runs(experiment_id,code,what,result,outcome,culture_id,batch_id,sort) VALUES(?,?,?,?,?,?,?,?)'
-    )
-    .run(
-      r.experimentId,
-      r.code,
-      r.what || '',
-      r.result || '',
-      r.outcome || 'open',
-      r.cultureId || null,
-      r.batchId || null,
-      r.sort != null ? r.sort : (max && max.m != null ? max.m : 0) + 1
-    );
-  incrementDataVersion(db);
-  return info.lastInsertRowid;
+  return _mitVerlauf(db, () => {
+    // Ans Ende, ohne dass der Aufrufer zaehlen muss.
+    const max = db.prepare('SELECT MAX(sort) AS m FROM experiment_runs WHERE experiment_id=?').get(r.experimentId);
+    const info = db
+      .prepare(
+        'INSERT INTO experiment_runs(experiment_id,code,what,result,outcome,culture_id,batch_id,sort) VALUES(?,?,?,?,?,?,?,?)'
+      )
+      .run(
+        r.experimentId,
+        r.code,
+        r.what || '',
+        r.result || '',
+        r.outcome || 'open',
+        r.cultureId || null,
+        r.batchId || null,
+        r.sort != null ? r.sort : (max && max.m != null ? max.m : 0) + 1
+      );
+    const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(info.lastInsertRowid);
+    _verlauf(db, wer, {
+      entity: 'run',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'create',
+      new: JSON.stringify(_ansatzStand(zeile))
+    });
+    incrementDataVersion(db);
+    return info.lastInsertRowid;
+  });
 }
 
-function updateExperimentRun(db, id, f) {
+function updateExperimentRun(db, id, f, wer) {
+  if (f.outcome !== undefined && !ANSATZ_AUSGANG.includes(f.outcome)) throw new Error('invalid outcome: ' + f.outcome);
+  const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(id);
+  if (!zeile) return false;
   const spalten = {
     code: 'code',
     what: 'what',
     result: 'result',
     outcome: 'outcome',
     cultureId: 'culture_id',
-    batchId: 'batch_id',
-    sort: 'sort'
+    batchId: 'batch_id'
   };
-  const setzen = [];
-  const werte = [];
-  for (const [k, spalte] of Object.entries(spalten)) {
-    if (f[k] === undefined) continue;
-    if (k === 'outcome' && !ANSATZ_AUSGANG.includes(f[k])) throw new Error('invalid outcome: ' + f[k]);
-    setzen.push(spalte + '=?');
-    werte.push(f[k]);
-  }
-  if (!setzen.length) return false;
-  werte.push(id);
-  const info = db.prepare('UPDATE experiment_runs SET ' + setzen.join(',') + ' WHERE id=?').run(...werte);
-  if (info.changes) incrementDataVersion(db);
-  return info.changes > 0;
+  const aenderungen = _aenderungen(_ansatzStand(zeile), f, Object.keys(spalten));
+  // Die Reihenfolge wird geschrieben, kommt aber nicht in den Verlauf (s. o.).
+  const sortieren = f.sort !== undefined && String(f.sort) !== String(zeile.sort);
+  if (!aenderungen.length && !sortieren) return false;
+  _mitVerlauf(db, () => {
+    const setzen = aenderungen.map((a) => spalten[a.feld] + '=?');
+    const werte = aenderungen.map((a) => a.neu);
+    if (sortieren) {
+      setzen.push('sort=?');
+      werte.push(f.sort);
+    }
+    db.prepare('UPDATE experiment_runs SET ' + setzen.join(',') + ' WHERE id=?').run(...werte, id);
+    for (const a of aenderungen) {
+      _verlauf(db, wer, {
+        entity: 'run',
+        entityId: zeile.id,
+        experimentId: zeile.experiment_id,
+        action: 'update',
+        field: a.feld,
+        old: _alsText(a.alt),
+        new: _alsText(a.neu)
+      });
+    }
+    incrementDataVersion(db);
+  });
+  return true;
 }
 
-function deleteExperimentRun(db, id) {
-  const info = db.prepare('DELETE FROM experiment_runs WHERE id=?').run(id);
-  if (info.changes) incrementDataVersion(db);
-  return info.changes > 0;
+function deleteExperimentRun(db, id, wer) {
+  const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(id);
+  if (!zeile) return false;
+  _mitVerlauf(db, () => {
+    db.prepare('DELETE FROM experiment_runs WHERE id=?').run(id);
+    _verlauf(db, wer, {
+      entity: 'run',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'remove',
+      old: JSON.stringify(_ansatzStand(zeile))
+    });
+    incrementDataVersion(db);
+  });
+  return true;
 }
 
 // ── Notizen je Vorhaben-Reiter ──────────────────────────────
@@ -7204,33 +7530,68 @@ function listProjectNotes(db) {
     .map((n) => ({ id: n.id, tab: n.tab, body: n.body, created: n.created, updated: n.updated || '' }));
 }
 
-function insertProjectNote(db, n) {
+// Notizen schreiben ihren Verlauf wie die Versuche, `wer` ist auch hier die
+// Sitzung.
+function insertProjectNote(db, n, wer) {
   if (!n.tab || !n.body) throw new Error('tab and body are required');
   if (!NOTIZ_REITER.includes(n.tab)) throw new Error('invalid tab: ' + n.tab);
-  const info = db
-    .prepare('INSERT INTO project_notes(tab,body,created) VALUES(?,?,?)')
-    .run(n.tab, n.body, n.created || new Date().toISOString());
-  incrementDataVersion(db);
-  return info.lastInsertRowid;
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare('INSERT INTO project_notes(tab,body,created) VALUES(?,?,?)')
+      .run(n.tab, n.body, n.created || new Date().toISOString());
+    const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(info.lastInsertRowid);
+    _verlauf(db, wer, {
+      entity: 'note',
+      entityId: zeile.id,
+      action: 'create',
+      new: JSON.stringify(_notizStand(zeile))
+    });
+    incrementDataVersion(db);
+    return info.lastInsertRowid;
+  });
 }
 
-function updateProjectNote(db, id, f) {
+function updateProjectNote(db, id, f, wer) {
   if (f.body === undefined) return false;
   if (!f.body) throw new Error('body is required');
-  const info = db
-    .prepare('UPDATE project_notes SET body=?, updated=? WHERE id=?')
-    .run(f.body, new Date().toISOString(), id);
-  if (info.changes) incrementDataVersion(db);
-  return info.changes > 0;
+  const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(id);
+  // Derselbe Text ist keine Aenderung und macht die Notiz nicht "geaendert".
+  if (!zeile || zeile.body === f.body) return false;
+  _mitVerlauf(db, () => {
+    db.prepare('UPDATE project_notes SET body=?, updated=? WHERE id=?').run(f.body, new Date().toISOString(), id);
+    _verlauf(db, wer, {
+      entity: 'note',
+      entityId: zeile.id,
+      action: 'update',
+      field: 'body',
+      old: zeile.body,
+      new: f.body
+    });
+    incrementDataVersion(db);
+  });
+  return true;
 }
 
 // Eine Notiz darf weg. Sie ist kein Laborbucheintrag, sondern ein Zettel, und
 // ein Zettel, den man nicht wegwerfen kann, sammelt sich zu dem an, was dieser
 // Reiter gerade loswerden soll.
-function deleteProjectNote(db, id) {
-  const info = db.prepare('DELETE FROM project_notes WHERE id=?').run(id);
-  if (info.changes) incrementDataVersion(db);
-  return info.changes > 0;
+//
+// Aus dem Reiter verschwindet sie; ihr Text bleibt im Verlauf stehen. Den zeigt
+// die Oberflaeche nirgends, er ist nur nicht verloren.
+function deleteProjectNote(db, id, wer) {
+  const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(id);
+  if (!zeile) return false;
+  _mitVerlauf(db, () => {
+    db.prepare('DELETE FROM project_notes WHERE id=?').run(id);
+    _verlauf(db, wer, {
+      entity: 'note',
+      entityId: zeile.id,
+      action: 'remove',
+      old: JSON.stringify(_notizStand(zeile))
+    });
+    incrementDataVersion(db);
+  });
+  return true;
 }
 
 // ── Vorhaben-Texte ──────────────────────────────────────────
@@ -11161,6 +11522,7 @@ module.exports = {
   insertExperimentRun,
   updateExperimentRun,
   deleteExperimentRun,
+  listExperimentHistory,
   listProjectNotes,
   insertProjectNote,
   updateProjectNote,

@@ -15827,7 +15827,7 @@ function pjDetail(v) {
     `<textarea id="pj-v-outcome" data-pj-exp="${v.id}" data-pj-feld="outcome" rows="3" ` +
     `placeholder="${esc(t('exp.conclusionPh'))}">${esc(v.outcome)}</textarea>` +
     '</div>';
-  return kopf + fotos + text;
+  return kopf + fotos + text + pjVerlauf(v);
 }
 function pjArchiv() {
   const alte = experiments.filter((v) => v.status !== 'running' || v.archived);
@@ -15840,11 +15840,135 @@ function pjArchiv() {
     '</div></details>'
   );
 }
+// ── Verlauf ─────────────────────────────────────────────────
+//
+// Wer wann was geaendert hat: am Experiment, an seinen Gefaessen, an seinen
+// Fotos. Die Felder darueber zeigen den Stand von jetzt; hier steht, wie er
+// zustande kam. Das Neueste oben, der Anfang unten.
+//
+// Zugeklappt, weil man darin nachschlaegt und nicht arbeitet. Geholt wird er
+// erst beim Aufklappen und nicht mit /api/data: er waechst mit jeder Aenderung,
+// und /api/data laeuft bei jedem Sync. Einmal aufgeklappt bleibt er offen, auch
+// wenn die Ansicht darunter neu gezeichnet wird, und holt sich dann neu.
+let pjVerlaufOffen = null; // id des Experiments, dessen Verlauf offen ist
+let pjVerlaufStand = null; // { id, eintraege } oder { id, fehler: true }
+let pjVerlaufNr = 0; // gezeichnet wird nur die Antwort auf den juengsten Abruf
+function pjVerlauf(v) {
+  return (
+    `<details class="card pj-sec pj-fold pj-verlauf" data-pj-verlauf="${v.id}"${pjVerlaufOffen === v.id ? ' open' : ''}>` +
+    `<summary class="sec">${esc(t('exp.hist'))}</summary>` +
+    `<div id="pj-verlauf-liste">${pjVerlaufListe(v)}</div>` +
+    '</details>'
+  );
+}
+// Ein Gefaess heisst im Verlauf so, wie es zuletzt hiess: wer es umbenennt,
+// steht als eigener Eintrag da. Ein geloeschtes kennt nur noch der Verlauf.
+function pjVerlaufCodes(v, eintraege) {
+  const codes = {};
+  for (const e of eintraege) {
+    if (e.entity !== 'run') continue;
+    if (e.record && e.record.code) codes[e.entityId] = e.record.code;
+    if (e.field === 'code' && e.to) codes[e.entityId] = e.to;
+  }
+  for (const r of v.runs) codes[r.id] = r.code;
+  return codes;
+}
+function pjVerlaufWert(e, x) {
+  if (x == null || x === '') return '—';
+  if (e.entity === 'run' && e.field === 'outcome') return t('exp.out.' + x);
+  if (e.field === 'status') return t('exp.hist.status.' + x);
+  if (e.field === 'archived') return x === 'true' ? t('exp.hist.yes') : t('exp.hist.no');
+  return x;
+}
+function pjVerlaufZeile(e, codes) {
+  const gefaess = e.entity === 'run' ? codes[e.entityId] || '#' + e.entityId : '';
+  let was;
+  let wert = '';
+  if (e.action === 'update') {
+    const feld = t('exp.hist.f.' + e.entity + '.' + e.field);
+    was = gefaess ? gefaess + ' · ' + feld : feld;
+    wert =
+      '<div class="pj-hist-wert">' +
+      `<del>${esc(pjVerlaufWert(e, e.from))}</del> → <ins>${esc(pjVerlaufWert(e, e.to))}</ins></div>`;
+  } else {
+    was = t('exp.hist.' + e.action + '.' + e.entity, { code: gefaess });
+    // Ein Foto sagt, zu welchem Gefaess es gehoert, wenn es eins hat.
+    const runId = e.entity === 'photo' && e.record ? e.record.runId : null;
+    if (runId && codes[runId]) was += ' · ' + codes[runId];
+  }
+  return (
+    '<li class="pj-hist">' +
+    `<div class="pj-hist-kopf">${esc(fmtDtTime(e.at))}${e.user ? ' · ' + esc(e.user) : ''}</div>` +
+    `<div class="pj-hist-was">${esc(was)}</div>` +
+    wert +
+    '</li>'
+  );
+}
+// Der Ausgangsstand ist ein Eintrag je Datensatz, der beim Einfuehren des
+// Verlaufs da war. Einzeln gezeigt waeren das zwanzig gleiche Zeilen am Ende;
+// gemeint ist eine: ab hier wird mitgeschrieben.
+function pjVerlaufListe(v) {
+  const s = pjVerlaufStand;
+  if (!s || s.id !== v.id) return `<p class="pj-empty">${esc(t('common.loading'))}</p>`;
+  if (s.fehler) return `<p class="pj-empty">${esc(t('exp.histErr'))}</p>`;
+  const codes = pjVerlaufCodes(v, s.eintraege);
+  const zeilen = s.eintraege
+    .filter((e) => e.action !== 'baseline')
+    .reverse()
+    .map((e) => pjVerlaufZeile(e, codes));
+  const anfang = s.eintraege.find((e) => e.action === 'baseline');
+  if (anfang) {
+    zeilen.push(
+      '<li class="pj-hist">' +
+        `<div class="pj-hist-kopf">${esc(fmtDtTime(anfang.at))}</div>` +
+        `<div class="pj-hist-was">${esc(t('exp.hist.baseline'))}</div></li>`
+    );
+  }
+  return zeilen.length
+    ? '<ul class="pj-hist-liste">' + zeilen.join('') + '</ul>'
+    : `<p class="pj-empty">${esc(t('exp.histNone'))}</p>`;
+}
+function pjVerlaufLaden(id) {
+  const nr = ++pjVerlaufNr;
+  return apiGet('/api/experiments/' + id + '/history')
+    .then((r) => ({ id, eintraege: (r && r.entries) || [] }))
+    .catch(() => ({ id, fehler: true }))
+    .then((stand) => {
+      if (nr !== pjVerlaufNr) return;
+      pjVerlaufStand = stand;
+      const el = document.getElementById('pj-verlauf-liste');
+      const v = pjExp(pjOffen);
+      if (el && v && v.id === id) el.innerHTML = pjVerlaufListe(v);
+    });
+}
+// Nach einem Feld, das gespeichert wird, ohne dass die Ansicht neu gezeichnet
+// wird: Ergebnis, Mengen, Fazit. Nur die Liste, damit ein halb getippter Satz
+// im naechsten Feld stehen bleibt.
+function pjVerlaufNeu() {
+  if (pjOffen && pjVerlaufOffen === pjOffen) pjVerlaufLaden(pjOffen);
+}
+// <details> meldet das Auf- und Zuklappen mit "toggle", und das steigt nicht
+// auf; der Zuhoerer haengt deshalb in der Capture-Phase an der Seite. Ein
+// Verlauf, der schon als offen gilt, wurde nicht von Hand geoeffnet, sondern
+// mit der Ansicht neu gezeichnet; das Holen uebernimmt dann renderVersuch().
+function pjToggle(e) {
+  const det = e.target;
+  if (!det || !det.dataset || !det.dataset.pjVerlauf) return;
+  const id = Number(det.dataset.pjVerlauf);
+  if (det.open) {
+    if (pjVerlaufOffen === id) return;
+    pjVerlaufOffen = id;
+    pjVerlaufLaden(id);
+  } else if (pjVerlaufOffen === id) {
+    pjVerlaufOffen = null;
+  }
+}
 function renderVersuch() {
   const el = document.getElementById('pj-versuch');
   if (!el) return;
   const v = pjOffen ? pjExp(pjOffen) : null;
   el.innerHTML = v ? pjDetail(v) : pjListe();
+  if (v && pjVerlaufOffen === v.id) pjVerlaufLaden(v.id);
 }
 // Ein Etikett je Gefaess — dieselbe Vorlage, die die Kulturen drucken. Ein
 // Kolben und ein Glas bekommen dasselbe Etikett, und das ist der Punkt: am
@@ -15935,7 +16059,7 @@ function pjChange(e) {
     const v = pjExp(pjOffen);
     const r = v && v.runs.find((x) => x.id === id);
     if (r) r[name] = wert;
-    apiPatch('/api/experiment-runs/' + id, { [name]: wert });
+    apiPatch('/api/experiment-runs/' + id, { [name]: wert }).then(pjVerlaufNeu);
     if (name === 'outcome') renderVersuch();
     return;
   }
@@ -15943,7 +16067,7 @@ function pjChange(e) {
     const id = Number(feld.dataset.pjExp);
     const v = pjExp(id);
     if (v) v[name] = wert;
-    apiPatch('/api/experiments/' + id, { [name]: wert });
+    apiPatch('/api/experiments/' + id, { [name]: wert }).then(pjVerlaufNeu);
   }
 }
 function pjVersuchClick(e) {
@@ -16267,9 +16391,13 @@ function pjNotizClick(e) {
     }
     const n = projectNotes.find((x) => x.id === id);
     if (n) {
-      n.body = body;
-      n.updated = new Date().toISOString();
-      apiPatch('/api/project-notes/' + id, { body });
+      // Derselbe Text ist keine Aenderung; der Server schreibt dann nichts, und
+      // "geaendert" stuende hier nur bis zum naechsten Datenstand.
+      if (n.body !== body) {
+        n.body = body;
+        n.updated = new Date().toISOString();
+        apiPatch('/api/project-notes/' + id, { body });
+      }
       renderProjekte(n.tab);
     }
     return true;
@@ -27102,6 +27230,7 @@ function initEventListeners() {
   $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));
   $('p-proj').addEventListener('click', pjClick);
   $('p-proj').addEventListener('change', pjChange);
+  $('p-proj').addEventListener('toggle', pjToggle, true);
   const pickupsSchalter = $('pickups-past-btn');
   if (pickupsSchalter)
     pickupsSchalter.addEventListener('click', () => {
