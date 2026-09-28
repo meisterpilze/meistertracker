@@ -277,16 +277,17 @@ describe('Eine Charge aus einem Ansatz, angesetzt an einem früheren Tag', () =>
 
   it('ohne den Schalter bucht sie wie immer', () => {
     // Der Tag allein schaltet nichts ab — nur noBooking. Ein anderer Aufrufer, der
-    // `created` mitgibt, bucht weiter.
-    const korn = () => d.prepare('SELECT stock_grain AS v FROM inventory WHERE id=1').get().v;
-    const kornVorher = korn();
+    // `created` mitgibt, zieht weiter aus dem Ansatz. (Korn bucht eine Charge seit
+    // dem 28.09.2026 gar nicht mehr ab: es ging beim Ansetzen der Körnerbrut.)
+    const rest = () => db.listSubstrateBatches(d).find((s) => s.subId === 'SUB-01').remainingKg;
+    const restVorher = rest();
     const r = db.createBagBatchFromSubstrate(
       d,
       { batchId: 'BO-010926-01', subId: 'SUB-01', strainId: bo, qty: 2, bagKg: 5, created: '2026-09-01T10:00:00.000Z' },
       null
     );
     assert.equal(r.drawKg, 10);
-    assert.ok(korn() < kornVorher, 'ohne noBooking wurde nichts abgebucht');
+    assert.equal(rest(), restVorher - 10, 'ohne noBooking wurde nichts aus dem Ansatz gezogen');
   });
 });
 

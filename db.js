@@ -4555,9 +4555,13 @@ function deleteSubstrateBatch(db, subId, userId) {
   }
 }
 
-// Create a Charge of bags out of an existing mix. The substrate is already paid
-// for, so the only thing booked here is the spawn — which is why this needs the
-// species and the mix does not.
+// Create a Charge of bags out of an existing mix. Nothing comes off the shelf
+// here. The substrate was paid for when it was mixed, and the grain inside the
+// spawn when the grain spawn was set up (createGrainBatch books it, dry). This
+// used to book the spawn a second time — rec_spawn_pct of the wet block weight
+// against the same raw-grain stock — so every kilo of grain left the shelf twice
+// instead of once, when the grain spawn was made.
+// spawnKg is still worked out and returned: how much spawn these bags took.
 function createBagBatchFromSubstrate(db, b, userId) {
   const sub = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(b.subId);
   if (!sub) throw new Error('Substrat-Charge nicht gefunden: ' + b.subId);
@@ -4576,11 +4580,11 @@ function createBagBatchFromSubstrate(db, b, userId) {
 
   // Bestand aus der Inventur (noBooking): die Charge stand schon, bevor sie in
   // der App war. Sie bleibt mit dem Ansatz verbunden — seine Mischung, sein
-  // Maismehl —, zieht aber 0 kg daraus und bucht keine Körnerbrut ab. Die
-  // Restmenge, die aus den gezogenen Kilogramm abgeleitet wird
-  // (_recalcSubstrateRemaining), bleibt damit, wie sie war.
+  // Maismehl —, zieht aber 0 kg daraus. Die Restmenge, die aus den gezogenen
+  // Kilogramm abgeleitet wird (_recalcSubstrateRemaining), bleibt damit, wie sie
+  // war.
   const bucht = b.noBooking !== true;
-  const deltas = bucht && spawnKg > 0 ? [{ mat: 'grain', deltaKg: -spawnKg, type: 'spawn' }] : [];
+  const deltas = [];
   const res = insertBatch(
     db,
     {
@@ -4873,15 +4877,12 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
     const addedWetKg = weight * newBags.length;
     if (batch.substrate_batch_id) {
       // The substrate for these bags was bought when the mix was made. What
-      // they cost now is more of that mix, plus the spawn to inoculate them.
+      // they cost now is more of that mix — and nothing off the shelf: the
+      // grain in their spawn was booked when the grain spawn was set up
+      // (see createBagBatchFromSubstrate).
       db.prepare('UPDATE batches SET substrate_kg = substrate_kg + ? WHERE batch_id=?').run(addedWetKg, batchId);
       const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(batch.substrate_batch_id);
       if (sub) _recalcSubstrateRemaining(db, sub.sub_id);
-      const ms = batch.strain_id
-        ? db.prepare('SELECT rec_spawn_pct FROM mushroom_strains WHERE id=?').get(batch.strain_id)
-        : null;
-      const spawnKg = addedWetKg * (((ms && ms.rec_spawn_pct) || 0) / 100);
-      if (spawnKg > 0) applyInventoryDeltaNoTxn(db, 'grain', -spawnKg, 'spawn', batchId, userId || null);
     } else {
       const deltas = computeBatchMaterialDeltasForKg(batch, addedWetKg);
       for (const d of deltas) {
@@ -4913,8 +4914,10 @@ function deleteBatchById(db, batchId, userId) {
       row.batch_id = batchId;
       // A Charge drawn from a mix never took raw materials — it took kilograms
       // of finished substrate, and those go back to the mix rather than to the
-      // shelf. Only the spawn it was inoculated with is a shelf credit, and the
-      // capped-at-what-was-taken logic below already handles that from the ledger.
+      // shelf. Charges made before 28.09.2026 also had their spawn booked
+      // against raw grain (the second booking createBagBatchFromSubstrate no
+      // longer makes); deleting one gives that back, from its own 'spawn' rows
+      // in the ledger. A newer Charge has none, and gets nothing.
       if (row.substrate_batch_id && row.substrate_kg > 0) {
         const sub = db.prepare('SELECT sub_id FROM substrate_batches WHERE id=?').get(row.substrate_batch_id);
         if (sub) _recalcSubstrateRemaining(db, sub.sub_id, batchId);

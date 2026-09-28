@@ -1,8 +1,9 @@
 'use strict';
 // v67: substrate is mixed in bulk, once, and portioned into bags afterwards —
 // often across several species out of the same mix. So the raw materials are
-// charged when the mix is made, and a Charge drawn from it costs only the spawn
-// it is inoculated with.
+// charged when the mix is made, and a Charge drawn from it costs nothing off
+// the shelf: the grain in its spawn was charged when the grain spawn was set up.
+// (Until 28.09.2026 it was charged here a second time.)
 //
 // The old arrangement charged pellets per bag, which booked the same substrate
 // twice: once when it was mixed and again for every bag made from it. These
@@ -126,7 +127,10 @@ describe('substrate batches and the Chargen drawn from them', () => {
     );
     assert.equal(r.drawKg, 100);
     assert.equal(stock(d, 'hardwood'), pelletsBefore, 'the substrate was paid for when it was mixed');
-    assert.equal(stock(d, 'grain').toFixed(2), '55.00', 'only the spawn is charged here');
+    // And the spawn when the grain spawn was set up: its grain left the shelf
+    // then. Booking 5 % of the block weight here as well charged it twice.
+    assert.equal(stock(d, 'grain'), 60, 'no raw grain is charged for the spawn');
+    assert.equal(r.spawnKg, 5, 'how much spawn went in is still reported');
     assert.equal(sub(d, 'SUB-01').remainingKg, 100);
     assert.equal(d.prepare("SELECT COUNT(*) c FROM bags WHERE batch_id='BO-01'").get().c, 20);
     assert.equal(d.prepare("SELECT COUNT(*) c FROM barcodes WHERE entity_type='bag'").get().c, 20);
@@ -146,12 +150,12 @@ describe('substrate batches and the Chargen drawn from them', () => {
     assert.equal(row.sub_rh, 60);
   });
 
-  it('charges more mix and more spawn when a Charge is grown', () => {
+  it('charges more mix, and no raw grain, when a Charge is grown', () => {
     const grainBefore = stock(d, 'grain');
     const pelletsBefore = stock(d, 'hardwood');
     db.addBagsToBatch(d, 'CHUT-01', ['CHUT-01-16', 'CHUT-01-17'], 17, 5, null);
     assert.equal(sub(d, 'SUB-01').remainingKg, 15);
-    assert.equal(stock(d, 'grain').toFixed(2), (grainBefore - 0.5).toFixed(2));
+    assert.equal(stock(d, 'grain'), grainBefore);
     assert.equal(stock(d, 'hardwood'), pelletsBefore);
   });
 
@@ -165,8 +169,19 @@ describe('substrate batches and the Chargen drawn from them', () => {
     const pelletsBefore = stock(d, 'hardwood');
     db.deleteBatchById(d, 'BO-01', null);
     assert.equal(sub(d, 'SUB-01').remainingKg, 115, '100 kg returns to the mix');
-    assert.equal(stock(d, 'grain').toFixed(2), (grainBefore + 5).toFixed(2), 'the spawn returns to the shelf');
+    assert.equal(stock(d, 'grain'), grainBefore, 'nothing was charged, so nothing comes back');
     assert.equal(stock(d, 'hardwood'), pelletsBefore, 'the pellets stay booked against the mix');
+  });
+
+  it('gives an older Charge back the spawn it was charged', () => {
+    // Chargen made before 28.09.2026 carry a 'spawn' row in the ledger — the
+    // second booking. Deleting one returns exactly that, and nothing more.
+    db.createBagBatchFromSubstrate(d, { batchId: 'BO-ALT', subId: 'SUB-01', strainId: bo, qty: 2, bagKg: 5 }, null);
+    db.applyInventoryDelta(d, 'grain', -0.5, 'spawn', 'BO-ALT', null);
+    const grainBefore = stock(d, 'grain');
+    db.deleteBatchById(d, 'BO-ALT', null);
+    assert.equal(stock(d, 'grain').toFixed(2), (grainBefore + 0.5).toFixed(2));
+    assert.equal(sub(d, 'SUB-01').remainingKg, 115, 'and the mix is whole again');
   });
 
   it('allows an overdraw and records it, rather than losing the bags', () => {

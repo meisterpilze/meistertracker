@@ -1089,7 +1089,7 @@ window.LANG['pt'] = {
   'sub.commentPlaceholder': 'p. ex. pellets mais húmidos do que o habitual',
   'sub.commentSaved': 'Comentário guardado',
   'sub.commentCleared': 'Comentário apagado',
-  'sub.noSpawnHint': 'O inóculo é descontado no lote, não aqui — a preparação ainda não sabe que espécie vai receber.',
+  'sub.noSpawnHint': 'O inóculo não entra aqui: vai para os sacos no lote, e o grão dele já foi descontado ao preparar o grão.',
   'sub.confirmTitle': 'Criar preparação?',
   'sub.confirmMsg': '{kg} kg segundo {recipe} como {id}. O material sai do stock agora.',
   'sub.running': 'A criar a preparação…',

@@ -350,7 +350,7 @@ window.LANG['de'] = {
   'sub.commentPlaceholder': 'z. B. Pellets waren feuchter als sonst',
   'sub.commentSaved': 'Kommentar gespeichert',
   'sub.commentCleared': 'Kommentar gelöscht',
-  'sub.noSpawnHint': 'Körnerbrut wird erst bei der Charge abgezogen — der Ansatz weiß noch nicht, welche Sorte draus wird.',
+  'sub.noSpawnHint': 'Körnerbrut ist hier nicht dabei: sie kommt erst bei der Charge in die Beutel, und ihr Korn ist schon beim Ansetzen der Körnerbrut abgebucht.',
   'sub.confirmTitle': 'Ansatz anlegen?',
   'sub.confirmMsg': '{kg} kg nach {recipe} als {id}. Das Material wird jetzt vom Lager abgebucht.',
   'sub.running': 'Ansatz wird angelegt…',

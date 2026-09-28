@@ -346,7 +346,7 @@ window.LANG['en'] = {
   'sub.commentPlaceholder': 'e.g. pellets were wetter than usual',
   'sub.commentSaved': 'Comment saved',
   'sub.commentCleared': 'Comment cleared',
-  'sub.noSpawnHint': 'Spawn is charged with the Charge, not here — a mix does not know yet what will grow in it.',
+  'sub.noSpawnHint': 'No spawn in here: it goes into the bags with the Charge, and its grain was booked when the grain spawn was set up.',
   'sub.confirmTitle': 'Create mix?',
   'sub.confirmMsg': '{kg} kg to {recipe} as {id}. The material comes off the shelf now.',
   'sub.running': 'Creating mix…',
