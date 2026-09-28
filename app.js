@@ -335,6 +335,8 @@ let mushroomStrains = [],
   manualTasks = [],
   experiments = [],
   projectNotes = [],
+  projectDocs = null, // Vorhaben-Texte, erst beim Öffnen eines Reiters geladen
+  projectDocsStamp = null,
   harvests = [],
   cultures = [],
   inventory = {},
@@ -617,6 +619,14 @@ function applyData(d) {
   manualTasks = d.manualTasks || [];
   experiments = d.experiments || [];
   projectNotes = d.projectNotes || [];
+  // Die Vorhaben-Texte kommen nicht mit, nur ihre Marke. Hat jemand sie ersetzt,
+  // gilt der geladene Stand als veraltet und wird beim nächsten Öffnen eines
+  // Reiters neu geholt. Neu gezeichnet wird hier nichts: im Notizfeld darunter
+  // tippt vielleicht gerade jemand.
+  if ((d.projectDocsStamp || '') !== projectDocsStamp) {
+    if (projectDocsStamp !== null) projectDocs = null;
+    projectDocsStamp = d.projectDocsStamp || '';
+  }
   harvests = d.harvests || [];
   cultures = d.cultures || [];
   inventory = d.inventory || defaultInventory();
@@ -1587,10 +1597,11 @@ function refresh() {
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
-  // Der Inhalt dieser Seite hängt nicht an den Daten — er steht im Quelltext.
-  // Gezeichnet wird trotzdem, aber nur, wenn noch nichts dasteht: das deckt den
-  // Fall ab, für den diese Liste da ist (die offene Seite bleibt leer), ohne
-  // alle 30 Sekunden ein Dokument neu zu bauen, während jemand darin liest.
+  // Die Unterlagen dieser Seite hängen nicht an jedem Datenstand, sie kommen
+  // über ihren eigenen Abruf (pjDocsLaden). Gezeichnet wird trotzdem, aber nur,
+  // wenn noch nichts dasteht: das deckt den Fall ab, für den diese Liste da ist
+  // (die offene Seite bleibt leer), ohne alle 30 Sekunden ein Dokument neu zu
+  // bauen, während jemand darin liest.
   if (id === 'proj') {
     const offen = document.querySelector('#p-proj .sp.active > div');
     if (offen && !offen.innerHTML) {
@@ -15569,10 +15580,11 @@ async function printQrSheet(items, title) {
 
 // ─── VORHABEN (Forschung · Produkte · Bau) ───────────────────
 //
-// Drei Unterlagen, je eine für die Reiter Forschung, Produkte und
-// Bau. Sie stehen hier,
-// weil sie an der Werkbank gebraucht werden und nicht am Schreibtisch — ein
-// PDF, das man erst suchen muss, wird beim Ansetzen nicht gelesen.
+// Drei Unterlagen, die an der Werkbank gebraucht werden und nicht am
+// Schreibtisch. Ihr Wortlaut steht nicht hier, sondern in der Datenbank
+// (/api/project-docs): diesen Code liest jeder, der das Repository sieht, die
+// Unterlagen gehören dem Betrieb. Hier steht nur, wie sie gezeichnet werden.
+// Gepflegt werden sie außerhalb des Trackers und kommen per Import herein.
 //
 // Der Text ist Inhalt, keine Oberfläche, und geht deshalb nicht durch t().
 // Übersetzt werden die Reiter und die Knöpfe. Das ist dieselbe Grenze, die eine
@@ -15581,14 +15593,30 @@ async function printQrSheet(items, title) {
 // Wörterbuch. Drei Rechercheberichte in drei Sprachen zu halten hieße, sie
 // dreimal zu pflegen, und gepflegt würde dann einer.
 //
-// Bausteine je Abschnitt: p, ul, ol, note, table, cards, steps, tasks, copy.
-// Mehr braucht keines der drei Dokumente, und was ein Dokument nicht braucht,
-// kann auch nicht veralten.
-const PJ_DOCS = {
-  research: { title: '', sections: [] },
-  products: { title: '', sections: [] },
-  build: { title: '', sections: [] }
-};
+// Bausteine je Abschnitt: p, ul, ol, note, table, cards, steps, tasks, plan,
+// copy. Welche Form ein Dokument haben muss, prüft der Server beim Import
+// (checkProjectDoc in db.js), damit hier nie eine Datei ankommt, die der
+// Zeichner nicht lesen kann.
+//
+// Geladen wird erst, wenn jemand einen der drei Reiter öffnet: die Texte sind
+// lang, und /api/data läuft bei jedem Sync. /api/data trägt nur eine Marke;
+// ändert sie sich, holt der nächste Reiterwechsel den neuen Stand.
+let pjDocsAbruf = null; // laufender Abruf, damit zwei Reiter nicht zweimal holen
+function pjDocsLaden() {
+  if (!pjDocsAbruf) {
+    pjDocsAbruf = apiGet('/api/project-docs')
+      .then((r) => {
+        projectDocs = (r && r.docs) || {};
+      })
+      .catch(() => {
+        /* projectDocs bleibt null; der Reiter zeigt dann den Knopf zum Nachladen */
+      })
+      .finally(() => {
+        pjDocsAbruf = null;
+      });
+  }
+  return pjDocsAbruf;
+}
 
 // **fett** ist die einzige Auszeichnung, die diese drei Dokumente brauchen, und
 // sie wird nach dem Escapen eingesetzt: der Inhalt geht durch esc(), erst danach
@@ -15890,6 +15918,12 @@ function pjChange(e) {
     const dateien = e.target.files;
     e.target.value = '';
     if (id) pjKamera(id, dateien);
+    return;
+  }
+  if (e.target.dataset && e.target.dataset.pjDocFor) {
+    const datei = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (datei) pjDocImportieren(e.target.dataset.pjDocFor, datei);
     return;
   }
   const feld = e.target.closest('[data-pj-feld]');
@@ -16254,10 +16288,76 @@ function pjNotizClick(e) {
   }
   return false;
 }
+// Solange nichts geladen ist, steht ein Platzhalter da. Schlägt der Abruf fehl,
+// bleibt ein Knopf zum Nachladen stehen, statt dass es endlos weiterlädt.
+function pjDocsWarten(el, key) {
+  el.innerHTML = `<div class="card pj-sec"><p class="pj-empty">${esc(t('proj.docLoading'))}</p></div>`;
+  pjDocsLaden().then(() => {
+    if (projectDocs) {
+      renderProjekte(key);
+      return;
+    }
+    el.innerHTML =
+      '<div class="card pj-sec">' +
+      `<p class="pj-empty">${esc(t('proj.docLoadErr'))}</p>` +
+      '<div class="pj-note-bar">' +
+      `<button type="button" class="btn btn-sm fs-xs" data-pj-doc-retry="${esc(key)}">${esc(t('proj.docRetry'))}</button>` +
+      '</div></div>';
+  });
+}
+// Der Import nimmt die Datei, die außerhalb des Trackers gepflegt wird: ein
+// Objekt mit research, products und build, oder ein einzelnes Dokument für den
+// offenen Reiter. Den Knopf sieht nur ein Admin; der Server prüft das ohnehin.
+// Dasselbe Muster wie die Kamera: ein verstecktes Dateifeld, ein Knopf davor.
+function pjDocImport(key, ersetzen) {
+  if (!currentUser || currentUser.role !== 'admin') return '';
+  return (
+    '<div class="pj-note-bar">' +
+    `<input type="file" id="pj-doc-datei-${esc(key)}" accept=".json,application/json" data-pj-doc-for="${esc(key)}" hidden>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-doc-import="${esc(key)}">` +
+    `${esc(t(ersetzen ? 'proj.docReplace' : 'proj.docImport'))}</button>` +
+    '</div>'
+  );
+}
+async function pjDocImportieren(key, datei) {
+  let daten;
+  try {
+    daten = JSON.parse(await datei.text());
+  } catch (e) {
+    toast(t('proj.docBadFile'), 'err');
+    return;
+  }
+  // Ein einzelnes Dokument gehört zum offenen Reiter; die gepflegte Datei trägt
+  // alle drei und geht, wie sie ist.
+  const body = daten && Array.isArray(daten.sections) ? { [key]: daten } : daten;
+  const r = await apiPut('/api/project-docs', body);
+  if (!r || r.error) {
+    toast(t('proj.docBadFile') + (r && r.error ? ': ' + r.error : ''), 'err');
+    return;
+  }
+  projectDocs = null;
+  toast(t('proj.docImported', { n: (r.tabs || []).length }));
+  renderProjekte(key);
+}
 function renderProjekte(key) {
   const el = document.getElementById('pj-' + key);
-  const doc = PJ_DOCS[key];
-  if (!el || !doc) return;
+  if (!el) return;
+  if (!projectDocs) {
+    pjDocsWarten(el, key);
+    return;
+  }
+  const doc = projectDocs[key];
+  if (!doc) {
+    // Noch nichts importiert. Die Notizen hängen nicht an der Unterlage und
+    // bleiben auch ohne sie benutzbar.
+    el.innerHTML =
+      '<div class="card pj-sec">' +
+      `<p class="pj-empty">${esc(t('proj.docNone'))}</p>` +
+      pjDocImport(key, false) +
+      '</div>' +
+      (key === 'research' ? pjNotizen(key, []) : '');
+    return;
+  }
   const offen = doc.sections.filter((s) => !s.fold);
   const zu = doc.sections.filter((s) => s.fold);
   // Nur die Forschung hat die Notizen-Tuer. Produkte und Bau behalten ihre
@@ -16290,7 +16390,8 @@ function renderProjekte(key) {
           '</div>'
       )
       .join('') +
-    hinten;
+    hinten +
+    pjDocImport(key, true);
   pjPlansRefresh(el);
 }
 // Beide Knöpfe dieser Seite hängen an einem Zuhörer an der Seite selbst: der
@@ -16311,6 +16412,17 @@ function pjClick(e) {
   }
   if (pjVersuchClick(e)) return;
   if (pjNotizClick(e)) return;
+  const importieren = e.target.closest('[data-pj-doc-import]');
+  if (importieren) {
+    const feld = document.getElementById('pj-doc-datei-' + importieren.dataset.pjDocImport);
+    if (feld) feld.click();
+    return;
+  }
+  const nachladen = e.target.closest('[data-pj-doc-retry]');
+  if (nachladen) {
+    renderProjekte(nachladen.dataset.pjDocRetry);
+    return;
+  }
   const mehr = e.target.closest('[data-pj-more]');
   if (mehr) {
     const det = document.getElementById('pjd-' + mehr.dataset.pjMore);

@@ -36,8 +36,8 @@ window.LANG['en'] = {
   'nav.adminDevices': 'Devices',
   'nav.adminSystem': 'System',
   // Projects — research, product ideas, build. The three documents themselves
-  // live in PJ_DOCS (app.js) and are not translated; what is below is the
-  // chrome around them.
+  // live in the database and are not translated; what is below is the chrome
+  // around them.
   'proj.tabResearch': 'Research',
   'proj.tabProducts': 'Products',
   'proj.tabBuild': 'Build',
@@ -61,6 +61,14 @@ window.LANG['en'] = {
   'proj.noteDelTitle': 'Delete note?',
   'proj.noteDelMsg': 'The note is gone afterwards. Experiments and research stay.',
   'proj.research': 'From the research ({n})',
+  'proj.docLoading': 'Loading…',
+  'proj.docLoadErr': 'Could not be loaded.',
+  'proj.docRetry': 'Try again',
+  'proj.docNone': 'No text has been added here yet.',
+  'proj.docImport': 'Import text',
+  'proj.docReplace': 'Replace text',
+  'proj.docImported': 'Text imported ({n})',
+  'proj.docBadFile': 'The file does not fit',
   // Versuche — ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz.
   'exp.outcome': 'Outcome',
   'exp.out.open': 'open',

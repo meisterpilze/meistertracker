@@ -36,7 +36,7 @@ window.LANG['de'] = {
   'nav.adminDevices': 'Ger\u00e4te',
   'nav.adminSystem': 'System',
   // Vorhaben — Forschung, Produktideen, Bau. Der Inhalt der drei Unterlagen
-  // steht in PJ_DOCS (app.js) und wird nicht übersetzt; hier stehen die
+  // steht in der Datenbank und wird nicht übersetzt; hier stehen die
   // Beschriftungen darum herum.
   'proj.tabResearch': 'Forschung',
   'proj.tabProducts': 'Produkte',
@@ -64,6 +64,14 @@ window.LANG['de'] = {
   'proj.noteDelTitle': 'Notiz löschen?',
   'proj.noteDelMsg': 'Die Notiz ist danach weg. Versuche und Recherche bleiben.',
   'proj.research': 'Aus der Recherche ({n})',
+  'proj.docLoading': 'Wird geladen …',
+  'proj.docLoadErr': 'Konnte nicht geladen werden.',
+  'proj.docRetry': 'Nochmal versuchen',
+  'proj.docNone': 'Hier ist noch kein Text hinterlegt.',
+  'proj.docImport': 'Text importieren',
+  'proj.docReplace': 'Text ersetzen',
+  'proj.docImported': 'Text importiert ({n})',
+  'proj.docBadFile': 'Die Datei passt nicht',
   // Versuche — ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz.
   'exp.outcome': 'Ausgang',
   'exp.out.open': 'offen',

@@ -436,6 +436,13 @@ CREATE TABLE IF NOT EXISTS project_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_project_notes ON project_notes(tab, id DESC);
 
+CREATE TABLE IF NOT EXISTS project_docs (
+  tab        TEXT PRIMARY KEY,
+  doc        TEXT NOT NULL,
+  updated    TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -2591,6 +2598,18 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_staemme_name ON staemme(strain_id, name COLLATE NOCASE)');
     }
+  },
+  {
+    version: 88,
+    description: 'Vorhaben-Texte in der Datenbank statt im Quelltext',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS project_docs (
+        tab        TEXT PRIMARY KEY,
+        doc        TEXT NOT NULL,
+        updated    TEXT NOT NULL,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )`);
+    }
   }
 ];
 
@@ -3112,6 +3131,7 @@ function readAll(db, opts = {}) {
     barcodes,
     experiments: listExperiments(db),
     projectNotes: listProjectNotes(db),
+    projectDocsStamp: getProjectDocsStamp(db),
     version
   };
 }
@@ -7194,6 +7214,141 @@ function deleteProjectNote(db, id) {
   return info.changes > 0;
 }
 
+// ── Vorhaben-Texte ──────────────────────────────────────────
+//
+// Forschung, Produkte und Bau sind Unterlagen, keine Oberflaeche. Ihr Wortlaut
+// steht deshalb hier und nicht im Quelltext: den Code liest jeder, der das
+// Repository sieht, die Unterlagen gehoeren dem Betrieb. Der Code kennt nur die
+// Form, die renderProjekte() zeichnen kann; dieselben drei Reiter wie die Notizen.
+//
+// Ersetzt wird ein Reiter im Ganzen. Gepflegt wird die Unterlage ausserhalb des
+// Trackers, und der Import bringt ihren Stand. Geprueft wird die Form genau so
+// weit, wie der Zeichner sie anfasst: eine Datei, die nicht passt, wird hier
+// abgewiesen, statt auf dem Telefon als leere Seite anzukommen.
+const DOC_MAX_ZEICHEN = 1000000;
+
+function _docFehler(wo, was) {
+  return new Error('project doc: ' + wo + ' ' + was);
+}
+function _docObjekt(x) {
+  return !!x && typeof x === 'object' && !Array.isArray(x);
+}
+function _docText(x, wo, pflicht) {
+  if (x === undefined && !pflicht) return;
+  if (typeof x !== 'string') throw _docFehler(wo, 'must be text');
+}
+function _docTextListe(x, wo) {
+  if (!Array.isArray(x) || !x.every((s) => typeof s === 'string')) throw _docFehler(wo, 'must be a list of texts');
+}
+function _docListe(x, wo, jeEintrag) {
+  if (!Array.isArray(x)) throw _docFehler(wo, 'must be a list');
+  x.forEach((e, i) => jeEintrag(e, wo + '[' + i + ']'));
+}
+function _docZeile(r, wo) {
+  if (!Array.isArray(r)) throw _docFehler(wo, 'must be a row');
+}
+
+// Die Bausteine, die pjItem() kennt, in seiner Reihenfolge. Was ein Baustein
+// sonst noch traegt, laesst der Zeichner liegen, und die Pruefung auch.
+function _docBaustein(it, wo) {
+  if (!_docObjekt(it)) throw _docFehler(wo, 'must be an object');
+  _docText(it.t, wo + '.t');
+  _docText(it.p, wo + '.p');
+  if (it.ul !== undefined) _docTextListe(it.ul, wo + '.ul');
+  if (it.ol !== undefined) _docTextListe(it.ol, wo + '.ol');
+  _docText(it.note, wo + '.note');
+  if (it.table !== undefined) {
+    if (!_docObjekt(it.table)) throw _docFehler(wo + '.table', 'must be an object');
+    _docTextListe(it.table.head, wo + '.table.head');
+    _docListe(it.table.rows, wo + '.table.rows', _docZeile);
+  }
+  if (it.cards !== undefined) {
+    _docListe(it.cards, wo + '.cards', (c, w) => {
+      if (!_docObjekt(c)) throw _docFehler(w, 'must be an object');
+      if (c.rows !== undefined) _docListe(c.rows, w + '.rows', _docZeile);
+    });
+  }
+  if (it.steps !== undefined) {
+    _docListe(it.steps, wo + '.steps', (s, w) => {
+      if (!_docObjekt(s)) throw _docFehler(w, 'must be an object');
+    });
+  }
+  if (it.tasks !== undefined) _docTextListe(it.tasks, wo + '.tasks');
+  if (it.plan !== undefined) {
+    if (!_docObjekt(it.plan)) throw _docFehler(wo + '.plan', 'must be an object');
+    _docText(it.plan.key, wo + '.plan.key', true);
+    _docListe(it.plan.items, wo + '.plan.items', _docZeile);
+  }
+  if (it.copy !== undefined) {
+    if (!_docObjekt(it.copy)) throw _docFehler(wo + '.copy', 'must be an object');
+    _docText(it.copy.text, wo + '.copy.text', true);
+  }
+}
+
+function checkProjectDoc(doc, tab) {
+  if (!_docObjekt(doc)) throw _docFehler(tab, 'must be an object');
+  if (JSON.stringify(doc).length > DOC_MAX_ZEICHEN) throw _docFehler(tab, 'is too long');
+  _docText(doc.title, tab + '.title', true);
+  _docText(doc.meta, tab + '.meta');
+  _docText(doc.lead, tab + '.lead');
+  _docListe(doc.sections, tab + '.sections', (s, w) => {
+    if (!_docObjekt(s)) throw _docFehler(w, 'must be an object');
+    _docText(s.t, w + '.t', true);
+    _docListe(s.items, w + '.items', _docBaustein);
+  });
+}
+
+function getProjectDocs(db) {
+  const docs = {};
+  for (const r of db.prepare('SELECT tab, doc FROM project_docs').all()) {
+    if (!NOTIZ_REITER.includes(r.tab)) continue;
+    try {
+      docs[r.tab] = JSON.parse(r.doc);
+    } catch (e) {
+      // Geschrieben wird nur, was die Pruefung passiert hat. Eine kaputte Zeile
+      // waere ein Eingriff von aussen; der Reiter bleibt dann leer statt die
+      // ganze Seite mitzunehmen.
+    }
+  }
+  return docs;
+}
+
+// Wann zuletzt ein Reiter ersetzt wurde. /api/data traegt nur diese Marke, nicht
+// die Texte: die sind lang, und /api/data laeuft bei jedem Sync.
+function getProjectDocsStamp(db) {
+  const r = db.prepare('SELECT MAX(updated) AS m FROM project_docs').get();
+  return (r && r.m) || '';
+}
+
+// Nimmt ein Objekt mit einem oder mehreren Reitern, so wie die gepflegte Datei
+// aussieht. Erst wird alles geprueft, dann alles geschrieben: ein Import, der
+// beim dritten Reiter scheitert, hat auch die ersten beiden nicht angefasst.
+function setProjectDocs(db, docs, userId) {
+  if (!_docObjekt(docs) || !Object.keys(docs).length) {
+    throw new Error('project doc: expected an object with research, products or build');
+  }
+  const reiter = Object.keys(docs);
+  for (const tab of reiter) {
+    if (!NOTIZ_REITER.includes(tab)) throw new Error('project doc: unknown tab ' + tab);
+    checkProjectDoc(docs[tab], tab);
+  }
+  const jetzt = new Date().toISOString();
+  const stmt = db.prepare(
+    'INSERT INTO project_docs(tab,doc,updated,updated_by) VALUES(?,?,?,?) ' +
+      'ON CONFLICT(tab) DO UPDATE SET doc=excluded.doc, updated=excluded.updated, updated_by=excluded.updated_by'
+  );
+  db.exec('BEGIN');
+  try {
+    for (const tab of reiter) stmt.run(tab, JSON.stringify(docs[tab]), jetzt, userId || null);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  incrementDataVersion(db);
+  return reiter;
+}
+
 function listSuppliers(db) {
   return db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
 }
@@ -9782,6 +9937,7 @@ const SAFE_ERROR_PREFIXES = [
   'Unknown zone:',
   // Validation — db.js
   'invalid material:',
+  'project doc:',
   'Invalid culture parent:',
   'Substrate composition must total',
   // Mischen — computeMixBatch. Seit die Anteile im Ansatz-Formular eintippbar
@@ -10990,6 +11146,9 @@ module.exports = {
   insertProjectNote,
   updateProjectNote,
   deleteProjectNote,
+  getProjectDocs,
+  getProjectDocsStamp,
+  setProjectDocs,
   listSuppliers,
   upsertSupplier,
   deleteSupplier,

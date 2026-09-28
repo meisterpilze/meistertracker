@@ -9474,6 +9474,38 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Vorhaben-Texte ─────────────────────────────────────────
+  //
+  // Die Unterlagen hinter Forschung, Produkte und Bau. Lesen darf, wer die Seite
+  // sieht; ersetzen nur ein Admin, und zwar reiterweise im Ganzen, aus derselben
+  // Datei, die ausserhalb des Trackers gepflegt wird. Eigener Abruf statt eines
+  // Feldes in /api/data: die Texte sind lang und aendern sich selten.
+  if (req.method === 'GET' && url === '/api/project-docs') {
+    try {
+      jsonOk(res, { docs: db.getProjectDocs(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PUT' && url === '/api/project-docs') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const tabs = db.setProjectDocs(database, data, req.authUser.user_id);
+        broadcastSSE(res);
+        jsonOk(res, { tabs });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Team Members --
   if (req.method === 'POST' && req.url === '/api/team') {
     if (requireAdmin(req, res)) return;

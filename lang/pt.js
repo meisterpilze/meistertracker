@@ -36,7 +36,7 @@ window.LANG['pt'] = {
   'nav.adminDevices': 'Dispositivos',
   'nav.adminSystem': 'Sistema',
   // Projetos — pesquisa, ideias de produtos, obra. Os três documentos ficam
-  // em PJ_DOCS (app.js) e não são traduzidos; aqui estão apenas os rótulos.
+  // na base de dados e não são traduzidos; aqui estão apenas os rótulos.
   'proj.tabResearch': 'Pesquisa',
   'proj.tabProducts': 'Produtos',
   'proj.tabBuild': 'Obra',
@@ -60,6 +60,14 @@ window.LANG['pt'] = {
   'proj.noteDelTitle': 'Apagar a nota?',
   'proj.noteDelMsg': 'Depois a nota desaparece. Ensaios e pesquisa ficam.',
   'proj.research': 'Da pesquisa ({n})',
+  'proj.docLoading': 'A carregar…',
+  'proj.docLoadErr': 'Não foi possível carregar.',
+  'proj.docRetry': 'Tentar novamente',
+  'proj.docNone': 'Ainda não há texto aqui.',
+  'proj.docImport': 'Importar texto',
+  'proj.docReplace': 'Substituir texto',
+  'proj.docImported': 'Texto importado ({n})',
+  'proj.docBadFile': 'O ficheiro não é compatível',
   // Versuche — ein Versuch, seine Ansaetze, ein Ergebnis je Ansatz.
   'exp.outcome': 'Resultado',
   'exp.out.open': 'aberto',

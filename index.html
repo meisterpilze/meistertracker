@@ -6419,15 +6419,14 @@
         <!-- ══ ZONEN (Location Management) ══ -->
         <!-- Zone edit modal -->
 
-        <!-- Drei Unterlagen, je eine für die Reiter Forschung, Produkte
-             und Bau.
-             Sie stehen hier, weil sie an der Werkbank gebraucht werden und
-             nicht am Schreibtisch — ein PDF, das man erst suchen muss,
-             wird beim Ansetzen nicht gelesen.
+        <!-- Drei Unterlagen, die an der Werkbank gebraucht werden und nicht am
+             Schreibtisch: ein PDF, das man erst suchen muss, wird beim
+             Ansetzen nicht gelesen.
 
              Die Panels sind leer: ihren Inhalt schreibt renderProjekte() aus
-             PJ_DOCS in app.js. Der Text ist Inhalt und geht deshalb nicht durch
-             t(); die drei Reiter darüber schon. -->
+             dem, was in der Datenbank steht (/api/project-docs). Der Text ist
+             Inhalt und geht deshalb nicht durch t(); die drei Reiter darüber
+             schon. -->
         <div class="page" id="p-proj">
           <div class="stabs" data-stab-home="nav.projects">
             <button class="stab active" id="st-proj-versuch" data-i18n="proj.tabVersuch">Versuch</button>
