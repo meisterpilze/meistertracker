@@ -1403,6 +1403,23 @@ function savePhotoToDisk(reportId, photo, authUser) {
   };
 }
 
+// Undo savePhotoToDisk for files whose rows were rolled back: unlink them and
+// take their bytes back out of the cached total. Without the second half a
+// failed report kept counting against the cap until the next rescan, up to
+// five minutes later, and near the cap a retry got a 507 for space that was
+// already free again.
+function _discardPhotoFiles(files) {
+  for (const f of files) {
+    try {
+      const bytes = fs.statSync(f).size;
+      fs.unlinkSync(f);
+      _photoDirSizeBytes -= bytes;
+    } catch {
+      /* ignore — file already gone or never existed */
+    }
+  }
+}
+
 // Wieviele Beutel ein einzelner Bericht nennen darf. Eine Reihe im Regal passt
 // locker hinein; die Grenze ist da, damit ein kaputter Aufrufer nicht 10.000 Berichte
 // in eine Transaktion schreibt, nicht als Arbeitsgrenze.
@@ -8236,13 +8253,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           // the rollback undid the scan rows but not the cache — rebuild on next read.
           db.invalidateBagZoneCache(database);
           // Best-effort cleanup of disk files written during the failed transaction.
-          for (const f of writtenPhotoFiles) {
-            try {
-              fs.unlinkSync(f);
-            } catch {
-              /* ignore — file already gone or never existed */
-            }
-          }
+          _discardPhotoFiles(writtenPhotoFiles);
           throw innerErr;
         }
         broadcastSSE(res);

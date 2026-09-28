@@ -2610,6 +2610,25 @@ const MIGRATIONS = [
         updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
       )`);
     }
+  },
+  {
+    version: 91,
+    description: 'Kontaminationsfotos: derselbe Inhalt darf in mehreren Berichten stehen',
+    fn(db) {
+      // v36 hat sha256 eindeutig gemacht, ueber die ganze Tabelle. Seit ein
+      // Bericht mehrere Beutel abdeckt, bekommt jeder Beutel seine eigene Kopie
+      // der Fotos: dieselben Bytes, dieselbe Pruefsumme. Die zweite Kopie
+      // scheiterte an diesem Index, die Transaktion rollte zurueck, und von der
+      // ganzen Meldung blieb nichts. Dasselbe Bild in einem spaeteren Bericht
+      // scheiterte genauso.
+      //
+      // Eindeutig je Bericht waere auch falsch: wer im Formular dasselbe Bild
+      // zweimal auswaehlt, verloere damit die Meldung. Die Pruefsumme sagt, dass
+      // zwei Dateien gleich sind, nicht dass es nur eine geben darf. Der Index
+      // bleibt, nur ohne UNIQUE.
+      db.exec('DROP INDEX IF EXISTS idx_contam_photos_sha');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_contam_photos_sha ON contamination_photos(sha256)');
+    }
   }
 ];
 
