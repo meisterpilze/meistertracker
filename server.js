@@ -678,7 +678,12 @@ function writeData(data) {
   db.writeAll(database, data);
 }
 
-function jsonBody(req, res, cb) {
+// The request body parsed as JSON, whatever its shape: an array, a string,
+// null. Only for routes that check the shape themselves: /mcp, where a JSON-RPC
+// batch is an array and the SDK answers anything else malformed, and the order
+// import, which also takes a bare array of orders. Every other route uses
+// jsonBody.
+function anyJsonBody(req, res, cb) {
   const body = [];
   let sz = 0;
   let aborted = false;
@@ -708,7 +713,38 @@ function jsonBody(req, res, cb) {
       res.end('{"error":"bad json"}');
       return;
     }
-    cb(null, parsed);
+    // Many routes validate `data` before their own try opens, so the route itself
+    // can throw here. Uncaught, that would reach the process-level
+    // uncaughtException handler, which only logs, and the request would never be
+    // answered: Node's requestTimeout stops counting once the body is in.
+    try {
+      cb(null, parsed);
+    } catch (err) {
+      if (!res.headersSent) {
+        safeErr(res, err);
+        return;
+      }
+      // Too late for a status code. Log it, as uncaughtException would have, and
+      // cut off a half-written response rather than leave it open.
+      log('error', 'Unexpected error after the response started', {
+        error: String((err && err.message) || ''),
+        stack: err && err.stack
+      });
+      if (!res.writableEnded) res.destroy();
+    }
+  });
+}
+// The request body as a JSON object, for every route not on anyJsonBody. Most
+// read `data.<field>` without checking what `data` is, so null would throw, and
+// a number, a string or an array would pass as a body with no fields: a 200
+// that changed nothing.
+function jsonBody(req, res, cb) {
+  anyJsonBody(req, res, (e, data) => {
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      jsonErr(res, 400, 'Request body must be a JSON object');
+      return;
+    }
+    cb(null, data);
   });
 }
 function formBody(req, res, cb) {
@@ -723,7 +759,7 @@ function formBody(req, res, cb) {
       req.destroy();
       return;
     }
-    // See jsonBody: decode once, or a multi-byte char split across a chunk
+    // See anyJsonBody: decode once, or a multi-byte char split across a chunk
     // boundary is silently replaced with U+FFFD.
     body.push(c);
   });
@@ -6133,7 +6169,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const mcpSessionAuthMismatch = (session) =>
       !session.auth || session.auth.userId !== mcpAuth.userId || session.auth.role !== mcpAuth.role;
     if (req.method === 'POST') {
-      jsonBody(req, res, async (e, body) => {
+      anyJsonBody(req, res, async (e, body) => {
         if (e) return;
         try {
           let session = sessionId ? mcpSessions.get(sessionId) : null;
@@ -8700,7 +8736,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     // Rewriting a ship-to address is not an "operational write" — same gate as
     // the other customer-PII routes.
     if (requireShipping(req, res)) return;
-    jsonBody(req, res, (e, data) => {
+    anyJsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
         return;

@@ -95,7 +95,7 @@ describe('customer-PII routes carry the shipping guard', () => {
   it('and the guard runs before the body is read, not after', () => {
     const body = routeBody("url === '/api/orders/import'");
     assert.ok(
-      body.indexOf('requireShipping') < body.indexOf('jsonBody'),
+      body.indexOf('requireShipping') < body.indexOf('anyJsonBody'),
       'the guard has to reject before upsertOrder can see the payload'
     );
   });
