@@ -7650,12 +7650,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       // noBooking: Bestand aus der Inventur — angelegt, aber nichts gezogen und
       // nichts abgebucht. Nur ein echtes true schaltet das Buchen ab.
+      // sourceId: die Kultur aus "Beimpft mit" im geführten Ablauf, sonst keine.
       const vt = validateTypes(data, {
         batchId: 'string',
         subId: 'string',
         strainId: 'number',
         qty: 'number',
-        noBooking: 'boolean'
+        noBooking: 'boolean',
+        sourceId: 'string'
       });
       if (vt) {
         jsonErr(res, 400, vt);
@@ -7666,7 +7668,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vrng);
         return;
       }
-      const vlen = validateLengths(data, { batchId: 100, subId: 100, strain: 200, notes: 10000, strainText: 200 });
+      const vlen = validateLengths(data, {
+        batchId: 100,
+        subId: 100,
+        strain: 200,
+        notes: 10000,
+        strainText: 200,
+        sourceId: 100
+      });
       if (vlen) {
         jsonErr(res, 400, vlen);
         return;

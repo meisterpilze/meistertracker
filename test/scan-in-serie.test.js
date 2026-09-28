@@ -774,13 +774,21 @@ describe('Ernten aus der Kamera geht in die Kamera zurück', () => {
 describe('Kamera-Leiste: Aufbau und Stil', () => {
   const leiste = HTML.slice(HTML.indexOf('id="cam-scan-hud"'), HTML.indexOf('<!-- Sidebar -->'));
 
-  it('hat vier beschriftete Knöpfe in einer eigenen Reihe', () => {
+  it('hat fünf beschriftete Knöpfe in einer eigenen Reihe', () => {
     const modi = leiste.slice(leiste.indexOf('id="cam-hud-modes"'), leiste.indexOf('class="cam-hud-btns"'));
     const ids = [...modi.matchAll(/id="(btn-cam-[a-z]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(ids, ['btn-cam-move', 'btn-cam-harvest', 'btn-cam-contam', 'btn-cam-trash']);
-    for (const k of ['cam.move', 'cam.harvest', 'cam.contam', 'cam.trash']) {
+    assert.deepEqual(ids, ['btn-cam-move', 'btn-cam-harvest', 'btn-cam-contam', 'btn-cam-trash', 'btn-cam-used']);
+    for (const k of ['cam.move', 'cam.harvest', 'cam.contam', 'cam.trash', 'cam.used']) {
       assert.match(modi, new RegExp('data-i18n="' + k.replace('.', '\\.') + '"'), k + ' ohne Wort');
     }
+  });
+
+  it('stellt den fünften Knopf mittig und so breit wie die anderen', () => {
+    // Vier Spalten, jede Kachel zwei: der fünfte allein in der dritten Reihe,
+    // mittig. Ohne die Regel stünde er links mit einem Loch daneben.
+    assert.match(CSS, /\.cam-hud-modes \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+    assert.match(CSS, /\.cam-hud-modes > \.cam-mode-btn \{\s*grid-column: span 2;/);
+    assert.match(CSS, /\.cam-hud-modes > \.cam-mode-btn:last-child:nth-child\(odd\) \{\s*grid-column: 2 \/ span 2;/);
   });
 
   it('lässt der Werkzeugreihe Platz auf einem Telefon', () => {

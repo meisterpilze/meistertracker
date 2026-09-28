@@ -1270,7 +1270,7 @@
             >
             <span class="cam-chip" id="cam-chip-count"><span id="ch-count">0</span></span>
           </div>
-          <!-- Die vier Vorgänge, die man in Serie macht: ein Knopf, dann Beutel
+          <!-- Die fünf Vorgänge, die man in Serie macht: ein Knopf, dann Beutel
                für Beutel scannen, bis der Knopf wieder aus ist. Mit Wort, nicht
                nur als Zeichen — sie ändern, was der nächste Scan tut, und das
                muss man lesen können, ohne es zu kennen. Vorher ging das nur über
@@ -1402,6 +1402,39 @@
               </svg>
               <span class="cam-mode-l" data-i18n="cam.trash">Entsorgen</span>
               <span class="cam-hud-badge" id="cam-trash-count" hidden>0</span>
+            </button>
+            <!-- Verbraucht: jeder Scan bucht einen Körnerbeutel aus dem Bestand,
+                 weil er in Blöcke gegangen ist — nicht als entsorgt. Andere
+                 Beutel nimmt der Knopf nicht; ↩ nimmt den letzten zurück. -->
+            <button
+              id="btn-cam-used"
+              class="cam-mode-btn cam-mode-used"
+              type="button"
+              aria-pressed="false"
+              data-i18n-aria-label="cam.usedAria"
+              aria-label="Verbraucht: jeder gescannte Körnerbeutel geht aus dem Bestand"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m16 16 2 2 4-4" />
+                <path
+                  d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"
+                />
+                <path d="m7.5 4.27 9 5.15" />
+                <polyline points="3.29 7 12 12 20.71 7" />
+                <line x1="12" x2="12" y1="22" y2="12" />
+              </svg>
+              <span class="cam-mode-l" data-i18n="cam.used">Verbraucht</span>
+              <span class="cam-hud-badge" id="cam-used-count" hidden>0</span>
             </button>
           </div>
           <div class="cam-hud-btns">

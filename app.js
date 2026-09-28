@@ -155,7 +155,9 @@ function loadLang(code) {
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────
-const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'];
+// USED gibt es nur auf dem Telefon und auf dem gedruckten Etikett: gebucht wird
+// ein REMOVE mit dem Grund "spawn" (siehe verbrauchtScan).
+const ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM', 'USED'];
 // The colour a zone falls back to when its row carries none, the shade the role
 // picker suggests, and the default in the new-zone form — one table instead of
 // the three separate literals these used to be, which is how the KPI strip and
@@ -295,7 +297,7 @@ function rebuildZoneConstants() {
   REF_GROUPS = [
     {
       g: 'Actions',
-      items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a }))
+      items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM', 'USED'].map((a) => ({ val: a, label: a }))
     }
   ];
   REF_GROUPS.push({
@@ -8991,10 +8993,16 @@ function inocAvailable() {
     .map((c) => ({
       kind: 'culture',
       id: c.id,
+      strainId: c.strainId || null,
       label: c.id + ' — ' + (c.strainName || c.species || '') + ' (' + c.type + ')'
     }));
   nbAvailableSpawnBags().forEach((b) =>
-    out.push({ kind: 'bag', id: b.bag, label: b.bag + ' — ' + b.species + ' (' + zoneDisplayName(b.loc) + ')' })
+    out.push({
+      kind: 'bag',
+      id: b.bag,
+      strainId: b.strainId || null,
+      label: b.bag + ' — ' + b.species + ' (' + (b.loc ? zoneDisplayName(b.loc) : t('bagInfo.notPlaced')) + ')'
+    })
   );
   return out;
 }
@@ -9037,7 +9045,12 @@ function inocRender(prefix) {
       .join('');
   const sel = document.getElementById(prefix + '-inoc-pick');
   if (sel) {
-    const free = inocAvailable().filter((x) => !_inoc.some((y) => y.id === x.id));
+    // Im geführten Ablauf nur, was zur gewählten Sorte passt: alle Kulturen und
+    // Körnerbeutel des Betriebs in einer Liste liest am Telefon niemand.
+    const sorte = prefix === 'wkb' ? WKB.strainId : null;
+    const free = inocAvailable().filter(
+      (x) => !_inoc.some((y) => y.id === x.id) && (!sorte || !x.strainId || x.strainId === sorte)
+    );
     sel.innerHTML =
       `<option value="">${esc(t('inoc.pick'))}</option>` +
       free.map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('');
@@ -9053,15 +9066,32 @@ function inocPicked(prefix) {
 }
 // After the batch is safely saved: was the inoculant used up? Yes writes it off,
 // no leaves it exactly where it was.
+//
+// Nur noch für Kulturen: eine Flüssigkultur oder Petrischale hält meist für mehr
+// als eine Charge, das weiß nur, wer sie in der Hand hat. Ein Körnerbeutel geht
+// dagegen immer ganz in die Blöcke —
+// gescannt ist er verbraucht, auf jedem Weg und ohne Frage. Eine Kultur, deren
+// Antwort der geführte Ablauf schon mitgibt (`spent`), wird auch nicht gefragt.
 function inocAskConsume(batchObj, list) {
   if (!list.length) return;
-  const names = list.map((x) => x.id).join(', ');
+  const n = inocVerbrauchtBuchen(batchObj, list);
+  if (n) toast(t('batch.spawnConsumed', { n: n, id: batchObj.batchId }));
+  const offen = list.filter((x) => x.kind === 'culture' && x.spent === undefined);
+  if (!offen.length) return;
+  const names = offen.map((x) => x.id).join(', ');
   // OK writes it off; Cancel is the "no, still have some" answer and leaves
   // everything untouched — which is what Cancel already means, so no custom
   // button label is needed.
   confirm2(t('inoc.spentTitle'), t('inoc.spentMsg', { names, id: batchObj.batchId }), t('inoc.spentYes'), () =>
-    inocConsume(batchObj, list)
+    inocConsume(batchObj, offen)
   );
+}
+// Die Körnerbeutel der Liste ausbuchen, mit der neuen Charge als Grund — alle,
+// ohne Frage. Kein eigenes Rückgängig: die Leiste unten gehört dann der Meldung
+// über die Charge. Zurück kommt, wieviele Körnerbeutel es waren.
+function inocVerbrauchtBuchen(batchObj, list) {
+  const bags = list.filter((x) => x.kind === 'bag').map((x) => x.id);
+  return bags.length ? spawnBuchen(bags, 'spawn:' + batchObj.batchId).length : 0;
 }
 function inocConsume(batchObj, list) {
   const bags = list.filter((x) => x.kind === 'bag').map((x) => x.id);
@@ -9080,12 +9110,16 @@ function inocConsume(batchObj, list) {
 // written off on create: a REMOVE carrying reason "spawn:<new batch id>", so the
 // link lives in the scan log rather than needing a column, and it is naturally
 // multi-valued (a 20-bag batch may take two grain bags).
-// Which UI prefix ('nb' | 'ms-q') has the camera open for a "Beimpft mit" scan,
-// so the read lands in that field instead of opening the bag sheet or the lineage
-// view. Cleared when the camera closes, or every later scan would be swallowed by
-// a form the worker has moved on from.
+// Which UI prefix ('nb' | 'ms-q' | 'wkb') has the camera open for a "Beimpft
+// mit" scan, so the read lands in that field instead of opening the bag sheet or
+// the lineage view. Cleared when the camera closes, or every later scan would be
+// swallowed by a form the worker has moved on from.
 let _inocScanPrefix = null;
-// A grain bag is available if it belongs to a grain batch and is still placed.
+// Ein Körnerbeutel ist verfügbar, solange er im Bestand zählt — dieselbe Regel
+// wie in _grainKgOf(): kein REMOVE als letzter Scan, nicht in einer
+// Kontaminationszone. Auch einer, der nie eingelagert wurde; er zählt dort mit,
+// also muss man ihn auch verbrauchen können. Vorher fehlte er hier, und ein
+// kontaminierter stand zur Auswahl.
 function nbAvailableSpawnBags() {
   const placed = buildLastPlacementByBag();
   const out = [];
@@ -9093,47 +9127,92 @@ function nbAvailableSpawnBags() {
     if (b.batchType !== 'grain') return;
     (b.bags || []).forEach((bag) => {
       const last = placed.get(String(bag).toUpperCase());
-      if (!last || last.action === 'REMOVE' || !last.to) return;
-      out.push({ bag, loc: last.to, species: b.strainName || b.species || '' });
+      if (last && last.action === 'REMOVE') return;
+      const loc = (last && last.to) || null;
+      const zone = loc ? ZONE_BY_ID[toZone(loc)] : null;
+      if (zone && zone.role === 'contaminated') return;
+      out.push({
+        bag,
+        loc,
+        species: b.strainName || b.species || '',
+        strainId: b.strainId || null,
+        strainText: (b.strainText || '').trim()
+      });
     });
   });
   return out.sort((a, z) => a.bag.localeCompare(z.bag));
 }
-// Write off each grain bag consumed by `batchObj`. from = its current location so
-// the zone counts drop, and reason ties it to the batch it became.
-function nbConsumeSpawnBags(batchObj, bags) {
-  if (!bags.length) return;
+// Ist dieser REMOVE ein verbrauchter Körnerbeutel — "spawn" vom Scanner, oder
+// "spawn:<Charge>" vom Anlegen einer Charge —, und kein entsorgter Beutel?
+function istVerbraucht(entry) {
+  const r = entry && entry.reason;
+  return !!entry && entry.action === 'REMOVE' && typeof r === 'string' && (r === 'spawn' || r.startsWith('spawn:'));
+}
+// Bucht Körnerbeutel als verbraucht aus: je Beutel ein REMOVE von dem Platz, an
+// dem er stand — ohne Platz, wenn er nie eingelagert war —, mit dem Grund
+// `reason`. Ein Beutel, der schon draußen ist, bekommt keinen zweiten Eintrag.
+// opts.sitzung: die Einträge gehören zur laufenden Scan-Runde, ↩ in der Kamera
+// nimmt sie zurück. Zurück kommen die Einträge, die gebucht wurden.
+function spawnBuchen(bags, reason, opts) {
   const placed = buildLastPlacementByBag();
   const now = new Date().toISOString();
   const entries = [];
   bags.forEach((bag) => {
     const last = placed.get(String(bag).toUpperCase());
-    if (!last || last.action === 'REMOVE') return;
-    const src = batches.find((b) => (b.bags || []).some((x) => x.toUpperCase() === bag.toUpperCase()));
+    if (last && last.action === 'REMOVE') return;
+    const src = batches.find((b) => (b.bags || []).some((x) => x.toUpperCase() === String(bag).toUpperCase()));
     const entry = {
       time: now,
       action: 'REMOVE',
       batch: src ? src.batchId : null,
       bag,
-      from: last.to || null,
+      from: (last && last.to) || null,
       to: null,
       species: src ? src.species : null,
       strain: src ? src.strain : null,
-      reason: 'spawn:' + batchObj.batchId,
+      reason,
       user: currentUser?.username || null,
       client_uuid: newScanUuid(),
       _tempId: 's' + ++_scanTempIdCounter
     };
     scanLog.push(entry);
     movements.push(entry);
+    if (opts && opts.sitzung) {
+      if (!sessionStartTime) sessionStartTime = Date.now();
+      sessionEntries.push(entry);
+      scan.count++;
+    }
     entries.push(entry);
   });
-  if (!entries.length) return;
+  if (!entries.length) return entries;
   _statusByBatch = null; // the grain batch may now be DONE
   _placementByBag = null; // and those jars are off the shelf
   _rhythmIndex = null;
   postScanEntries(entries, { zoneCheck: false });
-  setFb('ok', t('batch.spawnConsumed', { n: entries.length, id: batchObj.batchId }), { noModal: true });
+  return entries;
+}
+// Rückgängig für spawnBuchen(): die Einträge gehen aus dem Log auf dem Telefon
+// und auf dem Server wieder heraus, die Beutel stehen wieder im Bestand.
+function spawnZuruecknehmen(entries) {
+  entries.forEach(scanEintragZuruecknehmen);
+  _statusByBatch = null;
+  _placementByBag = null;
+  _rhythmIndex = null;
+  updateSD();
+  renderStatus();
+  // Dieselbe Leiste, auf der eben noch Rückgängig stand: dort schaut man hin.
+  toast(t('batch.spawnBack', { n: entries.length }));
+}
+// Write off each grain bag consumed by `batchObj`. from = its current location so
+// the zone counts drop, and reason ties it to the batch it became. Ein Fehltipp
+// kostet einen Tipp: Rückgängig stellt die Beutel zurück.
+function nbConsumeSpawnBags(batchObj, bags) {
+  if (!bags.length) return;
+  const entries = spawnBuchen(bags, 'spawn:' + batchObj.batchId);
+  if (!entries.length) return;
+  const msg = t('batch.spawnConsumed', { n: entries.length, id: batchObj.batchId });
+  setFb('ok', msg, { noModal: true });
+  showUndoBar(msg, () => spawnZuruecknehmen(entries));
 }
 // Grain bags written off for a batch, read back out of the scan log.
 function spawnSourceFor(batchId) {
@@ -9987,7 +10066,10 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim(),
       // Nur bei einer Charge aus der Inventur; sonst setzt der Server jetzt, und
       // die Fälligkeit rechnet er in beiden Fällen selbst davon aus.
-      ...(frueher ? { created: opts.created, noBooking: true } : {})
+      ...(frueher ? { created: opts.created, noBooking: true } : {}),
+      // Die Kultur, mit der beimpft wurde, als Herkunft der Charge. Körnerbrut
+      // steht nicht hier, sondern im Scan-Log (spawnSourceFor).
+      ...(opts && opts.sourceId ? { sourceId: opts.sourceId } : {})
     });
     if (!r || r.error) {
       toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
@@ -17699,8 +17781,14 @@ async function msQuickConfirm() {
     const el = document.getElementById(id);
     if (el) el.value = val;
   };
+  // Die Kultur, mit der beimpft wird, steht in der Beimpf-Liste (gescannt oder
+  // gewählt). Das versteckte Feld hier setzt seit dieser Liste niemand mehr —
+  // so kam ein gescanntes Elternteil bei der Laborarbeit nie an.
   const sourceCulture =
-    (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || '';
+    (document.getElementById('ms-q-culture') && document.getElementById('ms-q-culture').value) || inocCultureId();
+  // msQuickClose() leert die Liste, damit ein abgebrochener Dialog nichts in die
+  // nächste Charge trägt. Wer anlegt, nimmt sie mit hinüber.
+  const inocMit = _inoc.slice();
   if (mode === 'labor') {
     const labType = document.getElementById('ms-q-labtype').value || 'MC';
     // Grainspawn is not a culture: it is weighed, incubates and yields
@@ -17723,6 +17811,9 @@ async function msQuickConfirm() {
       if (gsc) gsc.value = sourceCulture;
       setv('lw-notes', '');
       msQuickClose();
+      // createGrainBatch() liest die Liste: die Kultur wird Herkunft, ein
+      // gescannter Körnerbeutel (Körner aus Körnern) geht als verbraucht raus.
+      _inoc = inocMit;
       createGrainBatch();
       return;
     }
@@ -17761,13 +17852,11 @@ async function msQuickConfirm() {
     if (gsc) gsc.value = sourceCulture;
     setv('lw-notes', '');
     msQuickClose();
+    _inoc = inocMit;
     createGrainBatch();
     return;
   }
-  // block / all-in-one
-  // msQuickClose clears the grain-bag selection so an abandoned dialog cannot
-  // leak into the next batch — so carry it over the close explicitly.
-  const _inocPicked = _inoc.slice();
+  // block / all-in-one — die Liste geht über nbFillFromStrain mit (inocMit).
   // Formular bereitmachen, BEVOR das Rezept hineingeschrieben wird: beim ersten
   // Mal in einer Sitzung setzt nbEnsureReady() die gemerkten Vorgaben, und die
   // überschrieben sonst jedes Feld, das das Rezept gleich setzt. Ein Wechsel auf
@@ -17775,7 +17864,7 @@ async function msQuickConfirm() {
   // selbst hoch, egal wo man steht.
   msQuickClose();
   nbEnsureReady();
-  nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: _inocPicked, created: angesetzt });
+  nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: inocMit, created: angesetzt });
   createBatch();
 }
 
@@ -18424,7 +18513,8 @@ function createGrainBatch() {
         }
       }
       // Grain spawn is usually made from a liquid culture that survives many
-      // uses, so ask rather than assume.
+      // uses, so ask rather than assume. Ein Körnerbeutel (Körner aus Körnern)
+      // geht dagegen ganz hinein und wird ohne Frage ausgebucht.
       inocAskConsume(batchObj, _inocUsed);
     })
     .finally(() => {
@@ -18608,7 +18698,7 @@ function openBagInfo(bagId, batchId, batch) {
   let currentLoc = t('bagInfo.notPlaced');
   if (bagLogs.length) {
     const last = bagLogs[bagLogs.length - 1];
-    if (last.action === 'REMOVE') currentLoc = t('bagInfo.removed');
+    if (last.action === 'REMOVE') currentLoc = istVerbraucht(last) ? t('bagInfo.usedUp') : t('bagInfo.removed');
     else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
@@ -18691,7 +18781,12 @@ function renderBiActions() {
       `<button type="button" data-bi="scope-batch" class="fs-sm" style="${seg};border-left:1px solid var(--c-border);${biWholeBatch ? 'background:var(--c-text);color:#fff' : 'background:transparent;color:var(--c-text-sec)'}">${esc(t('bagInfo.scopeBatch', { n: nBags }))}</button>` +
       '</div>';
   }
-  if (!cur.removed && (role === 'incubation' || role === 'spawn') && hasFruiting) {
+  // Körnerbrut kommt nie in die Fruchtung: ihr nächster Schritt ist, in Blöcke zu
+  // gehen. Stand hier "→ Fruchtung", weil der Beutel im Spawn-Zelt steht, lag der
+  // falsche Knopf am größten da.
+  if (!cur.removed && b.batchType === 'grain') {
+    html += `<button type="button" data-bi="used" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-purple-dark);color:#fff">✓ ${esc(t('bagInfo.used'))}</button>`;
+  } else if (!cur.removed && (role === 'incubation' || role === 'spawn') && hasFruiting) {
     html += `<button type="button" data-bi="fruchtung" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-primary);color:#fff">→ ${esc(t('dash.toFruiting'))}</button>`;
   } else if (!cur.removed && role === 'fruiting') {
     html += `<button type="button" data-bi="harvest" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-amber-dark);color:#fff">✂ ${esc(t('bagInfo.harvest'))}</button>`;
@@ -18740,6 +18835,26 @@ function biMoveTo(dest) {
   };
   if (biWholeBatch) moveBatchTo(b, dest, cb);
   else moveBagsTo(b, [biBagId], dest, cb);
+}
+// Verbraucht aus dem Beutel-Fenster: der gescannte Körnerbeutel, oder mit
+// "Ganze Charge" alle, die noch dastehen. Danach zurück in die Kamera wie beim
+// Umziehen, und ein Fehltipp kostet einen Tipp: Rückgängig, oder ↩ in der
+// Kamera. Die Kamera geht vor dem Buchen auf, damit die Meldung dort steht.
+function biMarkUsed() {
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  if (!b || !biBagId) return;
+  document.getElementById('m-baginfo').classList.remove('open');
+  biRearmScanner();
+  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], 'spawn', { sitzung: true });
+  if (!entries.length) {
+    setFb('warn', t('scanFb.alreadyUsed', { bag: biBagId }));
+    return;
+  }
+  const msg =
+    entries.length === 1 ? t('bagInfo.usedOne', { bag: entries[0].bag }) : t('bagInfo.usedN', { n: entries.length, id: b.batchId });
+  setFb('ok', msg, entries.length === 1 ? entries[0] : undefined);
+  showUndoBar(msg, () => spawnZuruecknehmen(entries));
+  updateSD();
 }
 // Return to a clean scan state and re-open the camera, so scanning the next bag
 // opens its sheet again (no action armed).
@@ -21327,7 +21442,8 @@ function armScanAction(val, opts) {
       MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
       REMOVE: t('scanFb.actionRemove'),
       HARVEST: t('scanFb.actionHarvest'),
-      CONTAM: t('scanFb.actionContam')
+      CONTAM: t('scanFb.actionContam'),
+      USED: t('cam.usedArmed')
     }[val],
     opts && opts.noModal ? { noModal: true } : undefined
   );
@@ -21376,7 +21492,7 @@ function updateCamContamBtn() {
   );
 }
 
-// ── Vorgänge in Serie: Umziehen, Ernten, Kontamination, Entsorgen ─────────
+// ── Vorgänge in Serie: Umziehen, Ernten, Kontamination, Entsorgen, Verbraucht ─
 // Ein Knopf, dann Beutel für Beutel scannen, bis der Knopf wieder aus ist. So
 // einfach muss es sein, sonst benutzt es niemand. Der Scanner konnte das schon
 // (ein gesetzter Vorgang bleibt stehen), nur lag die Tür dazu hinter gedruckten
@@ -21393,8 +21509,8 @@ let _modeRun = null;
 // Anruf, die Bildschirmsperre oder ein Tipp neben das Bild schließen sie mitten
 // in der Reihe; wer gleich weitermacht, soll nicht wieder bei null anfangen. Wer
 // erst nach einer Pause wiederkommt, bekommt den neutralen Scanner wie bisher.
-// Entsorgen überlebt sie nie: wer die Kamera später aufmacht, um nach einem
-// Beutel zu sehen, darf ihn nicht versehentlich wegbuchen.
+// Entsorgen und Verbraucht überleben sie nie: wer die Kamera später aufmacht, um
+// nach einem Beutel zu sehen, darf ihn nicht versehentlich wegbuchen.
 const MODE_RUN_KEEP_MS = 15 * 60 * 1000;
 
 function toggleMoveScan() {
@@ -21409,18 +21525,23 @@ function toggleMoveScan() {
   _openZonePicker(t('cam.movePick'), armMoveRun);
 }
 
-// Ernten und Entsorgen: ein Tipp stellt den Vorgang scharf, der zweite nimmt
-// ihn zurück — wie beim Umziehen, nur ohne Ziel.
+// Ernten, Entsorgen und Verbraucht: ein Tipp stellt den Vorgang scharf, der
+// zweite nimmt ihn zurück — wie beim Umziehen, nur ohne Ziel.
 function toggleModeScan(action) {
+  const [an, aus] = {
+    HARVEST: ['cam.harvestArmed', 'cam.harvestEnded'],
+    REMOVE: ['cam.trashArmed', 'cam.trashEnded'],
+    USED: ['cam.usedArmed', 'cam.usedEnded']
+  }[action];
   if (scan.action === action) {
     const n = modeRunCount(action, null);
     endModeRun();
-    setFb('ok', t(action === 'HARVEST' ? 'cam.harvestEnded' : 'cam.trashEnded', { n: n }));
+    setFb('ok', t(aus, { n: n }));
     return;
   }
   if (contamPending()) return;
   armMode(action, null);
-  setFb('ok', t(action === 'HARVEST' ? 'cam.harvestArmed' : 'cam.trashArmed'));
+  setFb('ok', t(an));
 }
 
 // Gesammelte Kontaminations-Beutel gingen beim Umschalten still verloren:
@@ -21497,7 +21618,7 @@ function modeRunResumable() {
   return Date.now() - _modeRun.at < MODE_RUN_KEEP_MS;
 }
 
-// Die drei Knöpfe, die hier gezählt werden. Die Kontamination hat ihren eigenen
+// Die Knöpfe, die hier gezählt werden. Die Kontamination hat ihren eigenen
 // (updateCamContamBtn), weil ihr Knopf mehr tut: mit gesammelten Beuteln öffnet
 // er das Formular.
 function updateCamModeBtns() {
@@ -21506,7 +21627,8 @@ function updateCamModeBtns() {
   const knoepfe = [
     ['move', moveOn, moveOn ? t('cam.moveOnAria', { loc: loc }) : t('cam.moveAria'), modeRunCount('MOVE', scan.to)],
     ['harvest', scan.action === 'HARVEST', t('cam.harvestAria'), modeRunCount('HARVEST', null)],
-    ['trash', scan.action === 'REMOVE', t('cam.trashAria'), modeRunCount('REMOVE', null)]
+    ['trash', scan.action === 'REMOVE', t('cam.trashAria'), modeRunCount('REMOVE', null)],
+    ['used', scan.action === 'USED', t('cam.usedAria'), modeRunCount('USED', null)]
   ];
   for (const [name, on, aria, zahl] of knoepfe) {
     const b = document.getElementById('btn-cam-' + name);
@@ -21625,20 +21747,23 @@ function undoneMsg(entry) {
   }
   return t('scanFb.undone', { bag: was });
 }
-// Undo a single scan entry by clicking the ↩ button
-function undoScanEntry(btn) {
-  const row = btn.closest('.scan-log-entry');
-  const tempId = row ? row.getAttribute('data-scan-id') : null;
-  if (!tempId) return;
-  const idx = sessionEntries.findIndex((e) => e._tempId === tempId);
-  if (idx === -1) return;
-  const entry = sessionEntries[idx];
-  // Remove from scanLog + movements
+// Nimmt einen Scan-Eintrag zurück: aus dem Log auf dem Telefon, aus der
+// laufenden Runde samt ihrer Zeile im Verlauf, und vom Server — auch einen,
+// dessen Speichern noch läuft oder der offline in der Warteschlange steht. Der
+// ↩-Knopf und das Rückgängig nach "Verbraucht" nehmen denselben Weg.
+function scanEintragZuruecknehmen(entry) {
+  const tempId = entry._tempId;
   const si = scanLog.findIndex((e) => e._tempId === tempId);
   if (si !== -1) scanLog.splice(si, 1);
   const mi = movements.findIndex((e) => e._tempId === tempId);
   if (mi !== -1) movements.splice(mi, 1);
-  sessionEntries.splice(idx, 1);
+  const ri = sessionEntries.findIndex((e) => e._tempId === tempId);
+  if (ri !== -1) {
+    sessionEntries.splice(ri, 1);
+    scan.count = Math.max(0, scan.count - 1);
+    const row = document.querySelector('.scan-log-entry[data-scan-id="' + tempId + '"]');
+    if (row) row.remove();
+  }
   modeRunUntally(entry);
   // Delete from server
   if (entry._serverId) apiDelete('/api/scan-log/' + entry._serverId);
@@ -21646,9 +21771,21 @@ function undoScanEntry(btn) {
   // none is coming until replay — pull it out of the queue instead.
   else if (entry._queued && dropQueuedScanEntry(entry)) entry._queued = false;
   else entry._undoPending = true; // POST not resolved yet — delete once its id arrives
-  // Remove DOM row
-  if (row) row.remove();
-  scan.count = Math.max(0, scan.count - 1);
+}
+// Undo a single scan entry by clicking the ↩ button
+function undoScanEntry(btn) {
+  const row = btn.closest('.scan-log-entry');
+  const tempId = row ? row.getAttribute('data-scan-id') : null;
+  if (!tempId) return;
+  const entry = sessionEntries.find((e) => e._tempId === tempId);
+  if (entry) scanRueckgaengig(entry);
+}
+// Nimmt einen Eintrag der laufenden Runde zurück und sagt es. ↩ in der Kamera
+// kommt direkt hierher und sucht nicht erst die Zeile im Verlauf: die gibt es
+// nicht für jeden Eintrag (mehrere Beutel auf einmal verbraucht schreiben eine
+// Meldung, keine je Beutel), und der Verlauf behält nur die letzten 80.
+function scanRueckgaengig(entry) {
+  scanEintragZuruecknehmen(entry);
   _scanBeep(400, 100);
   setFb('info', undoneMsg(entry));
   updateSD();
@@ -22056,7 +22193,7 @@ function processScan(raw, opts) {
         setFb('err', cultureRefusal(hit));
         return;
       }
-      const addErr = inocAdd(hit.id);
+      const addErr = _inocScanPrefix === 'wkb' ? wkbInocAdd(hit.id) : inocAdd(hit.id);
       if (addErr) {
         _scanBeep(300, 150);
         setFb('err', addErr);
@@ -22066,6 +22203,14 @@ function processScan(raw, opts) {
       _scanBeep(800, 60);
       setFb('ok', t('scanFb.cultureAutofilled', { id: hit.id }));
       closeCamScan();
+      return;
+    }
+    // Verbraucht bucht Körnerbeutel aus. Eine Kultur hieß hier sonst: Kamera zu,
+    // Stammbaum auf — mitten in einer Reihe. Stattdessen sagt der Scanner, wo
+    // eine leere Kultur hingehört, und die Reihe geht weiter.
+    if (scan.action === 'USED') {
+      _scanBeep(300, 150);
+      setFb('err', t('scanFb.usedNotCulture', { id: val }));
       return;
     }
     const c = cultures.find((x) => x.id.toUpperCase() === val);
@@ -22179,7 +22324,7 @@ function processScan(raw, opts) {
     // so an explicit MOVE/REMOVE still wins. Closing the camera is what brings
     // the quick dialog back into view (it steps aside for the camera).
     if (isBag && !scan.action && _inocScanPrefix) {
-      const err = inocAdd(val);
+      const err = _inocScanPrefix === 'wkb' ? wkbInocAdd(val) : inocAdd(val);
       if (err) {
         _scanBeep(300, 150);
         setFb('err', err);
@@ -22228,6 +22373,10 @@ function processScan(raw, opts) {
       // Handscanner weiter, während es aufsteht.
       if (document.getElementById('m-contam-report').classList.contains('open')) _crRenderTargets();
       updateSD();
+      return;
+    }
+    if (scan.action === 'USED') {
+      verbrauchtScan(val, isBag, batchId, batch);
       return;
     }
     if (scan.action === 'ADD' && !scan.to) {
@@ -22456,6 +22605,40 @@ function scanActionName(a) {
 // Warum eine Kultur nicht genommen werden kann, in Worten statt "ist contam".
 function cultureRefusal(c) {
   return c.status === 'contam' ? t('scanFb.cultureContam', { id: c.id }) : t('scanFb.cultureUsed', { id: c.id });
+}
+// ── Verbraucht: Körnerbrut aus dem Bestand ──────────────────
+// Ein Körnerbeutel, mit dem Blöcke beimpft wurden, stand weiter im Bestand, bis
+// ihn jemand entsorgte — und dann zählte er als weggeworfen. "Verbraucht" bucht
+// ihn aus wie Entsorgen: ein Knopf, dann Beutel für Beutel scannen, ↩ nimmt den
+// letzten zurück. Gebucht wird, was das Anlegen einer Charge bucht, wenn dort
+// Körnerbrut als verbraucht angegeben wird (nbConsumeSpawnBags): ein REMOVE mit
+// dem Grund "spawn". Ohne die Charge dahinter — in welche der Beutel ging, weiß
+// der Scanner nicht; das weiß "Charge anlegen", und dort wird sie mitgeschrieben.
+function verbrauchtScan(val, isBag, batchId, batch) {
+  if (!isBag) {
+    _scanBeep(300, 150);
+    setFb('err', t('scanFb.usedNeedsBag', { batch: batchId }));
+    return;
+  }
+  // Nur Körnerbrut. Ein Block, der hier landet, ist fast immer ein falsch
+  // gewählter Knopf — und ein ausgebuchter Block zählte in keiner Ernte mehr.
+  if (!batch || batch.batchType !== 'grain') {
+    _scanBeep(300, 150);
+    setFb('err', t('scanFb.usedNotGrain', { bag: val }));
+    return;
+  }
+  const bag = (batch.bags || []).find((x) => x.toUpperCase() === val.toUpperCase()) || val;
+  const last = buildLastPlacementByBag().get(bag.toUpperCase());
+  if (last && last.action === 'REMOVE') {
+    _scanBeep(500, 120);
+    setFb('warn', t(istVerbraucht(last) ? 'scanFb.alreadyUsed' : 'scanFb.alreadyRemoved', { bag: bag }));
+    return;
+  }
+  const [entry] = spawnBuchen([bag], 'spawn', { sitzung: true });
+  _lastScanVal = bag;
+  const n = modeRunTally('USED', null, entry);
+  setFb('ok', t('scanFb.usedLogged', { bag: bag, n: n }), entry);
+  updateSD();
 }
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
 const _scanBuf = { chars: [], timer: null };
@@ -26506,8 +26689,7 @@ function camUndoLastScan() {
     _showCamHudToast('info', t('cam.nothingToUndo'));
     return;
   }
-  const btn = document.querySelector('[data-scan-id="' + last._tempId + '"] .sle-undo');
-  if (btn) undoScanEntry(btn);
+  scanRueckgaengig(last);
 }
 function copyCalDavUrl() {
   const url = document.getElementById('caldav-url-display').textContent;
@@ -26598,6 +26780,7 @@ function initEventListeners() {
     if (a === 'harvest') return biOpenHarvest();
     if (a === 'contam') return biReportContam();
     if (a === 'remove') return biConfirmRemove();
+    if (a === 'used') return biMarkUsed();
     // Same explicit target as the dashboard one-tap — this button names no tent
     // either, so it must not resolve to a different one.
     if (a === 'fruchtung') return biMoveTo(fruitingTarget());
@@ -26720,7 +26903,8 @@ function initEventListeners() {
   for (const [id, fn] of [
     ['btn-cam-move', toggleMoveScan],
     ['btn-cam-harvest', () => toggleModeScan('HARVEST')],
-    ['btn-cam-trash', () => toggleModeScan('REMOVE')]
+    ['btn-cam-trash', () => toggleModeScan('REMOVE')],
+    ['btn-cam-used', () => toggleModeScan('USED')]
   ]) {
     const knopf = $(id);
     if (knopf) knopf.addEventListener('click', fn);
@@ -27951,6 +28135,9 @@ function wkfOpen(kind) {
 
 function wkfClose() {
   wkf('m-work-flow').classList.remove('open');
+  // Die Beimpf-Liste gehört zu genau einer Charge. Wer den Ablauf verlässt,
+  // nimmt sie nicht in die nächste mit; beim Anlegen ist sie vorher kopiert.
+  if (WKF.kind === 'batch') _inoc = [];
   WKF.kind = null;
   WKF.step = null;
   WKF.receipt = null;
@@ -28570,8 +28757,10 @@ function wkbOpen() {
   WKB.custom = false;
   WKB.hw = WKB.wb = WKB.rh = WKB.days = null;
   // Jede Charge fängt bei "ohne Stamm" und heute an — auch "Noch eine Charge".
+  // Und ohne Beimpfmaterial: das der letzten ist verbraucht.
   stammReset('wkb');
   anlageReset('wkb');
+  _inoc = [];
   const first = mushroomStrains.filter((x) => x.recBatchType)[0] || mushroomStrains[0];
   WKB.strainId = first ? first.id : null;
   WKB.subVonHand = false;
@@ -28640,8 +28829,15 @@ function wkbRender() {
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       .map((x) => `<option value="${x.id}"${x.id === WKB.strainId ? ' selected' : ''}>${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`)
       .join('');
+    // "Beimpft mit" steht zuoberst: die Körnerbrut hat man in der Hand, und
+    // gescannt bringt sie Sorte und Stamm gleich mit (wkbInocAdd). Wählen geht
+    // auch; die Liste zeigt nur, was zur Sorte passt.
     body =
       `<div class="wkf-q">${esc(t('work.bQ1'))}</div>
+       <div class="wkf-field"><label for="wkb-inoc-pick">${esc(t('work.bInoc'))}</label>
+         <div class="stamm-row"><button type="button" class="btn" data-wkb="inoc-scan">📷 ${esc(t('work.bInocScan'))}</button>
+           <select id="wkb-inoc-pick"></select></div>
+         <div id="wkb-inoc-chips" class="inoc-chips"></div></div>
        <div class="wkf-field"><label>${esc(t('strains.pilzsorte'))}</label>
          <select id="wkb-strain">${list}</select></div>
        <div id="wkb-stamm-wrap" class="wkf-field stamm-wrap"></div>
@@ -28735,6 +28931,7 @@ function wkbRender() {
        <div class="wkf-sum-card">
          <div><span class="wkf-r-k">${esc(t('strains.pilzsorte'))}</span><b>${esc(ms ? ms.name : '')}</b></div>
          <div><span class="wkf-r-k">${esc(t('stamm.label'))}</span>${stammAnzeige('wkb') ? esc(stammAnzeige('wkb')) : '&mdash;'}</div>
+         ${wkbInocZeile()}
          <div><span class="wkf-r-k">${esc(t('anlage.label'))}</span>${frueher ? '<b>' + esc(fmtDt(anlageZeitpunkt(anlageState('wkb').datum))) + '</b>' : esc(t('anlage.today'))}</div>
          <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
          <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${quelle}</div>
@@ -28754,6 +28951,7 @@ function wkbRender() {
   if (WKB.step === 1) {
     stammRender('wkb', WKB.strainId);
     anlageRender('wkb');
+    inocRender('wkb');
   }
 
   const back = `<button class="btn" data-wkb="back">${esc(t('work.back'))}</button>`;
@@ -28787,13 +28985,87 @@ function wkbReadStep() {
   }
 }
 
+// ── Beimpft mit, im geführten Ablauf ─────────────────────────
+// Beim Anlegen die Körnerbrut scannen, damit man weiß, welche Brut in welchen
+// Blöcken steckt. Das lange Formular und der Schnelldialog konnten das seit
+// #449; seit die Kacheln der Weg zum Anlegen sind, öffnet die aber niemand
+// mehr, und der Ablauf kannte es nicht.
+//
+// Der erste Körnerbeutel bringt Sorte und Stamm mit: gescannt ist schneller als
+// gewählt, und die Brut sagt, was aus ihr wird. Danach nimmt die Liste nur Brut
+// derselben Sorte, aus zwei Sorten wird keine Charge. Beim Anlegen gelten die
+// Körnerbeutel als verbraucht — ein geöffneter Beutel geht ganz in die Blöcke,
+// und die Zusammenfassung sagt es vorher. Eine Kultur wird nur verknüpft; sie
+// hält meist für mehr als eine Charge.
+function wkbInocAdd(id) {
+  if (WKB.step === 1) wkbReadStep();
+  const gesucht = String(id || '')
+    .trim()
+    .toUpperCase();
+  const beutel = nbAvailableSpawnBags().find((x) => x.bag.toUpperCase() === gesucht);
+  const hatBrut = _inoc.some((x) => x.kind === 'bag');
+  if (beutel && hatBrut && beutel.strainId !== WKB.strainId) {
+    const ms = wkbStrain();
+    return t('work.bInocOtherSorte', { bag: beutel.bag, sorte: beutel.species, charge: ms ? ms.name : '' });
+  }
+  const err = inocAdd(id);
+  if (err) return err;
+  if (beutel && !hatBrut && beutel.strainId) {
+    const sorteNeu = WKB.strainId !== beutel.strainId;
+    WKB.strainId = beutel.strainId;
+    // Der Stamm der Brut, wenn die Sorte ihn in ihrer Liste führt. Führt sie
+    // ihn nicht, bleibt eine Wahl von Hand stehen — außer die Sorte hat eben
+    // gewechselt, dann gehört die alte Wahl zu einer anderen Sorte.
+    const stamm = staemmeFor(beutel.strainId).find((s) => stammGleich(s.name, beutel.strainText));
+    if (stamm || sorteNeu) {
+      const st = stammState('wkb');
+      st.strainId = beutel.strainId;
+      st.neu = false;
+      st.getippt = '';
+      st.wert = stamm ? stamm.name : '';
+    }
+  }
+  wkbRender();
+  return null;
+}
+// Die Sorte von Hand gewechselt, nachdem Brut gescannt war: Brut einer anderen
+// Sorte gehört nicht zu dieser Charge und geht aus der Liste — mit Meldung.
+function wkbInocSortePruefen() {
+  const alle = nbAvailableSpawnBags();
+  const fremd = _inoc.filter((x) => {
+    if (x.kind !== 'bag') return false;
+    const b = alle.find((y) => y.bag === x.id);
+    return !!b && b.strainId !== WKB.strainId;
+  });
+  if (!fremd.length) return;
+  _inoc = _inoc.filter((x) => !fremd.includes(x));
+  toast(t('work.bInocDropped', { list: fremd.map((x) => x.id).join(', ') }));
+}
+// Die Zeile in der Zusammenfassung: womit beimpft wird, und dass die
+// Körnerbeutel dabei ausgebucht werden — gesagt, bevor es geschieht.
+function wkbInocZeile() {
+  if (!_inoc.length) return '';
+  const brut = _inoc.some((x) => x.kind === 'bag');
+  return (
+    `<div><span class="wkf-r-k">${esc(t('work.bInoc'))}</span>${esc(_inoc.map((x) => x.id).join(', '))}` +
+    (brut ? `<div class="wkf-hint">${esc(t('work.bInocSpent'))}</div>` : '') +
+    '</div>'
+  );
+}
+// Die Liste fürs Anlegen, mit der Antwort auf "verbraucht?" schon darin.
+function wkbInocListe() {
+  return _inoc.map((x) => ({ kind: x.kind, id: x.id, spent: x.kind === 'bag' }));
+}
+
 // Ohne Ansatz läuft die Buchung über createBatch() des langen Formulars: es
 // zieht Rohmaterial vom Lager, fragt danach die Zone ab und druckt Etiketten.
 // Der Ablauf füllt dessen Felder und übergibt, statt denselben Weg noch einmal
 // zu schreiben — eine zweite Fassung wäre die, die irgendwann abweicht.
 // `stamm` und `angesetzt` kommen aus wkbCreate, schon geprüft: der Name aus der
-// Liste der Sorte ('' für ohne), der Tag als JJJJ-MM-TT ('' für heute).
-function wkbCreateFromShelf(stamm, angesetzt) {
+// Liste der Sorte ('' für ohne), der Tag als JJJJ-MM-TT ('' für heute). `inoc`
+// ist die Beimpf-Liste aus wkbInocListe(); createBatch() bucht die Brut nach dem
+// Speichern aus (inocAskConsume) und nimmt die erste Kultur als Herkunft.
+function wkbCreateFromShelf(stamm, angesetzt, inoc) {
   const ms = wkbStrain();
   if (!ms) return;
   const r = wkbRecipe();
@@ -28803,8 +29075,7 @@ function wkbCreateFromShelf(stamm, angesetzt) {
   // was hier gesetzt wird. Die Seite wechselt dafür nicht mehr — siehe
   // msQuickConfirm, derselbe Grund.
   nbEnsureReady();
-  // Das Rezept des Assistenten überschreibt das der Sorte, wo es abweicht;
-  // Kultur und Beimpfung bleiben leer, weil dieser Weg keine kennt.
+  // Das Rezept des Assistenten überschreibt das der Sorte, wo es abweicht.
   nbFillFromStrain(ms, {
     qty: WKB.qty,
     bagKg: WKB.bagKg,
@@ -28814,13 +29085,16 @@ function wkbCreateFromShelf(stamm, angesetzt) {
     rh: r.rh,
     notes: WKB.notes.trim(),
     strainText: stamm || '',
-    created: angesetzt || ''
+    created: angesetzt || '',
+    inoc: inoc || []
   });
   createBatch();
 }
 
 async function wkbCreate() {
   wkbReadStep();
+  // Die Beimpf-Liste jetzt, solange der Ablauf offen ist: wkfClose() leert sie.
+  const inoc = wkbInocListe();
   const ms = wkbStrain();
   const mix = wkbMix();
   if (!ms) return;
@@ -28845,18 +29119,24 @@ async function wkbCreate() {
   if (knopf) knopf.disabled = false;
   // Fehlgeschlagen (gemeldet ist es), oder der Ablauf wurde währenddessen zu.
   if (stamm === null || WKF.kind !== 'batch') return;
-  if (!mix) return wkbCreateFromShelf(stamm, angesetzt);
+  if (!mix) return wkbCreateFromShelf(stamm, angesetzt, inoc);
   const r = wkbRecipe();
   const wann = anlageZeitpunkt(angesetzt);
   const batchId = genBatchId(ms.name, wann);
+  const kultur = inoc.find((x) => x.kind === 'culture');
   // Wie das lange Formular: der Stamm steht in beiden Spalten, und ohne ihn steht
   // in `strain` 'XXX', nicht das Sorten-Kürzel. Sonst bedeutet dieselbe Spalte je
   // nach Eingabeweg etwas anderes.
   createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, stamm || 'XXX', stamm, {
     notes: WKB.notes.trim(),
     created: angesetzt ? wann.toISOString() : undefined,
+    sourceId: kultur ? kultur.id : undefined,
     onDone: (res) => {
       const neuId = res.batchId || batchId;
+      const neu = batches.find((x) => x.batchId === neuId);
+      // Die Körnerbrut geht jetzt aus dem Bestand, mit der neuen Charge als
+      // Grund. Auch wenn der Ablauf inzwischen zu ist: angelegt ist angelegt.
+      const brut = neu ? inocVerbrauchtBuchen(neu, inoc) : 0;
       // Was noch im Ansatz steht, ist die Zahl, gegen die die nächste Charge
       // geplant wird. Sie stand auf der Quittung, die dieser Weg jetzt nicht
       // mehr zeigt — also geht sie in die Meldung mit. Eine Charge aus der
@@ -28868,11 +29148,16 @@ async function wkbCreate() {
             id: mix.subId,
             left: (res.remainingKg || 0).toFixed(0)
           });
+      const meldung =
+        t('work.bDone', { n: WKB.qty, name: ms.name }) +
+        ' — ' +
+        gezogen +
+        (brut ? ' — ' + t('work.bInocDone', { n: brut }) : '');
       // Der Ablauf kann inzwischen verlassen oder ein anderer geöffnet worden
       // sein. Dann gehört WKF nicht mehr uns — die Bestätigung sagt es dem
       // Fenster, statt den fremden Bildschirm zu übernehmen.
       if (WKF.kind !== 'batch') {
-        toast(t('work.bDone', { n: WKB.qty, name: ms.name }) + ' — ' + gezogen);
+        toast(meldung);
         return;
       }
       // Zuerst zu, dann einlagern: m-move-batch und m-batch-print lägen sonst
@@ -28881,8 +29166,7 @@ async function wkbCreate() {
       // vorher "fertig" sagt, lädt dazu ein, ihn wegzutippen. Genau so können
       // Chargen ohne einen einzigen ADD-Scan entstehen.
       wkfClose();
-      toast(t('work.bDone', { n: WKB.qty, name: ms.name }) + ' — ' + gezogen);
-      const neu = batches.find((x) => x.batchId === neuId);
+      toast(meldung);
       if (neu) nbPlaceAndPrint(neu, neu.bags || []);
     }
   });
@@ -28893,9 +29177,25 @@ async function wkbCreate() {
   if (!flow) return;
   flow.addEventListener('click', (e) => {
     if (WKF.kind !== 'batch') return;
+    // Das ✕ an einem Beimpf-Eintrag: raus aus der Liste, sonst bleibt alles.
+    const weg = e.target.closest('[data-action="inoc-drop"]');
+    if (weg) {
+      wkbReadStep();
+      inocRemove(weg.dataset.id);
+      wkbRender();
+      return;
+    }
     const el = e.target.closest('[data-wkb]');
     if (!el || el.disabled) return;
     const a = el.dataset.wkb;
+    if (a === 'inoc-scan') {
+      // Die Kamera liegt über dem Ablauf (beide z-index 200, die Kamera steht in
+      // index.html dahinter); der Scan landet über _inocScanPrefix in
+      // wkbInocAdd(), und das Schließen der Kamera gibt den Ablauf wieder frei.
+      wkbReadStep();
+      msqOpenScan('wkb');
+      return;
+    }
     if (a === 'kg') {
       wkbReadStep();
       WKB.bagKg = parseDecimal(el.dataset.val) || NB_BAG_KG_DEFAULT;
@@ -28936,9 +29236,21 @@ async function wkbCreate() {
   // Menge und Sorte wirken auf die Zeile im zweiten Schritt, also sofort merken.
   flow.addEventListener('change', (e) => {
     if (WKF.kind !== 'batch') return;
+    // Beimpfmaterial aus der Liste gewählt statt gescannt: derselbe Weg.
+    if (e.target.closest('#wkb-inoc-pick')) {
+      const wahl = e.target.value;
+      if (!wahl) return;
+      const err = wkbInocAdd(wahl);
+      if (err) {
+        toast(err, 'err');
+        inocRender('wkb');
+      }
+      return;
+    }
     if (e.target.closest('#wkb-mix')) WKB.subVonHand = true;
     if (e.target.closest('#wkb-strain,#wkb-qty,#wkb-mix')) {
       wkbReadStep();
+      if (e.target.closest('#wkb-strain')) wkbInocSortePruefen();
       wkbRender();
     }
   });

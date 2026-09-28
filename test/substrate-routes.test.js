@@ -102,7 +102,9 @@ describe('substrate routes are wired to the right handlers', () => {
     for (const marker of ["req.url === '/api/substrate-batches'", 'subOffMatch', 'subDelMatch', 'from-substrate']) {
       const i = SRC.indexOf(marker);
       assert.ok(i > 0, marker + ' not found');
-      assert.match(SRC.slice(i, i + 2000), /broadcastSSE\(res\)/, marker + ' does not broadcast');
+      // 2500 like the calendar test below: the from-substrate handler grew by
+      // its sourceId check, and the window only has to reach the broadcast.
+      assert.match(SRC.slice(i, i + 2500), /broadcastSSE\(res\)/, marker + ' does not broadcast');
     }
   });
 

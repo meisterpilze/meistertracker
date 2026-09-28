@@ -9224,8 +9224,14 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   const contamZoneIds = zones.filter((z) => z.role === 'contaminated').map((z) => z.id);
   if (contamZoneIds.length === 0) return { groupBy, groups: {}, totalContam: 0 };
 
+  // Ein Körnerbeutel, der in Blöcke ging, trägt als Grund "spawn" (Scanner,
+  // "Verbraucht") oder "spawn:<Charge>" (beim Anlegen einer Charge). Das ist ein
+  // REMOVE mit Grund wie jeder Kontaminations-Abgang, aber kein Verlust — ohne
+  // diese Ausnahme zählte jeder verbrauchte Beutel hier als Kontamination.
   let rows = db
-    .prepare("SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL ORDER BY id")
+    .prepare(
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' ORDER BY id"
+    )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
   if (endDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) <= endDate);
