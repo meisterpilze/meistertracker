@@ -45,17 +45,20 @@ $trigger.Delay = 'PT1M'
 # S4U runs as this user with the profile loaded but needs no stored password.
 # The server needs the user profile for the pm2 home and the printer spooler.
 #
-# RunLevel Limited, not Highest, and the reason is pm2 rather than security.
+# RunLevel Limited asks for the right thing, but for an S4U logon Windows does
+# not apply it: the task still runs with the full administrator token. Files
+# the boot run writes come out owned by Administrators, and so does the pipe
+# pm2 talks to its daemon over, \\.\pipe\rpc.sock. An ordinary window may read
+# that pipe but not write to it, so `pm2 describe` and `pm2 start` fail with
+# EPERM, and taskkill cannot stop the server either. The result was a machine
+# where the server ran but could never be updated from an ordinary window.
 #
-# pm2 talks to its daemon over \\.\pipe\rpc.sock. A pipe created by an elevated
-# process cannot be opened by a non-elevated one, so a boot instance started at
-# Highest is unreachable from an ordinary START.bat window: `pm2 describe` and
-# `pm2 start` both fail with EPERM, and taskkill cannot stop the process either.
-# The result is a machine where the server runs but can never be updated, and
-# START.bat reports "Server process crashed on startup" while the healthy
-# instance it could not replace keeps serving yesterday's code.
+# START.bat therefore drops those rights itself before anything starts pm2,
+# see scripts\unelevated.ps1. Limited stays: it is what this task should be,
+# and it costs nothing.
 #
-# Nothing in START.bat needs administrator rights. The only privileged-looking
+# Apart from installing Node.js or Git, nothing in START.bat needs
+# administrator rights. The only privileged-looking
 # thing the server does is bind port 80 for the HTTP→HTTPS redirect, which
 # Windows permits unprivileged and which already degrades cleanly — server.js
 # catches EACCES and EADDRINUSE there and continues in HTTPS-only mode.

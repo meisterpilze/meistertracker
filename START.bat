@@ -87,18 +87,66 @@ REM or to match a fork's branding. Must match the value server.js reads
 REM from PM2_PROCESS_NAME.
 if not defined PM2_PROCESS_NAME set "PM2_PROCESS_NAME=meisterpilze"
 if not defined PORT set "PORT=3000"
-REM Der Name der Boot-Aufgabe. Muss zu $TaskName in install-autostart.ps1
-REM passen: Schritt 5 bittet den Scheduler unter diesem Namen, die Aufgabe zu
-REM beenden, wenn taskkill an ihrer Instanz scheitert.
-if not defined AUTOSTART_TASK set "AUTOSTART_TASK=MeisterTracker"
 set "NEED_PATH_REFRESH=0"
+
+REM ---- Drop administrator rights before anything can start pm2 ----
+REM
+REM pm2's daemon, its pipe and the server it starts all inherit the token of
+REM whatever starts pm2 first. Started with administrator rights, they belong
+REM to Administrators, and an ordinary window can then neither stop the server
+REM nor send pm2 a command: taskkill is refused, and pm2 fails with
+REM "connect EPERM //./pipe/rpc.sock".
+REM
+REM The boot task is where that comes from. It runs this script through an
+REM S4U logon, and Windows does not apply a task's RunLevel to S4U: registered
+REM Limited, the boot run still gets the full administrator token. So neither
+REM re-registering the task nor asking the scheduler to end it could help --
+REM and the task had long finished anyway, leaving pm2 behind.
+REM
+REM A run that finds itself elevated therefore hands itself to
+REM scripts\unelevated.ps1, which runs it again as a standard user. Not when
+REM Node.js or Git is missing: installing those is the one thing here that
+REM does need administrator rights.
+REM
+REM The second run deletes the marker file first thing. If it is still there
+REM afterwards, the helper never got as far as starting it -- and this run
+REM carries on with its rights rather than leave the machine without a server.
+REM
+REM Keep `exit /b` the last command of every block it sits in. Anything after
+REM it in the same block, even a line that never runs, makes cmd /c exit 0 --
+REM and then Phase 1 takes a failed second run for a good one and does not
+REM stop to show the error.
+set "SELF=%~f0"
+set "HERE=%~2"
+if "%~3"=="--unelevated" (
+    if defined UNELEVATED_MARK del "!UNELEVATED_MARK!" >nul 2>&1
+) else (
+    call :check_admin
+    if !errorlevel! equ 0 (
+        call :check_node
+        if !errorlevel! equ 0 call :check_git
+        if !errorlevel! equ 0 (
+            set "UNELEVATED_ARGS=/d /c ""!SELF!" --relaunched "!HERE!" --unelevated""
+            set "UNELEVATED_MARK=!TEMP!\meisterpilze_unelevated_!RANDOM!.mark"
+            type nul > "!UNELEVATED_MARK!"
+            powershell -NoProfile -ExecutionPolicy Bypass -File "!HERE!scripts\unelevated.ps1"
+            set "UNELEVATED_RC=!errorlevel!"
+            if exist "!UNELEVATED_MARK!" (
+                del "!UNELEVATED_MARK!" >nul 2>&1
+                echo  WARNING: could not drop administrator rights; continuing with them.
+            ) else (
+                exit /b !UNELEVATED_RC!
+            )
+        )
+    )
+)
 
 REM ============================================================
 REM  Check and auto-install prerequisites
 REM ============================================================
 
 REM ---- Check for admin rights (needed for winget installs) ----
-net session >nul 2>&1
+call :check_admin
 if !errorlevel! neq 0 (
     call :check_node
     if !errorlevel! neq 0 (
@@ -201,8 +249,22 @@ if !errorlevel! neq 0 (
     echo  Please close this window, open a NEW command prompt, and run START.bat again.
     exit /b 1
 )
-for /f "tokens=*" %%v in ('call pm2 --version 2^>nul') do set "PM2_VER=%%v"
-echo  -^> PM2 %PM2_VER% found.
+REM The version comes from pm2's package.json, not from `pm2 --version`. Every
+REM pm2 command, --version included, connects to the daemon first and starts
+REM one when it cannot -- so with the boot instance's daemon out of reach, each
+REM run left a second daemon behind that could never take over the pipe. Step 5
+REM checks the daemon before the first pm2 command.
+set "PM2_VER="
+set "PM2_PKG="
+for /f "delims=" %%P in ('where pm2.cmd 2^>nul') do if not defined PM2_PKG set "PM2_PKG=%%~dpPnode_modules\pm2\package.json"
+if defined PM2_PKG if exist "!PM2_PKG!" (
+    for /f "delims=" %%v in ('node -p "require(process.argv[1]).version" "!PM2_PKG!" 2^>nul') do set "PM2_VER=%%v"
+)
+if defined PM2_VER (
+    echo  -^> PM2 !PM2_VER! found.
+) else (
+    echo  -^> PM2 found.
+)
 
 REM ============================================================
 REM  Step 2: Install dependencies
@@ -280,7 +342,49 @@ REM ============================================================
 echo.
 echo [5/5] Starting server...
 
-REM Kill stale node processes on our port before starting.
+REM ---- Can this window send pm2 a command at all? ----
+REM Every pm2 command connects to the daemon over a named pipe first. A daemon
+REM started with administrator rights owns that pipe as Administrators, and
+REM this window may then read it but not write to it: pm2 fails with
+REM "connect EPERM //./pipe/rpc.sock" and a stack trace, which reads like the
+REM application crashing, after starting a second daemon that can never take
+REM the pipe over. So ask before the first pm2 command, and say what it is.
+REM Worktree runs ask too -- there is one daemon per machine, and they use it.
+set "PM2_ACCESS="
+for /f "delims=" %%A in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\pm2-access.ps1" 2^>nul') do set "PM2_ACCESS=%%A"
+if "!PM2_ACCESS!"=="denied" (
+    echo.
+    echo  ERROR: pm2 runs with administrator rights, and this window has none.
+    echo.
+    echo  Every pm2 command from here is refused, so the server can be neither
+    echo  stopped nor updated. Its daemon was started elevated: by the boot
+    echo  task, before this script learned to drop those rights, or from a
+    echo  window run as administrator.
+    echo.
+    echo  Once, in an Administrator PowerShell:
+    echo      ^& "$env:APPDATA\npm\pm2.cmd" kill
+    echo  then run this script again.
+    echo.
+    echo  If this is back after the next restart, the boot run could not drop
+    echo  its rights. It wrote down why in %TEMP%\meistertracker-unelevated.log
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Match update_server.sh: always delete + start with --update-env so the
+REM new process picks up any .env changes made since the last launch.
+REM Through pm2 first, before anything is killed on the port: a process pm2
+REM runs, killed from outside, is one pm2 starts straight back up.
+call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
+if !errorlevel! equ 0 (
+    echo  -^> Process found, deleting for clean restart...
+    call pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
+)
+
+REM Then kill whatever else still holds our port, and look again rather than
+REM assume: taskkill's refusal goes to nul, and a refused kill printed exactly
+REM what a successful one does.
 REM In worktree mode skip this entirely so a parallel run never reaches
 REM across into the production instance on a different port.
 if "%WORKTREE_MODE%"=="1" (
@@ -290,71 +394,17 @@ if "%WORKTREE_MODE%"=="1" (
         echo  -^> Killing stale process on port %PORT% ^(PID %%P^)...
         taskkill /PID %%P /F >nul 2>&1
     )
-)
-
-REM Say so when that kill did not work, instead of walking into pm2.
-REM
-REM taskkill's output was discarded, so a refusal looked exactly like a success:
-REM the line above printed either way. Everything below assumes the port is now
-REM free, and when it is not, pm2 fails on a named pipe it cannot open and
-REM prints "connect EPERM //./pipe/rpc.sock" followed by a Node stack trace.
-REM That reads as the application crashing. It is not — it is this script having
-REM failed to stop the previous instance two steps earlier, and the server it
-REM could not replace carries on serving whatever code it started with.
-REM When taskkill is refused, ask the Task Scheduler before giving up.
-REM
-REM taskkill needs a handle on the process. The boot instance runs in its own
-REM S4U logon session, and an ordinary window could not even read its command
-REM line, let alone terminate it. The scheduler is a different route to the same
-REM end: it runs as SYSTEM, it owns the task it started, and stopping a task is
-REM something its owner may ask for without a handle and without elevation.
-REM
-REM This is what turned a boot-day into an administrator errand. The first run
-REM of START.bat after every restart hit the refusal, and the advice underneath
-REM sent the operator into an elevated shell to fix something that was not
-REM broken.
-if not "%WORKTREE_MODE%"=="1" (
     set "PORT_HOLDER="
     for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do set "PORT_HOLDER=%%P"
     if defined PORT_HOLDER (
-        echo  -^> Kill refused; asking the scheduler to stop "%AUTOSTART_TASK%"...
-        schtasks /end /tn "%AUTOSTART_TASK%" >nul 2>&1
-        REM Two seconds for the tree to go down. ping, because timeout fails
-        REM when stdin is redirected, which it is when this runs from a shortcut.
-        ping -n 3 127.0.0.1 >nul 2>&1
-        set "PORT_HOLDER="
-        for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /r "0.0.0.0:%PORT%.*LISTENING"') do set "PORT_HOLDER=%%P"
-        if not defined PORT_HOLDER echo  -^> Scheduler stopped it; port %PORT% is free.
-    )
-    if defined PORT_HOLDER (
-        REM Ask the task what it actually is, instead of asserting it. The old
-        REM text named RunLevel Highest as the cause and sent the reader to
-        REM re-register the task -- on a machine where it was already Limited,
-        REM so the elevated trip changed nothing and the port stayed held.
-        set "TASK_LEVEL="
-        for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "(Get-ScheduledTask -TaskName '%AUTOSTART_TASK%' -ErrorAction SilentlyContinue).Principal.RunLevel" 2^>nul`) do set "TASK_LEVEL=%%L"
+        set "HOLDER_NAME=unknown program"
+        for /f "tokens=1 delims=," %%N in ('tasklist /FI "PID eq !PORT_HOLDER!" /FO CSV /NH 2^>nul') do set "HOLDER_NAME=%%~N"
         echo.
-        echo  ERROR: port %PORT% is still held by PID !PORT_HOLDER!.
-        echo  Neither taskkill nor the scheduler could stop it.
+        echo  ERROR: port %PORT% is held by PID !PORT_HOLDER! ^(!HOLDER_NAME!^), and this window cannot stop it.
         echo.
-        if /i "!TASK_LEVEL!"=="Highest" (
-            echo  The "%AUTOSTART_TASK%" task is registered with RunLevel Highest, so its
-            echo  instance runs elevated. An ordinary window can neither stop it nor
-            echo  reach its pm2 daemon.
-            echo.
-            echo  Fix it once, in an Administrator PowerShell:
-            echo      powershell -ExecutionPolicy Bypass -File "%~dp0install-autostart.ps1"
-            echo  That re-registers the task unelevated, and the two stop fighting
-            echo  over the port for good.
-        ) else (
-            echo  The "%AUTOSTART_TASK%" task runs at RunLevel !TASK_LEVEL!, so elevation is
-            echo  not the cause and re-registering it would change nothing.
-            echo  Something else is holding the port - check what PID !PORT_HOLDER! is.
-        )
-        echo.
-        echo  To get running right now, in an Administrator PowerShell:
+        echo  It is not run by the pm2 this window talks to - that one was asked
+        echo  first. To stop it, in an Administrator PowerShell:
         echo      Stop-Process -Id !PORT_HOLDER! -Force
-        echo      ^& "$env:APPDATA\npm\pm2.cmd" kill
         echo  then run this script again.
         echo.
         pause
@@ -362,13 +412,6 @@ if not "%WORKTREE_MODE%"=="1" (
     )
 )
 
-REM Match update_server.sh: always delete + start with --update-env so the
-REM new process picks up any .env changes made since the last launch.
-call pm2 describe %PM2_PROCESS_NAME% >nul 2>&1
-if !errorlevel! equ 0 (
-    echo  -^> Process found, deleting for clean restart...
-    call pm2 delete %PM2_PROCESS_NAME% >nul 2>&1
-)
 echo  -^> Starting instance...
 call pm2 start server.js --name %PM2_PROCESS_NAME% --update-env
 call pm2 save >nul 2>&1
@@ -433,6 +476,12 @@ exit /b %errorlevel%
 
 :check_pm2
 where pm2 >nul 2>&1
+exit /b %errorlevel%
+
+:check_admin
+REM Listing file system filters is for administrators only. Unlike
+REM `net session`, fltmc does not need the Server service to be running.
+fltmc >nul 2>&1
 exit /b %errorlevel%
 
 :ensure_certs
