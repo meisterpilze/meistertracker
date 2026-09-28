@@ -15772,6 +15772,8 @@ function pjGefaessZeile(r) {
     `<span class="pj-run-code">${esc(r.code)}</span>` +
     (r.what ? `<span class="pj-run-what">${esc(r.what)}</span>` : '') +
     `<button type="button" class="btn btn-sm fs-xs pj-run-etikett" data-pj-label="${r.id}">${esc(t('exp.label'))}</button>` +
+    `<button type="button" class="pj-run-weg" data-pj-rundel="${r.id}" aria-label="${esc(t('exp.removeRun'))}" ` +
+    `title="${esc(t('exp.removeRun'))}">&times;</button>` +
     '</div><div class="pj-run-tools">' +
     `<input class="pj-run-res" data-pj-run="${r.id}" data-pj-feld="result" value="${esc(r.result)}" ` +
     `placeholder="${esc(t('exp.resultPh'))}" maxlength="1000">` +
@@ -15779,19 +15781,53 @@ function pjGefaessZeile(r) {
     '</div></div>'
   );
 }
+// ── Entfernte Gefaesse und Fotos ────────────────────────────
+//
+// Entfernt ist nicht geloescht: was jemand herausgenommen hat, steht zugeklappt
+// unter der Liste, nur zum Lesen, mit einem Knopf, der es zurueckholt. Wer es
+// wann entfernt hat, steht im Verlauf.
+function pjEntferntesGefaess(r) {
+  return (
+    '<div class="pj-run pj-run-ro">' +
+    '<div class="pj-run-kopf">' +
+    `<span class="pj-run-code">${esc(r.code)}</span>` +
+    (r.what ? `<span class="pj-run-what">${esc(r.what)}</span>` : '') +
+    `<button type="button" class="btn btn-sm fs-xs pj-run-zurueck" data-pj-runback="${r.id}">${esc(t('exp.restore'))}</button>` +
+    '</div><div class="pj-run-tools">' +
+    `<span class="pj-run-res">${esc(r.result || '—')}</span>` +
+    `<span class="pj-out-${esc(r.outcome)}">${esc(t('exp.out.' + r.outcome))}</span>` +
+    `<span class="pj-count">${esc(t('exp.removedAt', { d: fmtDt(r.removedAt) }))}</span>` +
+    '</div></div>'
+  );
+}
+function pjEntfernte(titel, n, inhalt) {
+  if (!n) return '';
+  return (
+    '<details class="pj-fold pj-weg">' +
+    `<summary class="sec">${esc(t(titel, { n }))}</summary>` +
+    inhalt +
+    '</details>'
+  );
+}
 function pjFotoKachel(v, f) {
   const url = '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid);
   return (
-    `<figure class="pj-foto"><a href="${esc(url)}" target="_blank" rel="noopener">` +
+    `<figure class="pj-foto${f.removedAt ? ' pj-foto-entfernt' : ''}"><a href="${esc(url)}" target="_blank" rel="noopener">` +
     `<img src="${esc(url)}?thumb=1" alt="" loading="lazy"></a>` +
     `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
-    `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('common.delete'))}">&times;</button>` +
+    (f.removedAt
+      ? `<button type="button" class="btn btn-sm fs-xs pj-foto-zurueck" data-pj-photoback="${f.id}">${esc(t('exp.restore'))}</button>`
+      : `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('exp.remove'))}">&times;</button>`) +
     '</figure>'
   );
 }
 // Ein Experiment, von oben nach unten so, wie der Tag laeuft: was drinsteht,
 // wie es aussieht, womit es angesetzt wurde, was dabei herauskam.
 function pjDetail(v) {
+  // Ein Experiment, das gerade erst im Browser angelegt wurde, kennt noch keine
+  // entfernten; der naechste Datenstand bringt die Listen mit.
+  const wegG = v.removedRuns || [];
+  const wegF = v.removedPhotos || [];
   const kopf =
     '<div class="card pj-sec">' +
     '<div class="pj-v-head">' +
@@ -15807,7 +15843,9 @@ function pjDetail(v) {
     `<input id="pj-new-code" placeholder="${esc(t('exp.codePh'))}" maxlength="40">` +
     `<input id="pj-new-what" placeholder="${esc(t('exp.whatPh'))}" maxlength="200">` +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-addrun="${v.id}">${esc(t('exp.addRun'))}</button>` +
-    '</div></div>';
+    '</div>' +
+    pjEntfernte('exp.removedRuns', wegG.length, wegG.map(pjEntferntesGefaess).join('')) +
+    '</div>';
   const fotos =
     '<div class="card pj-sec">' +
     `<div class="sec">${esc(t('exp.photos', { n: v.photos.length }))}</div>` +
@@ -15817,6 +15855,11 @@ function pjDetail(v) {
     '<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>' +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
     '<span class="pj-count" id="pj-cam-status"></span>' +
+    pjEntfernte(
+      'exp.removedPhotos',
+      wegF.length,
+      '<div class="pj-fotos">' + wegF.map((f) => pjFotoKachel(v, f)).join('') + '</div>'
+    ) +
     '</div>';
   const text =
     '<div class="card pj-sec">' +
@@ -15870,7 +15913,7 @@ function pjVerlaufCodes(v, eintraege) {
     if (e.record && e.record.code) codes[e.entityId] = e.record.code;
     if (e.field === 'code' && e.to) codes[e.entityId] = e.to;
   }
-  for (const r of v.runs) codes[r.id] = r.code;
+  for (const r of v.runs.concat(v.removedRuns || [])) codes[r.id] = r.code;
   return codes;
 }
 function pjVerlaufWert(e, x) {
@@ -16091,15 +16134,38 @@ function pjVersuchClick(e) {
     }
     return true;
   }
+  // Entfernen und Zurueckholen: danach einmal neu laden, statt die Listen hier
+  // von Hand umzuhaengen. Was entfernt ist, bestimmt der Server.
+  const neuZeichnen = async () => {
+    await loadData();
+    renderVersuch();
+  };
   const fotoWeg = e.target.closest('[data-pj-photodel]');
   if (fotoWeg) {
     const id = Number(fotoWeg.dataset.pjPhotodel);
-    confirm2(t('exp.photoDelTitle'), t('exp.photoDelMsg'), t('common.delete'), () => {
-      apiDelete('/api/experiment-photos/' + id).then(async () => {
-        await loadData();
-        renderVersuch();
-      });
+    confirm2(t('exp.photoDelTitle'), t('exp.photoDelMsg'), t('exp.remove'), () => {
+      apiDelete('/api/experiment-photos/' + id).then(neuZeichnen);
     });
+    return true;
+  }
+  const fotoZurueck = e.target.closest('[data-pj-photoback]');
+  if (fotoZurueck) {
+    apiPost('/api/experiment-photos/' + Number(fotoZurueck.dataset.pjPhotoback) + '/restore').then(neuZeichnen);
+    return true;
+  }
+  const gefaessWeg = e.target.closest('[data-pj-rundel]');
+  if (gefaessWeg) {
+    const v = pjExp(pjOffen);
+    const r = v && v.runs.find((x) => x.id === Number(gefaessWeg.dataset.pjRundel));
+    if (!r) return true;
+    confirm2(t('exp.removeRunTitle'), t('exp.removeRunMsg', { code: r.code }), t('exp.remove'), () => {
+      apiDelete('/api/experiment-runs/' + r.id).then(neuZeichnen);
+    });
+    return true;
+  }
+  const gefaessZurueck = e.target.closest('[data-pj-runback]');
+  if (gefaessZurueck) {
+    apiPost('/api/experiment-runs/' + Number(gefaessZurueck.dataset.pjRunback) + '/restore').then(neuZeichnen);
     return true;
   }
   const drucken = e.target.closest('[data-pj-label]');

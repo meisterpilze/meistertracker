@@ -8123,13 +8123,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           const counts = db.resetOperationalData(database, scopes);
           // Contamination photo files are on disk, not in the DB — drop them too
           // so they don't hold the photo-dir cap against freshly cleared reports.
+          // Only those: experiment photos share the directory, and the reset
+          // keeps experiments. It used to remove the whole directory, which
+          // left every experiment pointing at photos that were gone.
           let photosRemoved = false;
           if (scopes.growing) {
             try {
-              fs.rmSync(PHOTO_DIR, { recursive: true, force: true });
+              photoCap.removeContaminationPhotos(PHOTO_DIR);
               fs.mkdirSync(PHOTO_DIR, { recursive: true });
-              _photoDirSizeBytes = 0;
-              _photoDirSizeStaleAt = 0; // force a recompute on the next check
+              _ensurePhotoDirSize(true);
               photosRemoved = true;
             } catch (fileErr) {
               log('warn', 'Reset: photo cleanup failed', { error: fileErr.message });
@@ -9323,9 +9325,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Ein Gefaess wird auch nicht geloescht, sondern entfernt: DELETE nimmt es aus
+  // der Liste, die Zeile bleibt, und /restore holt es zurueck.
   if (req.method === 'DELETE' && ansatzTreffer) {
     try {
-      db.deleteExperimentRun(database, parseInt(ansatzTreffer[1]), req.authUser);
+      db.removeExperimentRun(database, parseInt(ansatzTreffer[1], 10), req.authUser);
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const ansatzZurueckTreffer = url.match(/^\/api\/experiment-runs\/(\d+)\/restore$/);
+  if (req.method === 'POST' && ansatzZurueckTreffer) {
+    try {
+      db.restoreExperimentRun(database, parseInt(ansatzZurueckTreffer[1], 10), req.authUser);
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
@@ -9435,21 +9450,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Entfernen, nicht loeschen, wie beim Gefaess. Die Datei bleibt auf der
+  // Platte: ein entferntes Foto laesst sich zurueckholen, und der Verlauf nennt
+  // seine Pruefsumme, die ohne die Datei nichts mehr belegen koennte.
   const fotoWegTreffer = url.match(/^\/api\/experiment-photos\/(\d+)$/);
   if (req.method === 'DELETE' && fotoWegTreffer) {
     try {
-      const zeile = db.deleteExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10), req.authUser);
-      if (zeile) {
-        for (const rel of [zeile.rel_path, zeile.thumb_path]) {
-          const abs = path.join(DIR, 'data', rel);
-          if (!abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) continue;
-          try {
-            fs.unlinkSync(abs);
-          } catch {
-            /* Datei war schon weg */
-          }
-        }
-      }
+      db.removeExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10), req.authUser);
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  const fotoZurueckTreffer = url.match(/^\/api\/experiment-photos\/(\d+)\/restore$/);
+  if (req.method === 'POST' && fotoZurueckTreffer) {
+    try {
+      db.restoreExperimentPhoto(database, parseInt(fotoZurueckTreffer[1], 10), req.authUser);
       broadcastSSE(res);
       jsonOk(res);
     } catch (err) {

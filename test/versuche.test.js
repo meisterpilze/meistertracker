@@ -106,11 +106,30 @@ describe('Versuche', () => {
     assert.throws(() => db.updateExperiment(d, v.id, { status: 'irgendwas' }), /invalid status/);
   });
 
-  it('loescht einen Ansatz, der falsch angelegt war', () => {
+  it('nimmt einen falsch angelegten Ansatz aus der Liste, ohne ihn zu loeschen', () => {
+    // Aus der Liste ist er so schnell weg wie frueher, nur nicht aus dem
+    // Laborbuch: die Zeile bleibt, und er laesst sich zurueckholen.
     const id = db.insertExperiment(d, { code: 'V2', title: 'Zweiter Ansatz' });
     const r = db.insertExperimentRun(d, { experimentId: id, code: 'TIPPFEHLER' });
-    assert.equal(db.deleteExperimentRun(d, r), true);
-    assert.deepEqual(db.listExperiments(d).find((x) => x.id === id).runs, []);
+    assert.equal(db.removeExperimentRun(d, r), true);
+    const v = db.listExperiments(d).find((x) => x.id === id);
+    assert.deepEqual(v.runs, []);
+    assert.deepEqual(
+      v.removedRuns.map((x) => x.code),
+      ['TIPPFEHLER']
+    );
+    assert.ok(v.removedRuns[0].removedAt, 'when it was removed');
+    assert.equal(d.prepare('SELECT COUNT(*) AS c FROM experiment_runs WHERE id=?').get(r).c, 1);
+    assert.equal(db.removeExperimentRun(d, r), false, 'removing twice changes nothing');
+    assert.equal(db.restoreExperimentRun(d, r), true);
+    const zurueck = db.listExperiments(d).find((x) => x.id === id);
+    assert.deepEqual(
+      zurueck.runs.map((x) => x.code),
+      ['TIPPFEHLER']
+    );
+    assert.deepEqual(zurueck.removedRuns, []);
+    assert.equal(db.restoreExperimentRun(d, r), false, 'restoring what is there changes nothing');
+    assert.equal(db.removeExperimentRun(d, 999999), false);
   });
 
   it('nimmt die Ansaetze mit, wenn ein Versuch doch verschwindet', () => {
@@ -147,16 +166,31 @@ describe('Versuche', () => {
     assert.equal(db.getExperimentPhotoByUuid(d, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee').id, id);
   });
 
-  it('gibt beim Loeschen die Zeile zurueck, damit die Datei mitgeht', () => {
-    // Die Platte ist nicht Teil der Transaktion. Wer loescht, muss erfahren,
-    // welche Datei jetzt niemandem mehr gehoert — sonst waechst data/photos
-    // weiter, waehrend die Anwendung nichts mehr davon weiss.
+  it('nimmt ein Foto aus der Liste, und Zeile und Datei bleiben', () => {
+    // Frueher ging mit dem Foto auch die Datei. Jetzt bleibt beides: die Zeile
+    // mit ihrem Pfad und ihrer Pruefsumme, und damit das Bild, das der Verlauf
+    // belegt. Zurueckholen stellt es wieder in die Liste.
     const v = db.listExperiments(d).find((x) => x.code === 'V1');
-    const zeile = db.deleteExperimentPhoto(d, v.photos[0].id);
+    const id = v.photos[0].id;
+    assert.equal(db.removeExperimentPhoto(d, id), true);
+    const nachher = db.listExperiments(d).find((x) => x.id === v.id);
+    assert.deepEqual(nachher.photos, []);
+    assert.deepEqual(
+      nachher.removedPhotos.map((f) => f.id),
+      [id]
+    );
+    const zeile = d.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
     assert.equal(zeile.rel_path, 'photos/2026/09/exp-1/a.jpg');
-    assert.equal(zeile.thumb_path, 'photos/2026/09/exp-1/a_thumb.jpg');
-    assert.equal(db.deleteExperimentPhoto(d, 999999), null);
-    assert.deepEqual(db.listExperiments(d).find((x) => x.id === v.id).photos, []);
+    assert.ok(zeile.removed_at);
+    assert.equal(db.removeExperimentPhoto(d, 999999), false);
+    assert.equal(db.restoreExperimentPhoto(d, id), true);
+    assert.deepEqual(
+      db
+        .listExperiments(d)
+        .find((x) => x.id === v.id)
+        .photos.map((f) => f.id),
+      [id]
+    );
   });
 
   it('reicht die Versuche mit der Nutzlast an die Oberflaeche durch', () => {

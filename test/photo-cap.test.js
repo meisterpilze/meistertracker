@@ -8,7 +8,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { computePhotoDirSize, enforceCap, PhotoCapError } = require('../scripts/photo-cap.js');
+const {
+  computePhotoDirSize,
+  enforceCap,
+  removeContaminationPhotos,
+  PhotoCapError
+} = require('../scripts/photo-cap.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mt-photo-cap-'));
@@ -76,5 +81,50 @@ describe('R-15 — photo directory size cap', () => {
     } finally {
       fs.rmSync(e2eDir, { recursive: true, force: true });
     }
+  });
+});
+
+// The admin reset clears contamination reports and used to remove the whole
+// photo directory with them. Experiment photos live in the same tree, under
+// {year}/{month}/exp-{id}/, and the reset keeps experiments, so every
+// experiment was left pointing at files that were gone. The pre-reset backup
+// covers the database only, so nothing brought them back.
+describe('reset — removes contamination photos, keeps experiment photos', () => {
+  it('removes report folders and stray files, and leaves exp-* folders alone', () => {
+    const dir = tmpDir();
+    try {
+      const put = (rel, bytes) => {
+        fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+        fs.writeFileSync(path.join(dir, rel), Buffer.alloc(bytes));
+      };
+      put('2026/04/7/a.jpg', 100);
+      put('2026/04/7/a_thumb.jpg', 10);
+      put('2026/04/exp-3/b.jpg', 200);
+      put('2026/05/12/c.jpg', 300);
+      put('2026/05/exp-4/d.jpg', 400);
+      put('2026/05/stray.jpg', 5);
+      put('stray.txt', 5);
+      assert.equal(removeContaminationPhotos(dir), 4);
+      assert.equal(fs.existsSync(path.join(dir, '2026/04/7')), false);
+      assert.equal(fs.existsSync(path.join(dir, '2026/05/12')), false);
+      assert.equal(fs.existsSync(path.join(dir, '2026/05/stray.jpg')), false);
+      assert.equal(fs.existsSync(path.join(dir, 'stray.txt')), false);
+      assert.equal(computePhotoDirSize(dir), 200 + 400, 'only the experiment photos are left');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does nothing when the directory does not exist', () => {
+    assert.equal(removeContaminationPhotos(path.join(os.tmpdir(), 'mt-photo-cap-missing-' + Date.now())), 0);
+  });
+
+  it('is what the reset route calls, instead of removing the directory', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const start = src.indexOf("req.url === '/api/admin/reset'");
+    assert.ok(start > 0, 'reset route not found in server.js');
+    const route = src.slice(start, src.indexOf('\n  // -- Contamination reports --', start));
+    assert.ok(route.includes('photoCap.removeContaminationPhotos(PHOTO_DIR)'));
+    assert.equal(route.includes('fs.rmSync(PHOTO_DIR'), false);
   });
 });

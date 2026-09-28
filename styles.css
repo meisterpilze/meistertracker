@@ -8926,3 +8926,41 @@ body:has(#m-camscan.open) .update-bar {
 .pj-hist-wert ins {
   text-decoration: none;
 }
+
+/* ── Entfernen und Zurueckholen ──────────────────────────────
+   Das Kreuz am Gefaess steht ganz rechts neben dem Etikett, so leise wie das
+   am Foto: entfernt wird selten, und eine Rueckfrage kommt ohnehin. Was
+   entfernt ist, liegt zugeklappt unter der Liste. Ein entferntes Gefaess ist
+   nur noch zum Lesen da (.pj-run-ro), ein entferntes Foto blass, und beide
+   tragen statt des Kreuzes einen Knopf zum Zurueckholen. */
+.pj-run-weg {
+  flex: 0 0 auto;
+  min-width: max(24px, var(--tap-min));
+  min-height: max(24px, var(--tap-min));
+  border: 0;
+  background: none;
+  color: var(--c-text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pj-run-weg:hover {
+  color: var(--c-red-dark);
+}
+.pj-run-zurueck {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.pj-weg {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border-light);
+}
+.pj-foto-entfernt img {
+  opacity: 0.55;
+}
+.pj-foto-zurueck {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}

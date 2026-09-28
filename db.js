@@ -2702,6 +2702,25 @@ const MIGRATIONS = [
     }
   },
   {
+    version: 90,
+    description: 'Gefaesse und Fotos werden entfernt, nicht geloescht',
+    fn(db) {
+      // Wann und von wem ein Gefaess oder ein Foto entfernt wurde. Solange
+      // removed_at leer ist, steht die Zeile in der Liste; gesetzt, steht sie
+      // unter "Entfernte" und laesst sich zurueckholen. Siehe _entfernen().
+      for (const tabelle of ['experiment_runs', 'experiment_photos']) {
+        const spalten = db
+          .prepare(`SELECT name FROM pragma_table_info('${tabelle}')`)
+          .all()
+          .map((s) => s.name);
+        if (!spalten.includes('removed_at')) db.exec(`ALTER TABLE ${tabelle} ADD COLUMN removed_at TEXT`);
+        if (!spalten.includes('removed_by')) {
+          db.exec(`ALTER TABLE ${tabelle} ADD COLUMN removed_by INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+        }
+      }
+    }
+  },
+  {
     version: 91,
     description: 'Kontaminationsfotos: derselbe Inhalt darf in mehreren Berichten stehen',
     fn(db) {
@@ -7115,7 +7134,10 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 //   action                 'baseline' der Stand, als der Verlauf begann (v89)
 //                          'create'   angelegt, new_value ist der Datensatz
 //                          'update'   ein Feld, old_value -> new_value
-//                          'remove'   entfernt, old_value ist der Datensatz
+//                          'remove'   entfernt, old_value ist der Datensatz;
+//                                     Gefaess und Foto bleiben als Zeile,
+//                                     eine Notiz nicht
+//                          'restore'  zurueckgeholt, new_value ist der Datensatz
 //   field                  nur bei 'update', mit dem Namen aus der API
 //
 // Ein Datensatz steht als JSON in der Form, die die API zeigt, ohne id und
@@ -7161,13 +7183,16 @@ function _notizStand(n) {
 
 // Wer aendert: die Sitzung aus req.authUser. Ohne Sitzung (Tests, Skripte)
 // bleibt der Eintrag ohne Namen, statt jemanden zu erfinden.
+function _werId(wer) {
+  return wer && wer.user_id != null ? wer.user_id : null;
+}
 function _verlauf(db, wer, e) {
   db.prepare(
     'INSERT INTO lab_history(at,user_id,username,entity,entity_id,experiment_id,action,field,old_value,new_value) ' +
       'VALUES(?,?,?,?,?,?,?,?,?,?)'
   ).run(
     new Date().toISOString(),
-    wer && wer.user_id != null ? wer.user_id : null,
+    _werId(wer),
     (wer && wer.username) || '',
     e.entity,
     e.entityId,
@@ -7249,9 +7274,33 @@ function listExperimentHistory(db, experimentId) {
     });
 }
 
+// Entfernte Gefaesse und Fotos kommen getrennt mit (removedRuns,
+// removedPhotos). runs und photos bleiben, was die Oberflaeche zaehlt und
+// zeigt, und keine Stelle, die sie liest, muss erst herausfiltern.
 function listExperiments(db) {
   const runs = db.prepare('SELECT * FROM experiment_runs ORDER BY sort, id').all();
   const fotos = db.prepare('SELECT * FROM experiment_photos ORDER BY uploaded_at, id').all();
+  const foto = (f) => ({
+    id: f.id,
+    uuid: f.uuid,
+    runId: f.run_id,
+    width: f.width,
+    height: f.height,
+    uploadedAt: f.uploaded_at,
+    removedAt: f.removed_at || null
+  });
+  const ansatz = (r) => ({
+    id: r.id,
+    experimentId: r.experiment_id,
+    code: r.code,
+    what: r.what || '',
+    result: r.result || '',
+    outcome: r.outcome,
+    cultureId: r.culture_id,
+    batchId: r.batch_id,
+    sort: r.sort,
+    removedAt: r.removed_at || null
+  });
   return db
     .prepare('SELECT * FROM experiments ORDER BY started DESC, id ASC')
     .all()
@@ -7265,29 +7314,10 @@ function listExperiments(db) {
       archived: e.archived === 1,
       recipe: e.recipe || '',
       outcome: e.outcome || '',
-      photos: fotos
-        .filter((f) => f.experiment_id === e.id)
-        .map((f) => ({
-          id: f.id,
-          uuid: f.uuid,
-          runId: f.run_id,
-          width: f.width,
-          height: f.height,
-          uploadedAt: f.uploaded_at
-        })),
-      runs: runs
-        .filter((r) => r.experiment_id === e.id)
-        .map((r) => ({
-          id: r.id,
-          experimentId: r.experiment_id,
-          code: r.code,
-          what: r.what || '',
-          result: r.result || '',
-          outcome: r.outcome,
-          cultureId: r.culture_id,
-          batchId: r.batch_id,
-          sort: r.sort
-        }))
+      photos: fotos.filter((f) => f.experiment_id === e.id && !f.removed_at).map(foto),
+      removedPhotos: fotos.filter((f) => f.experiment_id === e.id && f.removed_at).map(foto),
+      runs: runs.filter((r) => r.experiment_id === e.id && !r.removed_at).map(ansatz),
+      removedRuns: runs.filter((r) => r.experiment_id === e.id && r.removed_at).map(ansatz)
     }));
 }
 
@@ -7399,25 +7429,6 @@ function addExperimentPhoto(db, experimentId, runId, foto, wer) {
 function getExperimentPhotoByUuid(db, uuid) {
   return db.prepare('SELECT * FROM experiment_photos WHERE uuid=?').get(uuid) || null;
 }
-// Gibt die Zeile zurueck, damit der Aufrufer die Datei hinterherraeumen kann:
-// die Platte ist nicht Teil der Transaktion, also muss jemand wissen, was da
-// lag.
-function deleteExperimentPhoto(db, id, wer) {
-  const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
-  if (!zeile) return null;
-  _mitVerlauf(db, () => {
-    db.prepare('DELETE FROM experiment_photos WHERE id=?').run(id);
-    _verlauf(db, wer, {
-      entity: 'photo',
-      entityId: zeile.id,
-      experimentId: zeile.experiment_id,
-      action: 'remove',
-      old: JSON.stringify(_fotoStand(zeile))
-    });
-    incrementDataVersion(db);
-  });
-  return zeile;
-}
 
 function insertExperimentRun(db, r, wer) {
   if (!r.experimentId || !r.code) throw new Error('experimentId and code are required');
@@ -7494,21 +7505,55 @@ function updateExperimentRun(db, id, f, wer) {
   return true;
 }
 
-function deleteExperimentRun(db, id, wer) {
-  const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(id);
-  if (!zeile) return false;
+// ── Entfernen und Zurueckholen ──────────────────────────────
+//
+// Ein Gefaess und ein Foto werden nicht geloescht, sondern entfernt: sie
+// verschwinden aus der Liste, die Zeile bleibt mit removed_at und removed_by,
+// das Foto bleibt auf der Platte, und beides laesst sich zurueckholen. Ein
+// falsch angelegtes Gefaess ist damit so schnell weg wie vorher, nur nicht aus
+// dem Laborbuch.
+//
+// Fuer beide ist es dieselbe Handlung, deshalb eine Funktion. Wer entfernt, was
+// schon entfernt ist, oder zurueckholt, was da ist, aendert nichts und schreibt
+// auch nichts in den Verlauf.
+const ENTFERNBAR = {
+  run: { tabelle: 'experiment_runs', stand: _ansatzStand },
+  photo: { tabelle: 'experiment_photos', stand: _fotoStand }
+};
+function _entfernen(db, art, id, wer, weg) {
+  const { tabelle, stand } = ENTFERNBAR[art];
+  const zeile = db.prepare('SELECT * FROM ' + tabelle + ' WHERE id=?').get(id);
+  if (!zeile || !!zeile.removed_at === weg) return false;
   _mitVerlauf(db, () => {
-    db.prepare('DELETE FROM experiment_runs WHERE id=?').run(id);
+    db.prepare('UPDATE ' + tabelle + ' SET removed_at=?, removed_by=? WHERE id=?').run(
+      weg ? new Date().toISOString() : null,
+      weg ? _werId(wer) : null,
+      id
+    );
+    const datensatz = JSON.stringify(stand(zeile));
     _verlauf(db, wer, {
-      entity: 'run',
+      entity: art,
       entityId: zeile.id,
       experimentId: zeile.experiment_id,
-      action: 'remove',
-      old: JSON.stringify(_ansatzStand(zeile))
+      action: weg ? 'remove' : 'restore',
+      old: weg ? datensatz : null,
+      new: weg ? null : datensatz
     });
     incrementDataVersion(db);
   });
   return true;
+}
+function removeExperimentRun(db, id, wer) {
+  return _entfernen(db, 'run', id, wer, true);
+}
+function restoreExperimentRun(db, id, wer) {
+  return _entfernen(db, 'run', id, wer, false);
+}
+function removeExperimentPhoto(db, id, wer) {
+  return _entfernen(db, 'photo', id, wer, true);
+}
+function restoreExperimentPhoto(db, id, wer) {
+  return _entfernen(db, 'photo', id, wer, false);
 }
 
 // ── Notizen je Vorhaben-Reiter ──────────────────────────────
@@ -11516,12 +11561,14 @@ module.exports = {
   listExperiments,
   addExperimentPhoto,
   getExperimentPhotoByUuid,
-  deleteExperimentPhoto,
+  removeExperimentPhoto,
+  restoreExperimentPhoto,
   insertExperiment,
   updateExperiment,
   insertExperimentRun,
   updateExperimentRun,
-  deleteExperimentRun,
+  removeExperimentRun,
+  restoreExperimentRun,
   listExperimentHistory,
   listProjectNotes,
   insertProjectNote,

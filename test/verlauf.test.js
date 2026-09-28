@@ -24,7 +24,11 @@ function neueDb(name) {
     os.tmpdir(),
     'mt_verlauf_' + name + '_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db'
   );
-  return { p, d: db.openDb(p) };
+  const d = db.openDb(p);
+  // Die beiden Benutzer gibt es wirklich: removed_by verweist auf users.
+  const neu = d.prepare('INSERT INTO users(id,username,hash,salt,role,created) VALUES(?,?,?,?,?,?)');
+  for (const u of [ANNA, BEN]) neu.run(u.user_id, u.username, 'x', 'y', 'user', new Date().toISOString());
+  return { p, d };
 }
 function eintraege(d, entity, id) {
   return d.prepare('SELECT * FROM lab_history WHERE entity=? AND entity_id=? ORDER BY id').all(entity, id);
@@ -136,12 +140,14 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
     assert.equal(versuch('T1').title, 'Probelauf');
   });
 
-  it('fuehrt ein Gefaess vom Anlegen bis zum Loeschen', () => {
+  it('fuehrt ein Gefaess vom Anlegen ueber das Entfernen bis zum Zurueckholen', () => {
     const v = versuch('T1');
     const r = db.insertExperimentRun(d, { experimentId: v.id, code: 'A-1', what: 'Probe' }, ANNA);
     db.updateExperimentRun(d, r, { result: '3 Punkte', outcome: 'good' }, BEN);
     db.updateExperimentRun(d, r, { result: '3 Punkte' }, BEN);
-    assert.equal(db.deleteExperimentRun(d, r, ANNA), true);
+    assert.equal(db.removeExperimentRun(d, r, ANNA), true);
+    assert.equal(db.removeExperimentRun(d, r, BEN), false, 'removing twice changes nothing and writes nothing');
+    assert.equal(db.restoreExperimentRun(d, r, BEN), true);
     const z = eintraege(d, 'run', r);
     assert.deepEqual(
       z.map((x) => [x.action, x.field, x.username]),
@@ -149,13 +155,11 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
         ['create', null, 'anna'],
         ['update', 'result', 'ben'],
         ['update', 'outcome', 'ben'],
-        ['remove', null, 'anna']
+        ['remove', null, 'anna'],
+        ['restore', null, 'ben']
       ]
     );
-    assert.ok(
-      z.every((x) => x.experiment_id === v.id),
-      'the entries stay with their experiment after the row is gone'
-    );
+    assert.ok(z.every((x) => x.experiment_id === v.id));
     assert.deepEqual(JSON.parse(z[3].old_value), {
       code: 'A-1',
       what: 'Probe',
@@ -164,8 +168,23 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
       cultureId: null,
       batchId: null
     });
-    assert.equal(db.deleteExperimentRun(d, r, ANNA), false, 'a second delete finds nothing and writes nothing');
-    assert.equal(eintraege(d, 'run', r).length, 4);
+    assert.deepEqual(JSON.parse(z[4].new_value), JSON.parse(z[3].old_value), 'it comes back as it went');
+    const zeile = d.prepare('SELECT removed_at, removed_by FROM experiment_runs WHERE id=?').get(r);
+    assert.deepEqual({ ...zeile }, { removed_at: null, removed_by: null });
+  });
+
+  it('merkt am Gefaess, wann und von wem es entfernt wurde', () => {
+    const v = versuch('T1');
+    const r = db.insertExperimentRun(d, { experimentId: v.id, code: 'A-9' }, ANNA);
+    db.removeExperimentRun(d, r, BEN);
+    const zeile = d.prepare('SELECT removed_at, removed_by FROM experiment_runs WHERE id=?').get(r);
+    assert.equal(zeile.removed_by, BEN.user_id);
+    assert.ok(!Number.isNaN(Date.parse(zeile.removed_at)));
+    assert.equal(
+      versuch('T1').runs.some((x) => x.id === r),
+      false
+    );
+    assert.equal(versuch('T1').removedRuns.find((x) => x.id === r).removedAt, zeile.removed_at);
   });
 
   it('schreibt die Reihenfolge, aber nicht in den Verlauf', () => {
@@ -180,10 +199,10 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
     );
   });
 
-  it('haelt ein Foto mit seiner Pruefsumme fest, auch nach dem Loeschen', () => {
+  it('haelt ein Foto mit seiner Pruefsumme fest, auch nach dem Entfernen', () => {
     const v = versuch('T1');
     const id = db.addExperimentPhoto(d, v.id, null, foto('11111111-1111-1111-1111-111111111111'), ANNA);
-    db.deleteExperimentPhoto(d, id, BEN);
+    assert.equal(db.removeExperimentPhoto(d, id, BEN), true);
     const z = eintraege(d, 'photo', id);
     assert.deepEqual(
       z.map((x) => [x.action, x.username, x.experiment_id]),
@@ -378,9 +397,11 @@ describe('Verlauf: Server', () => {
       'updateExperiment(',
       'insertExperimentRun(',
       'updateExperimentRun(',
-      'deleteExperimentRun(',
+      'removeExperimentRun(',
+      'restoreExperimentRun(',
       'addExperimentPhoto(',
-      'deleteExperimentPhoto(',
+      'removeExperimentPhoto(',
+      'restoreExperimentPhoto(',
       'insertProjectNote(',
       'updateProjectNote(',
       'deleteProjectNote('
@@ -398,6 +419,27 @@ describe('Verlauf: Server', () => {
     assert.ok(SERVER.includes('/^\\/api\\/experiments\\/(\\d+)\\/history$/'), 'GET /api/experiments/:id/history');
     assert.ok(SERVER.includes('db.listExperimentHistory(database'));
     assert.equal(SERVER.includes('lab_history'), false, 'server.js reaches the table through db.js only');
+  });
+
+  it('loescht weder ein Gefaess noch ein Foto, und laesst die Fotodatei liegen', () => {
+    const zeilen = SERVER.split('\n');
+    const route = (marke) => {
+      const start = zeilen.findIndex((l) => l.includes(marke));
+      assert.ok(start >= 0, 'route not found: ' + marke);
+      let ende = start + 1;
+      while (ende < zeilen.length && !/^\s*if \(req\.method === /.test(zeilen[ende])) ende++;
+      return zeilen.slice(start, ende).join('\n');
+    };
+    const gefaess = route("if (req.method === 'DELETE' && ansatzTreffer)");
+    const foto = route("if (req.method === 'DELETE' && fotoWegTreffer)");
+    assert.ok(gefaess.includes('db.removeExperimentRun('));
+    assert.ok(foto.includes('db.removeExperimentPhoto('));
+    assert.equal(foto.includes('unlink'), false, 'the photo file stays on disk');
+    assert.equal(
+      /DELETE FROM experiment_(runs|photos)/.test(quelle('db.js')),
+      false,
+      'db.js has no hard delete for them'
+    );
   });
 });
 
