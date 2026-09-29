@@ -29,6 +29,15 @@ function computePhotoDirSize(dir) {
   return total;
 }
 
+// The folder an experiment's photos go into, below {year}/{month}/. One place
+// for the prefix: the upload names folders with it, and the reset keeps every
+// folder that carries it. Renamed on one side only, the reset would delete
+// experiment photos again.
+const EXPERIMENT_SCOPE_PREFIX = 'exp-';
+function experimentPhotoScope(experimentId) {
+  return EXPERIMENT_SCOPE_PREFIX + experimentId;
+}
+
 // What the admin reset may take from the photo directory: the contamination
 // report photos, which go with their reports. Experiment photos live in the
 // same tree, as {year}/{month}/exp-{id}/, but belong to experiments, and the
@@ -55,7 +64,7 @@ function removeContaminationPhotos(dir) {
         continue;
       }
       for (const scope of fs.readdirSync(monthDir, { withFileTypes: true })) {
-        if (scope.isDirectory() && scope.name.startsWith('exp-')) continue;
+        if (scope.isDirectory() && scope.name.startsWith(EXPERIMENT_SCOPE_PREFIX)) continue;
         drop(path.join(monthDir, scope.name));
       }
     }
@@ -80,4 +89,10 @@ function enforceCap(currentSize, addBytes, capBytes) {
   return true;
 }
 
-module.exports = { computePhotoDirSize, enforceCap, removeContaminationPhotos, PhotoCapError };
+module.exports = {
+  computePhotoDirSize,
+  enforceCap,
+  removeContaminationPhotos,
+  experimentPhotoScope,
+  PhotoCapError
+};

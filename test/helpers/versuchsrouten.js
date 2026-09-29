@@ -13,7 +13,7 @@ const path = require('path');
 const crypto = require('crypto');
 const assert = require('node:assert/strict');
 const { Writable } = require('stream');
-const { ROOT, quelle, hebeFunktion } = require('./quelle');
+const { ROOT, quelle, hebeFunktion, hebeKonstante } = require('./quelle');
 
 const db = require(path.join(ROOT, 'db.js'));
 const photoCap = require(path.join(ROOT, 'scripts', 'photo-cap.js'));
@@ -21,18 +21,25 @@ const photoCap = require(path.join(ROOT, 'scripts', 'photo-cap.js'));
 const HELFER = [
   'jsonOk',
   'jsonErr',
+  'requireAdmin',
   'safeErr',
   'validateRequired',
   'validateTypes',
   'validateLengths',
   'validateDate',
+  'validateDay',
+  'versuchPruefen',
   '_ensurePhotoDirSize',
   '_parseImageDataUrl',
   '_isJpegMagic',
   'savePhotoToDisk',
-  '_discardPhotoFiles'
+  '_discardPhotoFiles',
+  'ansatzPruefen',
+  'etagMatches'
 ];
 const KONSTANTEN = ['PHOTO_MAX_BYTES', 'PHOTO_THUMB_MAX_BYTES', 'PHOTO_SIZE_REFRESH_MS', 'EXP_MAX_PHOTOS_PER_CALL'];
+// Konstanten mit Objekt- oder Listenliteral.
+const LITERALE = ['ANSATZ_TYPEN'];
 
 function abschnitt(src) {
   const a = src.indexOf('// ── Versuche und ihre Ansaetze');
@@ -117,6 +124,7 @@ function versuchsrouten(opts = {}) {
     'deckel',
     `
     ${KONSTANTEN.map((k) => konstante(src, k)).join('\n')}
+    ${LITERALE.map((k) => hebeKonstante(k, src)).join('\n')}
     const PHOTO_DIR = path.join(DIR, 'data', 'photos');
     const PHOTO_DIR_MAX_BYTES = deckel;
     let _photoDirSizeBytes = 0;
@@ -130,13 +138,14 @@ function versuchsrouten(opts = {}) {
   )(db, database, path, fs, crypto, photoCap, DIR, log, broadcastSSE, jsonBody, opts.deckel || 10 * 1024 * 1024 * 1024);
 
   // Eine Anfrage an die Routen. Kommt keine Antwort, meldet das Ergebnis
-  // status null, statt den Test haengen zu lassen.
-  function anfrage(method, url, body, authUser) {
+  // status null, statt den Test haengen zu lassen. kopf: Anfragekoepfe, klein
+  // geschrieben wie bei node:http.
+  function anfrage(method, url, body, authUser, kopf) {
     const res = antwort();
     const req = {
       method,
       url,
-      headers: {},
+      headers: kopf || {},
       authUser: authUser === undefined ? { user_id: 7, username: 'anna', role: 'user' } : authUser,
       rohBody: body === undefined ? '' : JSON.stringify(body)
     };

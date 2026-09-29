@@ -34,14 +34,36 @@ function dateifeld(dateien) {
   };
 }
 
-function laden() {
+// pjKameraAuswahl und der Knopf "Foto aufnehmen" gegen Attrappen.
+function kameraKnopf() {
   return new Function(`
     const gesehen = [];
     function pjKamera(id, dateien) {
       gesehen.push({ id, n: Array.from(dateien || []).length });
     }
-    ${hebeFunktion('pjChange')}
-    return { pjChange, gesehen };`)();
+    const liste = [];
+    const feld = {
+      liste,
+      geklickt: 0,
+      onchange: null,
+      get files() {
+        return liste;
+      },
+      set value(v) {
+        if (v === '') liste.length = 0;
+      },
+      click() {
+        this.geklickt++;
+      }
+    };
+    const document = { getElementById: (id) => (id === 'pj-cam' ? feld : null) };
+    ${hebeFunktion('pjKameraAuswahl')}
+    ${hebeFunktion('pjVersuchClick')}
+    let pjGefaessUnterwegs = false;
+    let pjVersuchUnterwegs = false;
+    const tippen = (id) =>
+      pjVersuchClick({ target: { closest: (sel) => (sel === '[data-pj-cam]' ? { dataset: { pjCam: String(id) } } : null) } });
+    return { auswahl: pjKameraAuswahl, tippen, feld, gesehen };`)();
 }
 
 // pjKamera gegen Attrappen: komprimiert wird nichts, geschickt wird nur
@@ -114,21 +136,26 @@ describe('Upload der Versuchsfotos', () => {
 
 describe('Kamera am Versuch', () => {
   it('gibt die gewaehlten Bilder weiter, obwohl das Feld danach geleert wird', () => {
-    const ui = laden();
+    const k = kameraKnopf();
     const feld = dateifeld([
       { name: 'a.jpg', type: 'image/jpeg' },
       { name: 'b.jpg', type: 'image/jpeg' }
     ]);
-    ui.pjChange({ target: feld });
-    assert.deepEqual(ui.gesehen, [{ id: 7, n: 2 }]);
+    k.auswahl(feld, 7);
+    assert.deepEqual(k.gesehen, [{ id: 7, n: 2 }]);
     assert.equal(feld.files.length, 0, 'the field is still cleared, so the same photo can be picked again');
   });
 
-  it('ruft ohne Versuch nichts auf', () => {
-    const ui = laden();
-    const feld = dateifeld([{ name: 'a.jpg', type: 'image/jpeg' }]);
-    feld.dataset.pjFor = '';
-    ui.pjChange({ target: feld });
-    assert.deepEqual(ui.gesehen, []);
+  it('hoert die Auswahl am Feld selbst, auch wenn die Ansicht inzwischen neu gezeichnet wurde', () => {
+    // Die Seite leitet change nur an Felder weiter, die noch in ihr haengen.
+    // Der Zuhoerer sitzt deshalb am Feld; ob es noch in der Seite haengt, ist
+    // ihm gleich.
+    const k = kameraKnopf();
+    k.tippen(7);
+    assert.equal(k.feld.geklickt, 1);
+    assert.equal(typeof k.feld.onchange, 'function');
+    k.feld.liste.push({ name: 'c.jpg', type: 'image/jpeg' });
+    k.feld.onchange();
+    assert.deepEqual(k.gesehen, [{ id: 7, n: 1 }]);
   });
 });

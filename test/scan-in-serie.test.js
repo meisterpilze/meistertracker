@@ -479,7 +479,7 @@ describe('Abfrage: ein Fehler ist kein Stand', () => {
   });
 
   it('auch der erste Stand beim Laden prüft die Antwort', () => {
-    assert.match(hebe('loadData'), /\.then\(dataResponse\)/);
+    assert.match(hebe('loadData'), /\.then\(dataResponse\)|await dataResponse\(\w+\)/);
   });
 });
 

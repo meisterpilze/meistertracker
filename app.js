@@ -563,7 +563,13 @@ async function dataResponse(r) {
 async function loadData() {
   setSyncStatus('busy', 'Syncing...');
   try {
-    const d = await authFetch('/api/data').then(dataResponse);
+    const r = await authFetch('/api/data');
+    const d = await dataResponse(r);
+    // Das ETag gehoert zu dem Stand, der jetzt gezeichnet wird. Ohne es fragte
+    // die naechste Abfrage (etwa auf die eigene Meldung "data-changed" hin)
+    // ohne If-None-Match und lud denselben Stand noch einmal ganz.
+    const etag = r.headers && r.headers.get ? r.headers.get('ETag') : null;
+    if (etag) _lastEtag = etag;
     lastHash = JSON.stringify(d);
     applyData(d);
     lastSyncTime = Date.now();
@@ -1597,18 +1603,7 @@ function refresh() {
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
-  // Die Unterlagen dieser Seite hängen nicht an jedem Datenstand, sie kommen
-  // über ihren eigenen Abruf (pjDocsLaden). Gezeichnet wird trotzdem, aber nur,
-  // wenn noch nichts dasteht: das deckt den Fall ab, für den diese Liste da ist
-  // (die offene Seite bleibt leer), ohne alle 30 Sekunden ein Dokument neu zu
-  // bauen, während jemand darin liest.
-  if (id === 'proj') {
-    const offen = document.querySelector('#p-proj .sp.active > div');
-    if (offen && !offen.innerHTML) {
-      if (offen.id === 'pj-versuch') renderVersuch();
-      else renderProjekte(offen.id.replace('pj-', ''));
-    }
-  }
+  if (id === 'proj') pjRefresh();
   if (id === 'orders') _refreshOrdersActive();
   // Pickups arrive on the feed's own schedule, not on any action taken here, so
   // this page has no other way to notice that something changed.
@@ -15772,8 +15767,8 @@ function pjGefaessZeile(r) {
     `<span class="pj-run-code">${esc(r.code)}</span>` +
     (r.what ? `<span class="pj-run-what">${esc(r.what)}</span>` : '') +
     `<button type="button" class="btn btn-sm fs-xs pj-run-etikett" data-pj-label="${r.id}">${esc(t('exp.label'))}</button>` +
-    `<button type="button" class="pj-run-weg" data-pj-rundel="${r.id}" aria-label="${esc(t('exp.removeRun'))}" ` +
-    `title="${esc(t('exp.removeRun'))}">&times;</button>` +
+    `<button type="button" class="pj-run-weg" data-pj-rundel="${r.id}" aria-label="${esc(t('exp.removeRunNamed', { code: r.code }))}" ` +
+    `title="${esc(t('exp.removeRunNamed', { code: r.code }))}">&times;</button>` +
     '</div><div class="pj-run-tools">' +
     `<input class="pj-run-res" data-pj-run="${r.id}" data-pj-feld="result" value="${esc(r.result)}" ` +
     `placeholder="${esc(t('exp.resultPh'))}" maxlength="1000">` +
@@ -15792,7 +15787,8 @@ function pjEntferntesGefaess(r) {
     '<div class="pj-run-kopf">' +
     `<span class="pj-run-code">${esc(r.code)}</span>` +
     (r.what ? `<span class="pj-run-what">${esc(r.what)}</span>` : '') +
-    `<button type="button" class="btn btn-sm fs-xs pj-run-zurueck" data-pj-runback="${r.id}">${esc(t('exp.restore'))}</button>` +
+    `<button type="button" class="btn btn-sm fs-xs pj-run-zurueck" data-pj-runback="${r.id}" ` +
+    `aria-label="${esc(t('exp.restoreRunNamed', { code: r.code }))}">${esc(t('exp.restore'))}</button>` +
     '</div><div class="pj-run-tools">' +
     `<span class="pj-run-res">${esc(r.result || '—')}</span>` +
     `<span class="pj-out-${esc(r.outcome)}">${esc(t('exp.out.' + r.outcome))}</span>` +
@@ -15800,34 +15796,60 @@ function pjEntferntesGefaess(r) {
     '</div></div>'
   );
 }
-function pjEntfernte(titel, n, inhalt) {
+// Welche Klappen "Entfernte ..." offen sind, je Versuch und Art. Jede Aktion
+// zeichnet die Ansicht neu; ohne das klappte die Liste nach jedem Zurueckholen
+// wieder zu, und wer drei Fotos zurueckholte, oeffnete sie dreimal.
+const pjWegOffen = {};
+function pjEntfernte(titel, n, inhalt, schluessel) {
   if (!n) return '';
   return (
-    '<details class="pj-fold pj-weg">' +
+    `<details class="pj-fold pj-weg" data-pj-weg="${esc(schluessel)}"${pjWegOffen[schluessel] ? ' open' : ''}>` +
     `<summary class="sec">${esc(t(titel, { n }))}</summary>` +
     inhalt +
     '</details>'
   );
 }
-function pjFotoKachel(v, f) {
+function pjFotoKachel(v, f, nr) {
+  // Endgueltig geloescht: kein Bild mehr, nur der Platz, an dem es war. Dass es
+  // da war, steht mit Pruefsumme im Verlauf.
+  if (f.purged) {
+    return (
+      '<figure class="pj-foto pj-foto-entfernt">' +
+      `<div class="pj-foto-leer">${esc(t('exp.purged'))}</div>` +
+      `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption></figure>`
+    );
+  }
   const url = '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid);
+  // Ein entferntes Foto kann ein Admin endgueltig loeschen, fuer das Bild, das
+  // nicht gespeichert bleiben darf.
+  const admin = !!(currentUser && currentUser.role === 'admin');
+  // Ein Bildschirmleser liest die Knoepfe einzeln vor: "Zurueckholen" dreimal
+  // sagt nicht, welches Foto. Deshalb traegt jeder Knopf, wovon er spricht.
+  // Fotos aus einem Zug tragen dieselbe Minute; die Nummer in der Liste macht
+  // ihre Namen verschieden.
+  const wann = fmtDtTime(f.uploadedAt);
+  const name = { n: nr || 1, d: wann };
   return (
     `<figure class="pj-foto${f.removedAt ? ' pj-foto-entfernt' : ''}"><a href="${esc(url)}" target="_blank" rel="noopener">` +
-    `<img src="${esc(url)}?thumb=1" alt="" loading="lazy"></a>` +
+    `<img src="${esc(url)}?thumb=1" alt="${esc(t('exp.photoAlt', name))}" loading="lazy"></a>` +
     `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
     (f.removedAt
-      ? `<button type="button" class="btn btn-sm fs-xs pj-foto-zurueck" data-pj-photoback="${f.id}">${esc(t('exp.restore'))}</button>`
-      : `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" aria-label="${esc(t('exp.remove'))}">&times;</button>`) +
+      ? `<button type="button" class="btn btn-sm fs-xs pj-foto-zurueck" data-pj-photoback="${f.id}" ` +
+        `aria-label="${esc(t('exp.restorePhotoNamed', name))}">${esc(t('exp.restore'))}</button>` +
+        (admin
+          ? `<button type="button" class="btn btn-sm fs-xs pj-foto-zurueck" data-pj-photopurge="${f.id}" ` +
+            `aria-label="${esc(t('exp.purgePhotoNamed', name))}">${esc(t('exp.purge'))}</button>`
+          : '')
+      : `<button type="button" class="pj-foto-weg" data-pj-photodel="${f.id}" ` +
+        `aria-label="${esc(t('exp.removePhotoNamed', name))}">&times;</button>`) +
     '</figure>'
   );
 }
 // Ein Experiment, von oben nach unten so, wie der Tag laeuft: was drinsteht,
 // wie es aussieht, womit es angesetzt wurde, was dabei herauskam.
 function pjDetail(v) {
-  // Ein Experiment, das gerade erst im Browser angelegt wurde, kennt noch keine
-  // entfernten; der naechste Datenstand bringt die Listen mit.
-  const wegG = v.removedRuns || [];
-  const wegF = v.removedPhotos || [];
+  const wegG = v.removedRuns;
+  const wegF = v.removedPhotos;
   const kopf =
     '<div class="card pj-sec">' +
     '<div class="pj-v-head">' +
@@ -15844,13 +15866,13 @@ function pjDetail(v) {
     `<input id="pj-new-what" placeholder="${esc(t('exp.whatPh'))}" maxlength="200">` +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-addrun="${v.id}">${esc(t('exp.addRun'))}</button>` +
     '</div>' +
-    pjEntfernte('exp.removedRuns', wegG.length, wegG.map(pjEntferntesGefaess).join('')) +
+    pjEntfernte('exp.removedRuns', wegG.length, wegG.map(pjEntferntesGefaess).join(''), v.id + ':runs') +
     '</div>';
   const fotos =
     '<div class="card pj-sec">' +
     `<div class="sec">${esc(t('exp.photos', { n: v.photos.length }))}</div>` +
     '<div class="pj-fotos">' +
-    v.photos.map((f) => pjFotoKachel(v, f)).join('') +
+    v.photos.map((f, i) => pjFotoKachel(v, f, i + 1)).join('') +
     '</div>' +
     '<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>' +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
@@ -15858,7 +15880,8 @@ function pjDetail(v) {
     pjEntfernte(
       'exp.removedPhotos',
       wegF.length,
-      '<div class="pj-fotos">' + wegF.map((f) => pjFotoKachel(v, f)).join('') + '</div>'
+      '<div class="pj-fotos">' + wegF.map((f, i) => pjFotoKachel(v, f, i + 1)).join('') + '</div>',
+      v.id + ':photos'
     ) +
     '</div>';
   const text =
@@ -15891,29 +15914,60 @@ function pjArchiv() {
 //
 // Zugeklappt, weil man darin nachschlaegt und nicht arbeitet. Geholt wird er
 // erst beim Aufklappen und nicht mit /api/data: er waechst mit jeder Aenderung,
-// und /api/data laeuft bei jedem Sync. Einmal aufgeklappt bleibt er offen, auch
-// wenn die Ansicht darunter neu gezeichnet wird, und holt sich dann neu.
+// und /api/data laeuft bei jedem Sync. Geholt wird seitenweise: beim Aufklappen
+// die juengsten Eintraege, nach einer Aenderung nur, was seitdem dazukam, und
+// Aelteres auf Wunsch. Einmal aufgeklappt bleibt er offen, auch wenn die
+// Ansicht darunter neu gezeichnet wird.
 let pjVerlaufOffen = null; // id des Experiments, dessen Verlauf offen ist
-let pjVerlaufStand = null; // { id, eintraege } oder { id, fehler: true }
-let pjVerlaufNr = 0; // gezeichnet wird nur die Antwort auf den juengsten Abruf
+let pjVerlaufStand = null; // { id, eintraege, mehr } oder { id, fehler: true }
+let pjVerlaufNr = 0; // ein neuer Anfang verwirft Antworten auf fruehere Abrufe
 function pjVerlauf(v) {
+  const offen = pjVerlaufOffen === v.id;
+  // Die Liste steht nur im offenen Verlauf; zugeklappt waere sie Arbeit fuer
+  // nichts, bei jedem Neuzeichnen.
   return (
-    `<details class="card pj-sec pj-fold pj-verlauf" data-pj-verlauf="${v.id}"${pjVerlaufOffen === v.id ? ' open' : ''}>` +
+    `<details class="card pj-sec pj-fold pj-verlauf" data-pj-verlauf="${v.id}"${offen ? ' open' : ''}>` +
     `<summary class="sec">${esc(t('exp.hist'))}</summary>` +
-    `<div id="pj-verlauf-liste">${pjVerlaufListe(v)}</div>` +
+    `<div id="pj-verlauf-liste">${offen ? pjVerlaufListe(v) : ''}</div>` +
     '</details>'
   );
 }
 // Ein Gefaess heisst im Verlauf so, wie es zuletzt hiess: wer es umbenennt,
-// steht als eigener Eintrag da. Ein geloeschtes kennt nur noch der Verlauf.
+// steht als eigener Eintrag da. Der Verlauf kann neuer sein als die geladenen
+// Daten; ein Gefaess, das ein anderes Geraet eben angelegt hat, kennt dann nur
+// er. Tragen zwei Gefaesse denselben Code (ein entferntes und das, das danach
+// unter seinem Code angelegt wurde), kommt die Beschreibung dazu, und reicht die
+// nicht, die Kennung.
 function pjVerlaufCodes(v, eintraege) {
-  const codes = {};
+  const gefaesse = {};
   for (const e of eintraege) {
     if (e.entity !== 'run') continue;
-    if (e.record && e.record.code) codes[e.entityId] = e.record.code;
-    if (e.field === 'code' && e.to) codes[e.entityId] = e.to;
+    const g = gefaesse[e.entityId] || { code: '', what: '' };
+    if (e.record && e.record.code) {
+      g.code = e.record.code;
+      g.what = e.record.what || '';
+    }
+    if (e.field === 'code' && e.to) g.code = e.to;
+    if (e.field === 'what') g.what = e.to || '';
+    if (g.code) gefaesse[e.entityId] = g;
   }
-  for (const r of v.runs.concat(v.removedRuns || [])) codes[r.id] = r.code;
+  for (const r of v.runs.concat(v.removedRuns)) gefaesse[r.id] = { code: r.code, what: r.what || '' };
+  const anzahl = (schluessel) => {
+    const n = {};
+    for (const g of Object.values(gefaesse)) n[schluessel(g)] = (n[schluessel(g)] || 0) + 1;
+    return n;
+  };
+  const jeCode = anzahl((g) => g.code.toLowerCase());
+  const jeCodeUndWas = anzahl((g) => g.code.toLowerCase() + '\u0000' + g.what);
+  const codes = {};
+  for (const [id, g] of Object.entries(gefaesse)) {
+    let name = g.code;
+    if (jeCode[g.code.toLowerCase()] > 1) {
+      if (g.what) name += ' (' + g.what + ')';
+      if (jeCodeUndWas[g.code.toLowerCase() + '\u0000' + g.what] > 1) name += ' #' + id;
+    }
+    codes[id] = name;
+  }
   return codes;
 }
 function pjVerlaufWert(e, x) {
@@ -15923,7 +15977,7 @@ function pjVerlaufWert(e, x) {
   if (e.field === 'archived') return x === 'true' ? t('exp.hist.yes') : t('exp.hist.no');
   return x;
 }
-function pjVerlaufZeile(e, codes) {
+function pjVerlaufZeile(e, codes, fotoBild) {
   const gefaess = e.entity === 'run' ? codes[e.entityId] || '#' + e.entityId : '';
   let was;
   let wert = '';
@@ -15933,16 +15987,27 @@ function pjVerlaufZeile(e, codes) {
     wert =
       '<div class="pj-hist-wert">' +
       `<del>${esc(pjVerlaufWert(e, e.from))}</del> → <ins>${esc(pjVerlaufWert(e, e.to))}</ins></div>`;
+  } else if (e.action === 'backup') {
+    // Eine zurueckgespielte Sicherung: was danach stand, ist nicht mehr da.
+    was = t('exp.hist.backup', { n: (e.record && e.record.discarded) || 0 });
   } else {
     was = t('exp.hist.' + e.action + '.' + e.entity, { code: gefaess });
     // Ein Foto sagt, zu welchem Gefaess es gehoert, wenn es eins hat.
     const runId = e.entity === 'photo' && e.record ? e.record.runId : null;
     if (runId && codes[runId]) was += ' · ' + codes[runId];
   }
+  // Ein Foto zeigt sich selbst: drei "Foto hinzugefuegt" aus einem Zug waren
+  // sonst nicht auseinanderzuhalten. Die Kachel ist zwischengespeichert.
+  const bild = e.entity === 'photo' && e.record && e.record.uuid && fotoBild ? fotoBild(e.record.uuid) : '';
+  // Ein Name, dessen Konto es nicht mehr gibt, sagt das: ein neues Konto mit
+  // demselben Namen ist ein anderer Mensch.
+  const wer = e.user ? ' · ' + esc(e.user) + (e.userGone ? ' ' + esc(t('exp.hist.userGone')) : '') : '';
   return (
     '<li class="pj-hist">' +
-    `<div class="pj-hist-kopf">${esc(fmtDtTime(e.at))}${e.user ? ' · ' + esc(e.user) : ''}</div>` +
-    `<div class="pj-hist-was">${esc(was)}</div>` +
+    `<div class="pj-hist-kopf">${esc(fmtDtTime(e.at))}${wer}</div>` +
+    '<div class="pj-hist-was">' +
+    (bild ? `<img class="pj-hist-foto" src="${esc(bild)}" alt="" loading="lazy">` : '') +
+    `${esc(was)}</div>` +
     wert +
     '</li>'
   );
@@ -15955,10 +16020,16 @@ function pjVerlaufListe(v) {
   if (!s || s.id !== v.id) return `<p class="pj-empty">${esc(t('common.loading'))}</p>`;
   if (s.fehler) return `<p class="pj-empty">${esc(t('exp.histErr'))}</p>`;
   const codes = pjVerlaufCodes(v, s.eintraege);
+  const fotos = {};
+  for (const f of v.photos.concat(v.removedPhotos)) fotos[f.uuid] = f;
+  const fotoBild = (uuid) =>
+    fotos[uuid] && !fotos[uuid].purged
+      ? '/api/experiments/' + v.id + '/photos/' + encodeURIComponent(uuid) + '?thumb=1'
+      : '';
   const zeilen = s.eintraege
     .filter((e) => e.action !== 'baseline')
     .reverse()
-    .map((e) => pjVerlaufZeile(e, codes));
+    .map((e) => pjVerlaufZeile(e, codes, fotoBild));
   const anfang = s.eintraege.find((e) => e.action === 'baseline');
   if (anfang) {
     zeilen.push(
@@ -15967,28 +16038,77 @@ function pjVerlaufListe(v) {
         `<div class="pj-hist-was">${esc(t('exp.hist.baseline'))}</div></li>`
     );
   }
+  if (s.mehr) {
+    zeilen.push(
+      `<li class="pj-hist pj-hist-mehr"><button type="button" class="btn btn-sm fs-xs" data-pj-hist-mehr="${v.id}">` +
+        `${esc(t('exp.histMore'))}</button></li>`
+    );
+  }
   return zeilen.length
     ? '<ul class="pj-hist-liste">' + zeilen.join('') + '</ul>'
     : `<p class="pj-empty">${esc(t('exp.histNone'))}</p>`;
 }
-function pjVerlaufLaden(id) {
-  const nr = ++pjVerlaufNr;
-  return apiGet('/api/experiments/' + id + '/history')
-    .then((r) => ({ id, eintraege: (r && r.entries) || [] }))
-    .catch(() => ({ id, fehler: true }))
-    .then((stand) => {
+// Wie viel Neues ein Nachladen hoechstens holt (der Server nimmt bis 500).
+const PJ_VERLAUF_NEU = 500;
+// Zwei Seiten zu einer: nach Kennung, jeder Eintrag einmal.
+function pjVerlaufMischen(alt, neu) {
+  const nachId = new Map();
+  for (const e of alt) nachId.set(e.id, e);
+  for (const e of neu) nachId.set(e.id, e);
+  return [...nachId.values()].sort((a, b) => a.id - b.id);
+}
+// art: 'erste' die juengsten Eintraege (ersetzt, was da war), 'neu' was seit
+// dem letzten bekannten dazukam, 'aelter' die Seite vor dem aeltesten. Ohne
+// Stand fuer diesen Versuch ist jeder Abruf ein erster.
+function pjVerlaufLaden(id, art) {
+  const da = pjVerlaufStand && pjVerlaufStand.id === id && !pjVerlaufStand.fehler ? pjVerlaufStand : null;
+  if (!da || !da.eintraege.length) art = 'erste';
+  if (art === 'erste') pjVerlaufNr++;
+  const nr = pjVerlaufNr;
+  let pfad = '/api/experiments/' + id + '/history';
+  if (art === 'neu') pfad += '?after=' + da.eintraege[da.eintraege.length - 1].id + '&limit=' + PJ_VERLAUF_NEU;
+  if (art === 'aelter') pfad += '?before=' + da.eintraege[0].id;
+  return apiGet(pfad)
+    .then((r) => ({
+      eintraege: (r && r.entries) || [],
+      mehr: !!(r && r.more),
+      neuester: r && typeof r.newest === 'number' ? r.newest : null
+    }))
+    .catch(() => null)
+    .then((seite) => {
       if (nr !== pjVerlaufNr) return;
-      pjVerlaufStand = stand;
+      const jetzt = pjVerlaufStand && pjVerlaufStand.id === id && !pjVerlaufStand.fehler ? pjVerlaufStand : null;
+      // Juenger als alles, was der Server hat? Dann wurde eine Sicherung
+      // zurueckgespielt, und die Kennungen fangen wieder frueher an: von vorn.
+      const bekannt = jetzt && jetzt.eintraege.length ? jetzt.eintraege[jetzt.eintraege.length - 1].id : 0;
+      if (seite && art !== 'erste' && seite.neuester !== null && seite.neuester < bekannt) {
+        pjVerlaufLaden(id, 'erste');
+        return;
+      }
+      if (!seite) {
+        // Ein Nachladen, das scheitert, laesst stehen, was schon da ist.
+        if (art === 'erste' || !jetzt) pjVerlaufStand = { id, fehler: true };
+      } else if (art === 'erste' || !jetzt) {
+        pjVerlaufStand = { id, eintraege: seite.eintraege, mehr: seite.mehr };
+      } else {
+        pjVerlaufStand = {
+          id,
+          eintraege: pjVerlaufMischen(jetzt.eintraege, seite.eintraege),
+          mehr: art === 'aelter' ? seite.mehr : jetzt.mehr
+        };
+      }
       const el = document.getElementById('pj-verlauf-liste');
       const v = pjExp(pjOffen);
-      if (el && v && v.id === id) el.innerHTML = pjVerlaufListe(v);
+      if (el && v && v.id === id && pjVerlaufOffen === id) el.innerHTML = pjVerlaufListe(v);
+      // Eine volle Seite Neues heisst: es kam mehr dazu, als eine Seite fasst.
+      if (seite && art === 'neu' && seite.eintraege.length >= PJ_VERLAUF_NEU) pjVerlaufLaden(id, 'neu');
     });
 }
 // Nach einem Feld, das gespeichert wird, ohne dass die Ansicht neu gezeichnet
 // wird: Ergebnis, Mengen, Fazit. Nur die Liste, damit ein halb getippter Satz
-// im naechsten Feld stehen bleibt.
+// im naechsten Feld stehen bleibt, und nur das Neue.
 function pjVerlaufNeu() {
-  if (pjOffen && pjVerlaufOffen === pjOffen) pjVerlaufLaden(pjOffen);
+  if (pjOffen && pjVerlaufOffen === pjOffen) pjVerlaufLaden(pjOffen, 'neu');
 }
 // <details> meldet das Auf- und Zuklappen mit "toggle", und das steigt nicht
 // auf; der Zuhoerer haengt deshalb in der Capture-Phase an der Seite. Ein
@@ -15996,22 +16116,85 @@ function pjVerlaufNeu() {
 // mit der Ansicht neu gezeichnet; das Holen uebernimmt dann renderVersuch().
 function pjToggle(e) {
   const det = e.target;
+  if (det && det.dataset && det.dataset.pjWeg) {
+    pjWegOffen[det.dataset.pjWeg] = det.open;
+    return;
+  }
   if (!det || !det.dataset || !det.dataset.pjVerlauf) return;
   const id = Number(det.dataset.pjVerlauf);
   if (det.open) {
     if (pjVerlaufOffen === id) return;
     pjVerlaufOffen = id;
-    pjVerlaufLaden(id);
+    const el = document.getElementById('pj-verlauf-liste');
+    const v = pjExp(id);
+    if (el && v) el.innerHTML = pjVerlaufListe(v);
+    pjVerlaufLaden(id, 'erste');
   } else if (pjVerlaufOffen === id) {
+    // Zu ist zu: der Stand faellt weg, und Antworten, die noch unterwegs sind,
+    // zaehlen nicht mehr. Beim naechsten Aufklappen kommt der Verlauf frisch.
     pjVerlaufOffen = null;
+    pjVerlaufStand = null;
+    pjVerlaufNr++;
   }
 }
+// Was die Versuchsseite zuletzt gezeichnet hat: die Versuche und welcher offen
+// war. Aendert sich das unter ihr, ist sie veraltet.
+let pjVersuchGezeigt = null;
+function pjVersuchStand() {
+  return JSON.stringify([pjOffen, experiments]);
+}
+// Wann die offene Vorhaben-Seite bei einem neuen Datenstand neu gezeichnet wird.
+//
+// Die Unterlagen haengen nicht an jedem Datenstand, sie kommen ueber ihren
+// eigenen Abruf (pjDocsLaden). Sie werden gezeichnet, wenn noch nichts dasteht,
+// und nach einem Sprachwechsel, sonst nicht: niemand soll alle 30 Sekunden ein
+// Dokument unter den Augen neu gebaut bekommen.
+//
+// Der Versuch dagegen zeigt Daten, die sich unter ihm aendern. Ein Gefaess, das
+// ein anderes Geraet entfernt hat, stand sonst weiter mit Eingabefeldern da, und
+// was man hineintippte, landete im entfernten. Er wird deshalb neu gezeichnet,
+// sobald sich an den Versuchen etwas geaendert hat, ausser jemand gibt darin
+// gerade etwas ein: dann wartet er, bis das Feld verlassen ist.
+function pjRefresh() {
+  const offen = document.querySelector('#p-proj .sp.active > div');
+  if (!offen) return;
+  const versuch = offen.id === 'pj-versuch';
+  const leer = !offen.innerHTML;
+  const andereSprache = offen.dataset.lang !== currentLang;
+  // Beschaeftigt ist, wer in ein Feld tippt. Ein Knopf mit dem Fokus zaehlt
+  // nicht: in Safari bekommt ein angetippter Knopf keinen, und nach Entfernen
+  // oder Zurueckholen steht der Fokus auf einem, ohne dass jemand etwas tut.
+  const fokus = document.activeElement;
+  const tippt = !!fokus && offen.contains(fokus) && /^(INPUT|TEXTAREA|SELECT)$/.test(fokus.tagName || '');
+  const veraltet = versuch && pjVersuchGezeigt !== pjVersuchStand() && !tippt;
+  if (!leer && !andereSprache && !veraltet) return;
+  if (versuch) renderVersuch();
+  else renderProjekte(offen.id.replace('pj-', ''));
+}
+// Die Felder zum Anlegen: was darin steht und noch nicht abgeschickt ist,
+// uebersteht das Neuzeichnen derselben Ansicht.
+const PJ_ANLEGEN_FELDER = ['pj-new-code', 'pj-new-what', 'pj-new-vcode', 'pj-new-vtitle'];
+let pjGezeichnetFuer; // pjOffen beim letzten Zeichnen
 function renderVersuch() {
   const el = document.getElementById('pj-versuch');
   if (!el) return;
   const v = pjOffen ? pjExp(pjOffen) : null;
+  const angefangen = {};
+  if (pjGezeichnetFuer === pjOffen) {
+    for (const id of PJ_ANLEGEN_FELDER) {
+      const feld = document.getElementById(id);
+      if (feld && feld.value) angefangen[id] = feld.value;
+    }
+  }
   el.innerHTML = v ? pjDetail(v) : pjListe();
-  if (v && pjVerlaufOffen === v.id) pjVerlaufLaden(v.id);
+  pjGezeichnetFuer = pjOffen;
+  for (const [id, wert] of Object.entries(angefangen)) {
+    const feld = document.getElementById(id);
+    if (feld) feld.value = wert;
+  }
+  el.dataset.lang = currentLang;
+  pjVersuchGezeigt = pjVersuchStand();
+  if (v && pjVerlaufOffen === v.id) pjVerlaufLaden(v.id, 'neu');
 }
 // Ein Etikett je Gefaess — dieselbe Vorlage, die die Kulturen drucken. Ein
 // Kolben und ein Glas bekommen dasselbe Etikett, und das ist der Punkt: am
@@ -16049,6 +16232,15 @@ async function pjPrintRun(id) {
 // Ruecklinse statt der Galerie. Zusammengedrueckt wird im Browser mit derselben
 // Funktion, die die Kontaminationsfotos benutzt: 1280 px fuers Bild, 200 px
 // fuer die Kachel — ein Telefonfoto sind sonst 4 MB.
+// Die gewaehlten Bilder an pjKamera. Erst abschreiben, dann leeren: files ist
+// die Liste des Feldes selbst, und value = '' leert genau diese Liste. Mit der
+// Liste statt einer Abschrift kam bei pjKamera nie ein Bild an. Geleert wird,
+// damit dasselbe Bild ein zweites Mal gewaehlt werden kann.
+function pjKameraAuswahl(eingabe, id) {
+  const dateien = Array.from(eingabe.files || []);
+  eingabe.value = '';
+  if (id) pjKamera(id, dateien);
+}
 // Mehr nimmt der Server in einem Zug nicht an (EXP_MAX_PHOTOS_PER_CALL).
 const PJ_MAX_FOTOS = 8;
 async function pjKamera(versuchId, dateien) {
@@ -16088,20 +16280,25 @@ async function pjKamera(versuchId, dateien) {
   await loadData();
   renderVersuch();
 }
+// apiPost, apiPatch und apiDelete werfen nicht, sie melden {error}. Wer das
+// nicht prueft, zeigt einen gescheiterten Schreibvorgang wie einen gelungenen:
+// der Sync-Punkt wird kurz rot, und das naechste Nachladen setzt ihn wieder auf
+// gruen. pjFehlgeschlagen sagt es laut und gibt zurueck, ob etwas schiefging.
+function pjFehlgeschlagen(r) {
+  if (r && !r.error) return false;
+  toast(t('proj.saveErr', { err: (r && r.error) || '' }), 'err');
+  return true;
+}
+// Den Fokus auf ein Element nach dem Neuzeichnen; gibt es es nicht (mehr),
+// bleibt alles, wie es ist.
+function pjFokus(sel) {
+  const el = document.querySelector(sel);
+  if (el && typeof el.focus === 'function') el.focus();
+}
 // Tippen speichert beim Verlassen des Feldes, nicht bei jedem Zeichen: ein
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
 // eine Zeile Nutzen und hundert Anfragen.
 function pjChange(e) {
-  if (e.target.id === 'pj-cam') {
-    const id = Number(e.target.dataset.pjFor);
-    // Erst abschreiben, dann leeren: e.target.files ist die Liste des Feldes
-    // selbst, und value = '' leert genau diese Liste. Mit der Liste statt
-    // einer Abschrift kam bei pjKamera nie ein Bild an.
-    const dateien = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (id) pjKamera(id, dateien);
-    return;
-  }
   if (e.target.dataset && e.target.dataset.pjDocFor) {
     const datei = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -16116,19 +16313,53 @@ function pjChange(e) {
     const id = Number(feld.dataset.pjRun);
     const v = pjExp(pjOffen);
     const r = v && v.runs.find((x) => x.id === id);
-    if (r) r[name] = wert;
-    apiPatch('/api/experiment-runs/' + id, { [name]: wert }).then(pjVerlaufNeu);
+    // Eine veraltete Zeile: das Gefaess ist inzwischen entfernt, etwa auf einem
+    // anderen Geraet. Nichts schicken, neu zeichnen und sagen, warum.
+    if (!r) {
+      toast(t('exp.runGone'), 'err');
+      renderVersuch();
+      return;
+    }
+    const vorher = r[name];
+    r[name] = wert;
+    apiPatch('/api/experiment-runs/' + id, { [name]: wert }).then((antwort) => {
+      // Nicht gespeichert: der alte Wert gilt wieder. Ein Ausgang steht in
+      // einer Auswahl, die dann den gespeicherten zeigen muss; ein Ergebnis
+      // bleibt im Feld stehen, damit das Getippte nicht verloren ist.
+      if (pjFehlgeschlagen(antwort)) {
+        r[name] = vorher;
+        if (name === 'outcome') renderVersuch();
+        return;
+      }
+      pjVerlaufNeu();
+    });
     if (name === 'outcome') renderVersuch();
     return;
   }
   if (feld.dataset.pjExp) {
     const id = Number(feld.dataset.pjExp);
     const v = pjExp(id);
+    const vorher = v ? v[name] : undefined;
     if (v) v[name] = wert;
-    apiPatch('/api/experiments/' + id, { [name]: wert }).then(pjVerlaufNeu);
+    apiPatch('/api/experiments/' + id, { [name]: wert }).then((antwort) => {
+      // Der Text bleibt im Feld, nur der Stand dahinter gilt wieder als alt.
+      if (pjFehlgeschlagen(antwort)) {
+        if (v) v[name] = vorher;
+        return;
+      }
+      pjVerlaufNeu();
+    });
   }
 }
+// Ein Anlegen, dessen Antwort noch aussteht; ein zweiter Tipp wartet.
+let pjGefaessUnterwegs = false;
+let pjVersuchUnterwegs = false;
 function pjVersuchClick(e) {
+  const aelter = e.target.closest('[data-pj-hist-mehr]');
+  if (aelter) {
+    pjVerlaufLaden(Number(aelter.dataset.pjHistMehr), 'aelter');
+    return true;
+  }
   const rein = e.target.closest('[data-pj-open]');
   if (rein) {
     pjOffen = Number(rein.dataset.pjOpen);
@@ -16144,43 +16375,71 @@ function pjVersuchClick(e) {
   if (kamera) {
     const eingabe = document.getElementById('pj-cam');
     if (eingabe) {
-      eingabe.dataset.pjFor = kamera.dataset.pjCam;
+      const id = Number(kamera.dataset.pjCam);
+      // Der Zuhoerer haengt am Feld selbst, nicht an der Seite: wird die Ansicht
+      // neu gezeichnet, waehrend die Auswahl offen ist, haengt das Feld nicht
+      // mehr in der Seite, und ein Zuhoerer dort hoerte die Auswahl nie.
+      eingabe.onchange = () => pjKameraAuswahl(eingabe, id);
       eingabe.click();
     }
     return true;
   }
   // Entfernen und Zurueckholen: danach einmal neu laden, statt die Listen hier
-  // von Hand umzuhaengen. Was entfernt ist, bestimmt der Server.
-  const neuZeichnen = async () => {
+  // von Hand umzuhaengen. Was entfernt ist, bestimmt der Server. Der Knopf, der
+  // den Fokus hatte, ist nach dem Neuzeichnen weg; der Fokus geht dorthin, wo
+  // das Ding jetzt steht, statt auf die ganze Seite zu fallen.
+  const neuZeichnen = (fokus) => async (r) => {
+    pjFehlgeschlagen(r);
     await loadData();
     renderVersuch();
+    if (fokus) pjFokus(fokus);
   };
+  const versuchId = pjOffen;
   const fotoWeg = e.target.closest('[data-pj-photodel]');
   if (fotoWeg) {
     const id = Number(fotoWeg.dataset.pjPhotodel);
     confirm2(t('exp.photoDelTitle'), t('exp.photoDelMsg'), t('exp.remove'), () => {
-      apiDelete('/api/experiment-photos/' + id).then(neuZeichnen);
+      apiDelete('/api/experiment-photos/' + id).then(neuZeichnen('[data-pj-weg="' + versuchId + ':photos"] > summary'));
     });
     return true;
   }
   const fotoZurueck = e.target.closest('[data-pj-photoback]');
   if (fotoZurueck) {
-    apiPost('/api/experiment-photos/' + Number(fotoZurueck.dataset.pjPhotoback) + '/restore').then(neuZeichnen);
+    const id = Number(fotoZurueck.dataset.pjPhotoback);
+    apiPost('/api/experiment-photos/' + id + '/restore').then(neuZeichnen('[data-pj-photodel="' + id + '"]'));
+    return true;
+  }
+  const fotoEndgueltig = e.target.closest('[data-pj-photopurge]');
+  if (fotoEndgueltig) {
+    const id = Number(fotoEndgueltig.dataset.pjPhotopurge);
+    confirm2(t('exp.purgeTitle'), t('exp.purgeMsg'), t('exp.purge'), () => {
+      apiPost('/api/experiment-photos/' + id + '/purge').then((r) => {
+        // Die Zeile ist geloescht, eine Datei aber nicht: sonst stuende hier
+        // "geloescht", waehrend das Bild noch auf der Platte liegt.
+        if (r && r.leftoverFiles) toast(t('exp.purgeLeftover'), 'err');
+        return neuZeichnen('[data-pj-weg="' + versuchId + ':photos"] > summary')(r);
+      });
+    });
     return true;
   }
   const gefaessWeg = e.target.closest('[data-pj-rundel]');
   if (gefaessWeg) {
     const v = pjExp(pjOffen);
     const r = v && v.runs.find((x) => x.id === Number(gefaessWeg.dataset.pjRundel));
-    if (!r) return true;
+    if (!r) {
+      toast(t('exp.runGone'), 'err');
+      renderVersuch();
+      return true;
+    }
     confirm2(t('exp.removeRunTitle'), t('exp.removeRunMsg', { code: r.code }), t('exp.remove'), () => {
-      apiDelete('/api/experiment-runs/' + r.id).then(neuZeichnen);
+      apiDelete('/api/experiment-runs/' + r.id).then(neuZeichnen('[data-pj-weg="' + versuchId + ':runs"] > summary'));
     });
     return true;
   }
   const gefaessZurueck = e.target.closest('[data-pj-runback]');
   if (gefaessZurueck) {
-    apiPost('/api/experiment-runs/' + Number(gefaessZurueck.dataset.pjRunback) + '/restore').then(neuZeichnen);
+    const id = Number(gefaessZurueck.dataset.pjRunback);
+    apiPost('/api/experiment-runs/' + id + '/restore').then(neuZeichnen('[data-pj-rundel="' + id + '"]'));
     return true;
   }
   const drucken = e.target.closest('[data-pj-label]');
@@ -16190,6 +16449,7 @@ function pjVersuchClick(e) {
   }
   const gefaess = e.target.closest('[data-pj-addrun]');
   if (gefaess) {
+    if (pjGefaessUnterwegs) return true;
     const code = (document.getElementById('pj-new-code').value || '').trim();
     if (!code) {
       toast(t('exp.needCode'), 'err');
@@ -16200,39 +16460,85 @@ function pjVersuchClick(e) {
       code,
       what: (document.getElementById('pj-new-what').value || '').trim()
     };
+    // Dieselbe Pruefung wie auf dem Server, nur vor dem Abschicken: ein Code
+    // bezeichnet in einem Versuch ein Gefaess, gross oder klein geschrieben.
+    const hier = pjExp(daten.experimentId);
+    if (hier && hier.runs.some((x) => String(x.code).toLowerCase() === code.toLowerCase())) {
+      toast(t('exp.runCodeTaken', { code }), 'err');
+      return true;
+    }
+    // Bis die Antwort da ist, nimmt der Knopf keinen zweiten Tipp an: ein
+    // Doppeltipp auf langsamer Verbindung legte sonst zwei gleiche Gefaesse an.
+    // Die Sperre haengt nicht am Knopf: wird die Ansicht zwischendurch neu
+    // gezeichnet, ist der Knopf ein neuer und waere wieder frei.
+    pjGefaessUnterwegs = true;
+    gefaess.disabled = true;
     apiPost('/api/experiment-runs', daten).then((r) => {
+      pjGefaessUnterwegs = false;
+      if (!r || !r.id) {
+        // Die Eingaben bleiben stehen; gezeichnet wird nichts neu.
+        gefaess.disabled = false;
+        pjFehlgeschlagen(r || null);
+        return;
+      }
       const v = pjExp(daten.experimentId);
-      if (v && r && r.id) v.runs.push({ ...daten, id: r.id, result: '', outcome: 'open' });
+      if (v) v.runs.push({ ...daten, id: r.id, result: '', outcome: 'open', removedAt: null });
+      for (const id of ['pj-new-code', 'pj-new-what']) {
+        const feld = document.getElementById(id);
+        if (feld) feld.value = '';
+      }
       renderVersuch();
     });
     return true;
   }
   const neu = e.target.closest('[data-pj-newexp]');
   if (neu) {
+    if (pjVersuchUnterwegs) return true;
     const code = (document.getElementById('pj-new-vcode').value || '').trim();
     const title = (document.getElementById('pj-new-vtitle').value || '').trim();
     if (!code || !title) {
       toast(t('exp.needCodeTitle'), 'err');
       return true;
     }
+    // Ein Code gehoert einem Versuch, auch einem archivierten. Das zu sagen,
+    // bevor etwas abgeschickt ist, erspart die Suche nach dem Grund.
+    if (experiments.some((x) => String(x.code).toLowerCase() === code.toLowerCase())) {
+      toast(t('exp.codeTaken', { code }), 'err');
+      return true;
+    }
     const daten = { code, title, started: localDateStr(new Date()) };
+    pjVersuchUnterwegs = true;
+    neu.disabled = true;
     apiPost('/api/experiments', daten).then((r) => {
-      if (r && r.id) {
-        experiments.push({
-          ...daten,
-          id: r.id,
-          ended: null,
-          status: 'running',
-          archived: false,
-          recipe: '',
-          outcome: '',
-          runs: [],
-          photos: []
-        });
-        // Direkt hinein: wer gerade einen Ansatz angelegt hat, will jetzt die
-        // Gefaesse dazuschreiben und nicht erst eine Liste ansehen.
-        pjOffen = r.id;
+      pjVersuchUnterwegs = false;
+      if (!r || !r.id) {
+        // Code und Titel bleiben in den Feldern stehen.
+        neu.disabled = false;
+        pjFehlgeschlagen(r || null);
+        return;
       }
+      for (const id of ['pj-new-vcode', 'pj-new-vtitle']) {
+        const feld = document.getElementById(id);
+        if (feld) feld.value = '';
+      }
+      experiments.push({
+        ...daten,
+        id: r.id,
+        ended: null,
+        status: 'running',
+        archived: false,
+        recipe: '',
+        outcome: '',
+        // Dieselbe Form wie aus /api/data, damit nichts, was sie liest, einen
+        // eben angelegten Versuch als Sonderfall kennen muss.
+        runs: [],
+        removedRuns: [],
+        photos: [],
+        removedPhotos: []
+      });
+      // Direkt hinein: wer gerade einen Ansatz angelegt hat, will jetzt die
+      // Gefaesse dazuschreiben und nicht erst eine Liste ansehen.
+      pjOffen = r.id;
       renderVersuch();
     });
     return true;
@@ -16245,9 +16551,17 @@ function pjVersuchClick(e) {
     const v = pjExp(id);
     if (!v) return true;
     confirm2(t('exp.finishTitle'), t('exp.finishMsg', { code: v.code }), t('exp.finish'), () => {
+      const vorher = { status: v.status, ended: v.ended };
       v.status = 'done';
       v.ended = localDateStr(new Date());
-      apiPatch('/api/experiments/' + id, { status: 'done', ended: v.ended });
+      apiPatch('/api/experiments/' + id, { status: 'done', ended: v.ended }).then((antwort) => {
+        // Nicht abgeschlossen: der Versuch laeuft weiter und steht wieder da.
+        if (pjFehlgeschlagen(antwort)) {
+          v.status = vorher.status;
+          v.ended = vorher.ended;
+          renderVersuch();
+        }
+      });
       pjOffen = null;
       renderVersuch();
     });
@@ -16474,10 +16788,18 @@ function pjNotizClick(e) {
       toast(t('proj.noteEmpty'), 'err');
       return true;
     }
+    if (anlegen.disabled) return true;
     const tab = anlegen.dataset.pjNoteAdd;
     const daten = { tab, body };
+    anlegen.disabled = true;
     apiPost('/api/project-notes', daten).then((r) => {
-      if (r && r.id) projectNotes.unshift({ ...daten, id: r.id, created: new Date().toISOString(), updated: '' });
+      if (!r || !r.id) {
+        // Der Text bleibt im Feld; gezeichnet wird nichts neu.
+        anlegen.disabled = false;
+        pjFehlgeschlagen(r || null);
+        return;
+      }
+      projectNotes.unshift({ ...daten, id: r.id, created: new Date().toISOString(), updated: '' });
       renderProjekte(tab);
     });
     return true;
@@ -16518,9 +16840,25 @@ function pjNotizClick(e) {
       // Derselbe Text ist keine Aenderung; der Server schreibt dann nichts, und
       // "geaendert" stuende hier nur bis zum naechsten Datenstand.
       if (n.body !== body) {
+        const vorher = { body: n.body, updated: n.updated };
         n.body = body;
         n.updated = new Date().toISOString();
-        apiPatch('/api/project-notes/' + id, { body });
+        apiPatch('/api/project-notes/' + id, { body }).then((r) => {
+          if (!pjFehlgeschlagen(r)) return;
+          // Nicht gespeichert: der alte Stand gilt wieder, damit ein zweites
+          // Speichern mit demselben Text auch wirklich geschickt wird, und die
+          // Notiz geht mit dem Getippten wieder zum Bearbeiten auf.
+          n.body = vorher.body;
+          n.updated = vorher.updated;
+          renderProjekte(n.tab);
+          const knopf = document.querySelector('[data-pj-note-save="' + id + '"]');
+          const offen = knopf && knopf.closest('.pj-note');
+          if (offen) {
+            offen.classList.add('is-edit');
+            const eingabe = offen.querySelector('.pj-note-edit');
+            if (eingabe) eingabe.value = body;
+          }
+        });
       }
       renderProjekte(n.tab);
     }
@@ -16532,8 +16870,14 @@ function pjNotizClick(e) {
     const n = projectNotes.find((x) => x.id === id);
     if (!n) return true;
     confirm2(t('proj.noteDelTitle'), t('proj.noteDelMsg'), t('common.delete'), () => {
+      const stelle = projectNotes.indexOf(n);
       projectNotes = projectNotes.filter((x) => x.id !== id);
-      apiDelete('/api/project-notes/' + id);
+      apiDelete('/api/project-notes/' + id).then((r) => {
+        // Nicht geloescht: die Notiz steht wieder an ihrem Platz.
+        if (!pjFehlgeschlagen(r)) return;
+        if (!projectNotes.some((x) => x.id === id)) projectNotes.splice(Math.max(0, stelle), 0, n);
+        renderProjekte(n.tab);
+      });
       renderProjekte(n.tab);
     });
     return true;
@@ -16594,6 +16938,7 @@ async function pjDocImportieren(key, datei) {
 function renderProjekte(key) {
   const el = document.getElementById('pj-' + key);
   if (!el) return;
+  el.dataset.lang = currentLang;
   if (!projectDocs) {
     pjDocsWarten(el, key);
     return;

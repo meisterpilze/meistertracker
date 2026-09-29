@@ -8619,6 +8619,10 @@ body:has(#m-camscan.open) .update-bar {
   flex: 0 0 auto;
   font-weight: 700;
   font-size: max(0.8125rem, var(--fs-min));
+  /* Ein langer Code bricht um, statt die Zeile ueber den Rand zu schieben: neben
+     ihm stehen noch das Etikett und das Kreuz zum Entfernen. */
+  max-width: 40%;
+  overflow-wrap: anywhere;
 }
 .pj-run-what {
   flex: 1 1 auto;
@@ -8958,6 +8962,28 @@ body:has(#m-camscan.open) .update-bar {
 }
 .pj-foto-entfernt img {
   opacity: 0.55;
+}
+/* Das Foto, von dem eine Zeile im Verlauf spricht, klein davor. */
+.pj-hist-foto {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+/* Ein endgueltig geloeschtes Foto: der Platz, an dem es war. */
+.pj-foto-leer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 6px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius-sm);
 }
 .pj-foto-zurueck {
   display: block;

@@ -48,12 +48,13 @@ function laden() {
     let projectDocs = null;
     let projectNotes = [];
     let currentUser = null;
+    const currentLang = 'de';
     let pjDocsAbruf = null;
     const PJ_CHK = 'test';
     const abrufe = [];
     let antwort = { docs: {} };
     const els = {};
-    for (const k of ['research', 'products', 'build']) els['pj-' + k] = { innerHTML: '', querySelectorAll: () => [] };
+    for (const k of ['research', 'products', 'build']) els['pj-' + k] = { innerHTML: '', dataset: {}, querySelectorAll: () => [] };
     const document = { getElementById: (id) => els[id] || null, querySelectorAll: () => [] };
     const localStorage = { getItem: () => null, setItem: () => {} };
     const t = (k, o) => k + (o ? JSON.stringify(o) : '');

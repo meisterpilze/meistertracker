@@ -33,6 +33,13 @@ describe('Notizen', () => {
     assert.equal(n.updated, '');
   });
 
+  it('nimmt das Datum vom Server, nicht aus der Anfrage', () => {
+    const vorher = Date.now();
+    const id = db.insertProjectNote(d, { tab: 'products', body: 'datiert', created: '2019-01-01T00:00:00.000Z' });
+    const n = db.listProjectNotes(d).find((x) => x.id === id);
+    assert.ok(Date.parse(n.created) >= vorher - 1000, 'created is now, not the date the client sent');
+  });
+
   it('besteht auf Reiter und Text', () => {
     assert.throws(() => db.insertProjectNote(d, { tab: 'research' }), /required/);
     assert.throws(() => db.insertProjectNote(d, { body: 'ohne Reiter' }), /required/);

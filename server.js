@@ -674,8 +674,8 @@ function readData() {
   return db.readAll(database, { inventoryLogLimit: 500 });
 }
 
-function writeData(data) {
-  db.writeAll(database, data);
+function writeData(data, wer) {
+  db.writeAll(database, data, { wer });
 }
 
 // The request body parsed as JSON, whatever its shape: an array, a string,
@@ -904,6 +904,18 @@ function validateDate(value, fieldName) {
   const d = new Date(value);
   if (isNaN(d.getTime())) return fieldName + ' is not a valid date';
   return null;
+}
+// A calendar day as a date input sends it: YYYY-MM-DD, and a day that exists.
+// validateDate accepts whatever new Date() accepts, which includes 5, [2026] and
+// 2026-02-31. Unlike the others this one does not let an empty value through;
+// the caller decides whether a field may be left out.
+function validateDay(value, fieldName) {
+  const m = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3]) return null;
+  }
+  return fieldName + ' must be a date (YYYY-MM-DD)';
 }
 // Validate 24-hour time strings in HH:MM format
 function validateTimeOfDay(value, fieldName) {
@@ -1176,20 +1188,13 @@ async function syncChannelOrders(channel, excludeRes) {
     database.exec('BEGIN');
     try {
       for (const o of collected) {
-        // A SAVEPOINT per order keeps a malformed one from poisoning the batch:
+        // A savepoint per order keeps a malformed one from poisoning the batch:
         // it rolls back just that order, and the rest still commit together.
         try {
-          database.exec('SAVEPOINT mt_order');
-          db.upsertOrder(database, o);
-          database.exec('RELEASE mt_order');
+          db.withSavepoint(database, 'mt_order', () => db.upsertOrder(database, o));
           imported++;
         } catch (e2) {
-          try {
-            database.exec('ROLLBACK TO mt_order');
-            database.exec('RELEASE mt_order');
-          } catch (e3) {
-            /* ignore */
-          }
+          /* this order is skipped; the others are kept */
         }
       }
       database.exec('COMMIT');
@@ -1443,17 +1448,20 @@ function savePhotoToDisk(reportId, photo, authUser) {
 // take their bytes back out of the cached total. Without the second half a
 // failed report kept counting against the cap until the next rescan, up to
 // five minutes later, and near the cap a retry got a 507 for space that was
-// already free again.
+// already free again. Returns the files that are still there; one that is
+// already gone counts as deleted.
 function _discardPhotoFiles(files) {
+  const left = [];
   for (const f of files) {
     try {
       const bytes = fs.statSync(f).size;
       fs.unlinkSync(f);
       _photoDirSizeBytes -= bytes;
-    } catch {
-      /* ignore — file already gone or never existed */
+    } catch (e) {
+      if (e.code !== 'ENOENT') left.push(f);
     }
   }
+  return left;
 }
 
 // Wieviele Beutel ein einzelner Bericht nennen darf. Eine Reihe im Regal passt
@@ -1464,6 +1472,58 @@ const CONTAM_MAX_TARGETS = 50;
 // schuetzt die Platte und den Arbeitsspeicher: jedes Bild reist als Base64
 // durch den Hauptspeicher, bevor es geschrieben wird.
 const EXP_MAX_PHOTOS_PER_CALL = 8;
+
+// Die Felder eines Versuchs, fuer Anlegen und Aendern gleich. Titel und Beginn
+// sind Pflicht in der Zeile und duerfen deshalb nicht leer werden; ein Datum ist
+// ein Tag wie aus dem Datumsfeld; archived ist ja oder nein, und aus dem Text
+// 'false' wurde vorher ein archivierter Versuch. Welche Status es gibt, weiss
+// db.js.
+function versuchPruefen(data) {
+  const vr = validateRequired(data, []);
+  if (vr) return vr;
+  const vt = validateTypes(data, {
+    code: 'string',
+    title: 'string',
+    recipe: 'string',
+    outcome: 'string',
+    status: 'string',
+    archived: 'boolean'
+  });
+  if (vt) return vt;
+  if ('title' in data && !(typeof data.title === 'string' && data.title.trim())) return 'title must not be empty';
+  if ('status' in data && typeof data.status !== 'string') return 'status must be a string';
+  if ('archived' in data && typeof data.archived !== 'boolean') return 'archived must be a boolean';
+  if ('started' in data) {
+    const vd = validateDay(data.started, 'started');
+    if (vd) return vd;
+  }
+  // Ein leeres Ende heisst: noch kein Ende.
+  if (data.ended !== undefined && data.ended !== null && data.ended !== '') {
+    const vd = validateDay(data.ended, 'ended');
+    if (vd) return vd;
+  }
+  return null;
+}
+// Die Felder eines Gefaesses und ihre Typen, fuer Anlegen und Aendern gleich.
+// cultureId und batchId sind Kennungen als Text. Kam dort ein Objekt, band
+// node:sqlite es als benannte Parameter, das UPDATE traf keine Zeile, und der
+// Verlauf verzeichnete trotzdem eine Aenderung.
+const ANSATZ_TYPEN = {
+  code: 'string',
+  what: 'string',
+  result: 'string',
+  cultureId: 'string',
+  batchId: 'string',
+  sort: 'number'
+};
+// Was ueber die Typen hinaus gilt: ein Code ist nie leer (null traf die
+// Pflichtspalte und endete als 500, '' wurde gespeichert), und die
+// Reihenfolge ist eine ganze Zahl.
+function ansatzPruefen(data) {
+  if ('code' in data && !(typeof data.code === 'string' && data.code.trim())) return 'code must not be empty';
+  if (data.sort !== undefined && !Number.isInteger(data.sort)) return 'sort must be a whole number';
+  return null;
+}
 
 // Die Beutel, die ein Bericht abdeckt.
 //
@@ -7261,7 +7321,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        writeData(data);
+        writeData(data, req.authUser);
         const version = db.getDataVersion(database);
         broadcastSSE(res);
         jsonOk(res, { version });
@@ -7959,7 +8019,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.renameBatch(database, oldId, newId);
+        db.renameBatch(database, oldId, newId, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { ok: true, oldId, newId });
       } catch (err) {
@@ -8120,7 +8180,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         .then(() => {
           const verifyError = verifyBackupFile(dest);
           if (verifyError) throw new Error('pre-reset backup failed verification: ' + verifyError);
-          const counts = db.resetOperationalData(database, scopes);
+          const counts = db.resetOperationalData(database, scopes, req.authUser);
           // Contamination photo files are on disk, not in the DB — drop them too
           // so they don't hold the photo-dir cap against freshly cleared reports.
           // Only those: experiment photos share the directory, and the reset
@@ -8130,7 +8190,6 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           if (scopes.growing) {
             try {
               photoCap.removeContaminationPhotos(PHOTO_DIR);
-              fs.mkdirSync(PHOTO_DIR, { recursive: true });
               _ensurePhotoDirSize(true);
               photosRemoved = true;
             } catch (fileErr) {
@@ -8647,7 +8706,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.renameCulture(database, oldId, newId);
+        db.renameCulture(database, oldId, newId, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { ok: true, oldId, newId });
       } catch (err) {
@@ -8681,7 +8740,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (requireAdmin(req, res)) return;
     const id = decodeURIComponent(cultureMatch[1]);
     try {
-      const deleted = db.deleteCulture(database, id);
+      const deleted = db.deleteCulture(database, id, req.authUser);
       broadcastSSE(res);
       jsonOk(res, { deleted });
     } catch (err) {
@@ -9193,22 +9252,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { code: 'string', title: 'string', recipe: 'string', outcome: 'string' });
-      if (vt) {
-        jsonErr(res, 400, vt);
+      const vp = versuchPruefen(data);
+      if (vp) {
+        jsonErr(res, 400, vp);
         return;
       }
       const vl = validateLengths(data, { code: 20, title: 200, recipe: 20000, outcome: 20000 });
       if (vl) {
         jsonErr(res, 400, vl);
         return;
-      }
-      if (data.started) {
-        const vd = validateDate(data.started, 'started');
-        if (vd) {
-          jsonErr(res, 400, vd);
-          return;
-        }
       }
       try {
         const id = db.insertExperiment(database, data, req.authUser);
@@ -9227,9 +9279,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vt = validateTypes(data, { title: 'string', recipe: 'string', outcome: 'string' });
-      if (vt) {
-        jsonErr(res, 400, vt);
+      const vp = versuchPruefen(data);
+      if (vp) {
+        jsonErr(res, 400, vp);
         return;
       }
       const vl = validateLengths(data, { title: 200, recipe: 20000, outcome: 20000 });
@@ -9237,17 +9289,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vl);
         return;
       }
-      for (const feld of ['started', 'ended']) {
-        if (!data[feld]) continue;
-        const vd = validateDate(data[feld], feld);
-        if (vd) {
-          jsonErr(res, 400, vd);
-          return;
-        }
-      }
       try {
-        db.updateExperiment(database, id, data, req.authUser);
-        broadcastSSE(res);
+        // Gesendet wird nur, was sich geaendert hat: ein PATCH mit dem Wert, der
+        // schon dasteht, schreibt nichts und muss niemanden nachladen lassen.
+        if (db.updateExperiment(database, id, data, req.authUser)) broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
@@ -9258,10 +9303,23 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // Der Verlauf eines Versuchs: wer wann was geaendert hat, an ihm, seinen
   // Gefaessen und seinen Fotos. Nur lesen. Eine Route, die ihn aendert oder
   // loescht, gibt es nicht, und die Tabelle liesse es auch nicht zu.
+  // Seitenweise: ohne Angabe die juengsten Eintraege, mit ?before=id aeltere,
+  // mit ?after=id nur, was seitdem dazukam (siehe experimentHistoryPage).
   const verlaufTreffer = url.match(/^\/api\/experiments\/(\d+)\/history$/);
   if (req.method === 'GET' && verlaufTreffer) {
+    const q = new URL(req.url, 'http://localhost').searchParams;
+    const zahl = (name) => {
+      const v = q.get(name);
+      if (v === null) return undefined;
+      return /^\d{1,15}$/.test(v) ? Number(v) : NaN;
+    };
+    const seite = { after: zahl('after'), before: zahl('before'), limit: zahl('limit') };
+    if (Object.values(seite).some((v) => Number.isNaN(v))) {
+      jsonErr(res, 400, 'after, before and limit must be whole numbers');
+      return;
+    }
     try {
-      jsonOk(res, { entries: db.listExperimentHistory(database, parseInt(verlaufTreffer[1], 10)) });
+      jsonOk(res, db.experimentHistoryPage(database, parseInt(verlaufTreffer[1], 10), seite));
     } catch (err) {
       safeErr(res, err);
     }
@@ -9278,9 +9336,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { code: 'string', what: 'string', result: 'string' });
+      const vt = validateTypes(data, { ...ANSATZ_TYPEN, experimentId: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
+        return;
+      }
+      const vs = ansatzPruefen(data);
+      if (vs) {
+        jsonErr(res, 400, vs);
         return;
       }
       const vl = validateLengths(data, { code: 40, what: 200, result: 1000 });
@@ -9305,9 +9368,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vt = validateTypes(data, { code: 'string', what: 'string', result: 'string' });
+      const vt = validateTypes(data, ANSATZ_TYPEN);
       if (vt) {
         jsonErr(res, 400, vt);
+        return;
+      }
+      const vs = ansatzPruefen(data);
+      if (vs) {
+        jsonErr(res, 400, vs);
         return;
       }
       const vl = validateLengths(data, { code: 40, what: 200, result: 1000 });
@@ -9316,8 +9384,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.updateExperimentRun(database, id, data, req.authUser);
-        broadcastSSE(res);
+        if (db.updateExperimentRun(database, id, data, req.authUser)) broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
@@ -9329,8 +9396,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // der Liste, die Zeile bleibt, und /restore holt es zurueck.
   if (req.method === 'DELETE' && ansatzTreffer) {
     try {
-      db.removeExperimentRun(database, parseInt(ansatzTreffer[1], 10), req.authUser);
-      broadcastSSE(res);
+      if (db.removeExperimentRun(database, parseInt(ansatzTreffer[1], 10), req.authUser)) broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
       safeErr(res, err);
@@ -9340,8 +9406,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const ansatzZurueckTreffer = url.match(/^\/api\/experiment-runs\/(\d+)\/restore$/);
   if (req.method === 'POST' && ansatzZurueckTreffer) {
     try {
-      db.restoreExperimentRun(database, parseInt(ansatzZurueckTreffer[1], 10), req.authUser);
-      broadcastSSE(res);
+      if (db.restoreExperimentRun(database, parseInt(ansatzZurueckTreffer[1], 10), req.authUser)) broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
       safeErr(res, err);
@@ -9365,6 +9430,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 404, 'photo not found');
         return;
       }
+      if (!foto.rel_path) {
+        jsonErr(res, 404, 'photo deleted for good');
+        return;
+      }
       const abs = path.join(DIR, 'data', wantThumb ? foto.thumb_path : foto.rel_path);
       // Wie beim Kontaminationsbericht: nichts ausserhalb von data/photos, auch
       // wenn in der Zeile etwas anderes steht.
@@ -9376,7 +9445,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 404, 'photo file missing');
         return;
       }
-      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=31536000, immutable' });
+      // Fragen statt ein Jahr lang ungefragt aus dem Browser-Cache: ein
+      // endgueltig geloeschtes Foto kam sonst weiter aus dem Verlauf des
+      // Browsers, und nach dem Abmelden an einem geteilten Geraet auch ohne
+      // Anmeldung. Ein Bild aendert sich unter seiner uuid nie; die Frage kostet
+      // eine 304 ohne Inhalt.
+      const etag = '"' + foto.uuid + (wantThumb ? '-t' : '') + '"';
+      if (etagMatches(req.headers['if-none-match'], etag)) {
+        res.writeHead(304, { ETag: etag, 'Cache-Control': 'private, no-cache' });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-cache', ETag: etag });
       const strom = fs.createReadStream(abs);
       strom.on('error', (e) => {
         log('warn', 'Photo stream error', { error: e.message });
@@ -9399,9 +9479,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { experimentId: 'number', photos: 'array' });
+      const vt = validateTypes(data, { experimentId: 'number', photos: 'array', runId: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
+        return;
+      }
+      if (data.runId != null && !Number.isInteger(data.runId)) {
+        jsonErr(res, 400, 'runId must be a whole number');
         return;
       }
       if (!Array.isArray(data.photos) || !data.photos.length) {
@@ -9432,7 +9516,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         database.exec('BEGIN');
         try {
           for (const foto of data.photos) {
-            const gespeichert = savePhotoToDisk('exp-' + data.experimentId, foto, req.authUser);
+            const gespeichert = savePhotoToDisk(photoCap.experimentPhotoScope(data.experimentId), foto, req.authUser);
             geschrieben.push(path.join(DIR, 'data', gespeichert.rel_path));
             geschrieben.push(path.join(DIR, 'data', gespeichert.thumb_path));
             ids.push(db.addExperimentPhoto(database, data.experimentId, data.runId || null, gespeichert, req.authUser));
@@ -9462,9 +9546,40 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const fotoWegTreffer = url.match(/^\/api\/experiment-photos\/(\d+)$/);
   if (req.method === 'DELETE' && fotoWegTreffer) {
     try {
-      db.removeExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10), req.authUser);
-      broadcastSSE(res);
+      if (db.removeExperimentPhoto(database, parseInt(fotoWegTreffer[1], 10), req.authUser)) broadcastSSE(res);
       jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // Endgueltig loeschen: nur ein Admin, nur ein entferntes Foto. Erst die Zeile
+  // (Grabstein und Verlauf), dann die Dateien; scheitert das Loeschen einer
+  // Datei, liegt sie verwaist da, statt dass eine Zeile auf nichts zeigt.
+  const fotoEndgueltigTreffer = url.match(/^\/api\/experiment-photos\/(\d+)\/purge$/);
+  if (req.method === 'POST' && fotoEndgueltigTreffer) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const fotoId = parseInt(fotoEndgueltigTreffer[1], 10);
+      const pfade = db.purgeExperimentPhoto(database, fotoId, req.authUser);
+      // Nur, was unter data/photos liegt, auch wenn in der Zeile etwas anderes
+      // stand; die Bytes gehen an die Deckelung zurueck.
+      const uebrig = _discardPhotoFiles(
+        (pfade ? [pfade.rel_path, pfade.thumb_path] : [])
+          .map((rel) => path.join(DIR, 'data', rel))
+          .filter((abs) => abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep))
+      );
+      // Die Zeile ist jetzt ein Grabstein und nennt die Dateien nicht mehr;
+      // wer den Rest von Hand loescht, findet ihn nur hier. Und der Admin soll
+      // nicht "geloescht" lesen, waehrend das Bild noch auf der Platte liegt.
+      if (uebrig.length) {
+        log('error', 'Photo purge left files on disk', {
+          photoId: fotoId,
+          files: uebrig.map((abs) => path.relative(path.join(DIR, 'data'), abs))
+        });
+      }
+      if (pfade) broadcastSSE(res);
+      jsonOk(res, uebrig.length ? { ok: true, leftoverFiles: uebrig.length } : undefined);
     } catch (err) {
       safeErr(res, err);
     }
@@ -9473,8 +9588,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   const fotoZurueckTreffer = url.match(/^\/api\/experiment-photos\/(\d+)\/restore$/);
   if (req.method === 'POST' && fotoZurueckTreffer) {
     try {
-      db.restoreExperimentPhoto(database, parseInt(fotoZurueckTreffer[1], 10), req.authUser);
-      broadcastSSE(res);
+      if (db.restoreExperimentPhoto(database, parseInt(fotoZurueckTreffer[1], 10), req.authUser)) broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
       safeErr(res, err);
@@ -9510,7 +9624,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.insertProjectNote(database, data, req.authUser);
+        const id = db.insertProjectNote(database, data);
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -9537,8 +9651,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.updateProjectNote(database, id, data, req.authUser);
-        broadcastSSE(res);
+        if (db.updateProjectNote(database, id, data)) broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
@@ -9548,8 +9661,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
   if (req.method === 'DELETE' && notizTreffer) {
     try {
-      db.deleteProjectNote(database, parseInt(notizTreffer[1]), req.authUser);
-      broadcastSSE(res);
+      if (db.deleteProjectNote(database, parseInt(notizTreffer[1], 10))) broadcastSSE(res);
       jsonOk(res);
     } catch (err) {
       safeErr(res, err);
@@ -12142,8 +12254,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         tmpPath = path.join(BACKUP_DIR, '_restore_tmp_' + crypto.randomBytes(8).toString('hex') + '.db');
         fs.writeFileSync(tmpPath, plain, { mode: 0o600 });
         let tmpDb;
+        // Was im Laborbuch-Verlauf verloren geht: die Eintraege der laufenden
+        // Datei, die juenger sind als der juengste der Sicherung. Gezaehlt
+        // wird vor dem Tausch; danach steht es als Eintrag in jedem Versuch.
+        let verworfen = {};
         try {
           tmpDb = db.openDb(tmpPath); // validates schema + runs migrations
+          verworfen = db.historyAfter(database, db.lastHistoryId(tmpDb));
           tmpDb.close();
         } catch (valErr) {
           try {
@@ -12206,6 +12323,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           database = db.openDb(DB_FILE);
           jsonErr(res, 500, 'Restore failed, previous data has been preserved');
           return;
+        }
+        try {
+          db.markBackupRestore(database, verworfen, req.authUser);
+        } catch (e) {
+          log('error', 'Failed to record the restore in the lab history', { error: e.message });
         }
         // Cleanup backup of old db
         try {

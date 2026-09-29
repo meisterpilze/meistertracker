@@ -1,5 +1,5 @@
 'use strict';
-// Der Verlauf von Versuchen, Gefaessen, Fotos und Notizen.
+// Der Verlauf von Versuchen, Gefaessen und Fotos.
 //
 // Die Felder eines Versuchs zeigen nur den Stand von jetzt. Ein Laborbuch muss
 // auch sagen koennen, was vorher dastand, wann es sich geaendert hat und wer es
@@ -213,6 +213,11 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
     );
     assert.equal(JSON.parse(z[0].new_value).sha256, 'a'.repeat(64));
     assert.equal(JSON.parse(z[1].old_value).uuid, '11111111-1111-1111-1111-111111111111');
+    assert.equal(
+      z.some((x) => 'uploadedBy' in JSON.parse(x.new_value || x.old_value)),
+      false,
+      'the uploader is the name on the create entry, not a field that empties when the account goes'
+    );
   });
 
   it('laeuft in der Transaktion des Foto-Uploads mit und geht mit ihr zurueck', () => {
@@ -279,6 +284,29 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
   });
 });
 
+describe('Verlauf: geloeschtes Konto', () => {
+  it('markiert Eintraege, deren Konto es nicht mehr gibt', () => {
+    const { d, p } = neueDb('konto');
+    try {
+      const v = Number(db.insertExperiment(d, { code: 'K1', title: 'Lauf' }, BEN));
+      db.updateExperiment(d, v, { outcome: 'von anna' }, ANNA);
+      db.deleteUser(d, BEN.user_id);
+      const eintraege = db.listExperimentHistory(d, v);
+      assert.deepEqual(
+        eintraege.map((e) => [e.user, !!e.userGone]),
+        [
+          ['ben', true],
+          ['anna', false]
+        ]
+      );
+      assert.equal(db.experimentHistoryPage(d, v).entries[0].userGone, true);
+    } finally {
+      d.close();
+      fs.unlinkSync(p);
+    }
+  });
+});
+
 describe('Verlauf: Notizen', () => {
   let d, p;
   before(() => {
@@ -289,38 +317,32 @@ describe('Verlauf: Notizen', () => {
     fs.unlinkSync(p);
   });
 
-  it('behaelt den Text einer Notiz, die aus dem Reiter geloescht wurde', () => {
-    const id = db.insertProjectNote(d, { tab: 'research', body: 'erste Fassung' }, ANNA);
-    assert.equal(db.updateProjectNote(d, id, { body: 'zweite Fassung' }, BEN), true);
-    assert.equal(db.deleteProjectNote(d, id, ANNA), true);
+  // Eine Notiz ist ein Zettel, kein Laborbucheintrag. Was aus dem Reiter
+  // geloescht wird, ist weg, so wie es der Dialog sagt, und keine Fassung
+  // bleibt irgendwo liegen.
+  it('schreibt nichts in den Verlauf und laesst nach dem Loeschen nichts zurueck', () => {
+    const vorher = anzahl(d);
+    const id = db.insertProjectNote(d, { tab: 'research', body: 'erste Fassung mit Geheimnis' });
+    assert.equal(db.updateProjectNote(d, id, { body: 'zweite Fassung' }), true);
+    assert.equal(db.deleteProjectNote(d, id), true);
     assert.equal(
       db.listProjectNotes(d).some((n) => n.id === id),
       false,
       'the note is gone from the tab'
     );
-    const z = eintraege(d, 'note', id);
-    assert.deepEqual(
-      z.map((x) => [x.action, x.username]),
-      [
-        ['create', 'anna'],
-        ['update', 'ben'],
-        ['remove', 'anna']
-      ]
-    );
-    assert.deepEqual([z[1].field, z[1].old_value, z[1].new_value], ['body', 'erste Fassung', 'zweite Fassung']);
-    assert.equal(JSON.parse(z[2].old_value).body, 'zweite Fassung');
-    assert.equal(JSON.parse(z[2].old_value).tab, 'research');
-    assert.ok(z.every((x) => x.experiment_id === null));
+    assert.equal(anzahl(d), vorher, 'no history entry for notes');
+    const irgendwo = d
+      .prepare(
+        "SELECT COUNT(*) AS c FROM lab_history WHERE old_value LIKE '%Geheimnis%' OR new_value LIKE '%Geheimnis%'"
+      )
+      .get().c;
+    assert.equal(irgendwo, 0, 'no earlier version is kept');
   });
 
   it('macht eine Notiz nicht zur geaenderten, wenn derselbe Text gespeichert wird', () => {
-    const id = db.insertProjectNote(d, { tab: 'build', body: 'bleibt so' }, ANNA);
-    assert.equal(db.updateProjectNote(d, id, { body: 'bleibt so' }, BEN), false);
+    const id = db.insertProjectNote(d, { tab: 'build', body: 'bleibt so' });
+    assert.equal(db.updateProjectNote(d, id, { body: 'bleibt so' }), false);
     assert.equal(db.listProjectNotes(d).find((n) => n.id === id).updated, '');
-    assert.deepEqual(
-      eintraege(d, 'note', id).map((x) => x.action),
-      ['create']
-    );
   });
 });
 
@@ -335,7 +357,7 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
       const exp = d.prepare("SELECT id FROM experiments WHERE code='T9'").get().id;
       d.prepare("INSERT INTO experiment_runs(experiment_id,code,result,outcome) VALUES(?,'C-1','alt','good')").run(exp);
       d.prepare(
-        'INSERT INTO experiment_photos(experiment_id,uuid,rel_path,thumb_path,bytes,sha256,uploaded_at) VALUES(?,?,?,?,?,?,?)'
+        'INSERT INTO experiment_photos(experiment_id,uuid,rel_path,thumb_path,bytes,sha256,uploaded_at,uploaded_by) VALUES(?,?,?,?,?,?,?,?)'
       ).run(
         exp,
         '44444444-4444-4444-4444-444444444444',
@@ -343,13 +365,15 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
         'photos/x_thumb.jpg',
         10,
         'b'.repeat(64),
-        '2026-01-03T10:00:00.000Z'
+        '2026-01-03T10:00:00.000Z',
+        ANNA.user_id
       );
       d.prepare(
         "INSERT INTO project_notes(tab,body,created) VALUES('build','alte Notiz','2026-01-04T10:00:00.000Z')"
       ).run();
       d.exec('DROP TABLE lab_history');
-      d.prepare('DELETE FROM schema_version WHERE version=89').run();
+      // Eine Datenbank von vor dem Verlauf hat auch v92 noch nicht gesehen.
+      d.prepare('DELETE FROM schema_version WHERE version IN (89, 92)').run();
       d.close();
 
       d2 = db.openDb(p);
@@ -359,8 +383,7 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
         [
           ['experiment', 'baseline', exp],
           ['run', 'baseline', exp],
-          ['photo', 'baseline', exp],
-          ['note', 'baseline', null]
+          ['photo', 'baseline', exp]
         ]
       );
       assert.ok(
@@ -369,7 +392,16 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
       );
       assert.equal(JSON.parse(alle[1].new_value).result, 'alt');
       assert.equal(JSON.parse(alle[2].new_value).sha256, 'b'.repeat(64));
-      assert.equal(JSON.parse(alle[3].new_value).body, 'alte Notiz');
+      assert.equal(
+        JSON.parse(alle[2].new_value).uploadedBy,
+        ANNA.user_id,
+        'as v89 shipped: a photo older than the history has no create entry, its baseline names the uploader'
+      );
+      assert.equal(
+        alle.some((z) => z.entity === 'note'),
+        false,
+        'notes end up without history: v92 takes out what v89 wrote for them'
+      );
 
       // Der erste Eintrag danach beginnt bei dem Stand, der festgehalten ist.
       const run = d2.prepare("SELECT id FROM experiment_runs WHERE code='C-1'").get().id;
@@ -380,10 +412,56 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
       // Ein weiteres Oeffnen schreibt keinen zweiten Ausgangsstand.
       d2.close();
       d2 = db.openDb(p);
-      assert.equal(d2.prepare("SELECT COUNT(*) AS c FROM lab_history WHERE action='baseline'").get().c, 4);
+      assert.equal(d2.prepare("SELECT COUNT(*) AS c FROM lab_history WHERE action='baseline'").get().c, 3);
     } finally {
       if (d2) d2.close();
       fs.unlinkSync(p);
+    }
+  });
+});
+
+describe('Verlauf: Migration 92 nimmt die Notizen heraus', () => {
+  it('loescht Notiz-Eintraege und den ungenutzten Index, laesst den Rest und die Trigger stehen', () => {
+    const { p, d } = neueDb('v92');
+    let d2;
+    try {
+      // So, wie #633 auf main die Tabelle hinterlassen hat: Notizen mit jeder
+      // Fassung, dazu der Index nach Art und Datensatz.
+      const v = Number(db.insertExperiment(d, { code: 'N1', title: 'Lauf' }, ANNA));
+      const eintragen = d.prepare(
+        "INSERT INTO lab_history(at,user_id,username,entity,entity_id,action,field,old_value,new_value) VALUES(?,?,?,'note',?,?,?,?,?)"
+      );
+      eintragen.run(
+        '2026-09-28T10:00:00.000Z',
+        7,
+        'anna',
+        1,
+        'create',
+        null,
+        null,
+        JSON.stringify({ body: 'ZETTELTEXT' })
+      );
+      eintragen.run('2026-09-28T10:01:00.000Z', 7, 'anna', 1, 'update', 'body', 'ZETTELTEXT', 'anders');
+      d.exec('CREATE INDEX IF NOT EXISTS idx_lab_history_entity ON lab_history(entity, entity_id, id)');
+      d.prepare('DELETE FROM schema_version WHERE version=92').run();
+      d.close();
+
+      d2 = db.openDb(p);
+      assert.equal(d2.prepare("SELECT COUNT(*) AS c FROM lab_history WHERE entity='note'").get().c, 0);
+      assert.equal(
+        d2.prepare('SELECT COUNT(*) AS c FROM lab_history WHERE experiment_id=?').get(v).c,
+        1,
+        'the experiment keeps its entry'
+      );
+      assert.equal(d2.prepare("SELECT 1 FROM sqlite_master WHERE name='idx_lab_history_entity'").get(), undefined);
+      assert.throws(() => d2.prepare('DELETE FROM lab_history').run(), /append-only/, 'the triggers are back');
+      d2.close();
+      d2 = null;
+      const roh = Buffer.concat(['', '-wal'].filter((x) => fs.existsSync(p + x)).map((x) => fs.readFileSync(p + x)));
+      assert.equal(roh.includes(Buffer.from('ZETTELTEXT')), false, 'the text is not left in the file or the WAL');
+    } finally {
+      if (d2) d2.close();
+      for (const x of ['', '-wal', '-shm']) fs.rmSync(p + x, { force: true });
     }
   });
 });
@@ -401,10 +479,7 @@ describe('Verlauf: Server', () => {
       'restoreExperimentRun(',
       'addExperimentPhoto(',
       'removeExperimentPhoto(',
-      'restoreExperimentPhoto(',
-      'insertProjectNote(',
-      'updateProjectNote(',
-      'deleteProjectNote('
+      'restoreExperimentPhoto('
     ];
     for (const aufruf of aufrufe) {
       const stellen = SERVER.split('\n').filter((l) => l.includes('db.' + aufruf));
@@ -417,7 +492,7 @@ describe('Verlauf: Server', () => {
 
   it('liest den Verlauf ueber eine eigene Route und fasst die Tabelle selbst nicht an', () => {
     assert.ok(SERVER.includes('/^\\/api\\/experiments\\/(\\d+)\\/history$/'), 'GET /api/experiments/:id/history');
-    assert.ok(SERVER.includes('db.listExperimentHistory(database'));
+    assert.ok(SERVER.includes('db.experimentHistoryPage(database'));
     assert.equal(SERVER.includes('lab_history'), false, 'server.js reaches the table through db.js only');
   });
 
@@ -457,6 +532,7 @@ describe('Verlauf: Oberflaeche', () => {
     'pjVerlaufWert',
     'pjVerlaufZeile',
     'pjVerlaufListe',
+    'pjVerlaufMischen',
     'pjVerlaufLaden',
     'pjVerlaufNeu',
     'pjToggle'
@@ -472,6 +548,7 @@ describe('Verlauf: Oberflaeche', () => {
       const els = { 'pj-verlauf-liste': { innerHTML: '' } };
       const document = { getElementById: (id) => els[id] || null };
       const t = (k, o) => k + (o ? '(' + Object.values(o).join(',') + ')' : '');
+      const PJ_VERLAUF_NEU = 500;
       // Jeder Abruf bleibt offen, bis der Test ihn beantwortet: so laesst sich
       // eine spaete Antwort nach einer fruehen zustellen.
       const apiGet = (p) => new Promise((ok, fehler) => abrufe.push({ p, ok, fehler }));
@@ -487,17 +564,19 @@ describe('Verlauf: Oberflaeche', () => {
         pjToggle,
         oeffne: (id) => { pjOffen = id; },
         setzeStand: (s) => { pjVerlaufStand = s; },
+        stand: () => pjVerlaufStand,
         offen: () => pjVerlaufOffen
       };`)();
   }
   const warten = () => new Promise((r) => setTimeout(r, 5));
-  const V = {
-    id: 3,
+  // Ein Versuch in der Form, die /api/data liefert.
+  const versuchMit = (extra) => ({ id: 3, runs: [], removedRuns: [], photos: [], removedPhotos: [], ...extra });
+  const V = versuchMit({
     runs: [
       { id: 1, code: 'A-1' },
       { id: 2, code: 'A-2' }
     ]
-  };
+  });
   const EINTRAEGE = [
     {
       id: 1,
@@ -601,9 +680,84 @@ describe('Verlauf: Oberflaeche', () => {
         }
       ]
     });
-    const html = ui.pjVerlaufListe({ id: 3, runs: [] });
+    const html = ui.pjVerlaufListe(versuchMit());
     assert.ok(html.includes('exp.hist.remove.run(X-9)'));
     assert.equal(html.includes('#9'), false);
+  });
+
+  it('haelt zwei Gefaesse mit demselben Code auseinander', () => {
+    const ui = werkbank();
+    const v = versuchMit({
+      runs: [{ id: 1, code: 'A-1', what: 'Probe' }],
+      removedRuns: [
+        { id: 2, code: 'A-1', what: 'Kontrolle' },
+        { id: 7, code: 'B-1', what: '' }
+      ]
+    });
+    const e = (id, entityId) => ({
+      id,
+      at: '2026-01-06T09:00:00.000Z',
+      user: 'anna',
+      entity: 'run',
+      entityId,
+      action: 'update',
+      field: 'result',
+      from: '',
+      to: 'x'
+    });
+    ui.setzeStand({ id: 3, eintraege: [e(1, 1), e(2, 2), e(3, 7)] });
+    const html = ui.pjVerlaufListe(v);
+    assert.ok(html.includes('A-1 (Probe) · exp.hist.f.run.result'));
+    assert.ok(html.includes('A-1 (Kontrolle) · exp.hist.f.run.result'));
+    assert.ok(html.includes('B-1 · exp.hist.f.run.result'), 'a code that is unique stays short');
+    const gleich = versuchMit({
+      runs: [{ id: 1, code: 'A-1', what: '' }],
+      removedRuns: [{ id: 2, code: 'A-1', what: '' }]
+    });
+    ui.setzeStand({ id: 3, eintraege: [e(1, 1), e(2, 2)] });
+    const html2 = ui.pjVerlaufListe(gleich);
+    assert.ok(
+      html2.includes('A-1 #1 · ') && html2.includes('A-1 #2 · '),
+      'and with nothing else to tell them apart, the id'
+    );
+  });
+
+  it('zeigt bei einem Foto das Foto, solange es eins gibt', () => {
+    const ui = werkbank();
+    const eintrag = (uuid) => ({
+      id: 1,
+      at: '2026-01-06T09:00:00.000Z',
+      user: 'anna',
+      entity: 'photo',
+      entityId: 4,
+      action: 'create',
+      record: { uuid }
+    });
+    ui.setzeStand({ id: 3, eintraege: [eintrag('u-1')] });
+    const html = ui.pjVerlaufListe(versuchMit({ photos: [{ id: 4, uuid: 'u-1' }] }));
+    assert.ok(html.includes('src="/api/experiments/3/photos/u-1?thumb=1"'));
+    const weg = ui.pjVerlaufListe(versuchMit({ removedPhotos: [{ id: 4, uuid: 'u-1', purged: true }] }));
+    assert.equal(weg.includes('<img'), false, 'a photo deleted for good shows no picture');
+  });
+
+  it('sagt, wenn das Konto hinter einem Namen geloescht ist', () => {
+    const ui = werkbank();
+    ui.setzeStand({
+      id: 3,
+      eintraege: [
+        {
+          id: 1,
+          at: '2026-01-06T09:00:00.000Z',
+          user: 'lena',
+          userGone: true,
+          entity: 'experiment',
+          entityId: 3,
+          action: 'create',
+          record: {}
+        }
+      ]
+    });
+    assert.ok(ui.pjVerlaufListe(V).includes(' · lena exp.hist.userGone'));
   });
 
   it('escaped, was im Verlauf steht', () => {
@@ -670,8 +824,8 @@ describe('Verlauf: Oberflaeche', () => {
     const ui = werkbank();
     ui.experiments.push(V);
     ui.oeffne(3);
-    ui.pjVerlaufLaden(3);
-    ui.pjVerlaufLaden(3);
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
+    ui.pjVerlaufLaden(3, 'erste');
     ui.abrufe[1].ok({ entries: EINTRAEGE });
     await warten();
     ui.abrufe[0].ok({ entries: [] });
@@ -687,6 +841,91 @@ describe('Verlauf: Oberflaeche', () => {
     ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
     ui.pjVerlaufNeu();
     assert.equal(ui.abrufe.length, 2);
+  });
+
+  it('holt nach einer Aenderung nur, was seitdem dazukam', async () => {
+    const ui = werkbank();
+    ui.experiments.push(V);
+    ui.oeffne(3);
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
+    ui.abrufe[0].ok({ entries: EINTRAEGE, more: false });
+    await warten();
+    ui.pjVerlaufNeu();
+    assert.equal(ui.abrufe[1].p, '/api/experiments/3/history?after=5&limit=500');
+    ui.abrufe[1].ok({
+      entries: [
+        {
+          id: 6,
+          at: '2026-01-08T08:00:00.000Z',
+          user: 'ben',
+          entity: 'run',
+          entityId: 2,
+          action: 'update',
+          field: 'result',
+          from: '',
+          to: 'neu'
+        }
+      ]
+    });
+    await warten();
+    assert.deepEqual(
+      ui.stand().eintraege.map((e) => e.id),
+      [1, 2, 3, 4, 5, 6]
+    );
+    assert.ok(ui.els['pj-verlauf-liste'].innerHTML.includes('<ins>neu</ins>'));
+  });
+
+  it('laedt von vorn, wenn eine zurueckgespielte Sicherung die Kennungen zurueckgesetzt hat', async () => {
+    const ui = werkbank();
+    ui.experiments.push(V);
+    ui.oeffne(3);
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
+    ui.abrufe[0].ok({ entries: EINTRAEGE, more: false, newest: 5 });
+    await warten();
+    ui.pjVerlaufNeu();
+    ui.abrufe[1].ok({ entries: [], more: false, newest: 2 });
+    await warten();
+    assert.equal(ui.abrufe[2].p, '/api/experiments/3/history', 'a fresh first page');
+    ui.abrufe[2].ok({ entries: EINTRAEGE.slice(0, 2), more: false, newest: 2 });
+    await warten();
+    assert.deepEqual(
+      ui.stand().eintraege.map((e) => e.id),
+      [1, 2],
+      'the discarded entries are gone from the view'
+    );
+  });
+
+  it('bietet Aelteres an und haengt es unten an', async () => {
+    const ui = werkbank();
+    ui.experiments.push(V);
+    ui.oeffne(3);
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
+    ui.abrufe[0].ok({ entries: EINTRAEGE.slice(2), more: true });
+    await warten();
+    let html = ui.els['pj-verlauf-liste'].innerHTML;
+    assert.ok(html.includes('data-pj-hist-mehr="3"'));
+    assert.equal(html.includes('exp.hist.baseline'), false);
+    ui.pjVerlaufLaden(3, 'aelter');
+    assert.equal(ui.abrufe[1].p, '/api/experiments/3/history?before=3');
+    ui.abrufe[1].ok({ entries: EINTRAEGE.slice(0, 2), more: false });
+    await warten();
+    html = ui.els['pj-verlauf-liste'].innerHTML;
+    assert.equal(html.includes('data-pj-hist-mehr'), false);
+    assert.ok(html.includes('exp.hist.baseline'));
+  });
+
+  it('zeichnet die Liste nur im offenen Verlauf und vergisst sie beim Zuklappen', async () => {
+    const ui = werkbank();
+    ui.experiments.push(V);
+    ui.oeffne(3);
+    ui.setzeStand({ id: 3, eintraege: EINTRAEGE, mehr: false });
+    assert.ok(ui.pjVerlauf(V).includes('<div id="pj-verlauf-liste"></div>'), 'closed: no list is built');
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: true } });
+    ui.pjToggle({ target: { dataset: { pjVerlauf: '3' }, open: false } });
+    assert.equal(ui.stand(), null, 'closing drops the cached history');
+    ui.abrufe[0].ok({ entries: EINTRAEGE });
+    await warten();
+    assert.equal(ui.stand(), null, 'and an answer still on its way does not bring it back');
   });
 });
 
@@ -708,6 +947,7 @@ describe('Verlauf: Notiz speichern', () => {
       const apiDelete = () => Promise.resolve({});
       const apiPatch = (p, b) => { gepatcht.push([p, b]); return Promise.resolve({}); };
       const renderProjekte = (k) => gezeichnet.push(k);
+      ${hebeFunktion('pjFehlgeschlagen', APP)}
       ${hebeFunktion('pjNotizClick', APP)}
       const feld = { value: body };
       const zeile = { querySelector: () => feld, classList: { remove() {}, add() {} } };

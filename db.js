@@ -443,7 +443,7 @@ CREATE TABLE IF NOT EXISTS project_docs (
   updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Who changed what in experiments, runs, photos and notes. See migration v89:
+-- Who changed what in experiments, runs and photos. See migration v89:
 -- append-only, and without foreign keys on purpose.
 CREATE TABLE IF NOT EXISTS lab_history (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -459,7 +459,6 @@ CREATE TABLE IF NOT EXISTS lab_history (
   new_value     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_lab_history_exp ON lab_history(experiment_id, id);
-CREATE INDEX IF NOT EXISTS idx_lab_history_entity ON lab_history(entity, entity_id, id);
 CREATE TRIGGER IF NOT EXISTS lab_history_no_update BEFORE UPDATE ON lab_history
 BEGIN
   SELECT RAISE(ABORT, 'lab_history is append-only');
@@ -2738,8 +2737,32 @@ const MIGRATIONS = [
       db.exec('DROP INDEX IF EXISTS idx_contam_photos_sha');
       db.exec('CREATE INDEX IF NOT EXISTS idx_contam_photos_sha ON contamination_photos(sha256)');
     }
+  },
+  {
+    version: 92,
+    description: 'Notizen aus dem Verlauf des Laborbuchs',
+    fn(db) {
+      // Notizen stehen nicht mehr im Verlauf (siehe insertProjectNote): eine
+      // Notiz ist ein Zettel, und was jemand loescht, soll weg sein, so wie es
+      // der Dialog sagt. v89 und die Notizfunktionen bis hierher haben jede
+      // Fassung hineingeschrieben. Die gehen hier heraus, einmal und bewusst:
+      // dafuer wird der Loesch-Trigger abgehoben, openDb legt ihn danach
+      // wieder an. secure_delete ueberschreibt die freien Seiten, damit der
+      // Text nicht in der Datei liegen bleibt; openDb leert danach das WAL.
+      //
+      // Dazu der Index nach Art und Datensatz, den keine Abfrage benutzt.
+      db.exec('PRAGMA secure_delete = ON');
+      db.exec('DROP TRIGGER IF EXISTS lab_history_no_delete');
+      const weg = db.prepare("DELETE FROM lab_history WHERE entity='note'").run().changes;
+      db.exec('PRAGMA secure_delete = OFF');
+      db.exec('DROP INDEX IF EXISTS idx_lab_history_entity');
+      if (weg) _walLeeren = true;
+    }
   }
 ];
+// Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
+// in dem die alten Seiten sonst noch stuenden.
+let _walLeeren = false;
 
 function runMigrations(db) {
   db.exec(
@@ -2837,6 +2860,23 @@ function openDb(dbPath) {
   db.exec('PRAGMA wal_autocheckpoint = 1000');
   db.exec(SCHEMA);
   runMigrations(db);
+  if (_walLeeren) {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    _walLeeren = false;
+  }
+  // Die Schutz-Trigger des Verlaufs jedes Mal neu: CREATE TRIGGER IF NOT EXISTS
+  // prueft nur den Namen. Eine zurueckgespielte Datei mit gleichnamigen, aber
+  // wirkungslosen Triggern behielte sonst ihre.
+  db.exec(`DROP TRIGGER IF EXISTS lab_history_no_update;
+    DROP TRIGGER IF EXISTS lab_history_no_delete;
+    CREATE TRIGGER lab_history_no_update BEFORE UPDATE ON lab_history
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_history is append-only');
+    END;
+    CREATE TRIGGER lab_history_no_delete BEFORE DELETE ON lab_history
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_history is append-only');
+    END;`);
   // Ensure singleton rows exist
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();
@@ -3278,6 +3318,28 @@ function incrementDataVersion(db) {
   return v;
 }
 
+// fn in einem SAVEPOINT: alles oder nichts, auch dann, wenn der Aufrufer schon
+// eine Transaktion haelt. Ein BEGIN darin scheiterte mit "cannot start a
+// transaction within a transaction"; ein SAVEPOINT verschachtelt sich. Das
+// Aufraeumen hat seinen eigenen Schutz: ist der Savepoint schon weg, wuerde ein
+// Fehler von dort den ersetzen, der den Abbruch erklaert.
+function withSavepoint(db, name, fn) {
+  db.exec('SAVEPOINT ' + name);
+  try {
+    const ergebnis = fn();
+    db.exec('RELEASE ' + name);
+    return ergebnis;
+  } catch (e) {
+    try {
+      db.exec('ROLLBACK TO ' + name);
+      db.exec('RELEASE ' + name);
+    } catch {
+      /* der erste Fehler ist der, der etwas erklaert */
+    }
+    throw e;
+  }
+}
+
 // ── P-06: Bag-zone cache ────────────────────────────────────
 // snapshotDailyKPIs and getProductionPipeline both used to do a full
 // `SCAN scan_log` to derive the per-bag current zone, then iterate the
@@ -3396,10 +3458,10 @@ function writeAll(db, incoming, opts) {
       );
       const incomingIds = new Set(incoming.batches.map((b) => b.batchId));
 
-      for (const id of existingIds) {
-        if (!incomingIds.has(id)) {
-          db.prepare('DELETE FROM batches WHERE batch_id = ?').run(id);
-        }
+      const wegIds = [...existingIds].filter((id) => !incomingIds.has(id));
+      _verknuepfungGeht(db, 'batchId', wegIds, opts && opts.wer);
+      for (const id of wegIds) {
+        db.prepare('DELETE FROM batches WHERE batch_id = ?').run(id);
       }
 
       const upsertBatch = db.prepare(`
@@ -3522,10 +3584,10 @@ function writeAll(db, incoming, opts) {
       );
       const incomingIds = new Set(incoming.cultures.map((c) => c.id));
 
-      for (const id of existingIds) {
-        if (!incomingIds.has(id)) {
-          db.prepare('DELETE FROM cultures WHERE id = ?').run(id);
-        }
+      const wegIds = [...existingIds].filter((id) => !incomingIds.has(id));
+      _verknuepfungGeht(db, 'cultureId', wegIds, opts && opts.wer);
+      for (const id of wegIds) {
+        db.prepare('DELETE FROM cultures WHERE id = ?').run(id);
       }
 
       const upsert = db.prepare(`
@@ -4930,7 +4992,7 @@ function escapeLikePattern(s) {
   return String(s).replace(/[\\%_]/g, '\\$&');
 }
 
-function renameBatch(db, oldId, newId) {
+function renameBatch(db, oldId, newId, wer) {
   db.exec('BEGIN');
   // Defer FK checks to COMMIT so we can update parent (batches) and child (bags)
   // without hitting a constraint violation mid-transaction. The schema uses
@@ -4963,6 +5025,10 @@ function renameBatch(db, oldId, newId) {
     );
     db.prepare('UPDATE batches SET batch_id=? WHERE batch_id=?').run(newId, oldId);
     db.prepare('UPDATE bags SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    // Reservierungen aus Bestellungen zeigen auch auf die Charge. Ohne diese
+    // Zeile scheiterte das COMMIT am Fremdschluessel, sobald eine bestand.
+    db.prepare('UPDATE order_allocations SET batch_id=? WHERE batch_id=?').run(newId, oldId);
+    _verknuepfungUmbenannt(db, 'batchId', oldId, newId, wer);
     // Update barcode registry: rename entity_id for bags that were renamed
     db.prepare(
       "UPDATE barcodes SET entity_id = ? || substr(entity_id, ?) WHERE entity_type='bag' AND entity_id LIKE ? ESCAPE '\\'"
@@ -4975,7 +5041,7 @@ function renameBatch(db, oldId, newId) {
   }
 }
 
-function renameCulture(db, oldId, newId) {
+function renameCulture(db, oldId, newId, wer) {
   db.exec('BEGIN');
   db.exec('PRAGMA defer_foreign_keys = ON');
   try {
@@ -4989,6 +5055,7 @@ function renameCulture(db, oldId, newId) {
     db.prepare('UPDATE batches SET source_id=? WHERE source_id=?').run(newId, oldId);
     // Rename the culture itself
     db.prepare('UPDATE cultures SET id=? WHERE id=?').run(newId, oldId);
+    _verknuepfungUmbenannt(db, 'cultureId', oldId, newId, wer);
     // Update barcode registry
     db.prepare("UPDATE barcodes SET entity_id=? WHERE entity_type='culture' AND entity_id=?").run(newId, oldId);
     incrementDataVersion(db);
@@ -5141,6 +5208,7 @@ function deleteBatchById(db, batchId, userId) {
     db.prepare("UPDATE contamination_reports SET bag_id = NULL WHERE bag_id LIKE ? ESCAPE '\\'").run(
       escapeLikePattern(batchId) + '-%'
     );
+    _verknuepfungGeht(db, 'batchId', [batchId], _werZuId(db, userId));
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -5355,7 +5423,7 @@ function deleteLastScanEntries(db, n) {
 //
 // Categories are opt-in via opts so the operator chooses at the moment they run
 // it. Returns per-table row counts for the confirmation message.
-function resetOperationalData(db, opts) {
+function resetOperationalData(db, opts, wer) {
   opts = opts || {};
   const counts = {};
   // Table names below are internal literals, never user input.
@@ -5368,6 +5436,10 @@ function resetOperationalData(db, opts) {
   db.exec('BEGIN');
   try {
     if (opts.growing) {
+      // The reset keeps experiments, but their runs lose the link to every
+      // batch and culture it clears. Record that in the lab history first.
+      _verknuepfungGeht(db, 'batchId', null, wer);
+      _verknuepfungGeht(db, 'cultureId', null, wer);
       // Children before parents. bags also cascades from batches, but clearing
       // it explicitly keeps the reported counts honest.
       wipe('contamination_photos');
@@ -5669,10 +5741,13 @@ function getCultureById(db, id) {
   };
 }
 
-function deleteCulture(db, id) {
-  const info = db.prepare('DELETE FROM cultures WHERE id=?').run(id);
-  if (info.changes > 0) incrementDataVersion(db);
-  return info.changes > 0;
+function deleteCulture(db, id, wer) {
+  return withSavepoint(db, 'mt_kultur_weg', () => {
+    _verknuepfungGeht(db, 'cultureId', [id], wer);
+    const info = db.prepare('DELETE FROM cultures WHERE id=?').run(id);
+    if (info.changes > 0) incrementDataVersion(db);
+    return info.changes > 0;
+  });
 }
 
 // -- Tasks --
@@ -7115,7 +7190,7 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 
 // ── Verlauf ─────────────────────────────────────────────────
 //
-// Versuch, Gefaess, Foto und Notiz werden an Ort und Stelle ueberschrieben.
+// Versuch, Gefaess und Foto werden an Ort und Stelle ueberschrieben.
 // Ohne Verlauf steht nach einem PATCH nur der neue Stand da, und niemand kann
 // sagen, was vorher drinstand, wann es sich geaendert hat und wer es war. Fuer
 // ein Laborbuch ist das die halbe Sache.
@@ -7127,17 +7202,21 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 //
 // Eine Zeile in lab_history:
 //   at, user_id, username  wann und wer; der Name als Abschrift, siehe v89
-//   entity, entity_id      'experiment' | 'run' | 'photo' | 'note' und seine id
-//   experiment_id          der Versuch, zu dem das gehoert (bei Notizen NULL),
-//                          damit ein Gefaess auch nach dem Loeschen noch im
-//                          Verlauf seines Versuchs steht
+//   entity, entity_id      'experiment' | 'run' | 'photo' und seine id
+//   experiment_id          der Versuch, zu dem das gehoert, damit ein Gefaess
+//                          auch nach dem Entfernen im Verlauf seines Versuchs
+//                          steht
 //   action                 'baseline' der Stand, als der Verlauf begann (v89)
 //                          'create'   angelegt, new_value ist der Datensatz
 //                          'update'   ein Feld, old_value -> new_value
 //                          'remove'   entfernt, old_value ist der Datensatz;
-//                                     Gefaess und Foto bleiben als Zeile,
-//                                     eine Notiz nicht
+//                                     die Zeile bleibt, siehe _entfernen()
 //                          'restore'  zurueckgeholt, new_value ist der Datensatz
+//                          'purge'    ein entferntes Foto endgueltig geloescht,
+//                                     old_value ist der Datensatz
+//                          'backup'   eine Sicherung wurde zurueckgespielt;
+//                                     new_value sagt, wie viele Eintraege
+//                                     dieses Versuchs dabei verworfen wurden
 //   field                  nur bei 'update', mit dem Namen aus der API
 //
 // Ein Datensatz steht als JSON in der Form, die die API zeigt, ohne id und
@@ -7165,7 +7244,10 @@ function _ansatzStand(r) {
     batchId: r.batch_id
   };
 }
-function _fotoStand(f) {
+// Wer ein Foto hochgeladen hat, sagt der Verlauf mit dem Namen am Eintrag
+// 'create', nicht die Spalte uploaded_by: die wird leer, wenn das Konto geloescht
+// wird, und ein spaeterer Datensatz widerspraeche sonst dem ersten.
+function _fotoDaten(f) {
   return {
     uuid: f.uuid,
     runId: f.run_id,
@@ -7173,10 +7255,20 @@ function _fotoStand(f) {
     bytes: f.bytes,
     width: f.width,
     height: f.height,
-    uploadedAt: f.uploaded_at,
-    uploadedBy: f.uploaded_by
+    uploadedAt: f.uploaded_at
   };
 }
+// Nur noch fuer Migration 89, und so, wie sie ausgeliefert wurde: eine
+// Datenbank soll danach gleich aussehen, ob v89 mit #633 lief oder erst jetzt.
+// Fuer ein Foto von vor dem Verlauf gibt es keinen Eintrag 'create'; sein
+// Ausgangsstand nennt die Nummer des Kontos, das es hochgeladen hat.
+function _fotoStand(f) {
+  return { ..._fotoDaten(f), uploadedBy: f.uploaded_by };
+}
+
+// Nur noch fuer Migration 89, die einmal ausgelieferte Migrationen nicht
+// aendern darf: sie schreibt einen Ausgangsstand fuer Notizen, und v92 nimmt
+// ihn wieder heraus. Notizen selbst stehen nicht mehr im Verlauf.
 function _notizStand(n) {
   return { tab: n.tab, body: n.body, created: n.created, updated: n.updated || '' };
 }
@@ -7221,57 +7313,217 @@ function _alsText(x) {
   return x == null ? null : String(x);
 }
 
-// Aenderung und Eintrag gehen zusammen oder gar nicht. Ein SAVEPOINT statt
-// BEGIN, weil der Foto-Upload seine Zeilen schon in einer eigenen Transaktion
-// schreibt und ein BEGIN darin scheitern wuerde.
+// Aenderung, Eintrag und neue Datenversion gehen zusammen oder gar nicht. Ein
+// Savepoint, weil der Foto-Upload seine Zeilen schon in einer eigenen
+// Transaktion schreibt.
 function _mitVerlauf(db, fn) {
-  db.exec('SAVEPOINT mt_verlauf');
-  try {
+  return withSavepoint(db, 'mt_verlauf', () => {
     const ergebnis = fn();
-    db.exec('RELEASE mt_verlauf');
+    incrementDataVersion(db);
     return ergebnis;
-  } catch (e) {
-    try {
-      db.exec('ROLLBACK TO mt_verlauf');
-      db.exec('RELEASE mt_verlauf');
-    } catch {
-      /* der erste Fehler ist der, der etwas erklaert */
-    }
-    throw e;
+  });
+}
+
+// Was je Art zum Verlauf gehoert: die Tabelle, der Datensatz, wie ihn die API
+// zeigt, und der Versuch, in dessen Verlauf ein Eintrag steht.
+const LABOR = {
+  experiment: { tabelle: 'experiments', stand: _versuchStand, versuch: (z) => z.id },
+  run: { tabelle: 'experiment_runs', stand: _ansatzStand, versuch: (z) => z.experiment_id },
+  photo: { tabelle: 'experiment_photos', stand: _fotoDaten, versuch: (z) => z.experiment_id }
+};
+// Der Eintrag zu einer frisch angelegten Zeile. Gibt die Zeile zurueck.
+function _angelegt(db, wer, art, id) {
+  const { tabelle, stand, versuch } = LABOR[art];
+  const zeile = db.prepare('SELECT * FROM ' + tabelle + ' WHERE id=?').get(id);
+  _verlauf(db, wer, {
+    entity: art,
+    entityId: zeile.id,
+    experimentId: versuch(zeile),
+    action: 'create',
+    new: JSON.stringify(stand(zeile))
+  });
+  return zeile;
+}
+// Ein Eintrag steht nur fuer eine Aenderung, die eine Zeile getroffen hat.
+// Bindet SQLite einen Wert anders als gedacht (ein Objekt vorne wird zu
+// benannten Parametern, und WHERE id=? bleibt leer), aendert das UPDATE nichts;
+// dann wirft es hier, und der Savepoint nimmt den Eintrag mit zurueck.
+function _nurMitZeile(info, art) {
+  if (info.changes !== 1) throw new Error(art + ' update matched ' + info.changes + ' rows');
+}
+// Ein Eintrag je geaendertem Feld, mit dem Namen aus der API.
+function _geaendert(db, wer, art, zeile, aenderungen) {
+  const { versuch } = LABOR[art];
+  for (const a of aenderungen) {
+    _verlauf(db, wer, {
+      entity: art,
+      entityId: zeile.id,
+      experimentId: versuch(zeile),
+      action: 'update',
+      field: a.feld,
+      old: _alsText(a.alt),
+      new: _alsText(a.neu)
+    });
   }
 }
 
+// Kulturen und Chargen haengen an Gefaessen per Fremdschluessel mit ON DELETE
+// SET NULL: wer eine Kultur loescht, leert damit culture_id jedes Gefaesses, das
+// mit ihr beimpft wurde, und SQLite tut das still, am Verlauf vorbei. Jede
+// Stelle, die Kulturen oder Chargen loescht, schreibt deshalb vorher hier einen
+// Eintrag je betroffenem Gefaess, in derselben Transaktion. ids null heisst: alle
+// Gefaesse mit einer solchen Verknuepfung (der Reset nimmt alle Kulturen).
+function _verknuepfungGeht(db, feld, ids, wer) {
+  const spalte = feld === 'cultureId' ? 'culture_id' : 'batch_id';
+  let zeilen;
+  if (ids === null) {
+    zeilen = db.prepare('SELECT * FROM experiment_runs WHERE ' + spalte + ' IS NOT NULL ORDER BY id').all();
+  } else {
+    const liste = [...new Set(ids)].filter((x) => x != null && x !== '');
+    if (!liste.length) return 0;
+    zeilen = db
+      .prepare(
+        'SELECT * FROM experiment_runs WHERE ' + spalte + ' IN (' + liste.map(() => '?').join(',') + ') ORDER BY id'
+      )
+      .all(...liste);
+  }
+  for (const zeile of zeilen) _geaendert(db, wer, 'run', zeile, [{ feld, alt: zeile[spalte], neu: null }]);
+  return zeilen.length;
+}
+// Eine Kultur oder Charge wird umbenannt: ihre Gefaesse tragen den neuen Namen
+// mit, mit einem Eintrag je Gefaess. Ohne das scheiterte die Umbenennung am
+// Fremdschluessel, sobald ein Gefaess auf sie zeigte, auch ein entferntes.
+function _verknuepfungUmbenannt(db, feld, alt, neu, wer) {
+  const spalte = feld === 'cultureId' ? 'culture_id' : 'batch_id';
+  const zeilen = db.prepare('SELECT * FROM experiment_runs WHERE ' + spalte + '=? ORDER BY id').all(alt);
+  if (!zeilen.length) return 0;
+  db.prepare('UPDATE experiment_runs SET ' + spalte + '=? WHERE ' + spalte + '=?').run(neu, alt);
+  for (const zeile of zeilen) _geaendert(db, wer, 'run', zeile, [{ feld, alt, neu }]);
+  return zeilen.length;
+}
+// Die Sitzung zu einer Benutzer-Id, fuer Stellen, die nur die Id kennen.
+function _werZuId(db, userId) {
+  if (userId == null) return null;
+  return db.prepare('SELECT id AS user_id, username FROM users WHERE id=?').get(userId) || null;
+}
+
+// Ein Eintrag, wie die Oberflaeche ihn liest. Ein Datensatz kommt als Objekt
+// zurueck, nicht als JSON-Text, damit sie nichts parsen muss.
+function _verlaufEintrag(z) {
+  const e = {
+    id: z.id,
+    at: z.at,
+    userId: z.user_id,
+    user: z.username,
+    entity: z.entity,
+    entityId: z.entity_id,
+    action: z.action
+  };
+  // Den Namen gibt es als Abschrift. Ist das Konto dahinter weg (oder traegt
+  // heute einen anderen Namen), sagt userGone das: ein neues Konto mit demselben
+  // Namen ist ein anderer Mensch.
+  if (z.user_id != null && 'konto' in z && z.konto !== z.username) e.userGone = true;
+  if (z.action === 'update') {
+    e.field = z.field;
+    e.from = z.old_value;
+    e.to = z.new_value;
+    return e;
+  }
+  const roh = z.action === 'remove' || z.action === 'purge' ? z.old_value : z.new_value;
+  try {
+    e.record = roh ? JSON.parse(roh) : null;
+  } catch {
+    e.record = null;
+  }
+  return e;
+}
+
 // Der Verlauf eines Versuchs: er selbst, seine Gefaesse und seine Fotos, in der
-// Reihenfolge, in der es passiert ist. Ein Datensatz kommt als Objekt zurueck,
-// nicht als JSON-Text, damit die Oberflaeche nichts parsen muss.
+// Reihenfolge, in der es passiert ist. Ganz, fuer Tests und Auswertungen; die
+// Oberflaeche liest ihn seitenweise (experimentHistoryPage).
 function listExperimentHistory(db, experimentId) {
   return db
-    .prepare('SELECT * FROM lab_history WHERE experiment_id=? ORDER BY id')
+    .prepare(
+      'SELECT h.*, u.username AS konto FROM lab_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.experiment_id=? ORDER BY h.id'
+    )
     .all(experimentId)
-    .map((z) => {
-      const e = {
-        id: z.id,
-        at: z.at,
-        userId: z.user_id,
-        user: z.username,
-        entity: z.entity,
-        entityId: z.entity_id,
-        action: z.action
-      };
-      if (z.action === 'update') {
-        e.field = z.field;
-        e.from = z.old_value;
-        e.to = z.new_value;
-        return e;
-      }
-      const roh = z.action === 'remove' ? z.old_value : z.new_value;
-      try {
-        e.record = roh ? JSON.parse(roh) : null;
-      } catch {
-        e.record = null;
-      }
-      return e;
-    });
+    .map(_verlaufEintrag);
+}
+
+// Eine Seite des Verlaufs, in der Reihenfolge des Geschehens. Er waechst mit
+// jeder Aenderung und laesst sich nicht kuerzen; ganz ausgeliefert wurde er mit
+// jedem Speichern groesser, bis er irgendwann gar nicht mehr lud.
+//   ohne after/before  die juengsten `limit` Eintraege
+//   before=id          die `limit` Eintraege vor diesem
+//   after=id           was nach diesem dazukam, hoechstens `limit`
+// `more` sagt, ob es vor der Seite noch aeltere gibt (bei after immer false).
+// `newest` ist die juengste Kennung des Versuchs: nach dem Zurueckspielen einer
+// Sicherung ist sie kleiner als die, die ein offener Verlauf zuletzt kannte,
+// und der muss dann von vorn laden, weil after=<alte Kennung> nichts mehr traefe.
+const VERLAUF_SEITE = 200;
+const VERLAUF_SEITE_MAX = 500;
+function experimentHistoryPage(db, experimentId, opts = {}) {
+  const limit = Math.min(Math.max(1, opts.limit || VERLAUF_SEITE), VERLAUF_SEITE_MAX);
+  const newest = db.prepare('SELECT MAX(id) AS m FROM lab_history WHERE experiment_id=?').get(experimentId).m || 0;
+  if (opts.after != null) {
+    const neu = db
+      .prepare(
+        'SELECT h.*, u.username AS konto FROM lab_history h LEFT JOIN users u ON u.id = h.user_id ' +
+          'WHERE h.experiment_id=? AND h.id>? ORDER BY h.id LIMIT ?'
+      )
+      .all(experimentId, opts.after, limit);
+    return { entries: neu.map(_verlaufEintrag), more: false, newest };
+  }
+  const bis = opts.before != null ? opts.before : Number.MAX_SAFE_INTEGER;
+  const zeilen = db
+    .prepare(
+      'SELECT h.*, u.username AS konto FROM lab_history h LEFT JOIN users u ON u.id = h.user_id ' +
+        'WHERE h.experiment_id=? AND h.id<? ORDER BY h.id DESC LIMIT ?'
+    )
+    .all(experimentId, bis, limit)
+    .reverse();
+  const aeltester = zeilen.length ? zeilen[0].id : bis;
+  const mehr = !!db
+    .prepare('SELECT 1 FROM lab_history WHERE experiment_id=? AND id<? LIMIT 1')
+    .get(experimentId, aeltester);
+  return { entries: zeilen.map(_verlaufEintrag), more: mehr, newest };
+}
+
+// Eine Sicherung wurde zurueckgespielt. Mit ihr kommt ihr Verlauf zurueck, und
+// alles, was danach geschrieben wurde, ist weg, ohne dass der Verlauf davon
+// wuesste. Deshalb steht danach in jedem Versuch ein Eintrag 'backup': wann, wer,
+// und wie viele Eintraege dieses Versuchs dabei verworfen wurden (verworfen: ein
+// Objekt Versuch -> Anzahl, vor dem Tausch aus der alten Datei gezaehlt).
+function markBackupRestore(db, verworfen, wer) {
+  const jetzt = new Date().toISOString();
+  return withSavepoint(db, 'mt_rueckspielen', () => {
+    const versuche = db.prepare('SELECT id FROM experiments ORDER BY id').all();
+    for (const v of versuche) {
+      _verlauf(db, wer, {
+        entity: 'experiment',
+        entityId: v.id,
+        experimentId: v.id,
+        action: 'backup',
+        new: JSON.stringify({ restoredAt: jetzt, discarded: (verworfen && verworfen[v.id]) || 0 })
+      });
+    }
+    return versuche.length;
+  });
+}
+// Was beim Zurueckspielen einer Sicherung je Versuch verloren geht: die
+// Eintraege der laufenden Datei, die juenger sind als der juengste der Sicherung.
+function historyAfter(db, letzteId) {
+  const aus = {};
+  for (const z of db
+    .prepare('SELECT experiment_id AS v, COUNT(*) AS n FROM lab_history WHERE id>? GROUP BY experiment_id')
+    .all(letzteId || 0)) {
+    if (z.v != null) aus[z.v] = z.n;
+  }
+  return aus;
+}
+function lastHistoryId(db) {
+  const z = db.prepare('SELECT MAX(id) AS m FROM lab_history').get();
+  return (z && z.m) || 0;
 }
 
 // Entfernte Gefaesse und Fotos kommen getrennt mit (removedRuns,
@@ -7287,45 +7539,46 @@ function listExperiments(db) {
     width: f.width,
     height: f.height,
     uploadedAt: f.uploaded_at,
-    removedAt: f.removed_at || null
+    removedAt: f.removed_at || null,
+    purged: !f.rel_path
   });
+  // Versuch und Gefaess zeigt die API so, wie der Verlauf sie festhaelt, dazu
+  // die Kennungen und was nur die Anzeige braucht. Ein Foto zeigt sie knapper.
   const ansatz = (r) => ({
     id: r.id,
     experimentId: r.experiment_id,
-    code: r.code,
-    what: r.what || '',
-    result: r.result || '',
-    outcome: r.outcome,
-    cultureId: r.culture_id,
-    batchId: r.batch_id,
+    ..._ansatzStand(r),
     sort: r.sort,
     removedAt: r.removed_at || null
   });
+  // Einmal durch Gefaesse und Fotos und nach Versuch einsortieren, statt fuer
+  // jeden Versuch alle vier Listen neu zu filtern: das lief bei jedem
+  // Datenstand, und der Aufwand wuchs mit Versuchen mal Zeilen.
+  const jeVersuch = new Map();
+  const fach = (id) => {
+    if (!jeVersuch.has(id)) jeVersuch.set(id, { photos: [], removedPhotos: [], runs: [], removedRuns: [] });
+    return jeVersuch.get(id);
+  };
+  for (const f of fotos) fach(f.experiment_id)[f.removed_at ? 'removedPhotos' : 'photos'].push(foto(f));
+  for (const r of runs) fach(r.experiment_id)[r.removed_at ? 'removedRuns' : 'runs'].push(ansatz(r));
   return db
     .prepare('SELECT * FROM experiments ORDER BY started DESC, id ASC')
     .all()
-    .map((e) => ({
-      id: e.id,
-      code: e.code,
-      title: e.title,
-      started: e.started,
-      ended: e.ended,
-      status: e.status,
-      archived: e.archived === 1,
-      recipe: e.recipe || '',
-      outcome: e.outcome || '',
-      photos: fotos.filter((f) => f.experiment_id === e.id && !f.removed_at).map(foto),
-      removedPhotos: fotos.filter((f) => f.experiment_id === e.id && f.removed_at).map(foto),
-      runs: runs.filter((r) => r.experiment_id === e.id && !r.removed_at).map(ansatz),
-      removedRuns: runs.filter((r) => r.experiment_id === e.id && r.removed_at).map(ansatz)
-    }));
+    .map((e) => ({ id: e.id, ..._versuchStand(e), ...fach(e.id) }));
 }
 
 // `wer` ist bei allen schreibenden Funktionen dieses Abschnitts die Sitzung aus
 // req.authUser; sie landet im Verlauf.
 function insertExperiment(db, e, wer) {
-  if (!e.code || !e.title) throw new Error('code and title are required');
-  if (e.status && !VERSUCH_STATUS.includes(e.status)) throw new Error('invalid status: ' + e.status);
+  if (!e.code || !e.title) throw new Error('lab: code and title are required');
+  if (e.status && !VERSUCH_STATUS.includes(e.status)) throw new Error('lab: invalid status: ' + e.status);
+  // Der Code ist eindeutig, auch gegen archivierte Versuche und gross oder klein
+  // geschrieben. Die Spalte haelt das fuer die genaue Schreibweise ohnehin fest;
+  // gefragt wird vorher, damit der Grund ankommt und nicht als UNIQUE-Fehler und
+  // 500.
+  if (db.prepare('SELECT 1 FROM experiments WHERE code=? COLLATE NOCASE').get(e.code)) {
+    throw new Error('lab: experiment code already in use: ' + e.code);
+  }
   return _mitVerlauf(db, () => {
     const info = db
       .prepare(
@@ -7341,28 +7594,23 @@ function insertExperiment(db, e, wer) {
         e.recipe || '',
         e.outcome || ''
       );
-    const zeile = db.prepare('SELECT * FROM experiments WHERE id=?').get(info.lastInsertRowid);
-    _verlauf(db, wer, {
-      entity: 'experiment',
-      entityId: zeile.id,
-      experimentId: zeile.id,
-      action: 'create',
-      new: JSON.stringify(_versuchStand(zeile))
-    });
-    incrementDataVersion(db);
+    _angelegt(db, wer, 'experiment', info.lastInsertRowid);
     return info.lastInsertRowid;
   });
 }
 
 function updateExperiment(db, id, f, wer) {
   if (f.status !== undefined && f.status !== null && !VERSUCH_STATUS.includes(f.status)) {
-    throw new Error('invalid status: ' + f.status);
+    throw new Error('lab: invalid status: ' + f.status);
   }
   const zeile = db.prepare('SELECT * FROM experiments WHERE id=?').get(id);
   if (!zeile) return false;
   // Spalte und Feld heissen hier gleich. archived kommt als Wahrheitswert und
-  // steht als 0/1 in der Zeile.
-  const neu = f.archived === undefined ? f : { ...f, archived: !!f.archived };
+  // steht als 0/1 in der Zeile. Ein leeres Ende heisst: kein Ende, in der Zeile
+  // NULL und nicht ''.
+  const neu = { ...f };
+  if (f.archived !== undefined) neu.archived = !!f.archived;
+  if (f.ended === '') neu.ended = null;
   const aenderungen = _aenderungen(_versuchStand(zeile), neu, [
     'title',
     'started',
@@ -7374,27 +7622,40 @@ function updateExperiment(db, id, f, wer) {
   ]);
   if (!aenderungen.length) return false;
   _mitVerlauf(db, () => {
-    db.prepare('UPDATE experiments SET ' + aenderungen.map((a) => a.feld + '=?').join(',') + ' WHERE id=?').run(
-      ...aenderungen.map((a) => (a.feld === 'archived' ? (a.neu ? 1 : 0) : a.neu)),
-      id
-    );
-    for (const a of aenderungen) {
-      _verlauf(db, wer, {
-        entity: 'experiment',
-        entityId: zeile.id,
-        experimentId: zeile.id,
-        action: 'update',
-        field: a.feld,
-        old: _alsText(a.alt),
-        new: _alsText(a.neu)
-      });
-    }
-    incrementDataVersion(db);
+    const info = db
+      .prepare('UPDATE experiments SET ' + aenderungen.map((a) => a.feld + '=?').join(',') + ' WHERE id=?')
+      .run(...aenderungen.map((a) => (a.feld === 'archived' ? (a.neu ? 1 : 0) : a.neu)), id);
+    _nurMitZeile(info, 'experiment');
+    _geaendert(db, wer, 'experiment', zeile, aenderungen);
   });
   return true;
 }
 
+// Ein Foto kann an einem Gefaess haengen, aber nur an einem seines Versuchs,
+// und nicht an einem entfernten. Sonst stand im Verlauf des einen Versuchs ein
+// Foto, dessen Gefaess im anderen liegt, und dort kam es nirgends vor.
+function _fotoGefaessPruefen(db, experimentId, runId) {
+  if (!runId) return;
+  const r = db.prepare('SELECT experiment_id, removed_at FROM experiment_runs WHERE id=?').get(runId);
+  if (!r || r.experiment_id !== Number(experimentId)) {
+    throw new Error('lab: run ' + runId + ' does not belong to experiment ' + experimentId);
+  }
+  if (r.removed_at) throw new Error('lab: run ' + runId + ' is removed');
+}
+// Ein Code bezeichnet in einem Versuch ein Gefaess: auf dem Etikett, im Verlauf,
+// am Regal. Zwei aktive Gefaesse mit demselben Code (etwa nach einem
+// Doppeltipp) waren im Verlauf nicht mehr auseinanderzuhalten. Gross und klein
+// geschrieben ist derselbe Code; entfernte Gefaesse zaehlen nicht mit.
+function _gefaessCodeFrei(db, experimentId, code, ausser) {
+  const belegt = db
+    .prepare(
+      'SELECT id FROM experiment_runs WHERE experiment_id=? AND code=? COLLATE NOCASE AND removed_at IS NULL AND id IS NOT ?'
+    )
+    .get(experimentId, code, ausser == null ? null : ausser);
+  if (belegt) throw new Error('lab: run code already in use in this experiment: ' + code);
+}
 function addExperimentPhoto(db, experimentId, runId, foto, wer) {
+  _fotoGefaessPruefen(db, experimentId, runId);
   return _mitVerlauf(db, () => {
     const info = db
       .prepare(
@@ -7414,15 +7675,7 @@ function addExperimentPhoto(db, experimentId, runId, foto, wer) {
         foto.uploaded_at,
         foto.uploaded_by
       );
-    const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(info.lastInsertRowid);
-    _verlauf(db, wer, {
-      entity: 'photo',
-      entityId: zeile.id,
-      experimentId: zeile.experiment_id,
-      action: 'create',
-      new: JSON.stringify(_fotoStand(zeile))
-    });
-    incrementDataVersion(db);
+    _angelegt(db, wer, 'photo', info.lastInsertRowid);
     return info.lastInsertRowid;
   });
 }
@@ -7431,10 +7684,11 @@ function getExperimentPhotoByUuid(db, uuid) {
 }
 
 function insertExperimentRun(db, r, wer) {
-  if (!r.experimentId || !r.code) throw new Error('experimentId and code are required');
-  if (r.outcome && !ANSATZ_AUSGANG.includes(r.outcome)) throw new Error('invalid outcome: ' + r.outcome);
+  if (!r.experimentId || !r.code) throw new Error('lab: experimentId and code are required');
+  if (r.outcome && !ANSATZ_AUSGANG.includes(r.outcome)) throw new Error('lab: invalid outcome: ' + r.outcome);
   const vorhanden = db.prepare('SELECT id FROM experiments WHERE id=?').get(r.experimentId);
-  if (!vorhanden) throw new Error('unknown experiment: ' + r.experimentId);
+  if (!vorhanden) throw new Error('lab: unknown experiment: ' + r.experimentId);
+  _gefaessCodeFrei(db, r.experimentId, r.code);
   return _mitVerlauf(db, () => {
     // Ans Ende, ohne dass der Aufrufer zaehlen muss.
     const max = db.prepare('SELECT MAX(sort) AS m FROM experiment_runs WHERE experiment_id=?').get(r.experimentId);
@@ -7452,23 +7706,20 @@ function insertExperimentRun(db, r, wer) {
         r.batchId || null,
         r.sort != null ? r.sort : (max && max.m != null ? max.m : 0) + 1
       );
-    const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(info.lastInsertRowid);
-    _verlauf(db, wer, {
-      entity: 'run',
-      entityId: zeile.id,
-      experimentId: zeile.experiment_id,
-      action: 'create',
-      new: JSON.stringify(_ansatzStand(zeile))
-    });
-    incrementDataVersion(db);
+    _angelegt(db, wer, 'run', info.lastInsertRowid);
     return info.lastInsertRowid;
   });
 }
 
 function updateExperimentRun(db, id, f, wer) {
-  if (f.outcome !== undefined && !ANSATZ_AUSGANG.includes(f.outcome)) throw new Error('invalid outcome: ' + f.outcome);
+  if (f.outcome !== undefined && !ANSATZ_AUSGANG.includes(f.outcome))
+    throw new Error('lab: invalid outcome: ' + f.outcome);
   const zeile = db.prepare('SELECT * FROM experiment_runs WHERE id=?').get(id);
   if (!zeile) return false;
+  // Entfernt heisst auch: nur noch zum Lesen. Ein Ergebnis, das in ein
+  // entferntes Gefaess geschrieben wird, steht sonst unter "Entfernte Gefaesse",
+  // wo es niemand sucht. Erst zurueckholen, dann aendern.
+  if (zeile.removed_at) throw new Error('lab: run ' + id + ' is removed; restore it first');
   const spalten = {
     code: 'code',
     what: 'what',
@@ -7478,6 +7729,7 @@ function updateExperimentRun(db, id, f, wer) {
     batchId: 'batch_id'
   };
   const aenderungen = _aenderungen(_ansatzStand(zeile), f, Object.keys(spalten));
+  if (aenderungen.some((a) => a.feld === 'code')) _gefaessCodeFrei(db, zeile.experiment_id, f.code, zeile.id);
   // Die Reihenfolge wird geschrieben, kommt aber nicht in den Verlauf (s. o.).
   const sortieren = f.sort !== undefined && String(f.sort) !== String(zeile.sort);
   if (!aenderungen.length && !sortieren) return false;
@@ -7488,19 +7740,9 @@ function updateExperimentRun(db, id, f, wer) {
       setzen.push('sort=?');
       werte.push(f.sort);
     }
-    db.prepare('UPDATE experiment_runs SET ' + setzen.join(',') + ' WHERE id=?').run(...werte, id);
-    for (const a of aenderungen) {
-      _verlauf(db, wer, {
-        entity: 'run',
-        entityId: zeile.id,
-        experimentId: zeile.experiment_id,
-        action: 'update',
-        field: a.feld,
-        old: _alsText(a.alt),
-        new: _alsText(a.neu)
-      });
-    }
-    incrementDataVersion(db);
+    const info = db.prepare('UPDATE experiment_runs SET ' + setzen.join(',') + ' WHERE id=?').run(...werte, id);
+    _nurMitZeile(info, 'run');
+    _geaendert(db, wer, 'run', zeile, aenderungen);
   });
   return true;
 }
@@ -7516,14 +7758,15 @@ function updateExperimentRun(db, id, f, wer) {
 // Fuer beide ist es dieselbe Handlung, deshalb eine Funktion. Wer entfernt, was
 // schon entfernt ist, oder zurueckholt, was da ist, aendert nichts und schreibt
 // auch nichts in den Verlauf.
-const ENTFERNBAR = {
-  run: { tabelle: 'experiment_runs', stand: _ansatzStand },
-  photo: { tabelle: 'experiment_photos', stand: _fotoStand }
-};
 function _entfernen(db, art, id, wer, weg) {
-  const { tabelle, stand } = ENTFERNBAR[art];
+  const { tabelle, stand } = LABOR[art];
   const zeile = db.prepare('SELECT * FROM ' + tabelle + ' WHERE id=?').get(id);
   if (!zeile || !!zeile.removed_at === weg) return false;
+  // Wer ein Gefaess zurueckholt, dessen Code inzwischen ein anderes traegt,
+  // haette danach zwei gleiche. Erst das andere entfernen.
+  if (!weg && art === 'run') _gefaessCodeFrei(db, zeile.experiment_id, zeile.code, zeile.id);
+  // Ein endgueltig geloeschtes Foto hat keine Datei mehr, die zurueckkommen koennte.
+  if (!weg && art === 'photo' && !zeile.rel_path) throw new Error('lab: photo ' + id + ' was deleted for good');
   _mitVerlauf(db, () => {
     db.prepare('UPDATE ' + tabelle + ' SET removed_at=?, removed_by=? WHERE id=?').run(
       weg ? new Date().toISOString() : null,
@@ -7539,7 +7782,6 @@ function _entfernen(db, art, id, wer, weg) {
       old: weg ? datensatz : null,
       new: weg ? null : datensatz
     });
-    incrementDataVersion(db);
   });
   return true;
 }
@@ -7554,6 +7796,30 @@ function removeExperimentPhoto(db, id, wer) {
 }
 function restoreExperimentPhoto(db, id, wer) {
   return _entfernen(db, 'photo', id, wer, false);
+}
+
+// Endgueltig loeschen, fuer ein Foto, das nicht bleiben darf, etwa weil etwas
+// darauf zu sehen ist, das nicht gespeichert sein soll. Nur ein entferntes, und
+// nur ein Admin (die Route prueft das). Die Zeile bleibt als Grabstein ohne
+// Dateipfade, der Verlauf behaelt den Datensatz samt Pruefsumme: dass es das
+// Foto gab, bleibt belegt, das Bild selbst nicht. Gibt die Pfade zurueck, damit
+// die Route die Dateien loeschen kann; die Platte ist nicht Teil der Transaktion.
+function purgeExperimentPhoto(db, id, wer) {
+  const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
+  if (!zeile) throw new Error('lab: photo ' + id + ' not found');
+  if (!zeile.removed_at) throw new Error('lab: photo ' + id + ' must be removed before it is deleted for good');
+  if (!zeile.rel_path) return null;
+  _mitVerlauf(db, () => {
+    db.prepare("UPDATE experiment_photos SET rel_path='', thumb_path='' WHERE id=?").run(id);
+    _verlauf(db, wer, {
+      entity: 'photo',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'purge',
+      old: JSON.stringify(_fotoDaten(zeile))
+    });
+  });
+  return { rel_path: zeile.rel_path, thumb_path: zeile.thumb_path };
 }
 
 // ── Notizen je Vorhaben-Reiter ──────────────────────────────
@@ -7575,68 +7841,40 @@ function listProjectNotes(db) {
     .map((n) => ({ id: n.id, tab: n.tab, body: n.body, created: n.created, updated: n.updated || '' }));
 }
 
-// Notizen schreiben ihren Verlauf wie die Versuche, `wer` ist auch hier die
-// Sitzung.
-function insertProjectNote(db, n, wer) {
-  if (!n.tab || !n.body) throw new Error('tab and body are required');
-  if (!NOTIZ_REITER.includes(n.tab)) throw new Error('invalid tab: ' + n.tab);
-  return _mitVerlauf(db, () => {
-    const info = db
-      .prepare('INSERT INTO project_notes(tab,body,created) VALUES(?,?,?)')
-      .run(n.tab, n.body, n.created || new Date().toISOString());
-    const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(info.lastInsertRowid);
-    _verlauf(db, wer, {
-      entity: 'note',
-      entityId: zeile.id,
-      action: 'create',
-      new: JSON.stringify(_notizStand(zeile))
-    });
-    incrementDataVersion(db);
-    return info.lastInsertRowid;
-  });
+// Notizen stehen nicht im Verlauf. Eine Notiz ist ein Zettel und kein
+// Laborbucheintrag (siehe deleteProjectNote); ein Verlauf, der jede Fassung
+// aufhebt, machte aus dem Wegwerfen ein Wegschliessen, und der Dialog, der
+// "danach weg" sagt, haette nicht mehr gestimmt.
+function insertProjectNote(db, n) {
+  if (!n.tab || !n.body) throw new Error('lab: tab and body are required');
+  if (!NOTIZ_REITER.includes(n.tab)) throw new Error('lab: invalid tab: ' + n.tab);
+  // Wann eine Notiz entstand, sagt die Uhr des Servers. Aus dem Rumpf der
+  // Anfrage liess sich jedes Datum setzen, auch eins, das keins ist.
+  const info = db
+    .prepare('INSERT INTO project_notes(tab,body,created) VALUES(?,?,?)')
+    .run(n.tab, n.body, new Date().toISOString());
+  incrementDataVersion(db);
+  return info.lastInsertRowid;
 }
 
-function updateProjectNote(db, id, f, wer) {
+function updateProjectNote(db, id, f) {
   if (f.body === undefined) return false;
-  if (!f.body) throw new Error('body is required');
-  const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(id);
+  if (!f.body) throw new Error('lab: body is required');
+  const zeile = db.prepare('SELECT body FROM project_notes WHERE id=?').get(id);
   // Derselbe Text ist keine Aenderung und macht die Notiz nicht "geaendert".
   if (!zeile || zeile.body === f.body) return false;
-  _mitVerlauf(db, () => {
-    db.prepare('UPDATE project_notes SET body=?, updated=? WHERE id=?').run(f.body, new Date().toISOString(), id);
-    _verlauf(db, wer, {
-      entity: 'note',
-      entityId: zeile.id,
-      action: 'update',
-      field: 'body',
-      old: zeile.body,
-      new: f.body
-    });
-    incrementDataVersion(db);
-  });
+  db.prepare('UPDATE project_notes SET body=?, updated=? WHERE id=?').run(f.body, new Date().toISOString(), id);
+  incrementDataVersion(db);
   return true;
 }
 
 // Eine Notiz darf weg. Sie ist kein Laborbucheintrag, sondern ein Zettel, und
 // ein Zettel, den man nicht wegwerfen kann, sammelt sich zu dem an, was dieser
 // Reiter gerade loswerden soll.
-//
-// Aus dem Reiter verschwindet sie; ihr Text bleibt im Verlauf stehen. Den zeigt
-// die Oberflaeche nirgends, er ist nur nicht verloren.
-function deleteProjectNote(db, id, wer) {
-  const zeile = db.prepare('SELECT * FROM project_notes WHERE id=?').get(id);
-  if (!zeile) return false;
-  _mitVerlauf(db, () => {
-    db.prepare('DELETE FROM project_notes WHERE id=?').run(id);
-    _verlauf(db, wer, {
-      entity: 'note',
-      entityId: zeile.id,
-      action: 'remove',
-      old: JSON.stringify(_notizStand(zeile))
-    });
-    incrementDataVersion(db);
-  });
-  return true;
+function deleteProjectNote(db, id) {
+  const info = db.prepare('DELETE FROM project_notes WHERE id=?').run(id);
+  if (info.changes) incrementDataVersion(db);
+  return info.changes > 0;
 }
 
 // ── Vorhaben-Texte ──────────────────────────────────────────
@@ -10391,7 +10629,10 @@ const SAFE_ERROR_PREFIXES = [
   'photo:',
   // Stämme je Pilzsorte — "gibt es schon" soll am Telefon ankommen, nicht als
   // "Internal server error".
-  'Stamm:'
+  'Stamm:',
+  // Laborbuch — Versuche, Gefäße und Notizen. Ein Code, den es schon gibt, oder
+  // ein Ausgang, den es nicht gibt, ist eine Auskunft, kein Serverfehler.
+  'lab:'
 ];
 
 const SAFE_ERROR_BARE = new Set([
@@ -10603,11 +10844,10 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
     // which is worse than the duplicate this replaces: an ordered line then
     // resolves to no product and drops out of the production plan entirely,
     // rather than landing on one of two.
-    // A SAVEPOINT rather than BEGIN, which is what the rest of this file uses:
+    // A savepoint rather than BEGIN, which is what the rest of this file uses:
     // it nests, so a caller that already holds a transaction does not turn this
     // into "cannot start a transaction within a transaction" one day.
-    db.exec('SAVEPOINT mt_map');
-    try {
+    withSavepoint(db, 'mt_map', () => {
       db.prepare('DELETE FROM product_channel_map WHERE channel = ? AND channel_sku IS ? AND listing_id IS ?').run(
         channel,
         channelSku || null,
@@ -10618,18 +10858,7 @@ function mapListing(db, { channel, channelSku, listingId, productId, title } = {
          VALUES(?,?,?,?,?)
          ON CONFLICT(channel, channel_sku, listing_id) DO UPDATE SET product_id = excluded.product_id`
       ).run(channel, channelSku || null, listingId || null, productId || null, now);
-      db.exec('RELEASE mt_map');
-    } catch (e) {
-      // The unwind gets its own guard: if the savepoint is already gone, throwing
-      // from here would replace the error that actually explains the failure.
-      try {
-        db.exec('ROLLBACK TO mt_map');
-        db.exec('RELEASE mt_map');
-      } catch {
-        /* the original error is the one worth having */
-      }
-      throw e;
-    }
+    });
   }
   // Back-resolve currently-unmapped order items for this listing group.
   if (productId && (channelSku || listingId)) {
@@ -11419,6 +11648,7 @@ module.exports = {
   upsertProduct,
   deleteProduct,
   mapListing,
+  withSavepoint,
   resolveProductId,
   listUnmappedItems,
   listChannelMappings,
@@ -11568,6 +11798,7 @@ module.exports = {
   addExperimentPhoto,
   getExperimentPhotoByUuid,
   removeExperimentPhoto,
+  purgeExperimentPhoto,
   restoreExperimentPhoto,
   insertExperiment,
   updateExperiment,
@@ -11576,6 +11807,10 @@ module.exports = {
   removeExperimentRun,
   restoreExperimentRun,
   listExperimentHistory,
+  experimentHistoryPage,
+  markBackupRestore,
+  historyAfter,
+  lastHistoryId,
   listProjectNotes,
   insertProjectNote,
   updateProjectNote,

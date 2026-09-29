@@ -12,6 +12,7 @@ const {
   computePhotoDirSize,
   enforceCap,
   removeContaminationPhotos,
+  experimentPhotoScope,
   PhotoCapError
 } = require('../scripts/photo-cap.js');
 
@@ -99,9 +100,10 @@ describe('reset — removes contamination photos, keeps experiment photos', () =
       };
       put('2026/04/7/a.jpg', 100);
       put('2026/04/7/a_thumb.jpg', 10);
-      put('2026/04/exp-3/b.jpg', 200);
+      // Die Ordner so benannt, wie der Upload sie benennt.
+      put('2026/04/' + experimentPhotoScope(3) + '/b.jpg', 200);
       put('2026/05/12/c.jpg', 300);
-      put('2026/05/exp-4/d.jpg', 400);
+      put('2026/05/' + experimentPhotoScope(4) + '/d.jpg', 400);
       put('2026/05/stray.jpg', 5);
       put('stray.txt', 5);
       assert.equal(removeContaminationPhotos(dir), 4);
@@ -113,6 +115,11 @@ describe('reset — removes contamination photos, keeps experiment photos', () =
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('is the name the upload gives an experiment folder', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    assert.ok(src.includes('savePhotoToDisk(photoCap.experimentPhotoScope(data.experimentId)'));
   });
 
   it('does nothing when the directory does not exist', () => {

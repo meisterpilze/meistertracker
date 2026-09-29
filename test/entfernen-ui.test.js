@@ -29,7 +29,10 @@ const TEILE = [
   'pjVerlaufWert',
   'pjVerlaufZeile',
   'pjVerlaufListe',
-  'pjVersuchClick'
+  'pjFehlgeschlagen',
+  'pjFokus',
+  'pjVersuchClick',
+  'pjToggle'
 ];
 
 function werkbank(v) {
@@ -41,6 +44,7 @@ function werkbank(v) {
     let pjOffen = v.id;
     let pjVerlaufOffen = null;
     let pjVerlaufStand = null;
+    let currentUser = v.admin ? { role: 'admin' } : { role: 'user' };
     const experiments = [v];
     const t = (k, o) => k + (o ? '(' + Object.values(o).join(',') + ')' : '');
     const confirm2 = (titel, text, knopf, ja) => {
@@ -60,12 +64,19 @@ function werkbank(v) {
       return Promise.resolve();
     };
     const renderVersuch = () => aufrufe.push(['render']);
+    let pjGefaessUnterwegs = false;
+    let pjVersuchUnterwegs = false;
+    const fokussiert = [];
+    const document = { querySelector: (sel) => ({ focus: () => fokussiert.push(sel) }) };
+    const toasts = [];
+    const toast = (m, k) => toasts.push([m, k]);
     ${hebeKonstante('PJ_AUSGANG', APP)}
+    ${hebeKonstante('pjWegOffen', APP)}
     ${TEILE.map((n) => hebeFunktion(n, APP)).join('\n')}
     // Ein Klick auf ein Element, das genau einen dieser Schluessel traegt.
     const klick = (sel, dataset) =>
       pjVersuchClick({ target: { closest: (s) => (s === sel ? { dataset } : null) } });
-    return { aufrufe, nachfragen, pjDetail, pjGefaessZeile, pjFotoKachel, klick };`
+    return { aufrufe, nachfragen, fokussiert, pjDetail, pjGefaessZeile, pjFotoKachel, pjToggle, klick };`
   )(v);
 }
 
@@ -95,7 +106,10 @@ describe('Entfernen: Ansicht', () => {
     const ui = werkbank(versuch());
     const html = ui.pjGefaessZeile(versuch().runs[0]);
     assert.ok(html.includes('data-pj-rundel="5"'));
-    assert.ok(html.includes('aria-label="exp.removeRun"'), 'the cross says what it does');
+    assert.ok(
+      html.includes('aria-label="exp.removeRunNamed(A-1)"'),
+      'the cross says what it does, and to which vessel'
+    );
   });
 
   it('zeigt nichts Entferntes, solange nichts entfernt ist', () => {
@@ -119,7 +133,11 @@ describe('Entfernen: Ansicht', () => {
       ]
     });
     const html = werkbank(v).pjDetail(v);
-    assert.ok(html.includes('<details class="pj-fold pj-weg"><summary class="sec">exp.removedRuns(1)</summary>'));
+    assert.ok(
+      html.includes(
+        '<details class="pj-fold pj-weg" data-pj-weg="3:runs"><summary class="sec">exp.removedRuns(1)</summary>'
+      )
+    );
     const weg = html.slice(html.indexOf('exp.removedRuns(1)'));
     assert.ok(weg.includes('data-pj-runback="6"'), 'it can be brought back');
     assert.ok(weg.includes('2 Punkte') && weg.includes('exp.out.contam'), 'what it held is readable');
@@ -141,14 +159,69 @@ describe('Entfernen: Ansicht', () => {
     assert.ok(weg.includes('pj-foto-entfernt'));
     assert.equal(weg.includes('data-pj-photodel="9"'), false);
     assert.ok(html.includes('data-pj-photodel="8"'), 'the photo in use keeps its cross');
-    assert.ok(html.includes('aria-label="exp.remove"'));
+    assert.ok(/aria-label="exp\.removePhotoNamed\([^)]+\)"/.test(html), 'the photo cross names its photo');
+    assert.ok(/aria-label="exp\.restorePhotoNamed\([^)]+\)"/.test(html), 'and so does restore');
+    assert.ok(/alt="exp\.photoAlt\([^)]+\)"/.test(html), 'the thumbnail link has a name');
+    const zwei = versuch({
+      photos: [
+        { id: 8, uuid: 'aaaa-1', uploadedAt: '2026-01-06T09:00:00.000Z', removedAt: null },
+        { id: 10, uuid: 'aaaa-2', uploadedAt: '2026-01-06T09:00:00.000Z', removedAt: null }
+      ]
+    });
+    const namen = [
+      ...werkbank(zwei)
+        .pjDetail(zwei)
+        .matchAll(/aria-label="(exp\.removePhotoNamed\([^"]*\))"/g)
+    ].map((m) => m[1]);
+    assert.equal(new Set(namen).size, 2, 'two photos from one upload are named apart');
   });
 
-  it('zeichnet ein eben im Browser angelegtes Experiment, das die Listen noch nicht kennt', () => {
-    const v = versuch();
-    delete v.removedRuns;
-    delete v.removedPhotos;
-    assert.doesNotThrow(() => werkbank(v).pjDetail(v));
+  it('merkt sich, dass die entfernten Gefaesse aufgeklappt sind, ueber das Neuzeichnen hinweg', () => {
+    const v = versuch({
+      removedRuns: [
+        { id: 6, code: 'A-2', what: '', result: '', outcome: 'open', removedAt: '2026-01-07T10:00:00.000Z' }
+      ]
+    });
+    const ui = werkbank(v);
+    assert.equal(ui.pjDetail(v).includes('data-pj-weg="3:runs" open'), false);
+    ui.pjToggle({ target: { dataset: { pjWeg: '3:runs' }, open: true } });
+    assert.ok(ui.pjDetail(v).includes('data-pj-weg="3:runs" open'), 'still open after the redraw');
+    ui.pjToggle({ target: { dataset: { pjWeg: '3:runs' }, open: false } });
+    assert.equal(ui.pjDetail(v).includes('data-pj-weg="3:runs" open'), false);
+  });
+
+  it('bietet nur einem Admin an, ein entferntes Foto endgueltig zu loeschen', () => {
+    const foto = {
+      id: 9,
+      uuid: 'bbbb-2',
+      uploadedAt: '2026-01-06T10:00:00.000Z',
+      removedAt: '2026-01-07T10:00:00.000Z'
+    };
+    const nutzer = versuch({ removedPhotos: [foto] });
+    assert.equal(werkbank(nutzer).pjDetail(nutzer).includes('data-pj-photopurge'), false);
+    const admin = versuch({ admin: true, removedPhotos: [foto] });
+    assert.ok(werkbank(admin).pjDetail(admin).includes('data-pj-photopurge="9"'));
+  });
+
+  it('zeigt ein endgueltig geloeschtes Foto als leeren Platz, ohne Bild und ohne Zurueckholen', () => {
+    const v = versuch({
+      admin: true,
+      removedPhotos: [
+        {
+          id: 9,
+          uuid: 'bbbb-2',
+          uploadedAt: '2026-01-06T10:00:00.000Z',
+          removedAt: '2026-01-07T10:00:00.000Z',
+          purged: true
+        }
+      ]
+    });
+    const weg = werkbank(v).pjDetail(v);
+    const kachel = weg.slice(weg.indexOf('exp.removedPhotos(1)'));
+    assert.ok(kachel.includes('exp.purged'));
+    assert.equal(kachel.includes('bbbb-2'), false, 'no image is requested');
+    assert.equal(kachel.includes('data-pj-photoback="9"'), false);
+    assert.equal(kachel.includes('data-pj-photopurge="9"'), false);
   });
 });
 
@@ -176,6 +249,11 @@ describe('Entfernen: Knoepfe', () => {
       ]
     );
     assert.deepEqual(ui.nachfragen, [], 'bringing something back needs no confirmation');
+    assert.deepEqual(
+      ui.fokussiert,
+      ['[data-pj-rundel="6"]', '[data-pj-photodel="9"]'],
+      'focus goes to what came back, not to the page'
+    );
   });
 
   it('fragt beim Foto nach "Entfernen", nicht nach "Loeschen"', async () => {

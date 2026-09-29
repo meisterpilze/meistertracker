@@ -1730,7 +1730,7 @@ function createMcpServer(database, onWrite, printer) {
       const adminErr = requireAdminRole();
       if (adminErr) return adminErr;
       try {
-        db.renameBatch(database, params.oldId, params.newId);
+        db.renameBatch(database, params.oldId, params.newId, { user_id: auth.userId, username: auth.username });
         notify();
         return json({ success: true, oldId: params.oldId, newId: params.newId });
       } catch (e) {
@@ -1760,7 +1760,7 @@ function createMcpServer(database, onWrite, printer) {
             'delete_culture löscht die Kultur unwiderruflich. Bitte mit confirm: true bestätigen. Alternativ: update_culture mit status "contam" oder "used".'
           );
         }
-        const removed = db.deleteCulture(database, params.id);
+        const removed = db.deleteCulture(database, params.id, { user_id: auth.userId, username: auth.username });
         if (!removed) return errResult('Culture not found: ' + params.id);
         notify();
         return json({ success: true, id: params.id });
