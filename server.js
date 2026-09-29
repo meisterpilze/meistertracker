@@ -8400,9 +8400,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 404, 'photo file missing');
           return;
         }
+        // Ask every time instead of serving from the browser cache for a year
+        // unasked: a photo of a deleted report kept opening from the browser
+        // history, and on a shared device after logging out as well, because no
+        // request reached the server and the session check never ran. A picture
+        // never changes under its uuid, so asking costs a 304 without a body.
+        const etag = '"' + photo.uuid + (wantThumb ? '-t' : '') + '"';
+        if (etagMatches(req.headers['if-none-match'], etag)) {
+          res.writeHead(304, { ETag: etag, 'Cache-Control': 'private, no-cache' });
+          res.end();
+          return;
+        }
         res.writeHead(200, {
           'Content-Type': 'image/jpeg',
-          'Cache-Control': 'private, max-age=31536000, immutable'
+          'Cache-Control': 'private, no-cache',
+          ETag: etag
         });
         // pipe() does not forward the read stream's 'error' (e.g. a concurrent
         // report DELETE unlinking the file after the existsSync check), which
