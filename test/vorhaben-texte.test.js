@@ -113,6 +113,8 @@ describe('Vorhaben-Texte', () => {
       [abschnitt([{ table: { head: ['A'], rows: ['keine Zeile'] } }]), /table\.rows\[0\] must be a row/],
       [abschnitt([{ cards: [{ t: 'K', rows: 'x' }] }]), /cards\[0\]\.rows must be a list/],
       [abschnitt([{ plan: { items: [] } }]), /plan\.key must be text/],
+      [abschnitt([{ plan: { key: 'x"><img src=x>', items: [] } }]), /plan\.key must be 1 to 64 letters/],
+      [abschnitt([{ plan: { key: '', items: [] } }]), /plan\.key must be 1 to 64 letters/],
       [abschnitt([{ copy: {} }]), /copy\.text must be text/]
     ];
     for (const [doc, fehler] of kaputt) {

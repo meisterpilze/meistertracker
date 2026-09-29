@@ -9412,6 +9412,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'photos: at most ' + EXP_MAX_PHOTOS_PER_CALL + ' per request');
         return;
       }
+      // Ein Eintrag, der kein Objekt ist, liess savePhotoToDisk null liefern,
+      // und der Zugriff darauf endete als 500. Das ist eine kaputte Anfrage,
+      // kein Fehler des Servers.
+      if (!data.photos.every((p) => p && typeof p === 'object' && !Array.isArray(p))) {
+        jsonErr(res, 400, 'photos: every entry must be an object');
+        return;
+      }
       const versuch = database.prepare('SELECT id FROM experiments WHERE id=?').get(data.experimentId);
       if (!versuch) {
         jsonErr(res, 404, 'unknown experiment');
@@ -9438,14 +9445,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         broadcastSSE(res);
         jsonOk(res, { ids });
       } catch (err) {
-        for (const datei of geschrieben) {
-          try {
-            fs.unlinkSync(datei);
-          } catch {
-            /* schon weg, oder nie geschrieben */
-          }
-        }
-        safeErr(res, err);
+        // Wegraeumen und die Bytes der Deckelung zurueckgeben, wie beim
+        // Kontaminationsbericht.
+        _discardPhotoFiles(geschrieben);
+        // Wie beim Kontaminationsbericht: eine volle Ablage ist 507, damit der
+        // Client "voll" sagen kann statt "Serverfehler".
+        if (err && err.name === 'PhotoCapError') jsonErr(res, 507, err.message);
+        else safeErr(res, err);
       }
     });
     return;

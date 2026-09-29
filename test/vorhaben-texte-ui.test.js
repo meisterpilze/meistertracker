@@ -28,6 +28,8 @@ const TEILE = [
   'pjTasks',
   'pjChkLoad',
   'pjChkSave',
+  'pjChkSchluessel',
+  'pjChkAlt',
   'pjPlan',
   'pjPlanRefresh',
   'pjPlansRefresh',
@@ -79,7 +81,17 @@ const DOK = {
   meta: 'Stand',
   lead: 'Vorweg',
   sections: [
-    { t: 'Offen', items: [{ p: 'Absatz' }, { table: { head: ['A'], rows: [['1']] } }, { tasks: ['Aufgabe'] }] },
+    {
+      t: 'Offen',
+      items: [
+        { p: 'Absatz' },
+        { table: { head: ['A'], rows: [['1']] } },
+        { tasks: ['Aufgabe'] },
+        // Ein Schluessel, den der Import heute abweist; eine aeltere Zeile in der
+        // Datenbank kann ihn trotzdem tragen.
+        { plan: { key: 'x"><img src=x onerror=alert(1)>', items: [['Ort', 'Schritt']] } }
+      ]
+    },
     { t: 'Hinten', fold: true, items: [{ ul: ['eins'] }] }
   ]
 };
@@ -110,6 +122,12 @@ describe('Vorhaben-Reiter', () => {
     const html = ui.els['pj-research'].innerHTML;
     assert.equal(html.includes('<img'), false);
     assert.ok(html.includes('&lt;img'));
+  });
+
+  it('escaped auch den Schluessel eines Plans in id und for', () => {
+    const html = ui.els['pj-research'].innerHTML;
+    assert.ok(html.includes('id="pjc-x&quot;&gt;&lt;img'), 'the checkbox id stays one attribute');
+    assert.ok(html.includes('for="pjc-x&quot;&gt;&lt;img'), 'and so does the label');
   });
 
   it('zeigt den Import nur einem Admin', () => {

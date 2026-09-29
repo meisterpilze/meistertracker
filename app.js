@@ -16049,12 +16049,19 @@ async function pjPrintRun(id) {
 // Ruecklinse statt der Galerie. Zusammengedrueckt wird im Browser mit derselben
 // Funktion, die die Kontaminationsfotos benutzt: 1280 px fuers Bild, 200 px
 // fuer die Kachel — ein Telefonfoto sind sonst 4 MB.
+// Mehr nimmt der Server in einem Zug nicht an (EXP_MAX_PHOTOS_PER_CALL).
+const PJ_MAX_FOTOS = 8;
 async function pjKamera(versuchId, dateien) {
   const status = document.getElementById('pj-cam-status');
   const bilder = Array.from(dateien || []).filter((f) => f && f.type && f.type.startsWith('image/'));
   if (!bilder.length) return;
+  // Was ueber die Grenze geht, bleibt liegen, aber nicht stillschweigend: wer
+  // zwoelf Bilder waehlt und acht wiederfindet, sucht sonst nach den vier.
+  if (bilder.length > PJ_MAX_FOTOS) {
+    toast(t('exp.photoLimit', { n: PJ_MAX_FOTOS, rest: bilder.length - PJ_MAX_FOTOS }), 'err');
+  }
   const fertig = [];
-  for (const datei of bilder.slice(0, 8)) {
+  for (const datei of bilder.slice(0, PJ_MAX_FOTOS)) {
     if (status) status.textContent = t('contam.compressing', { name: datei.name });
     try {
       fertig.push(await _crCompressFile(datei));
@@ -16064,17 +16071,22 @@ async function pjKamera(versuchId, dateien) {
     }
   }
   if (status) status.textContent = t('exp.uploading', { n: fertig.length });
-  try {
-    await apiPost('/api/experiment-photos', { experimentId: versuchId, photos: fertig });
-    // Kein vorlaeufiges Einhaengen: die Kennung des Bildes vergibt der Server,
-    // und eine Kachel ohne sie zeigt ein kaputtes Bild. Einmal nachladen ist
-    // schneller geschrieben und immer richtig.
-    if (status) status.textContent = '';
-    await loadData();
-    renderVersuch();
-  } catch (e) {
-    if (status) status.textContent = t('exp.uploadErr');
+  const r = await apiPost('/api/experiment-photos', { experimentId: versuchId, photos: fertig });
+  // apiPost wirft nicht, es meldet {error}. Ohne diese Pruefung sah ein
+  // gescheiterter Upload aus wie ein gelungener: die Statuszeile wurde leer,
+  // das Nachladen setzte den Sync wieder auf gruen, und die Bilder waren weg.
+  if (!r || r.error) {
+    const warum = t('exp.uploadErr', { err: (r && r.error) || '' });
+    if (status) status.textContent = warum;
+    toast(warum, 'err');
+    return;
   }
+  // Kein vorlaeufiges Einhaengen: die Kennung des Bildes vergibt der Server,
+  // und eine Kachel ohne sie zeigt ein kaputtes Bild. Einmal nachladen ist
+  // schneller geschrieben und immer richtig.
+  if (status) status.textContent = '';
+  await loadData();
+  renderVersuch();
 }
 // Tippen speichert beim Verlassen des Feldes, nicht bei jedem Zeichen: ein
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
@@ -16082,7 +16094,10 @@ async function pjKamera(versuchId, dateien) {
 function pjChange(e) {
   if (e.target.id === 'pj-cam') {
     const id = Number(e.target.dataset.pjFor);
-    const dateien = e.target.files;
+    // Erst abschreiben, dann leeren: e.target.files ist die Liste des Feldes
+    // selbst, und value = '' leert genau diese Liste. Mit der Liste statt
+    // einer Abschrift kam bei pjKamera nie ein Bild an.
+    const dateien = Array.from(e.target.files || []);
     e.target.value = '';
     if (id) pjKamera(id, dateien);
     return;
@@ -16256,11 +16271,44 @@ function pjChkSave(d) {
     /* privater Modus, voller Speicher: die Liste funktioniert, sie merkt es sich nur nicht */
   }
 }
+// Ein Haken gehoert zu einem Schritt, nicht zu einer Zeilennummer. Mit der
+// Nummer wanderte er nach einem Neuimport, der oben eine Zeile einfuegt, auf den
+// naechsten Schritt, und weil erledigte Zeilen ausgeblendet werden, verschwand
+// damit ein Schritt, der noch offen war. Der Schluessel ist deshalb der Plan
+// und der Wortlaut der Zeile (Marke und Handgriff); steht derselbe Wortlaut
+// zweimal im Plan, zaehlt ein Zusatz mit. Plan und Rest trennt ein |, das ein
+// Planschluessel nicht enthalten kann (siehe _docBaustein in db.js).
+function pjChkSchluessel(plan, it, gesehen) {
+  const text = String(it[0] || '') + '\u0000' + String(it[1] || '');
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const basis = (h >>> 0).toString(36);
+  const n = (gesehen[basis] = (gesehen[basis] || 0) + 1);
+  return plan + '|' + basis + (n > 1 ? '~' + n : '');
+}
+// Ein Haken im alten Format dieses Plans: Plan, Bindestrich, Zeilennummer.
+function pjChkAlt(k, plan) {
+  return k.length > plan.length + 1 && k.startsWith(plan + '-') && /^\d+$/.test(k.slice(plan.length + 1));
+}
 function pjPlan(pl) {
   const st = pjChkLoad();
+  const gesehen = {};
+  let umgezogen = false;
   const rows = pl.items
     .map((it, i) => {
-      const k = pl.key + '-' + i;
+      const k = pjChkSchluessel(pl.key, it, gesehen);
+      // Haken aus der Zeit, als die Zeilennummer der Schluessel war, ziehen
+      // einmal um. Das nimmt an, dass sich die Unterlage seit dem Haken nicht
+      // geaendert hat; mehr weiss heute niemand mehr darueber.
+      const alt = pl.key + '-' + i;
+      if (alt in st) {
+        if (st[alt] && !st[k]) st[k] = 1;
+        delete st[alt];
+        umgezogen = true;
+      }
       const id = 'pjc-' + k;
       const an = !!st[k];
       // Die Zeile ist kurz. Was daran noch zu wissen ist — Mengen, Temperaturen,
@@ -16272,12 +16320,22 @@ function pjPlan(pl) {
         : '';
       return (
         `<div class="pj-chk${an ? ' is-done' : ''}">` +
-        `<input type="checkbox" id="${id}" data-pj-chk="${esc(k)}"${an ? ' checked' : ''}>` +
+        `<input type="checkbox" id="${esc(id)}" data-pj-chk="${esc(k)}"${an ? ' checked' : ''}>` +
         `<div class="pj-body"><span class="pj-tag">${pjText(it[0])}</span>` +
-        `<label for="${id}">${pjText(it[1])}</label>${det}</div></div>`
+        `<label for="${esc(id)}">${pjText(it[1])}</label>${det}</div></div>`
       );
     })
     .join('');
+  // Was nach alter Zeilennummer uebrig ist (eine Zeile, die es nicht mehr
+  // gibt), geht ebenfalls: sonst hakte es spaeter eine neue Zeile ab, die an
+  // dieselbe Stelle rueckt, und die verschwaende als erledigt.
+  for (const k of Object.keys(st)) {
+    if (pjChkAlt(k, pl.key)) {
+      delete st[k];
+      umgezogen = true;
+    }
+  }
+  if (umgezogen) pjChkSave(st);
   return (
     `<div class="pj-plan" data-pj-plan="${esc(pl.key)}">` +
     rows +
@@ -16292,14 +16350,14 @@ function pjPlan(pl) {
 function pjPlanRefresh(box) {
   if (!box) return;
   const st = pjChkLoad();
-  const key = box.dataset.pjPlan;
   const zeilen = box.querySelectorAll('.pj-chk');
   let fertig = 0;
-  zeilen.forEach((row, i) => {
-    const an = !!st[key + '-' + i];
+  // Den Schluessel jeder Zeile traegt ihr Kasten, pjPlan hat ihn vergeben.
+  zeilen.forEach((row) => {
+    const cb = row.querySelector('input');
+    const an = !!(cb && st[cb.dataset.pjChk]);
     if (an) fertig++;
     row.classList.toggle('is-done', an);
-    const cb = row.querySelector('input');
     if (cb) cb.checked = an;
   });
   const zeigt = box.classList.contains('pj-show-done');
@@ -16642,8 +16700,11 @@ function pjClick(e) {
     const schluessel = feld && feld.dataset.pjPlan;
     if (!schluessel) return;
     const stand = pjChkLoad();
+    // Genau dieser Plan: der Schluessel bis zum letzten |. Mit dem Anfang
+    // allein nahm das Zuruecksetzen von "tag" die Haken von "tag-2" mit.
     Object.keys(stand).forEach((k) => {
-      if (k.indexOf(schluessel + '-') === 0) delete stand[k];
+      const trenner = k.lastIndexOf('|');
+      if ((trenner > 0 && k.slice(0, trenner) === schluessel) || pjChkAlt(k, schluessel)) delete stand[k];
     });
     pjChkSave(stand);
     feld.classList.remove('pj-show-done');

@@ -7702,6 +7702,12 @@ function _docBaustein(it, wo) {
   if (it.plan !== undefined) {
     if (!_docObjekt(it.plan)) throw _docFehler(wo + '.plan', 'must be an object');
     _docText(it.plan.key, wo + '.plan.key', true);
+    // Der Schluessel ist ein Bezeichner, kein Text: er steht in id- und
+    // for-Attributen und benennt die Haken im Browser. Ein Anfuehrungszeichen
+    // darin war der Weg aus dem Attribut heraus.
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(it.plan.key)) {
+      throw _docFehler(wo + '.plan.key', 'must be 1 to 64 letters, digits, - or _');
+    }
     _docListe(it.plan.items, wo + '.plan.items', _docZeile);
   }
   if (it.copy !== undefined) {
