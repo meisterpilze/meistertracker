@@ -126,12 +126,32 @@ describe('reset — removes contamination photos, keeps experiment photos', () =
     assert.equal(removeContaminationPhotos(path.join(os.tmpdir(), 'mt-photo-cap-missing-' + Date.now())), 0);
   });
 
-  it('is what the reset route calls, instead of removing the directory', () => {
+  function resetRoute() {
     const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
     const start = src.indexOf("req.url === '/api/admin/reset'");
     assert.ok(start > 0, 'reset route not found in server.js');
-    const route = src.slice(start, src.indexOf('\n  // -- Contamination reports --', start));
+    return src.slice(start, src.indexOf('\n  // -- Contamination reports --', start));
+  }
+
+  it('is what the reset route calls, instead of removing the directory', () => {
+    const route = resetRoute();
     assert.ok(route.includes('photoCap.removeContaminationPhotos(PHOTO_DIR)'));
     assert.equal(route.includes('fs.rmSync(PHOTO_DIR'), false);
+  });
+
+  // The cached total the cap compares against only follows the disk when it is
+  // told to. A removal that throws partway has still deleted files, so the
+  // rescan cannot sit in the same try.
+  it('recounts the directory whether or not the removal got through', () => {
+    const route = resetRoute();
+    const attempt = route.slice(
+      route.indexOf('photoCap.removeContaminationPhotos(PHOTO_DIR)'),
+      route.indexOf('} catch (fileErr)')
+    );
+    assert.equal(attempt.includes('_ensurePhotoDirSize'), false, 'the rescan sits inside the try again');
+    assert.ok(
+      route.indexOf('_ensurePhotoDirSize(true)') > route.indexOf("'Reset: photo cleanup failed'"),
+      'the rescan must follow the removal and its catch'
+    );
   });
 });

@@ -8190,11 +8190,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           if (scopes.growing) {
             try {
               photoCap.removeContaminationPhotos(PHOTO_DIR);
-              _ensurePhotoDirSize(true);
               photosRemoved = true;
             } catch (fileErr) {
               log('warn', 'Reset: photo cleanup failed', { error: fileErr.message });
             }
+            // Recount either way. A removal that fails partway has still taken
+            // files away, and without the rescan their bytes kept counting
+            // against the photo-dir cap until the next one, up to five minutes.
+            _ensurePhotoDirSize(true);
           }
           log('warn', 'Clean-slate reset performed', {
             user: req.authUser ? req.authUser.username : null,
@@ -8529,18 +8532,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       const photoPaths = db.deleteContaminationReport(database, reportId);
-      // Best-effort unlink — DB is the source of truth, orphan files are harmless
-      for (const p of photoPaths) {
-        for (const rel of [p.rel_path, p.thumb_path]) {
-          const abs = path.join(DIR, 'data', rel);
-          if (abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
-            try {
-              fs.unlinkSync(abs);
-            } catch (e) {
-              /* ignore — file may already be gone */
-            }
-          }
-        }
+      // Best-effort unlink — DB is the source of truth, orphan files are harmless.
+      // Only paths under data/photos, whatever a row says. Through
+      // _discardPhotoFiles, so the freed bytes leave the cached total now instead
+      // of counting against the photo-dir cap until the next rescan.
+      const left = _discardPhotoFiles(
+        photoPaths
+          .flatMap((p) => [p.rel_path, p.thumb_path])
+          .map((rel) => path.join(DIR, 'data', rel))
+          .filter((abs) => abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep))
+      );
+      // The rows are gone, so nothing names these files any more except this line.
+      if (left.length) {
+        log('warn', 'Contamination report delete left photo files on disk', {
+          reportId,
+          files: left.map((abs) => path.relative(path.join(DIR, 'data'), abs))
+        });
       }
       broadcastSSE(res);
       jsonOk(res);

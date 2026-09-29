@@ -12,7 +12,7 @@
 // noch die Fotos, nur ein "Internal server error" im Formular.
 //
 // Die Beutel, Chargen und Bilder hier sind ausgedacht.
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -20,6 +20,7 @@ const os = require('os');
 const path = require('path');
 const db = require('../db.js');
 const { quelle, hebeFunktion } = require('./helpers/quelle');
+const { kontaminationsrouten, jpeg } = require('./helpers/kontaminationsrouten');
 
 // Die Migration, die den eindeutigen Index ersetzt. Wird sie umnummeriert, muss
 // die Zahl hier mit.
@@ -176,27 +177,42 @@ describe('eine Datenbank von vor der Korrektur', () => {
   });
 });
 
+// Die Fotos zaehlen gegen die Obergrenze des Fotoordners. savePhotoToDisk()
+// rechnet jede Datei in einen zwischengespeicherten Zaehler ein, und neu
+// gezaehlt wird nur alle fuenf Minuten. Wer eine Datei loescht, muss sie dort
+// wieder abziehen, sonst zaehlt sie bis dahin weiter, und nahe der Grenze
+// bekommt ein neues Foto ein 507 fuer Platz, der schon frei ist.
+//
+// server.js lauscht schon beim require. _discardPhotoFiles() kommt deshalb aus
+// der Quelle und laeuft gegen einen eigenen Zaehler statt gegen den des
+// Servers. Zurueck kommen der Zaehler danach und die Dateien, die noch da sind.
+const SERVER = quelle('server.js');
+
+function verwerfen(dateien, zaehler) {
+  return new Function(
+    'fs',
+    'dateien',
+    '_photoDirSizeBytes',
+    `
+    ${hebeFunktion('_discardPhotoFiles', SERVER)}
+    const uebrig = _discardPhotoFiles(dateien);
+    return { zaehler: _photoDirSizeBytes, uebrig };
+  `
+  )(fs, dateien, zaehler);
+}
+
+// Der Text einer Route in server.js, von `anfang` bis vor `ende`.
+function route(anfang, ende) {
+  const a = SERVER.indexOf(anfang);
+  assert.ok(a > 0, anfang + ' nicht in server.js gefunden — der Test muss mitgeführt werden');
+  const b = SERVER.indexOf(ende, a);
+  assert.ok(b > a, ende + ' nicht hinter ' + anfang + ' gefunden — der Test muss mitgeführt werden');
+  return SERVER.slice(a, b);
+}
+
 describe('Aufraeumen, wenn die Meldung doch scheitert', () => {
   // Die Fotos liegen schon auf der Platte, wenn die Transaktion zurueckrollt.
-  // savePhotoToDisk() hat sie in den Zaehler fuer die Obergrenze des
-  // Fotoordners eingerechnet; wer sie loescht, muss sie dort wieder abziehen.
-  //
-  // server.js lauscht schon beim require. Die Funktion kommt deshalb aus der
-  // Quelle und laeuft gegen einen eigenen Zaehler statt gegen den des Servers.
-  const SERVER = quelle('server.js');
-
-  function aufraeumen(dateien, zaehler) {
-    return new Function(
-      'fs',
-      'dateien',
-      '_photoDirSizeBytes',
-      `
-      ${hebeFunktion('_discardPhotoFiles', SERVER)}
-      _discardPhotoFiles(dateien);
-      return _photoDirSizeBytes;
-    `
-    )(fs, dateien, zaehler);
-  }
+  const aufraeumen = (dateien, zaehler) => verwerfen(dateien, zaehler).zaehler;
 
   it('loescht die geschriebenen Dateien und gibt ihre Bytes dem Zaehler zurueck', () => {
     const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'mt-kontam-fotos-'));
@@ -221,5 +237,136 @@ describe('Aufraeumen, wenn die Meldung doch scheitert', () => {
 
   it('ist der Weg, auf dem die Meldung ihre Dateien wieder abraeumt', () => {
     assert.match(SERVER, /_discardPhotoFiles\(writtenPhotoFiles\)/);
+  });
+});
+
+describe('Loeschen eines Berichts', () => {
+  // DELETE /api/contamination-reports/:id loescht die Zeilen und dann die
+  // Dateien, auf die sie zeigten. Das tat es mit einem eigenen unlink, und die
+  // Bytes blieben im Zaehler.
+  const loeschroute = () => route('const contamDeleteMatch', '// -- Harvests --');
+
+  it('raeumt die Dateien ueber _discardPhotoFiles ab, nicht mit einem eigenen unlink', () => {
+    const r = loeschroute();
+    assert.match(r, /_discardPhotoFiles\(/);
+    assert.doesNotMatch(r, /unlinkSync|rmSync/);
+  });
+
+  it('loescht nur, was unter data/photos liegt', () => {
+    // Sonst liesse eine Zeile, die auf etwas anderes zeigt, den Server eine
+    // fremde Datei loeschen.
+    assert.ok(loeschroute().includes("abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)"));
+  });
+
+  it('zaehlt eine Datei weiter, die sich nicht loeschen laesst, und nennt sie', () => {
+    // Ein Ordner steht fuer eine solche Datei: unlink scheitert an ihm mit
+    // EISDIR oder EPERM, nicht mit ENOENT. Was noch auf der Platte liegt,
+    // belegt weiter Platz. Die Route schreibt es ins Log, denn nach dem
+    // Loeschen nennt es keine Zeile mehr.
+    const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'mt-kontam-fotos-'));
+    try {
+      const foto = path.join(ordner, 'b.jpg');
+      const klemmt = path.join(ordner, 'b_thumb.jpg');
+      fs.writeFileSync(foto, Buffer.alloc(800));
+      fs.mkdirSync(klemmt);
+      const { zaehler, uebrig } = verwerfen([foto, klemmt], 5000);
+      assert.equal(zaehler, 4200, 'nur die geloeschte Datei verlaesst den Zaehler');
+      assert.deepEqual(uebrig, [klemmt]);
+      assert.equal(fs.existsSync(foto), false);
+    } finally {
+      fs.rmSync(ordner, { recursive: true, force: true });
+    }
+  });
+
+  describe('gegen die Route selbst', () => {
+    // kontaminationsrouten() laesst den Abschnitt aus server.js gegen eine
+    // Datenbank und eine Fotoablage in einem Temp-Ordner laufen, mit einem
+    // eigenen Zaehler.
+    let r;
+    beforeEach(() => {
+      r = kontaminationsrouten();
+    });
+    afterEach(() => r.schliessen());
+
+    // Ein Bericht ueber einen Beutel mit einem Foto: 700 Bytes Bild, 90 Bytes
+    // Vorschau.
+    async function melden() {
+      const a = await r.anfrage('POST', '/api/contamination-reports', {
+        type_id: r.db.listContaminationTypes(r.database)[0].id,
+        severity: 'minor',
+        bag_id: 'XY-0101-01',
+        batch_id: 'XY-0101',
+        photos: [{ data_url: jpeg(700), thumb_data_url: jpeg(90) }]
+      });
+      assert.equal(a.status, 200);
+      const foto = r.database
+        .prepare('SELECT rel_path, thumb_path FROM contamination_photos WHERE id=?')
+        .get(a.json.photoIds[0]);
+      return { id: a.json.id, foto };
+    }
+    const loeschen = (id) => r.anfrage('DELETE', '/api/contamination-reports/' + id);
+
+    it('gibt die Bytes von Bild und Vorschau dem Zaehler zurueck', async () => {
+      const { id } = await melden();
+      assert.equal(r.groesse(), 790);
+      assert.equal((await loeschen(id)).status, 200);
+      assert.equal(r.groesse(), 0, 'die geloeschten Dateien zaehlen weiter gegen die Obergrenze');
+      assert.deepEqual(r.dateien(), []);
+    });
+
+    it('laesst eine Datei ausserhalb von data/photos stehen, auch wenn eine Zeile auf sie zeigt', async () => {
+      const { id } = await melden();
+      const draussen = path.join(r.DIR, 'draussen.jpg');
+      fs.writeFileSync(draussen, BILD);
+      const hinaus = 'photos/../../draussen.jpg';
+      r.db.addContaminationPhoto(r.database, id, { ...kopie(id, BILD), rel_path: hinaus, thumb_path: hinaus });
+      assert.equal((await loeschen(id)).status, 200);
+      assert.equal(fs.existsSync(draussen), true, 'die Route hat eine Datei ausserhalb der Ablage geloescht');
+      assert.equal(r.groesse(), 0);
+    });
+
+    it('zaehlt weiter, was sich nicht loeschen liess, und nennt es im Log', async () => {
+      const { id, foto } = await melden();
+      // Ein Ordner an der Stelle der Vorschau: unlink scheitert an ihm.
+      const vorschau = path.join(r.DIR, 'data', foto.thumb_path);
+      fs.rmSync(vorschau);
+      fs.mkdirSync(vorschau);
+      assert.equal((await loeschen(id)).status, 200);
+      assert.equal(r.groesse(), 90, 'nur das Bild ist weg, die Vorschau zaehlt weiter');
+      const eintrag = r.logs.find((l) => l.msg === 'Contamination report delete left photo files on disk');
+      assert.ok(eintrag, 'kein Log-Eintrag fuer die Datei, die liegen blieb');
+      assert.equal(eintrag.level, 'warn');
+      assert.deepEqual(eintrag.meta.files, [path.normalize(foto.thumb_path)]);
+    });
+  });
+});
+
+describe('Jeder Weg, der Fotodateien loescht, gibt ihre Bytes zurueck', () => {
+  // Die Meldung ist nicht der einzige Weg, auf dem server.js Fotodateien
+  // loescht. Wie sich die Versuchsfotos dabei verhalten, prueft
+  // versuchsfotos-route.test.js gegen die Route selbst; hier steht, dass alle
+  // ueber denselben Helfer gehen.
+  it('der Rueckbau eines gescheiterten Versuchsfoto-Uploads', () => {
+    const r = route("url === '/api/experiment-photos'", 'const fotoWegTreffer');
+    assert.match(r, /_discardPhotoFiles\(geschrieben\)/);
+    assert.doesNotMatch(r, /unlinkSync|rmSync/);
+  });
+
+  it('das endgueltige Loeschen eines entfernten Versuchsfotos, nur unter data/photos', () => {
+    const r = route('const fotoEndgueltigTreffer', 'const fotoZurueckTreffer');
+    assert.match(r, /_discardPhotoFiles\(/);
+    assert.ok(r.includes("abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)"));
+    assert.doesNotMatch(r, /unlinkSync|rmSync/);
+  });
+
+  it('kein Abschnitt mit Fotorouten loescht eine Datei an _discardPhotoFiles vorbei', () => {
+    // Eine neue Route, die Fotodateien selbst loescht, soll hier auffallen und
+    // nicht erst an einem Zaehler, der fuenf Minuten lang zu viel zaehlt.
+    for (const [anfang, ende] of [
+      ['// -- Contamination reports --', '// -- Harvests --'],
+      ['// ── Versuche und ihre Ansaetze', '// ── Vorhaben-Texte']
+    ]) {
+      assert.doesNotMatch(route(anfang, ende), /unlinkSync|\.unlink\(|rmSync|\.rm\(/, anfang);
+    }
   });
 });

@@ -123,7 +123,7 @@ function kontaminationsrouten(opts = {}) {
       ${abschnitt(src)}
       return false;
     }
-    return { handle };`
+    return { handle, groesse: () => _photoDirSizeBytes };`
   )(db, database, path, fs, crypto, photoCap, DIR, log, broadcastSSE, jsonBody);
 
   // Eine Anfrage an die Routen. Kommt keine Antwort, meldet das Ergebnis
@@ -164,6 +164,7 @@ function kontaminationsrouten(opts = {}) {
     DIR,
     logs,
     anfrage,
+    groesse: innen.groesse,
     dateien() {
       const wurzel = path.join(DIR, 'data', 'photos');
       if (!fs.existsSync(wurzel)) return [];
