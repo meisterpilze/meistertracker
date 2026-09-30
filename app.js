@@ -6787,15 +6787,20 @@ function _wkZoneRowsHtml(z, bags) {
     .sort((a, b) => (a.day ? a.day.getTime() : 0) - (b.day ? b.day.getTime() : 0) || a.species.localeCompare(b.species))
     .map((g) => {
       let n = 0;
+      // A scan entry does not have to name its batch: the server takes one
+      // without and stores an empty one as none, which MCP's scan tool lets
+      // through. Its bags land here under a null key, and localeCompare on
+      // that threw. This card is drawn before the day's tasks, so the tasks
+      // went down with it.
       const detail = [...g.batches.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
+        .sort((a, b) => String(a[0] || '').localeCompare(String(b[0] || '')))
         .map(([bid, ids]) => {
           n += ids.length;
           const nums = ids
             .map((id) => id.split('-').pop())
             .sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
             .join(', ');
-          return '<div><span class="wk-tent-batch">' + esc(bid) + '</span> ' + esc(nums) + '</div>';
+          return '<div><span class="wk-tent-batch">' + esc(bid || '—') + '</span> ' + esc(nums) + '</div>';
         })
         .join('');
       let when = '';
