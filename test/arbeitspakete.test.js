@@ -429,6 +429,7 @@ describe('Arbeitspakete im Laborbuch', () => {
     );
     assert.ok(html.includes('exp.lbWpFilter(AP1 · Erstes &lt;b&gt;Paket&lt;/b&gt;)'));
     assert.ok(html.includes('exp.wp AP1 · Erstes &lt;b&gt;Paket&lt;/b&gt; · '));
+    assert.ok(html.includes('<title>Laborbuch AP1</title>'), 'the PDF name says which package');
   });
 
   it('bietet beim Zeitraum die Pakete zur Wahl und schickt die Wahl mit', () => {

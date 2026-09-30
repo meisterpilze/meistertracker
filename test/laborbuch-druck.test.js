@@ -474,6 +474,18 @@ describe('Das Blatt', () => {
     assert.ok(jahr.includes('exp.lbRange(01.01.26,30.09.26)'));
   });
 
+  it('schlaegt fuer das PDF einen Namen mit Zeitraum vor, die Ueberschrift bleibt kurz', () => {
+    // Der Druckdialog nimmt den Titel des Fensters als Dateinamen. Hiesse jeder
+    // Bericht "Laborbuch", ueberschriebe der zweite den ersten.
+    const titel = (html) => html.match(/<title>([^<]*)<\/title>/)[1];
+    const jahr = pjLbHtml(buch({ from: '2026-01-01', to: '2026-09-30' }), 'Laborbuch', 'anna');
+    assert.equal(titel(jahr), 'Laborbuch exp.lbRange(2026-01-01,2026-09-30)');
+    assert.ok(jahr.includes('<h1>Laborbuch</h1>'));
+    const offen = pjLbHtml(buch({ to: '2026-09-30' }), 'Laborbuch', 'anna');
+    assert.equal(titel(offen), 'Laborbuch exp.lbRange(…,2026-09-30)');
+    assert.equal(titel(pjLbHtml(buch(), 'Laborbuch · V1', 'anna')), 'Laborbuch · V1');
+  });
+
   it('sagt, wenn im Zeitraum nichts lief', () => {
     const html = pjLbHtml(buch({ experiments: [] }), 'Laborbuch', 'anna');
     assert.ok(html.includes('exp.lbNone'));

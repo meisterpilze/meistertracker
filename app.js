@@ -16735,9 +16735,20 @@ function pjLbHtml(buch, titel, wer) {
   const inhalt = buch.experiments.length
     ? buch.experiments.map((v) => pjLbVersuch(v, pakete)).join('')
     : `<p class="leer">${esc(t('exp.lbNone'))}</p>`;
+  // Der Titel des Fensters ist der Dateiname, den der Druckdialog fuer das PDF
+  // vorschlaegt. Mit Paket und Zeitraum heissen zwei Berichte nicht gleich, und
+  // mit den Tagen als JJJJ-MM-TT stehen sie im Ordner in ihrer Reihenfolge.
+  const paket = buch.workPackageId != null ? pakete.find((w) => w.id === buch.workPackageId) : null;
+  const dateiname = [
+    titel,
+    paket ? paket.code : '',
+    zeitraum ? t('exp.lbRange', { from: buch.from || '…', to: buch.to || '…' }) : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     `<!doctype html><html lang="${esc(currentLang)}"><head><meta charset="utf-8">` +
-    `<title>${esc(titel)}</title><style>${PJ_LB_STIL}</style></head><body>` +
+    `<title>${esc(dateiname)}</title><style>${PJ_LB_STIL}</style></head><body>` +
     `<h1>${esc(titel)}</h1><div class="kopf">${esc(kopf)}</div>` +
     (zeitraum ? `<div class="kopf">${esc(t('exp.lbNote'))}</div>` : '') +
     inhalt +
