@@ -2119,7 +2119,7 @@ window.LANG['pt'] = {
   'work.harvestWhen': 'gramas por saco, depois de colher',
   'work.contam': 'Relatar contaminação',
   'work.contamWhen': 'assim que você vir, não depois',
-  'work.tentsTitle': 'Nas tendas',
+  'work.tentsTitle': 'Tendas e incubação',
   'work.tentSince': 'desde {date}',
   'work.tentToday': 'hoje',
   'work.tentDays.one': '{n} dia',

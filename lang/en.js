@@ -2102,7 +2102,7 @@ window.LANG['en'] = {
   'work.harvestWhen': 'grams per bag, after picking',
   'work.contam': 'Report contamination',
   'work.contamWhen': 'as soon as you see it, not later',
-  'work.tentsTitle': 'In the tents',
+  'work.tentsTitle': 'Tents & incubation',
   'work.tentSince': 'since {date}',
   'work.tentToday': 'today',
   'work.tentDays.one': '{n} day',

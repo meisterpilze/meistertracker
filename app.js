@@ -6759,11 +6759,14 @@ function _dashLeftBehindRows(splits) {
 // under each row. Drawn with the day's tasks, so it refreshes whenever they do —
 // which includes the 30-second tick, so what someone folded or unfolded is
 // remembered here rather than reset under their thumb.
-const _wkTentFold = { closed: new Set(), open: new Set() };
+//
+// Incubation zones follow the tents, folded: they hold hundreds of bags, and
+// open they would push the day's tasks off the phone. A tap unfolds one.
+const _wkTentFold = { zone: new Map(), open: new Set() };
 function renderWorkTents() {
   const card = document.getElementById('wk-tents');
   if (!card) return;
-  const tents = fruitingZones();
+  const tents = fruitingZones().concat(zones.filter((z) => z.role === 'incubation'));
   card.hidden = !tents.length;
   if (!tents.length) return;
   const today = new Date();
@@ -6828,10 +6831,10 @@ function renderWorkTents() {
         '<details class="wk-tent" data-tent="' +
         esc(z.id) +
         '"' +
-        (_wkTentFold.closed.has(z.id) ? '' : ' open') +
+        ((_wkTentFold.zone.has(z.id) ? _wkTentFold.zone.get(z.id) : z.role === 'fruiting') ? ' open' : '') +
         '><summary class="wk-tent-head">' +
         '<span class="zone-dot" style="background:' +
-        esc(z.color || ZONE_ROLE_COLOR.fruiting) +
+        esc(z.color || ZONE_ROLE_COLOR[z.role] || ZONE_ROLE_COLOR.fruiting) +
         '"></span><span class="wk-tent-name">' +
         esc(zoneDisplayName(z.id)) +
         '</span><span class="wk-tent-total">' +
@@ -6851,7 +6854,7 @@ function renderWorkTents() {
       'toggle',
       (ev) => {
         const d = ev.target;
-        if (d.dataset.tent) _wkTentFold.closed[d.open ? 'delete' : 'add'](d.dataset.tent);
+        if (d.dataset.tent) _wkTentFold.zone.set(d.dataset.tent, d.open);
         else if (d.dataset.fold) _wkTentFold.open[d.open ? 'add' : 'delete'](d.dataset.fold);
       },
       true

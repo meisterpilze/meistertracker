@@ -2126,7 +2126,7 @@ window.LANG['de'] = {
   'work.harvestWhen': 'Gramm pro Beutel, nach dem Ernten',
   'work.contam': 'Kontamination melden',
   'work.contamWhen': 'sobald du sie siehst, nicht später',
-  'work.tentsTitle': 'In den Zelten',
+  'work.tentsTitle': 'Zelte & Inkubation',
   'work.tentSince': 'seit {date}',
   'work.tentToday': 'heute',
   'work.tentDays.one': '{n} Tag',
