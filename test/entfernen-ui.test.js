@@ -23,6 +23,7 @@ const TEILE = [
   'pjEntferntesGefaess',
   'pjEntfernte',
   'pjFotoKachel',
+  'pjApAuswahl',
   'pjDetail',
   'pjVerlauf',
   'pjVerlaufCodes',
@@ -46,6 +47,7 @@ function werkbank(v) {
     let pjVerlaufStand = null;
     let currentUser = v.admin ? { role: 'admin' } : { role: 'user' };
     const experiments = [v];
+    const workPackages = [];
     const t = (k, o) => k + (o ? '(' + Object.values(o).join(',') + ')' : '');
     const confirm2 = (titel, text, knopf, ja) => {
       nachfragen.push({ titel, text, knopf });

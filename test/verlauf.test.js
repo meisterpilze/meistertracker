@@ -77,7 +77,8 @@ describe('Verlauf: Versuche, Gefaesse, Fotos', () => {
       status: 'running',
       archived: false,
       recipe: '',
-      outcome: ''
+      outcome: '',
+      workPackageId: null
     });
   });
 
@@ -396,6 +397,11 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
         JSON.parse(alle[2].new_value).uploadedBy,
         ANNA.user_id,
         'as v89 shipped: a photo older than the history has no create entry, its baseline names the uploader'
+      );
+      assert.deepEqual(
+        Object.keys(JSON.parse(alle[0].new_value)).sort(),
+        ['archived', 'code', 'ended', 'outcome', 'recipe', 'started', 'status', 'title'],
+        'as v89 shipped: the experiment baseline knows nothing of the work package v93 added'
       );
       assert.equal(
         alle.some((z) => z.entity === 'note'),

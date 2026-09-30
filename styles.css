@@ -8782,8 +8782,37 @@ body:has(#m-camscan.open) .update-bar {
   font-size: var(--fs-xs);
   color: var(--c-text-muted);
 }
-.pj-lb-feld input {
+.pj-lb-feld input,
+.pj-lb-feld select {
   width: 100%;
+}
+/* Das Arbeitspaket des Versuchs, unter dem Kopf: Beschriftung und Auswahl in
+   einer Zeile, am Telefon untereinander. */
+.pj-ap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.pj-ap select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+/* Ein Paket je Zeile: der Code schmal, der Titel breit, der Knopf rechts.
+   Die Zeile zum Anlegen steht genauso, deshalb gegen .pj-run-new input. */
+.pj-sec .pj-ap-code {
+  flex: 0 1 90px;
+  min-width: 0;
+}
+.pj-sec .pj-ap-titel {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.pj-ap-weg input {
+  color: var(--c-text-muted);
 }
 .pj-run {
   display: flex;

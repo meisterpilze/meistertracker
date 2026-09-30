@@ -120,6 +120,7 @@ describe('Verlauf und Zurueckholen: Verdrahtung', () => {
       const PJ_ANLEGEN_FELDER = [];
       let pjGezeichnetFuer;
       const experiments = [{ id: 5, runs: [] }];
+      const workPackages = [];
       const pjExp = (id) => experiments.find((v) => v.id === id) || null;
       const pjDetail = () => '';
       const pjListe = () => '';

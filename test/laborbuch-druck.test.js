@@ -602,6 +602,7 @@ describe('Der Zeitraum unter der Liste', () => {
       't',
       `
       const experiments = new Array(${anzahl}).fill({});
+      const workPackages = [];
       const heute = new Date();
       ${['esc', 'localDateStr', 'pjLbZeitraum'].map((n) => hebeFunktion(n)).join('\n')}
       let pjWegOffen = {};

@@ -1506,9 +1506,13 @@ function versuchPruefen(data) {
     recipe: 'string',
     outcome: 'string',
     status: 'string',
-    archived: 'boolean'
+    archived: 'boolean',
+    workPackageId: 'number'
   });
   if (vt) return vt;
+  // Ob es das Paket gibt, weiss db.js; hier nur, dass es eine Kennung ist.
+  if (data.workPackageId != null && !Number.isInteger(data.workPackageId))
+    return 'workPackageId must be a whole number';
   if ('title' in data && !(typeof data.title === 'string' && data.title.trim())) return 'title must not be empty';
   if ('status' in data && typeof data.status !== 'string') return 'status must be a string';
   if ('archived' in data && typeof data.archived !== 'boolean') return 'archived must be a boolean';
@@ -9390,6 +9394,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       }
       buchFrage[name] = tag;
     }
+    const paket = q.get('workPackage');
+    if (paket !== null) {
+      if (!/^\d{1,15}$/.test(paket)) {
+        jsonErr(res, 400, 'workPackage must be a whole number');
+        return;
+      }
+      buchFrage.workPackageId = Number(paket);
+    }
     if (buchFrage.from && buchFrage.to && buchFrage.from > buchFrage.to) {
       jsonErr(res, 400, 'from must not be after to');
       return;
@@ -9404,6 +9416,77 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // ── Arbeitspakete ──────────────────────────────────────────
+  //
+  // Die Gliederung eines Vorhabens in Arbeitspakete (siehe db.js). Anlegen und
+  // aendern darf ein Admin; einen Versuch einem Paket zuordnen darf jeder, das
+  // ist ein PATCH am Versuch. Geloescht wird nicht, nur ausgeblendet.
+  const paketTreffer = url.match(/^\/api\/work-packages\/(\d+)$/);
+  if (req.method === 'POST' && url === '/api/work-packages') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, ['code', 'title']);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { code: 'string', title: 'string' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { code: 20, title: 200 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        const id = db.insertWorkPackage(database, data);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'PATCH' && paketTreffer) {
+    if (requireAdmin(req, res)) return;
+    const id = parseInt(paketTreffer[1], 10);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vr = validateRequired(data, []);
+      if (vr) {
+        jsonErr(res, 400, vr);
+        return;
+      }
+      const vt = validateTypes(data, { code: 'string', title: 'string', archived: 'boolean' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      const vl = validateLengths(data, { code: 20, title: 200 });
+      if (vl) {
+        jsonErr(res, 400, vl);
+        return;
+      }
+      try {
+        if (db.updateWorkPackage(database, id, data)) broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
   if (req.method === 'POST' && url === '/api/experiment-runs') {

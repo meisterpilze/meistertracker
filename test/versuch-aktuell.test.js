@@ -19,6 +19,7 @@ function seite(opts = {}) {
     let currentLang = 'de';
     let pjOffen = 5;
     let experiments = [{ id: 5, runs: [{ id: 1, code: 'A-1' }] }];
+    let workPackages = [];
     const feldImVersuch = { id: 'pj-res', tagName: 'INPUT' };
     const knopfImVersuch = { tagName: 'BUTTON' };
     const versuch = {
@@ -65,6 +66,9 @@ function seite(opts = {}) {
       neuerStand: (e) => {
         experiments = e;
       },
+      neuePakete: (w) => {
+        workPackages = w;
+      },
       tippen: () => {
         document.activeElement = feldImVersuch;
       },
@@ -93,6 +97,15 @@ describe('offener Versuch bei neuem Datenstand', () => {
     const s = seite();
     s.renderVersuch();
     s.neuerStand([{ id: 5, runs: [], removedRuns: [{ id: 1, code: 'A-1' }] }]);
+    s.pjRefresh();
+    assert.equal(s.gezeichnet(), 2);
+  });
+
+  it('zeichnet neu, wenn anderswo ein Arbeitspaket dazukam', () => {
+    // Sonst fehlte es in der Auswahl, bis zufaellig etwas anderes neu zeichnet.
+    const s = seite();
+    s.renderVersuch();
+    s.neuePakete([{ id: 1, code: 'P1', title: 'Paket', archived: false }]);
     s.pjRefresh();
     assert.equal(s.gezeichnet(), 2);
   });
@@ -163,6 +176,7 @@ describe('Felder zum Anlegen beim Neuzeichnen', () => {
       let pjVerlaufOffen = null;
       let pjVersuchGezeigt = null;
       const experiments = [{ id: 5, runs: [] }, { id: 6, runs: [] }];
+      const workPackages = [];
       const pjExp = (id) => experiments.find((v) => v.id === id) || null;
       const pjDetail = () => '';
       const pjListe = () => '';

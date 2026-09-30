@@ -352,6 +352,7 @@ let mushroomStrains = [],
   movements = [],
   manualTasks = [],
   experiments = [],
+  workPackages = [], // Arbeitspakete des Vorhabens, siehe ARBEITSPAKETE
   projectNotes = [],
   projectDocs = null, // Vorhaben-Texte, erst beim Öffnen eines Reiters geladen
   projectDocsStamp = null,
@@ -642,6 +643,7 @@ function applyData(d) {
   movements = d.movements || d.scanLog || [];
   manualTasks = d.manualTasks || [];
   experiments = d.experiments || [];
+  workPackages = d.workPackages || [];
   projectNotes = d.projectNotes || [];
   // Die Vorhaben-Texte kommen nicht mit, nur ihre Marke. Hat jemand sie ersetzt,
   // gilt der geladene Stand als veraltet und wird beim nächsten Öffnen eines
@@ -15985,7 +15987,10 @@ function pjAusgangSelect(r) {
 // Eine Zeile in der Liste sagt in einem Blick, was der Ansatz ist, woraus er
 // besteht und wie weit er ist. Alles andere steht drinnen.
 function pjListenzeile(v) {
-  const gefaesse = v.runs.map((r) => r.code).join(', ');
+  // Das Arbeitspaket steht vor den Gefaessen: ein Blick sagt, wofuer der Ansatz
+  // laeuft.
+  const paket = v.workPackageId != null ? workPackages.find((w) => w.id === v.workPackageId) : null;
+  const gefaesse = [paket ? paket.code : '', v.runs.map((r) => r.code).join(', ')].filter(Boolean).join(' · ');
   const offen = v.runs.filter((r) => r.outcome === 'open').length;
   const zustand = v.runs.length
     ? offen
@@ -16016,7 +16021,68 @@ function pjListe() {
     `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
     '</div></div>' +
     pjArchiv() +
+    pjArbeitspakete() +
     pjLbZeitraum()
+  );
+}
+// ── Arbeitspakete ───────────────────────────────────────────
+//
+// Die Gliederung eines Vorhabens in Arbeitspakete: AP1, AP2
+// und so weiter. Anlegen, umbenennen und ausblenden darf ein Admin, hier unter
+// der Liste; einen Versuch zuordnen darf jeder, in seiner Ansicht. Was die
+// Pakete heissen, steht in der Datenbank und nicht hier.
+//
+// Ein Paket als "AP2 · Titel", und eines, das es nicht mehr gibt, als seine
+// Kennung: der Verlauf zeigt auch dann, dass da eines war.
+function pjApName(pakete, id) {
+  const w = (pakete || []).find((x) => x.id === Number(id));
+  return w ? w.code + ' · ' + w.title : '#' + id;
+}
+// Die Auswahl im Versuch. Angeboten werden die sichtbaren Pakete; ein
+// ausgeblendetes bleibt stehen, wo es schon steht. Ohne Pakete keine Auswahl.
+function pjApAuswahl(v) {
+  const angeboten = workPackages.filter((w) => !w.archived || w.id === v.workPackageId);
+  if (!angeboten.length) return '';
+  return (
+    `<label class="pj-ap">${esc(t('exp.wp'))}` +
+    `<select data-pj-exp="${v.id}" data-pj-feld="workPackageId">` +
+    `<option value=""${v.workPackageId == null ? ' selected' : ''}>${esc(t('exp.wpNone'))}</option>` +
+    angeboten
+      .map(
+        (w) =>
+          `<option value="${w.id}"${w.id === v.workPackageId ? ' selected' : ''}>${esc(w.code + ' · ' + w.title)}</option>`
+      )
+      .join('') +
+    '</select></label>'
+  );
+}
+let pjApOffen = false;
+function pjArbeitspakete() {
+  if (!(currentUser && currentUser.role === 'admin')) return '';
+  const zeilen = workPackages
+    .map(
+      (w) =>
+        `<div class="pj-run pj-ap-zeile${w.archived ? ' pj-ap-weg' : ''}">` +
+        `<input class="pj-ap-code" data-pj-ap="${w.id}" data-pj-apfeld="code" value="${esc(w.code)}" ` +
+        `maxlength="20" aria-label="${esc(t('exp.wpCode'))}">` +
+        `<input class="pj-ap-titel" data-pj-ap="${w.id}" data-pj-apfeld="title" value="${esc(w.title)}" ` +
+        `maxlength="200" aria-label="${esc(t('exp.wpTitle'))}">` +
+        `<button type="button" class="btn btn-sm fs-xs" data-pj-aparch="${w.id}">` +
+        `${esc(w.archived ? t('exp.wpShow') : t('exp.wpHide'))}</button></div>`
+    )
+    .join('');
+  return (
+    `<details class="card pj-sec pj-fold" data-pj-apfold="1"${pjApOffen ? ' open' : ''}>` +
+    `<summary class="sec">${esc(t('exp.wps', { n: workPackages.length }))}</summary>` +
+    `<p class="pj-count">${esc(t('exp.wpHint'))}</p>` +
+    zeilen +
+    '<div class="pj-run pj-run-new">' +
+    `<input id="pj-ap-new-code" class="pj-ap-code" placeholder="${esc(t('exp.wpCodePh'))}" maxlength="20" ` +
+    `aria-label="${esc(t('exp.wpCode'))}">` +
+    `<input id="pj-ap-new-title" class="pj-ap-titel" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200" ` +
+    `aria-label="${esc(t('exp.wpTitle'))}">` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-apadd="1">${esc(t('exp.wpAdd'))}</button>` +
+    '</div></details>'
   );
 }
 // Zwei Zeilen je Gefaess, auf jedem Geraet gleich: oben der Code und wofuer es
@@ -16126,6 +16192,7 @@ function pjDetail(v) {
       ? `<button type="button" class="btn btn-sm fs-xs" data-pj-finish="${v.id}">${esc(t('exp.finish'))}</button>`
       : '') +
     '</div></div>' +
+    pjApAuswahl(v) +
     (v.runs.length ? v.runs.map(pjGefaessZeile).join('') : `<p class="pj-empty">${esc(t('exp.noVessels'))}</p>`) +
     '<div class="pj-run pj-run-new">' +
     `<input id="pj-new-code" placeholder="${esc(t('exp.codePh'))}" maxlength="40">` +
@@ -16241,6 +16308,7 @@ function pjVerlaufWert(e, x) {
   if (e.entity === 'run' && e.field === 'outcome') return t('exp.out.' + x);
   if (e.field === 'status') return t('exp.hist.status.' + x);
   if (e.field === 'archived') return x === 'true' ? t('exp.hist.yes') : t('exp.hist.no');
+  if (e.field === 'workPackageId') return pjApName(workPackages, x);
   return x;
 }
 function pjVerlaufZeile(e, codes, fotoBild) {
@@ -16390,6 +16458,10 @@ function pjToggle(e) {
     pjLbOffen = det.open;
     return;
   }
+  if (det && det.dataset && det.dataset.pjApfold) {
+    pjApOffen = det.open;
+    return;
+  }
   if (!det || !det.dataset || !det.dataset.pjVerlauf) return;
   const id = Number(det.dataset.pjVerlauf);
   if (det.open) {
@@ -16411,7 +16483,9 @@ function pjToggle(e) {
 // war. Aendert sich das unter ihr, ist sie veraltet.
 let pjVersuchGezeigt = null;
 function pjVersuchStand() {
-  return JSON.stringify([pjOffen, experiments]);
+  // Die Arbeitspakete mit: ein Paket, das ein anderes Geraet anlegt oder
+  // umbenennt, steht sonst erst beim naechsten Neuzeichnen in der Auswahl.
+  return JSON.stringify([pjOffen, experiments, workPackages]);
 }
 // Wann die offene Vorhaben-Seite bei einem neuen Datenstand neu gezeichnet wird.
 //
@@ -16443,7 +16517,17 @@ function pjRefresh() {
 }
 // Die Felder zum Anlegen und der Zeitraum fuers Laborbuch: was darin steht und
 // noch nicht abgeschickt ist, uebersteht das Neuzeichnen derselben Ansicht.
-const PJ_ANLEGEN_FELDER = ['pj-new-code', 'pj-new-what', 'pj-new-vcode', 'pj-new-vtitle', 'pj-lb-von', 'pj-lb-bis'];
+const PJ_ANLEGEN_FELDER = [
+  'pj-new-code',
+  'pj-new-what',
+  'pj-new-vcode',
+  'pj-new-vtitle',
+  'pj-ap-new-code',
+  'pj-ap-new-title',
+  'pj-lb-von',
+  'pj-lb-bis',
+  'pj-lb-ap'
+];
 let pjGezeichnetFuer; // pjOffen beim letzten Zeichnen
 function renderVersuch() {
   const el = document.getElementById('pj-versuch');
@@ -16577,10 +16661,11 @@ function pjLbFoto(v, f, nr, codes) {
     `<div class="hash">SHA-256 ${esc(f.sha256)}</div></figcaption></figure>`
   );
 }
-function pjLbVersuch(v) {
+function pjLbVersuch(v, pakete) {
   // Das Laborbuch kennt jedes Gefaess, auch die entfernten, in einer Liste.
   const codes = pjVerlaufCodes({ runs: v.runs, removedRuns: [] }, v.history);
   const meta = [
+    v.workPackageId != null ? t('exp.wp') + ' ' + pjApName(pakete, v.workPackageId) : '',
     t('exp.hist.f.experiment.started') + ' ' + pjLbTag(v.started),
     t('exp.hist.f.experiment.ended') + ' ' + pjLbTag(v.ended),
     t('exp.hist.status.' + v.status),
@@ -16639,14 +16724,16 @@ function pjLbVersuch(v) {
 // der druckt.
 function pjLbHtml(buch, titel, wer) {
   const zeitraum = buch.from || buch.to;
+  const pakete = buch.workPackages || [];
   const kopf = [
+    buch.workPackageId != null ? t('exp.lbWpFilter', { name: pjApName(pakete, buch.workPackageId) }) : '',
     zeitraum ? t('exp.lbRange', { from: pjLbTag(buch.from), to: pjLbTag(buch.to) }) : '',
     t('exp.lbCreated', { d: fmtDtTime(buch.createdAt), user: wer || '—' })
   ]
     .filter(Boolean)
     .join(' · ');
   const inhalt = buch.experiments.length
-    ? buch.experiments.map(pjLbVersuch).join('')
+    ? buch.experiments.map((v) => pjLbVersuch(v, pakete)).join('')
     : `<p class="leer">${esc(t('exp.lbNone'))}</p>`;
   return (
     `<!doctype html><html lang="${esc(currentLang)}"><head><meta charset="utf-8">` +
@@ -16707,6 +16794,13 @@ function pjLbZeitraum() {
     `<input type="date" id="pj-lb-von" value="${localDateStr(new Date(heute.getFullYear(), 0, 1))}"></label>` +
     `<label class="pj-lb-feld">${esc(t('exp.lbTo'))}` +
     `<input type="date" id="pj-lb-bis" value="${localDateStr(heute)}"></label>` +
+    // Fuer den Bericht je Arbeitspaket; ohne Pakete gibt es nichts zu waehlen.
+    (workPackages.length
+      ? `<label class="pj-lb-feld">${esc(t('exp.wp'))}<select id="pj-lb-ap">` +
+        `<option value="">${esc(t('exp.lbWpAll'))}</option>` +
+        workPackages.map((w) => `<option value="${w.id}">${esc(w.code + ' · ' + w.title)}</option>`).join('') +
+        '</select></label>'
+      : '') +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-lbdruck="1">${esc(t('exp.lbPrint'))}</button>` +
     '</div></details>'
   );
@@ -16788,10 +16882,33 @@ function pjChange(e) {
     if (datei) pjDocImportieren(e.target.dataset.pjDocFor, datei);
     return;
   }
+  // Code oder Titel eines Arbeitspakets. Leer gibt es nicht: das Feld zeigt
+  // dann wieder, was gespeichert ist.
+  if (e.target.dataset && e.target.dataset.pjAp) {
+    const w = workPackages.find((x) => x.id === Number(e.target.dataset.pjAp));
+    const feldName = e.target.dataset.pjApfeld;
+    if (!w || !feldName) return;
+    const neuerWert = String(e.target.value || '').trim();
+    if (!neuerWert || neuerWert === w[feldName]) {
+      e.target.value = w[feldName];
+      return;
+    }
+    const alt = w[feldName];
+    w[feldName] = neuerWert;
+    apiPatch('/api/work-packages/' + w.id, { [feldName]: neuerWert }).then((antwort) => {
+      if (pjFehlgeschlagen(antwort)) {
+        w[feldName] = alt;
+        renderVersuch();
+      }
+    });
+    return;
+  }
   const feld = e.target.closest('[data-pj-feld]');
   if (!feld) return;
   const name = feld.dataset.pjFeld;
-  const wert = feld.value;
+  // Das Arbeitspaket kommt aus einer Auswahl als Text; gespeichert wird die
+  // Kennung, und keins heisst null.
+  const wert = name === 'workPackageId' ? (feld.value ? Number(feld.value) : null) : feld.value;
   if (feld.dataset.pjRun) {
     const id = Number(feld.dataset.pjRun);
     const v = pjExp(pjOffen);
@@ -16837,6 +16954,7 @@ function pjChange(e) {
 // Ein Anlegen, dessen Antwort noch aussteht; ein zweiter Tipp wartet.
 let pjGefaessUnterwegs = false;
 let pjVersuchUnterwegs = false;
+let pjPaketUnterwegs = false;
 function pjVersuchClick(e) {
   const aelter = e.target.closest('[data-pj-hist-mehr]');
   if (aelter) {
@@ -16942,14 +17060,66 @@ function pjVersuchClick(e) {
   if (e.target.closest('[data-pj-lbdruck]')) {
     const von = (document.getElementById('pj-lb-von') || {}).value || '';
     const bis = (document.getElementById('pj-lb-bis') || {}).value || '';
+    const paket = (document.getElementById('pj-lb-ap') || {}).value || '';
     if (von && bis && von > bis) {
       toast(t('exp.lbBadRange'), 'err');
       return true;
     }
-    const frage = [von ? 'from=' + encodeURIComponent(von) : '', bis ? 'to=' + encodeURIComponent(bis) : '']
+    const frage = [
+      von ? 'from=' + encodeURIComponent(von) : '',
+      bis ? 'to=' + encodeURIComponent(bis) : '',
+      paket ? 'workPackage=' + encodeURIComponent(paket) : ''
+    ]
       .filter(Boolean)
       .join('&');
     pjLbDrucken('/api/lab-book' + (frage ? '?' + frage : ''), t('exp.lbTitle'));
+    return true;
+  }
+  // Ein Arbeitspaket anlegen: Code und Titel, und der Code ist frei, gross
+  // oder klein geschrieben. Danach steht es in der Liste und in jeder Auswahl.
+  const paketNeu = e.target.closest('[data-pj-apadd]');
+  if (paketNeu) {
+    if (pjPaketUnterwegs) return true;
+    const code = ((document.getElementById('pj-ap-new-code') || {}).value || '').trim();
+    const title = ((document.getElementById('pj-ap-new-title') || {}).value || '').trim();
+    if (!code || !title) {
+      toast(t('exp.needCodeTitle'), 'err');
+      return true;
+    }
+    if (workPackages.some((w) => w.code.toLowerCase() === code.toLowerCase())) {
+      toast(t('exp.wpCodeTaken', { code }), 'err');
+      return true;
+    }
+    pjPaketUnterwegs = true;
+    paketNeu.disabled = true;
+    apiPost('/api/work-packages', { code, title }).then((r) => {
+      pjPaketUnterwegs = false;
+      if (!r || !r.id) {
+        paketNeu.disabled = false;
+        pjFehlgeschlagen(r || null);
+        return;
+      }
+      workPackages.push({ id: r.id, code, title, archived: false });
+      for (const id of ['pj-ap-new-code', 'pj-ap-new-title']) {
+        const feld = document.getElementById(id);
+        if (feld) feld.value = '';
+      }
+      renderVersuch();
+    });
+    return true;
+  }
+  // Ausblenden und wieder anbieten. Ein ausgeblendetes Paket bleibt an den
+  // Versuchen, die es schon tragen.
+  const paketWeg = e.target.closest('[data-pj-aparch]');
+  if (paketWeg) {
+    const w = workPackages.find((x) => x.id === Number(paketWeg.dataset.pjAparch));
+    if (!w) return true;
+    const archived = !w.archived;
+    apiPatch('/api/work-packages/' + w.id, { archived }).then((r) => {
+      if (pjFehlgeschlagen(r)) return;
+      w.archived = archived;
+      renderVersuch();
+    });
     return true;
   }
   const gefaess = e.target.closest('[data-pj-addrun]');
