@@ -2615,6 +2615,12 @@
               <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
             </button>
           </div>
+          <!-- Was in welchem Zelt steht, nach Sorte und Einzugstag. Gefüllt von
+               renderWorkTents(); ohne Fruchtungszone bleibt die Karte weg. -->
+          <div class="card wk-tents" id="wk-tents" hidden>
+            <div class="sec" style="margin: 0 0 6px" data-i18n="work.tentsTitle">In den Zelten</div>
+            <div id="wk-tents-list"></div>
+          </div>
           <!-- What is due, below the seven jobs that do it. This lived on the
                Dashboard, and the two screens pointed at each other: a strip here read
                "Weißt du nicht, was ansteht?" and sent you there, and the first thing

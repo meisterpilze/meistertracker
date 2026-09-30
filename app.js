@@ -6751,7 +6751,115 @@ function _dashLeftBehindRows(splits) {
     };
   });
 }
+// What is in each tent, on the screen the app opens on. The same answer lived
+// under Chargen → Standorte → Fruchtzelte, three taps deep and sorted by batch
+// number. Here a tent is a list of species with the day they went in —
+// "Nordlicht, 10 Beutel, seit 01.01." — oldest first, because the bags that have
+// been in longest are the ones to look at. Batches and bag numbers fold away
+// under each row. Drawn with the day's tasks, so it refreshes whenever they do —
+// which includes the 30-second tick, so what someone folded or unfolded is
+// remembered here rather than reset under their thumb.
+const _wkTentFold = { closed: new Set(), open: new Set() };
+function renderWorkTents() {
+  const card = document.getElementById('wk-tents');
+  if (!card) return;
+  const tents = fruitingZones();
+  card.hidden = !tents.length;
+  if (!tents.length) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const html = tents
+    .map((z) => {
+      const groups = new Map();
+      let total = 0;
+      for (const [bagId, d] of Object.entries(getZoneBags(z.id))) {
+        total++;
+        const day = d.since ? new Date(d.since) : null;
+        if (day) day.setHours(0, 0, 0, 0);
+        const key = (d.species || '') + '|' + (day ? day.getTime() : '');
+        if (!groups.has(key)) groups.set(key, { species: d.species || '—', day: day, batches: new Map() });
+        const g = groups.get(key);
+        if (!g.batches.has(d.batchId)) g.batches.set(d.batchId, []);
+        g.batches.get(d.batchId).push(bagId);
+      }
+      const rows = [...groups.values()]
+        .sort((a, b) => (a.day ? a.day.getTime() : 0) - (b.day ? b.day.getTime() : 0) || a.species.localeCompare(b.species))
+        .map((g) => {
+          let n = 0;
+          const detail = [...g.batches.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([bid, ids]) => {
+              n += ids.length;
+              const nums = ids
+                .map((id) => id.split('-').pop())
+                .sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
+                .join(', ');
+              return '<div><span class="wk-tent-batch">' + esc(bid) + '</span> ' + esc(nums) + '</div>';
+            })
+            .join('');
+          let when = '';
+          if (g.day) {
+            const days = Math.round((today - g.day) / 864e5);
+            when =
+              t('work.tentSince', { date: fmtDtShort(g.day) }) +
+              ' · ' +
+              (days <= 0 ? t('work.tentToday') : tp('work.tentDays', days));
+          }
+          const rk = z.id + '|' + g.species + '|' + (g.day ? g.day.getTime() : '');
+          return (
+            '<details class="wk-tent-row" data-fold="' +
+            esc(rk) +
+            '"' +
+            (_wkTentFold.open.has(rk) ? ' open' : '') +
+            '><summary>' +
+            '<span class="wk-tent-sp">' +
+            esc(g.species) +
+            '</span><span class="wk-tent-n">' +
+            esc(tp('dash.bags', n)) +
+            '</span>' +
+            (when ? '<span class="wk-tent-when">' + esc(when) + '</span>' : '') +
+            '</summary><div class="wk-tent-detail">' +
+            detail +
+            '</div></details>'
+          );
+        })
+        .join('');
+      return (
+        '<details class="wk-tent" data-tent="' +
+        esc(z.id) +
+        '"' +
+        (_wkTentFold.closed.has(z.id) ? '' : ' open') +
+        '><summary class="wk-tent-head">' +
+        '<span class="zone-dot" style="background:' +
+        esc(z.color || ZONE_ROLE_COLOR.fruiting) +
+        '"></span><span class="wk-tent-name">' +
+        esc(zoneDisplayName(z.id)) +
+        '</span><span class="wk-tent-total">' +
+        esc(tp('dash.bags', total)) +
+        '</span></summary>' +
+        (rows || '<div class="wk-tent-empty">' + esc(t('work.tentEmpty')) + '</div>') +
+        '</details>'
+      );
+    })
+    .join('');
+  const list = document.getElementById('wk-tents-list');
+  list.innerHTML = html;
+  // toggle does not bubble; capture catches it for every <details> in the list.
+  if (!list.dataset.bound) {
+    list.dataset.bound = '1';
+    list.addEventListener(
+      'toggle',
+      (ev) => {
+        const d = ev.target;
+        if (d.dataset.tent) _wkTentFold.closed[d.open ? 'delete' : 'add'](d.dataset.tent);
+        else if (d.dataset.fold) _wkTentFold.open[d.open ? 'add' : 'delete'](d.dataset.fold);
+      },
+      true
+    );
+  }
+}
 function renderDashBatchTasks() {
+  renderWorkTents();
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
   const week = buildWeekPlan();
@@ -8403,10 +8511,15 @@ function getZoneBags(zone) {
   scanLog.forEach((e) => {
     const tz = toZone(e.to),
       fz = toZone(e.from);
+    // since: when the bag came into this zone. A rack-to-rack move inside the
+    // zone keeps it — the bag did not arrive again.
     if (e.action === 'ADD' && tz === zone && e.bag)
-      bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
+      bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to, since: e.time };
     if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
-      if (tz === zone && e.bag) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
+      if (tz === zone && e.bag) {
+        const since = fz === tz && bags[e.bag] ? bags[e.bag].since : e.time;
+        bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to, since: since };
+      }
       // fz !== tz: a move WITHIN this zone (rack to rack — 'INC' to 'INC_R1',
       // which toZone() maps back to 'INC') inserted the bag and then deleted it
       // on the very next line, so the zone card, the fruiting summary and the

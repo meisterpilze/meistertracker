@@ -7499,6 +7499,89 @@ body:has(#m-camscan.open) .update-bar {
 .wk-tiles-row2 {
   margin-top: 12px;
 }
+/* In den Zelten: one block per tent, one tap-to-unfold row per species and day. */
+.wk-tents {
+  margin-top: 12px;
+  padding: 12px 16px;
+}
+.wk-tent + .wk-tent {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+}
+.wk-tent summary {
+  cursor: pointer;
+  list-style: none;
+}
+.wk-tent summary::-webkit-details-marker {
+  display: none;
+}
+.wk-tent-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-weight: 600;
+}
+.wk-tent-head .zone-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.wk-tent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-tent-total {
+  font-weight: 400;
+  color: var(--c-text-muted);
+  font-size: 0.875rem;
+}
+.wk-tent-row summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  padding: 6px 0 6px 18px;
+  min-height: 44px;
+  align-content: center;
+}
+.wk-tent-row + .wk-tent-row summary {
+  border-top: 1px dashed var(--c-border);
+}
+.wk-tent-sp {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-tent-n {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wk-tent-when {
+  grid-column: 1 / -1;
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+.wk-tent-detail {
+  padding: 0 0 8px 18px;
+  font-size: 0.8125rem;
+  color: var(--c-text-sec);
+}
+.wk-tent-batch {
+  font-family: monospace;
+  color: var(--c-text-muted);
+}
+.wk-tent-empty {
+  padding: 4px 0 4px 18px;
+  font-size: 0.875rem;
+  color: var(--c-text-muted);
+}
 /* 769–900px: a narrow desk window or a tablet in portrait. Below 769 the rule
    under this one takes over with a single column. */
 @media (max-width: 900px) {
