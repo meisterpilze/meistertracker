@@ -45,6 +45,12 @@ watchdog-error.log
 # Claude Code
 .claude/
 
+# Git worktrees. `.claude/worktrees/` is already covered by the line above;
+# this is the hand-made tree next to it, which was not. Nine worktrees have
+# sat here untracked since August, so `git status` on main has never been
+# empty, and an untracked entry that is always there is one nobody reads.
+.worktrees/
+
 # Internal working / audit docs (never commit)
 audit-*.md
 audit-plan.md
