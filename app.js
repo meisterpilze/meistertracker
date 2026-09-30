@@ -16008,7 +16008,8 @@ function pjListe() {
     `<input id="pj-new-vtitle" placeholder="${esc(t('exp.newTitlePh'))}" maxlength="200">` +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-newexp="1">${esc(t('exp.new'))}</button>` +
     '</div></div>' +
-    pjArchiv()
+    pjArchiv() +
+    pjLbZeitraum()
   );
 }
 // Zwei Zeilen je Gefaess, auf jedem Geraet gleich: oben der Code und wofuer es
@@ -16111,10 +16112,13 @@ function pjDetail(v) {
     `<div><button type="button" class="pj-zurueck" data-pj-back="1">← ${esc(t('exp.back'))}</button>` +
     `<div><span class="pj-v-code">${esc(v.code)}</span> <span class="pj-v-title">${esc(v.title)}</span></div>` +
     `<div class="pj-v-meta">${esc(t('exp.since', { d: v.started }))}${v.ended ? ' – ' + esc(v.ended) : ''}</div></div>` +
+    '<div class="pj-v-knoepfe">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-lbexp="${v.id}" ` +
+    `aria-label="${esc(t('exp.lbPrintNamed', { code: v.code }))}">${esc(t('exp.lbPrint'))}</button>` +
     (v.status === 'running'
       ? `<button type="button" class="btn btn-sm fs-xs" data-pj-finish="${v.id}">${esc(t('exp.finish'))}</button>`
       : '') +
-    '</div>' +
+    '</div></div>' +
     (v.runs.length ? v.runs.map(pjGefaessZeile).join('') : `<p class="pj-empty">${esc(t('exp.noVessels'))}</p>`) +
     '<div class="pj-run pj-run-new">' +
     `<input id="pj-new-code" placeholder="${esc(t('exp.codePh'))}" maxlength="40">` +
@@ -16375,6 +16379,10 @@ function pjToggle(e) {
     pjWegOffen[det.dataset.pjWeg] = det.open;
     return;
   }
+  if (det && det.dataset && det.dataset.pjLb) {
+    pjLbOffen = det.open;
+    return;
+  }
   if (!det || !det.dataset || !det.dataset.pjVerlauf) return;
   const id = Number(det.dataset.pjVerlauf);
   if (det.open) {
@@ -16426,9 +16434,9 @@ function pjRefresh() {
   if (versuch) renderVersuch();
   else renderProjekte(offen.id.replace('pj-', ''));
 }
-// Die Felder zum Anlegen: was darin steht und noch nicht abgeschickt ist,
-// uebersteht das Neuzeichnen derselben Ansicht.
-const PJ_ANLEGEN_FELDER = ['pj-new-code', 'pj-new-what', 'pj-new-vcode', 'pj-new-vtitle'];
+// Die Felder zum Anlegen und der Zeitraum fuers Laborbuch: was darin steht und
+// noch nicht abgeschickt ist, uebersteht das Neuzeichnen derselben Ansicht.
+const PJ_ANLEGEN_FELDER = ['pj-new-code', 'pj-new-what', 'pj-new-vcode', 'pj-new-vtitle', 'pj-lb-von', 'pj-lb-bis'];
 let pjGezeichnetFuer; // pjOffen beim letzten Zeichnen
 function renderVersuch() {
   const el = document.getElementById('pj-versuch');
@@ -16482,6 +16490,219 @@ async function pjPrintRun(id) {
   } else {
     printedFb(t('exp.printed', { code: r.code }));
   }
+}
+// ── Laborbuch drucken ───────────────────────────────────────
+//
+// Fuer einen Bericht, fuer eine Pruefung und fuers Archiv: ein Versuch oder
+// alle eines Zeitraums auf Papier, mit ihren Gefaessen, den Fotos samt
+// Pruefsumme und dem ganzen Verlauf. Gedruckt wird ueber den Druckdialog des
+// Browsers, und dort ist "Als PDF sichern" das, was man ablegt. Ein eigenes PDF
+// waere eine Bibliothek mehr fuer etwas, das jeder Browser schon kann.
+//
+// Ein eigenes Fenster wie bei der Arbeitsliste: das Blatt hat Papiermasse und
+// keine Seitenleiste, und die Anwendung dahinter bleibt, wie sie war. Die
+// Groessen stehen in pt und mm, weil Papier keine Schrifteinstellung liest.
+// Der Verlauf ist derselbe wie in der Anwendung (pjVerlaufZeile), nur ohne
+// Vorschaubilder: die Fotos stehen gross darueber.
+const PJ_LB_STIL =
+  '@page{size:A4;margin:14mm 14mm 16mm;@bottom-right{content:counter(page) " / " counter(pages);font:8pt Arial,sans-serif}}' +
+  'body{font:10pt/1.35 Arial,Helvetica,sans-serif;color:#000;margin:0}' +
+  '@media screen{body{max-width:182mm;margin:10mm auto;padding:0 4mm}}' +
+  'h1{font-size:16pt;margin:0 0 2pt}h2{font-size:13pt;margin:0 0 3pt;padding-bottom:2pt;border-bottom:1.5pt solid #000}' +
+  'h3{font-size:10.5pt;margin:10pt 0 3pt}.kopf{color:#444;font-size:9pt;margin-bottom:3pt}' +
+  'section{break-before:page}section:first-of-type{break-before:auto;margin-top:10pt}' +
+  '.meta{color:#333;font-size:9pt}.code{font-weight:bold}.leer{color:#666;font-style:italic;margin:0}' +
+  'table{width:100%;border-collapse:collapse;font-size:9pt}' +
+  'th,td{text-align:left;vertical-align:top;padding:2pt 4pt;border-bottom:0.5pt solid #bbb}' +
+  'th{border-bottom:1pt solid #000;font-size:8pt}tr,li,figure{break-inside:avoid}' +
+  '.text{white-space:pre-wrap;border-left:2pt solid #ccc;padding-left:6pt}.weg{color:#666}' +
+  '.fotos{display:flex;flex-wrap:wrap;gap:6pt}figure{margin:0;width:calc(50% - 3pt)}' +
+  'figure img{display:block;width:100%;height:auto;border:0.5pt solid #999}' +
+  'figure .leer{border:0.5pt dashed #999;padding:18pt 6pt;text-align:center}' +
+  'figcaption{font-size:8pt;margin-top:2pt}.hash{font-family:monospace;font-size:7pt;overflow-wrap:anywhere}' +
+  '.hist{list-style:none;margin:0;padding:0;font-size:9pt}.pj-hist{padding:2pt 0;border-bottom:0.5pt solid #ddd}' +
+  '.pj-hist-kopf{color:#444;font-size:8pt}.pj-hist-wert{white-space:pre-wrap}' +
+  'del{color:#555}ins{text-decoration:none;font-weight:bold}';
+// Gedruckt wird, wenn alle Bilder da sind; sonst kaemen leere Rahmen aufs Papier.
+const PJ_LB_DRUCK =
+  'function drucken(){var b=[].slice.call(document.images);' +
+  'Promise.all(b.map(function(i){return i.complete?0:new Promise(function(r){i.onload=i.onerror=r})}))' +
+  '.then(function(){setTimeout(function(){window.print()},200)})}' +
+  "if(document.readyState==='complete')drucken();else window.addEventListener('load',drucken)";
+// Ein Tag aus dem Datumsfeld so, wie er in der Anwendung steht.
+function pjLbTag(tag) {
+  return tag ? fmtDt(parseDateStr(tag)) : '—';
+}
+// Wer etwas entfernt hat und wann. Auf dem Papier gibt es keine Klappe, hinter
+// der das Entfernte liegt; es steht mit in der Liste und sagt, dass es weg ist.
+function pjLbEntfernt(x) {
+  if (!x.removedAt) return '';
+  return x.removedBy
+    ? t('exp.lbRemovedBy', { d: fmtDtTime(x.removedAt), user: x.removedBy })
+    : t('exp.removedAt', { d: fmtDtTime(x.removedAt) });
+}
+function pjLbGefaess(r) {
+  const verknuepft = [r.cultureId, r.batchId].filter(Boolean).join(' · ');
+  return (
+    `<tr${r.removedAt ? ' class="weg"' : ''}>` +
+    `<td class="code">${esc(r.code)}</td><td>${esc(r.what)}</td><td>${esc(r.result)}</td>` +
+    `<td>${esc(t('exp.out.' + r.outcome))}</td><td>${esc(verknuepft)}</td>` +
+    `<td>${esc(pjLbEntfernt(r) || t('exp.lbActive'))}</td></tr>`
+  );
+}
+// Ein Foto mit allem, was es belegt: wann, von wem, an welchem Gefaess, und
+// seine Pruefsumme. Mit ihr laesst sich spaeter zeigen, dass eine Datei im
+// Archiv genau die ist, die an dem Tag hochgeladen wurde. Ein endgueltig
+// geloeschtes Foto hat kein Bild mehr, seine Pruefsumme steht trotzdem da.
+function pjLbFoto(v, f, nr, codes) {
+  const wann = fmtDtTime(f.uploadedAt);
+  const bild = f.purged
+    ? `<div class="leer">${esc(t('exp.purged'))}</div>`
+    : `<img src="${esc('/api/experiments/' + v.id + '/photos/' + encodeURIComponent(f.uuid))}" ` +
+      `alt="${esc(t('exp.photoAlt', { n: nr, d: wann }))}">`;
+  const zeile = [t('exp.lbPhoto', { n: nr }), wann, f.uploadedBy, f.runId ? codes[f.runId] : '']
+    .filter(Boolean)
+    .join(' · ');
+  const weg = pjLbEntfernt(f);
+  return (
+    `<figure${f.removedAt ? ' class="weg"' : ''}>${bild}<figcaption>${esc(zeile)}` +
+    (weg ? '<br>' + esc(weg) : '') +
+    `<div class="hash">SHA-256 ${esc(f.sha256)}</div></figcaption></figure>`
+  );
+}
+function pjLbVersuch(v) {
+  // Das Laborbuch kennt jedes Gefaess, auch die entfernten, in einer Liste.
+  const codes = pjVerlaufCodes({ runs: v.runs, removedRuns: [] }, v.history);
+  const meta = [
+    t('exp.hist.f.experiment.started') + ' ' + pjLbTag(v.started),
+    t('exp.hist.f.experiment.ended') + ' ' + pjLbTag(v.ended),
+    t('exp.hist.status.' + v.status),
+    v.archived ? t('exp.lbArchived') : ''
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const text = (titel, inhalt) =>
+    `<h3>${esc(titel)}</h3>` + (inhalt ? `<div class="text">${esc(inhalt)}</div>` : '<p class="leer">—</p>');
+  const spalten = [
+    t('exp.hist.f.run.code'),
+    t('exp.hist.f.run.what'),
+    t('exp.hist.f.run.result'),
+    t('exp.hist.f.run.outcome'),
+    t('exp.lbLink'),
+    t('exp.lbState')
+  ];
+  const gefaesse = v.runs.length
+    ? '<table><thead><tr>' +
+      spalten.map((s) => `<th>${esc(s)}</th>`).join('') +
+      '</tr></thead><tbody>' +
+      v.runs.map(pjLbGefaess).join('') +
+      '</tbody></table>'
+    : `<p class="leer">${esc(t('exp.noVessels'))}</p>`;
+  const fotos = v.photos.length
+    ? '<div class="fotos">' + v.photos.map((f, i) => pjLbFoto(v, f, i + 1, codes)).join('') + '</div>'
+    : `<p class="leer">${esc(t('exp.lbNoPhotos'))}</p>`;
+  // Von oben nach unten, wie ein Laborbuch sich liest: das Aelteste zuerst. Der
+  // Ausgangsstand ist eine Zeile, wie in der Anwendung.
+  const zeilen = v.history.filter((e) => e.action !== 'baseline').map((e) => pjVerlaufZeile(e, codes, null));
+  const anfang = v.history.find((e) => e.action === 'baseline');
+  if (anfang) {
+    zeilen.unshift(
+      `<li class="pj-hist"><div class="pj-hist-kopf">${esc(fmtDtTime(anfang.at))}</div>` +
+        `<div class="pj-hist-was">${esc(t('exp.hist.baseline'))}</div></li>`
+    );
+  }
+  const verlauf = zeilen.length
+    ? '<ul class="hist">' + zeilen.join('') + '</ul>'
+    : `<p class="leer">${esc(t('exp.lbHistNone'))}</p>`;
+  return (
+    `<section><h2><span class="code">${esc(v.code)}</span> ${esc(v.title)}</h2>` +
+    `<div class="meta">${esc(meta)}</div>` +
+    `<h3>${esc(t('exp.lbRuns'))}</h3>` +
+    gefaesse +
+    text(t('exp.hist.f.experiment.recipe'), v.recipe) +
+    text(t('exp.conclusion'), v.outcome) +
+    `<h3>${esc(t('exp.photos', { n: v.photos.length }))}</h3>` +
+    fotos +
+    `<h3>${esc(t('exp.hist'))}</h3>` +
+    verlauf +
+    '</section>'
+  );
+}
+// Das ganze Blatt. buch ist die Antwort von /api/lab-book, wer der Name dessen,
+// der druckt.
+function pjLbHtml(buch, titel, wer) {
+  const zeitraum = buch.from || buch.to;
+  const kopf = [
+    zeitraum ? t('exp.lbRange', { from: pjLbTag(buch.from), to: pjLbTag(buch.to) }) : '',
+    t('exp.lbCreated', { d: fmtDtTime(buch.createdAt), user: wer || '—' })
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const inhalt = buch.experiments.length
+    ? buch.experiments.map(pjLbVersuch).join('')
+    : `<p class="leer">${esc(t('exp.lbNone'))}</p>`;
+  return (
+    `<!doctype html><html lang="${esc(currentLang)}"><head><meta charset="utf-8">` +
+    `<title>${esc(titel)}</title><style>${PJ_LB_STIL}</style></head><body>` +
+    `<h1>${esc(titel)}</h1><div class="kopf">${esc(kopf)}</div>` +
+    (zeitraum ? `<div class="kopf">${esc(t('exp.lbNote'))}</div>` : '') +
+    inhalt +
+    '<scr' +
+    'ipt>' +
+    PJ_LB_DRUCK +
+    '<\/scr' +
+    'ipt></body></html>'
+  );
+}
+// Das Fenster geht im Tippen selbst auf und nicht erst, wenn die Daten da sind:
+// eines, das eine Anfrage spaeter kommt, haelt der Browser fuer Werbung und
+// blockiert es. Bis die Daten da sind, sagt es, dass es arbeitet.
+function pjLbDrucken(pfad, titel) {
+  const win = window.open('', '_blank');
+  if (!win) {
+    toast(t('worklist.popupBlocked'), 'err');
+    return Promise.resolve(false);
+  }
+  win.document.write(
+    `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titel)}</title></head>` +
+      `<body><p>${esc(t('exp.lbPreparing'))}</p></body></html>`
+  );
+  win.document.close();
+  const wer = (currentUser && currentUser.username) || '';
+  return apiGet(pfad).then(
+    (buch) => {
+      // Wer das Fenster schon zugemacht hat, will nichts mehr drucken.
+      if (win.closed) return false;
+      win.document.open();
+      win.document.write(pjLbHtml(buch, titel, wer));
+      win.document.close();
+      return true;
+    },
+    (e) => {
+      if (!win.closed) win.close();
+      toast(t('exp.lbErr', { err: (e && e.message) || '' }), 'err');
+      return false;
+    }
+  );
+}
+// Der Zeitraum fuer das Laborbuch, unter der Liste. Vorgeschlagen ist das
+// laufende Jahr bis heute: so fragen Berichte meist.
+let pjLbOffen = false;
+function pjLbZeitraum() {
+  if (!experiments.length) return '';
+  const heute = new Date();
+  return (
+    `<details class="card pj-sec pj-fold" data-pj-lb="1"${pjLbOffen ? ' open' : ''}>` +
+    `<summary class="sec">${esc(t('exp.lb'))}</summary>` +
+    `<p class="pj-count">${esc(t('exp.lbHint'))}</p>` +
+    '<div class="pj-bar pj-lb-bar">' +
+    `<label class="pj-lb-feld">${esc(t('exp.lbFrom'))}` +
+    `<input type="date" id="pj-lb-von" value="${localDateStr(new Date(heute.getFullYear(), 0, 1))}"></label>` +
+    `<label class="pj-lb-feld">${esc(t('exp.lbTo'))}` +
+    `<input type="date" id="pj-lb-bis" value="${localDateStr(heute)}"></label>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-pj-lbdruck="1">${esc(t('exp.lbPrint'))}</button>` +
+    '</div></details>'
+  );
 }
 // Der Griff zur Kamera. `capture="environment"` oeffnet am Telefon direkt die
 // Ruecklinse statt der Galerie. Zusammengedrueckt wird im Browser mit derselben
@@ -16700,6 +16921,28 @@ function pjVersuchClick(e) {
   const drucken = e.target.closest('[data-pj-label]');
   if (drucken) {
     pjPrintRun(Number(drucken.dataset.pjLabel));
+    return true;
+  }
+  // Das Laborbuch: ein Versuch aus seiner Ansicht, die eines Zeitraums aus der
+  // Liste. Ohne Datum bleibt die Seite offen: ohne Anfang ab dem ersten Versuch,
+  // ohne Ende bis heute.
+  const buchVersuch = e.target.closest('[data-pj-lbexp]');
+  if (buchVersuch) {
+    const v = pjExp(Number(buchVersuch.dataset.pjLbexp));
+    if (v) pjLbDrucken('/api/lab-book?experiment=' + v.id, t('exp.lbTitle') + ' · ' + v.code);
+    return true;
+  }
+  if (e.target.closest('[data-pj-lbdruck]')) {
+    const von = (document.getElementById('pj-lb-von') || {}).value || '';
+    const bis = (document.getElementById('pj-lb-bis') || {}).value || '';
+    if (von && bis && von > bis) {
+      toast(t('exp.lbBadRange'), 'err');
+      return true;
+    }
+    const frage = [von ? 'from=' + encodeURIComponent(von) : '', bis ? 'to=' + encodeURIComponent(bis) : '']
+      .filter(Boolean)
+      .join('&');
+    pjLbDrucken('/api/lab-book' + (frage ? '?' + frage : ''), t('exp.lbTitle'));
     return true;
   }
   const gefaess = e.target.closest('[data-pj-addrun]');

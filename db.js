@@ -7567,6 +7567,107 @@ function listExperiments(db) {
     .map((e) => ({ id: e.id, ..._versuchStand(e), ...fach(e.id) }));
 }
 
+// ── Laborbuch zum Drucken ───────────────────────────────────
+//
+// Was ein Pruefer sehen will, wenn er nachfragt, und was Jahre spaeter noch
+// belegen muss, was gemacht wurde: jeder Versuch mit allem, was an ihm haengt,
+// auch dem Entfernten, dazu sein Verlauf und die Pruefsummen seiner Fotos. Die
+// Oberflaeche macht daraus ein Blatt zum Drucken oder als PDF Sichern.
+//
+//   experimentId  nur dieser Versuch
+//   from, to      ein Zeitraum in Tagen (JJJJ-MM-TT, beide einschliesslich).
+//                 Dazu gehoert jeder Versuch, der in ihm lief oder an dem in ihm
+//                 gearbeitet wurde. Verlauf und Fotos kommen nur aus dem
+//                 Zeitraum; Felder und Gefaesse stehen, wie sie heute sind, denn
+//                 wie sie damals standen, sagt der Verlauf.
+//   ohne beides   alle Versuche mit allem
+//
+// Ein Tag beginnt um Mitternacht in der Zeit des Servers. Der steht im Labor,
+// und seine Zeit ist die, in der dort gearbeitet wird.
+function _tagesAnfang(tag, plus) {
+  const [j, m, t] = tag.split('-').map(Number);
+  return new Date(j, m - 1, t + (plus || 0)).toISOString();
+}
+function labBook(db, opts = {}) {
+  const zeitraum = !!(opts.from || opts.to);
+  // Zeitpunkte stehen als ISO-Text in UTC und lassen sich als Text vergleichen.
+  const ab = opts.from ? _tagesAnfang(opts.from) : '';
+  const vor = opts.to ? _tagesAnfang(opts.to, 1) : '9999';
+  const imZeitraum = (at) => !zeitraum || (at >= ab && at < vor);
+  let versuche;
+  if (opts.experimentId != null) {
+    versuche = db.prepare('SELECT * FROM experiments WHERE id=?').all(opts.experimentId);
+  } else {
+    versuche = db.prepare('SELECT * FROM experiments ORDER BY started, id').all();
+    if (zeitraum) {
+      // Der Ausgangsstand und eine zurueckgespielte Sicherung sind keine Arbeit
+      // am Versuch. Sie zoegen sonst jeden Versuch in den Zeitraum, in dem sie
+      // geschrieben wurden.
+      const bearbeitet = new Set(
+        db
+          .prepare(
+            "SELECT DISTINCT experiment_id AS v FROM lab_history WHERE at>=? AND at<? AND action NOT IN ('baseline','backup')"
+          )
+          .all(ab, vor)
+          .map((z) => z.v)
+      );
+      const von = opts.from || '';
+      const bis = opts.to || '9999-12-31';
+      versuche = versuche.filter((e) => (e.started <= bis && (!e.ended || e.ended >= von)) || bearbeitet.has(e.id));
+    }
+  }
+  const konten = new Map(
+    db
+      .prepare('SELECT id, username FROM users')
+      .all()
+      .map((u) => [u.id, u.username])
+  );
+  const gefaesse = db.prepare('SELECT * FROM experiment_runs WHERE experiment_id=? ORDER BY sort, id');
+  const fotos = db.prepare('SELECT * FROM experiment_photos WHERE experiment_id=? ORDER BY uploaded_at, id');
+  return {
+    createdAt: new Date().toISOString(),
+    from: opts.from || null,
+    to: opts.to || null,
+    experiments: versuche.map((e) => {
+      const verlauf = listExperimentHistory(db, e.id);
+      // Wer ein Foto hochgeladen oder etwas entfernt hat, steht mit Namen im
+      // Verlauf, auch wenn das Konto inzwischen weg ist; die Spalten kennen nur
+      // die Nummer, und die ist dann leer. Sie gelten deshalb nur, wo der
+      // Verlauf schweigt, etwa bei einem Foto von vor dem Verlauf.
+      const hochgeladen = new Map();
+      const entfernt = new Map();
+      for (const x of verlauf) {
+        if (x.entity === 'photo' && x.action === 'create') hochgeladen.set(x.entityId, x.user);
+        if (x.action === 'remove') entfernt.set(x.entity + ':' + x.entityId, x.user);
+      }
+      const entferntVon = (art, z) =>
+        z.removed_at ? entfernt.get(art + ':' + z.id) || konten.get(z.removed_by) || '' : '';
+      return {
+        id: e.id,
+        ..._versuchStand(e),
+        runs: gefaesse.all(e.id).map((r) => ({
+          id: r.id,
+          ..._ansatzStand(r),
+          removedAt: r.removed_at || null,
+          removedBy: entferntVon('run', r)
+        })),
+        photos: fotos
+          .all(e.id)
+          .filter((f) => imZeitraum(f.uploaded_at))
+          .map((f) => ({
+            id: f.id,
+            ..._fotoDaten(f),
+            uploadedBy: hochgeladen.get(f.id) || konten.get(f.uploaded_by) || '',
+            removedAt: f.removed_at || null,
+            removedBy: entferntVon('photo', f),
+            purged: !f.rel_path
+          })),
+        history: verlauf.filter((x) => imZeitraum(x.at))
+      };
+    })
+  };
+}
+
 // `wer` ist bei allen schreibenden Funktionen dieses Abschnitts die Sitzung aus
 // req.authUser; sie landet im Verlauf.
 function insertExperiment(db, e, wer) {
@@ -11812,6 +11913,7 @@ module.exports = {
   restoreExperimentRun,
   listExperimentHistory,
   experimentHistoryPage,
+  labBook,
   markBackupRestore,
   historyAfter,
   lastHistoryId,

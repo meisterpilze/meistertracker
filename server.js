@@ -9344,6 +9344,47 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+  // Das Laborbuch zum Drucken: ein Versuch (?experiment=id) oder die Versuche
+  // eines Zeitraums (?from=JJJJ-MM-TT&to=JJJJ-MM-TT), ohne beides alle. Mit
+  // allem, was an ihnen haengt, auch dem Entfernten, dem Verlauf und den
+  // Pruefsummen der Fotos (siehe labBook). Nur lesen.
+  if (req.method === 'GET' && url === '/api/lab-book') {
+    const q = new URL(req.url, 'http://localhost').searchParams;
+    const buchFrage = {};
+    const versuch = q.get('experiment');
+    if (versuch !== null) {
+      if (!/^\d{1,15}$/.test(versuch)) {
+        jsonErr(res, 400, 'experiment must be a whole number');
+        return;
+      }
+      buchFrage.experimentId = Number(versuch);
+    }
+    for (const name of ['from', 'to']) {
+      const tag = q.get(name);
+      if (tag === null) continue;
+      const vd = validateDay(tag, name);
+      if (vd) {
+        jsonErr(res, 400, vd);
+        return;
+      }
+      buchFrage[name] = tag;
+    }
+    if (buchFrage.from && buchFrage.to && buchFrage.from > buchFrage.to) {
+      jsonErr(res, 400, 'from must not be after to');
+      return;
+    }
+    try {
+      const buch = db.labBook(database, buchFrage);
+      if (buchFrage.experimentId != null && !buch.experiments.length) {
+        jsonErr(res, 404, 'unknown experiment');
+        return;
+      }
+      jsonOk(res, buch);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   if (req.method === 'POST' && url === '/api/experiment-runs') {
     jsonBody(req, res, (e, data) => {
       if (e) {

@@ -8761,6 +8761,30 @@ body:has(#m-camscan.open) .update-bar {
   color: var(--c-text-muted);
   margin-top: 2px;
 }
+/* Drucken und Abschliessen stehen zusammen rechts im Kopf und brechen am
+   Telefon gemeinsam unter den Titel. */
+.pj-v-knoepfe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Der Zeitraum fuers Laborbuch: zwei Datumsfelder, die Beschriftung darueber,
+   der Knopf auf Hoehe der Felder. */
+.pj-lb-bar {
+  align-items: flex-end;
+}
+.pj-lb-feld {
+  flex: 1 1 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.pj-lb-feld input {
+  width: 100%;
+}
 .pj-run {
   display: flex;
   flex-wrap: wrap;
