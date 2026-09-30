@@ -2025,6 +2025,7 @@ window.LANG['pt'] = {
   'server.noResponse': 'Servidor n\u00e3o responde. Verifique manualmente.',
   'server.statusLabel': 'Estado',
   'server.versionLabel': 'Vers\u00e3o',
+  'server.codeLabel': 'Vers\u00e3o do c\u00f3digo',
   'server.platformLabel': 'Plataforma',
   'server.nodeLabel': 'Node.js',
   'server.uptimeLabel': 'Tempo de atividade',

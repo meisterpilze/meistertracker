@@ -125,6 +125,25 @@ const CERT_CRT = path.join(DIR, 'certs', 'server.crt');
 const DB_FILE = process.env.MT_DB_FILE || path.join(DIR, 'meistertracker.db');
 const CAL_DIR = path.join(DIR, 'calendars');
 
+// Which state of the code is running: the commit and its date. package.json
+// has said 1.0.0 all along, so whether an update actually arrived was only
+// visible on the machine itself — and an update that cannot fetch carries on
+// with the old code without a word. Read once at start-up, because the code
+// only changes with a restart; asynchronously, so start-up does not wait for
+// git. Without git (a ZIP copy) it stays null. Admin-only, like the Node
+// version: /api/health.
+function readCodeState(dir, done) {
+  execFile('git', ['log', '-1', '--format=%h%x09%cI'], { cwd: dir, timeout: 5000, windowsHide: true }, (err, out) => {
+    if (err) return done(null);
+    const [commit, date] = String(out).trim().split('\t');
+    done(/^[0-9a-f]{7,40}$/.test(commit || '') ? { commit, date: date || null } : null);
+  });
+}
+let codeState = null;
+readCodeState(DIR, (state) => {
+  codeState = state;
+});
+
 // Windows printer name — must match exactly what shows in Devices and Printers
 // Validated to prevent command injection via PowerShell/WMI
 const PRINTER_NAME_RAW = process.env.PRINTER_NAME || 'ZDesigner GK420d';
@@ -6809,6 +6828,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     if (authUser && authUser.role === 'admin') {
       health.platform = process.platform;
       health.nodeVersion = process.version;
+      health.code = codeState;
       health.sseClients = sseClients.size;
       health.memory = {
         rss: Math.round(mem.rss / 1024 / 1024),
@@ -6878,6 +6898,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       status: 'ok',
       uptime: Math.round(process.uptime()),
       version: require('./package.json').version,
+      code: codeState,
       nodeVersion: process.version,
       platform: process.platform,
       timestamp: new Date().toISOString()

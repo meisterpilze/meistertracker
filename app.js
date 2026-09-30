@@ -14009,6 +14009,13 @@ async function loadServerTab() {
       ':</b> ' +
       esc(h.version) +
       '</div>' +
+      // The commit tells whether an update arrived; the version above never
+      // changes. Missing without git on the server.
+      '<div><b>' +
+      t('server.codeLabel') +
+      ':</b> ' +
+      (h.code ? esc(h.code.commit) + (h.code.date ? ' · ' + esc(fmtDtTime(h.code.date)) : '') : '–') +
+      '</div>' +
       '<div><b>' +
       t('server.platformLabel') +
       ':</b> ' +

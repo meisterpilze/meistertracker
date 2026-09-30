@@ -90,7 +90,7 @@ describe('/api/health', () => {
     assert.match(handler, /if \(authUser && authUser\.role === 'admin'\)/);
     // The fields worth not handing out: an exact Node version narrows which
     // CVEs are worth trying.
-    for (const field of ['health.platform', 'health.nodeVersion', 'health.memory', 'health.backup']) {
+    for (const field of ['health.platform', 'health.nodeVersion', 'health.code', 'health.memory', 'health.backup']) {
       const at = handler.indexOf(field);
       assert.ok(at > handler.indexOf("authUser.role === 'admin'"), field + ' is outside the admin branch');
     }

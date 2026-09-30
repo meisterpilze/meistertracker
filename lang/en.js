@@ -2008,6 +2008,7 @@ window.LANG['en'] = {
   'server.noResponse': 'Server not responding. Please check manually.',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
+  'server.codeLabel': 'Code version',
   'server.platformLabel': 'Platform',
   'server.nodeLabel': 'Node.js',
   'server.uptimeLabel': 'Uptime',

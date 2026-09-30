@@ -2032,6 +2032,7 @@ window.LANG['de'] = {
   'server.noResponse': 'Server antwortet nicht. Bitte manuell pr\u00fcfen.',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
+  'server.codeLabel': 'Code-Stand',
   'server.platformLabel': 'Plattform',
   'server.nodeLabel': 'Node.js',
   'server.uptimeLabel': 'Uptime',
