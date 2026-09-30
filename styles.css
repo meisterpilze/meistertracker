@@ -7499,55 +7499,70 @@ body:has(#m-camscan.open) .update-bar {
 .wk-tiles-row2 {
   margin-top: 12px;
 }
-/* In den Zelten: one block per tent, one tap-to-unfold row per species and day. */
+/* Wo steht was: one chip per zone, and under the chosen one a tap-to-unfold row
+   per species and move-in day. The date line is the reason the card exists, so
+   it is set in the secondary text colour rather than muted. */
 .wk-tents {
   margin-top: 12px;
   padding: 12px 16px;
 }
-.wk-tent + .wk-tent {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--c-border);
-}
-.wk-tent summary {
-  cursor: pointer;
-  list-style: none;
-}
-.wk-tent summary::-webkit-details-marker {
-  display: none;
-}
-.wk-tent-head {
+.wk-zchips {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wk-zchip {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
+  gap: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 22px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.wk-zchip[aria-pressed='true'] {
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
   font-weight: 600;
 }
-.wk-tent-head .zone-dot {
-  width: 10px;
-  height: 10px;
+.wk-zchip .zone-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex: none;
 }
-.wk-tent-name {
-  flex: 1;
+.wk-zchip-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.wk-tent-total {
-  font-weight: 400;
+.wk-zchip-n {
   color: var(--c-text-muted);
-  font-size: 0.875rem;
+  font-weight: 600;
+}
+.wk-zone-rows {
+  margin-top: 8px;
+  border-top: 1px solid var(--c-border);
 }
 .wk-tent-row summary {
   display: grid;
   grid-template-columns: 1fr auto;
   column-gap: 8px;
-  padding: 6px 0 6px 18px;
+  padding: 6px 0;
   min-height: 44px;
   align-content: center;
+  cursor: pointer;
+  list-style: none;
+}
+.wk-tent-row summary::-webkit-details-marker {
+  display: none;
 }
 .wk-tent-row + .wk-tent-row summary {
   border-top: 1px dashed var(--c-border);
@@ -7565,11 +7580,11 @@ body:has(#m-camscan.open) .update-bar {
 }
 .wk-tent-when {
   grid-column: 1 / -1;
-  font-size: 0.8125rem;
-  color: var(--c-text-muted);
+  font-size: 0.875rem;
+  color: var(--c-text-sec);
 }
 .wk-tent-detail {
-  padding: 0 0 8px 18px;
+  padding: 0 0 8px;
   font-size: 0.8125rem;
   color: var(--c-text-sec);
 }
@@ -7578,9 +7593,67 @@ body:has(#m-camscan.open) .update-bar {
   color: var(--c-text-muted);
 }
 .wk-tent-empty {
-  padding: 4px 0 4px 18px;
+  padding: 10px 0 4px;
   font-size: 0.875rem;
   color: var(--c-text-muted);
+}
+/* Only there when something is wrong. Sized to its text, not stretched. */
+.wk-alert {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--c-amber-border);
+  border-radius: var(--radius);
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-alert[hidden] {
+  display: none;
+}
+/* The task card's heading is the day in one line and the switch for the list. */
+.wk-today {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-today-sum {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--c-text-sec);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-today-chev {
+  color: var(--c-text-muted);
+  transition: transform 0.15s;
+}
+.wk-today[aria-expanded='true'] .wk-today-chev {
+  transform: rotate(180deg);
+}
+.wk-today[aria-expanded='true'] {
+  margin-bottom: 8px;
+}
+#dash-batch-tasks-card.wk-tasks-closed #dash-batch-tasks {
+  display: none;
 }
 /* Two columns from 900px down, phones included. One column put seven full-width
    tiles above everything else on the start screen. Two fit since the titles
@@ -7698,6 +7771,24 @@ body:has(#m-camscan.open) .update-bar {
   }
   .wk-tile-when {
     display: none;
+  }
+  /* The weekly jobs (Labor, Körnerbrut, Substrat) three to a row, smaller and
+     without the drawing: they are there when needed, not what the eye lands on. */
+  .wk-tiles-small {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .wk-tiles-small .wk-tile {
+    min-height: 56px;
+    padding: 8px 10px;
+  }
+  .wk-tiles-small .wk-tile-art {
+    display: none;
+  }
+  .wk-tiles-small .wk-tile-t {
+    max-width: none;
+    font-size: 0.9375rem;
+    overflow-wrap: anywhere;
   }
 }
 
