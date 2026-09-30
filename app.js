@@ -5412,7 +5412,9 @@ function _undoMove(snap) {
     groups.get(key).bags.push(s.bag);
   });
   let back = 0;
-  groups.forEach((g) => moveBagsTo(g.batch, g.bags, g.dest, (m) => (back += m || 0)));
+  // Marked 'undo', so the bags get their old move-in day back in getZoneBags()
+  // instead of arriving today.
+  groups.forEach((g) => moveBagsTo(g.batch, g.bags, g.dest, (m) => (back += m || 0), { reason: 'undo' }));
   updateSD();
   renderBatches();
   renderStatus();
@@ -8618,16 +8620,22 @@ function getRackBags(rackId) {
 const selectedLocBags = new Map(); // bagId → {batchId, loc}
 function getZoneBags(zone) {
   const bags = {};
+  // bag → its since when it last left this zone, for a move that is undone.
+  const left = {};
   scanLog.forEach((e) => {
     const tz = toZone(e.to),
       fz = toZone(e.from);
     // since: when the bag came into this zone. A rack-to-rack move inside the
-    // zone keeps it — the bag did not arrive again.
+    // zone keeps it — the bag did not arrive again. Neither did a bag whose
+    // move out was taken back with Rückgängig: _undoMove() writes the way back
+    // with reason 'undo', and the bag gets the date it left with.
     if (e.action === 'ADD' && tz === zone && e.bag)
       bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to, since: e.time };
     if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
       if (tz === zone && e.bag) {
-        const since = fz === tz && bags[e.bag] ? bags[e.bag].since : e.time;
+        let since = e.time;
+        if (fz === tz && bags[e.bag]) since = bags[e.bag].since;
+        else if (e.reason === 'undo' && left[e.bag]) since = left[e.bag];
         bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to, since: since };
       }
       // fz !== tz: a move WITHIN this zone (rack to rack — 'INC' to 'INC_R1',
@@ -8636,7 +8644,10 @@ function getZoneBags(zone) {
       // dashboard zone count all read 0 right after a successful move. It also
       // emptied the stocktake's expected list, so every bag scanned on the walk
       // was judged "recorded elsewhere" and got a spurious correcting MOVE.
-      if (fz === zone && fz !== tz && e.bag) delete bags[e.bag];
+      if (fz === zone && fz !== tz && e.bag) {
+        if (bags[e.bag]) left[e.bag] = bags[e.bag].since;
+        delete bags[e.bag];
+      }
     }
     if (e.action === 'REMOVE' && fz === zone && e.bag) delete bags[e.bag];
   });
@@ -10920,7 +10931,9 @@ function buildLastPlacementByBag() {
   }
   return m;
 }
-function moveBagsTo(batch, bagIds, dest, cb) {
+// opts.reason goes onto every entry. _undoMove() passes 'undo', which is how
+// getZoneBags() tells a move taken back from a bag that really came back.
+function moveBagsTo(batch, bagIds, dest, cb, opts) {
   rememberDest(dest);
   const now = new Date().toISOString();
   const entries = [];
@@ -10950,6 +10963,7 @@ function moveBagsTo(batch, bagIds, dest, cb) {
       expected_current_zone: curLoc ? toZone(curLoc) : null,
       _tempId: tempId
     };
+    if (opts && opts.reason) entry.reason = opts.reason;
     scanLog.push(entry);
     movements.push(entry);
     entries.push(entry);

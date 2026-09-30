@@ -55,3 +55,53 @@ describe('getZoneBags since', () => {
     assert.equal(b['BO-1-02'].since, '2026-09-30T08:00:00Z');
   });
 });
+
+// Rückgängig after a move writes the way back as a MOVE with reason 'undo'
+// (_undoMove). The bag never really left, so it keeps its day.
+describe('getZoneBags since, after Rückgängig', () => {
+  const undo = (from, to, time) => ({ ...bag('MOVE', from, to, time), reason: 'undo' });
+
+  it('gives the bag back the day it had before the move was undone', () => {
+    const log = [
+      bag('ADD', null, 'INC_R1', '2026-09-01T08:00:00Z'),
+      bag('MOVE', 'INC_R1', 'TENT1', '2026-09-30T12:28:00Z'),
+      undo('TENT1', 'INC_R1', '2026-09-30T12:28:05Z')
+    ];
+    assert.equal(zoneBags(log, 'INC')['BO-1-02'].since, '2026-09-01T08:00:00Z');
+    assert.equal(zoneBags(log, 'TENT1')['BO-1-02'], undefined);
+  });
+
+  it('still starts over when the bag really comes back', () => {
+    const b = zoneBags(
+      [
+        bag('ADD', null, 'INC_R1', '2026-09-01T08:00:00Z'),
+        bag('MOVE', 'INC_R1', 'TENT1', '2026-09-20T08:00:00Z'),
+        bag('MOVE', 'TENT1', 'INC_R1', '2026-09-30T08:00:00Z')
+      ],
+      'INC'
+    );
+    assert.equal(b['BO-1-02'].since, '2026-09-30T08:00:00Z');
+  });
+
+  it('takes the day of the last stay, not of an earlier one', () => {
+    const b = zoneBags(
+      [
+        bag('ADD', null, 'INC_R1', '2026-09-01T08:00:00Z'),
+        bag('MOVE', 'INC_R1', 'TENT1', '2026-09-10T08:00:00Z'),
+        bag('MOVE', 'TENT1', 'INC_R2', '2026-09-12T08:00:00Z'),
+        bag('MOVE', 'INC_R2', 'TENT1', '2026-09-30T08:00:00Z'),
+        undo('TENT1', 'INC_R2', '2026-09-30T08:00:05Z')
+      ],
+      'INC'
+    );
+    assert.equal(b['BO-1-02'].since, '2026-09-12T08:00:00Z');
+  });
+
+  it('falls back to the time of the move for a bag the zone never had', () => {
+    const b = zoneBags(
+      [bag('ADD', null, 'TENT1', '2026-09-01T08:00:00Z'), undo('TENT1', 'INC_R1', '2026-09-30T08:00:00Z')],
+      'INC'
+    );
+    assert.equal(b['BO-1-02'].since, '2026-09-30T08:00:00Z');
+  });
+});

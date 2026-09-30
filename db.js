@@ -10052,9 +10052,12 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   // "Verbraucht") oder "spawn:<Charge>" (beim Anlegen einer Charge). Das ist ein
   // REMOVE mit Grund wie jeder Kontaminations-Abgang, aber kein Verlust — ohne
   // diese Ausnahme zählte jeder verbrauchte Beutel hier als Kontamination.
+  // Ebenso "undo": den Grund trägt der Rückweg, mit dem die App eine
+  // Verschiebung zurücknimmt (_undoMove in app.js). Ohne die Ausnahme zählte
+  // jedes Rückgängig hier als Kontamination.
   let rows = db
     .prepare(
-      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' ORDER BY id"
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' ORDER BY id"
     )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
