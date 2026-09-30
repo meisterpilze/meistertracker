@@ -262,11 +262,29 @@ const KNOWN_ZONE_I18N = {
   TENT3: 'dash.zoneTent3',
   CONTAM: 'dash.zoneContam'
 };
+// The English names db.js seeds these zones with. Only a zone still carrying
+// its seed name is translated; one renamed in Settings → Zones shows the name
+// it was given, or "Großes Zelt" comes back as "Zelt 1".
+const KNOWN_ZONE_SEED_NAME = {
+  SPAWN: 'Spawn Run',
+  INC: 'Incubation',
+  TENT1: 'Tent 1',
+  TENT2: 'Tent 2',
+  TENT3: 'Tent 3',
+  CONTAM: 'Contamination'
+};
+function zoneI18nKey(z) {
+  const key = KNOWN_ZONE_I18N[z.id];
+  return key && (!z.name || z.name === KNOWN_ZONE_SEED_NAME[z.id]) ? key : null;
+}
 function zoneDisplayName(id) {
   if (!id) return id;
-  if (KNOWN_ZONE_I18N[id]) return t(KNOWN_ZONE_I18N[id]);
   const z = zones.find((x) => x.id === id);
-  if (z) return z.name;
+  if (z) {
+    const key = zoneI18nKey(z);
+    return key ? t(key) : z.name;
+  }
+  if (KNOWN_ZONE_I18N[id]) return t(KNOWN_ZONE_I18N[id]);
   // Try as rack ID: find parent zone and return "ZoneName / rackSuffix"
   for (const zone of zones) {
     const rack = zone.racks.find((r) => r.id === id);
@@ -289,7 +307,7 @@ function rebuildZoneConstants() {
   ZONE_LABELS = {};
   ZONE_COLORS = {};
   zones.forEach((z) => {
-    ZONE_LABELS[z.id] = KNOWN_ZONE_I18N[z.id] || z.name;
+    ZONE_LABELS[z.id] = zoneI18nKey(z) || z.name;
     ZONE_COLORS[z.id] = z.color;
   });
   locColor = { ...ZONE_COLORS };
