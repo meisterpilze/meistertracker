@@ -6760,13 +6760,14 @@ function _dashLeftBehindRows(splits) {
 // which includes the 30-second tick, so what someone folded or unfolded is
 // remembered here rather than reset under their thumb.
 //
-// Incubation zones follow the tents, folded: they hold hundreds of bags, and
-// open they would push the day's tasks off the phone. A tap unfolds one.
+// Spawn-run and incubation zones follow the tents, folded: they hold hundreds
+// of bags, and open they would push the day's tasks off the phone. A tap
+// unfolds one.
 const _wkTentFold = { zone: new Map(), open: new Set() };
 function renderWorkTents() {
   const card = document.getElementById('wk-tents');
   if (!card) return;
-  const tents = fruitingZones().concat(zones.filter((z) => z.role === 'incubation'));
+  const tents = fruitingZones().concat(zones.filter((z) => z.role === 'spawn' || z.role === 'incubation'));
   card.hidden = !tents.length;
   if (!tents.length) return;
   const today = new Date();

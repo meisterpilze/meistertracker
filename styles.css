@@ -7582,20 +7582,13 @@ body:has(#m-camscan.open) .update-bar {
   font-size: 0.875rem;
   color: var(--c-text-muted);
 }
-/* 769–900px: a narrow desk window or a tablet in portrait. Below 769 the rule
-   under this one takes over with a single column. */
+/* Two columns from 900px down, phones included. One column put seven full-width
+   tiles above everything else on the start screen. Two fit since the titles
+   became one or two words ("Labor", "Körnerbrut") and the phone drops the
+   when-line (below). */
 @media (max-width: 900px) {
   .wk-tiles {
     grid-template-columns: repeat(2, 1fr);
-  }
-}
-/* One column on every phone, not only the narrow ones. 520px was a guess at
-   where two tiles stop fitting; the answer is that two tiles never fit next to
-   a title at 17px and a when-line at 13px, and 768 is where the rest of the
-   app already draws the line. */
-@media (max-width: 768px) {
-  .wk-tiles {
-    grid-template-columns: 1fr;
   }
 }
 .wk-tile {
@@ -7680,29 +7673,31 @@ body:has(#m-camscan.open) .update-bar {
    query adds no specificity, so between two `.wk-tile` rules the later one wins
    and the base min-height would simply have stood. */
 @media (max-width: 768px) {
-  /* And in one column the height is the content's, not a number's. `min-height:
-     156px` is a good proportion for a tile 261px wide on a desk; stretched full
-     width it is 35-70px of air per tile, seven times over. Measured at 375px:
-     every tile reported its when-line box as 88px tall for one to three lines of
-     13px text, because `grid-template-rows: auto 1fr` hands the second row
-     whatever the min-height left spare — the box was filling the air rather than
-     needing it.
-
-     The floor stays a floor: --tap, the same one every other control on a Feld
-     screen answers to. No tile comes near it — the shortest is a title and one
-     line — which is why it is written as the token rather than a literal.
-
-     The drawing shrinks with the box or it swallows it, and the when-line takes
-     back the width the drawing gives up. */
+  /* Two tiles side by side, each about 165px wide at 375px. There the when-line
+     would wrap to four or five lines of 13px, so the phone shows the title
+     alone, the drawing shrinks into the corner, and the height drops from the
+     desk's 156px to a short tile that is still well above --tap, the floor
+     every other control on a Feld screen answers to. The when-line stays on
+     wider screens. */
+  .wk-tiles {
+    gap: 10px;
+  }
+  .wk-tiles-row2 {
+    margin-top: 10px;
+  }
   .wk-tile {
-    min-height: var(--tap);
-    padding: 14px 16px;
+    min-height: 72px;
+    padding: 12px 14px;
+    align-content: center;
   }
   .wk-tile-art {
-    width: 96px;
+    width: 72px;
+  }
+  .wk-tile-t {
+    max-width: 78%;
   }
   .wk-tile-when {
-    max-width: 72%;
+    display: none;
   }
 }
 
