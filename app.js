@@ -15938,22 +15938,22 @@ function pjTasks(tasks) {
 // (Einkauf, Bank, Autoklav, Flow), und abgehakt heisst weg — am Tisch zeigt
 // die Liste, was noch zu tun ist, nicht was schon war. Ausgeblendet, nicht
 // geloescht: ein Knopf holt die erledigten zum Korrigieren zurueck. Dieselbe
-// Mechanik und dieselben Worte wie die Laborliste, die es vorher schon gab, damit nicht
-// zwei Werkzeuge zwei Sprachen sprechen.
+// Mechanik und dieselben Worte wie die Laborliste, die es vorher schon gab,
+// damit nicht zwei Werkzeuge zwei Sprachen sprechen.
 //
 // Der Haken liegt im Browser, nicht auf dem Server: er gilt fuer einen Ansatz
 // an einem Tag an einem Geraet, und dafuer waere eine Tabelle mit Sync die
 // falsche Groesse. Ist der Versuch durch, setzt der Knopf alles zurueck.
 // ── Experimente ─────────────────────────────────────────────
 //
-// Ein Experiment ist ein Ansatz: "Ansatz A", "Ansatz B". Die
-// Gefaesse darin sind seine Wiederholungen und seine Kontrolle — A-01, A-02,
-// A-K. Das ist die Ebene, auf der eine Frage beantwortet wird, und deshalb
-// die Ebene, die ein Ergebnis, ein Rezept und Fotos traegt.
+// Ein Experiment ist ein Ansatz: "Ansatz A", "Ansatz B". Die Gefaesse darin
+// sind seine Wiederholungen und seine Kontrolle — A-01, A-02, A-K. Das ist die
+// Ebene, auf der eine Frage beantwortet wird, und deshalb die Ebene, die ein
+// Ergebnis, ein Rezept und Fotos traegt.
 //
-// Vorher hing alles an einem Versuchstag, mit allen Gefaessen in einer
-// flachen Liste. Das war die falsche Ebene: Zeilen, die nicht sagen,
-// welche zusammengehoeren, und ein Fazit fuer alles zusammen, wo es doch mehrere
+// Vorher hing alles an einem Versuchstag, mit allen Gefaessen in einer flachen
+// Liste. Das war die falsche Ebene: Zeilen, die nicht sagen, welche
+// zusammengehoeren, und ein Fazit fuer alles zusammen, wo es doch mehrere
 // verschiedene Fragen waren.
 //
 // Zwei Ansichten: die Liste und ein Experiment. Ein Tipp auf die Zeile geht

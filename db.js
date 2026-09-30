@@ -7829,9 +7829,10 @@ function purgeExperimentPhoto(db, id, wer) {
 // gehoert dem Tag und niemandem sonst, und sie darf formlos sein. Deshalb eine
 // eigene Tabelle statt eines weiteren Abschnitts — und deshalb nur drei Felder.
 //
-// Ein Ansatz traegt sein Ergebnis in einer Zeile: ein paar Messwerte. Alles, was laenger ist als diese Zeile, gehoert hierher und
-// nicht in den Versuch. Das ist der ganze Zweck: der Versuch bleibt eine
-// Tabelle, die man ueberfliegt, und das Drumherum hat trotzdem einen Ort.
+// Ein Ansatz traegt sein Ergebnis in einer Zeile: ein paar Messwerte. Alles,
+// was laenger ist als diese Zeile, gehoert hierher und nicht in den Versuch.
+// Das ist der ganze Zweck: der Versuch bleibt eine Tabelle, die man
+// ueberfliegt, und das Drumherum hat trotzdem einen Ort.
 const NOTIZ_REITER = ['research', 'products', 'build'];
 
 function listProjectNotes(db) {
