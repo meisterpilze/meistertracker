@@ -467,7 +467,7 @@ describe('Jeder Weg trägt Stamm und Tag bis zum Anlegen', () => {
     // Körnerbrut als Laborarbeit, Kultur, Körner-Sorte als Charge: je ein
     // setv('lw-created') vor dem Aufruf, der es liest.
     const setzen = [...f.matchAll(/setv\('lw-created', angesetzt\)/g)].map((m) => m.index);
-    const aufrufe = [...f.matchAll(/\b(createGrainBatch|logLabWork)\(\);/g)].map((m) => m.index);
+    const aufrufe = [...f.matchAll(/\b(createGrainBatch\(\)|logLabWork\([^;()]*\));/g)].map((m) => m.index);
     assert.equal(setzen.length, 3, 'nicht jeder Laborzweig setzt lw-created');
     assert.equal(aufrufe.length, 3);
     setzen.forEach((s, i) => assert.ok(s < aufrufe[i], 'lw-created wird erst nach dem Anlegen gesetzt'));

@@ -534,8 +534,7 @@ describe('db – cultures', () => {
     );
   });
 
-  it('insertCultures rejects PD whose parent is not MC or PD', () => {
-    // Seed an LC parent so we have a non-MC, non-PD candidate.
+  it('insertCultures accepts PD streaked from an LC, rejects PD from grain', () => {
     db.insertCultures(d, [
       {
         id: 'LC-SEED-01',
@@ -545,6 +544,26 @@ describe('db – cultures', () => {
         status: 'active',
         notes: '',
         created: '2024-01-03T00:00:00Z'
+      },
+      {
+        id: 'GS-SEED-01',
+        type: 'GS',
+        parentId: 'LC-SEED-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-03T00:00:00Z'
+      }
+    ]);
+    db.insertCultures(d, [
+      {
+        id: 'PD-FROM-LC',
+        type: 'PD',
+        parentId: 'LC-SEED-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-04T00:00:00Z'
       }
     ]);
     assert.throws(
@@ -553,14 +572,14 @@ describe('db – cultures', () => {
           {
             id: 'PD-BAD-PARENT',
             type: 'PD',
-            parentId: 'LC-SEED-01',
+            parentId: 'GS-SEED-01',
             species: 'Pleurotus',
             status: 'active',
             notes: '',
             created: '2024-01-04T00:00:00Z'
           }
         ]),
-      /PD parent must be one of \[MC, PD\]/
+      /PD parent must be one of \[MC, PD, LC\], got GS/
     );
   });
 

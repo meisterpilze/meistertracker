@@ -100,6 +100,8 @@ function werkbank(stand) {
     const moveBatchTo = () => {};
     const armScanAction = (v) => { scan.action = v; };
     const scanAfterSync = (raw) => nachgefragt.push(raw);
+    const aufnehmen = [];
+    const kulturAufnehmenAnbieten = (id) => aufnehmen.push(id);
     ${hebe('modeRunTally')}
     ${hebe('armMode')}
     ${hebe('armMoveRun')}
@@ -112,6 +114,7 @@ function werkbank(stand) {
       letzte: () => fb[fb.length - 1],
       gepostet,
       nachgefragt,
+      aufnehmen,
       beutelFenster,
       geerntet,
       zustand: () => scan,
@@ -326,13 +329,27 @@ describe('Unbekannt heißt: erst nachfragen, dann sagen, was los ist', () => {
     assert.equal(danach.gepostet.length, 0);
   });
 
-  it('nennt eine unbekannte Kultur eine Kultur, keine Charge', () => {
+  it('bietet eine unbekannte Kultur zum Aufnehmen an, statt sie eine Charge zu nennen', () => {
     const w = werkbank({ scan: neutral(), cultures: [] });
     w.scan('MC-LM-160926-01');
     assert.deepEqual(w.nachgefragt, ['MC-LM-160926-01']);
     const danach = werkbank({ scan: neutral(), cultures: [] });
     danach.scan('MC-LM-160926-01', { synced: true });
-    assert.match(danach.letzte().msg, /^scanFb\.cultureNotInSystem /);
+    assert.deepEqual(danach.aufnehmen, ['MC-LM-160926-01']);
+  });
+
+  it('erkennt eine Kultur mit Stamm in der Kennung, und Spritzen', () => {
+    // Eine Kennung mit Stamm darin hieß "nicht im System", obwohl sie in der Liste stand.
+    for (const id of ['PD-KO-KOKQ07-090926-05', 'SY-KO-090926-01']) {
+      const w = werkbank({ scan: neutral(), cultures: [{ id: id, status: 'active' }] });
+      w.scan(id);
+      assert.match(w.letzte().msg, /^scanFb\.cultureScanned /, id);
+      assert.deepEqual(w.nachgefragt, [], id);
+    }
+    // Mit Unterstrichen, wie ein deutscher Handscanner sie schickt.
+    const w = werkbank({ scan: neutral(), cultures: [{ id: 'PD-KO-KOKQ07-090926-05', status: 'active' }] });
+    w.scan('PD_KO_KOKQ07_090926_05');
+    assert.match(w.letzte().msg, /^scanFb\.cultureScanned /);
   });
 
   it('sagt bei einer aufgebrauchten Kultur "aufgebraucht", nicht "used"', () => {

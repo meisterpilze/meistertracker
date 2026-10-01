@@ -446,7 +446,6 @@ describe('Beim Anlegen: Körnerbrut, deren Antwort feststeht, ohne Frage ausbuch
       ${hebe('buildLastPlacementByBag')}
       ${hebe('spawnBuchen')}
       ${hebe('inocVerbrauchtBuchen')}
-      ${hebe('inocConsume')}
       ${hebe('inocAskConsume')}
       inocAskConsume({ batchId: 'CHUT-280926-01' }, liste);
       return { gepostet, gefragt, toasts, status };
@@ -485,7 +484,8 @@ describe('Beim Anlegen: Körnerbrut, deren Antwort feststeht, ohne Frage ausbuch
     assert.deepEqual(r.gefragt, []);
   });
 
-  it('gefragt wird nur noch nach einer Kultur', () => {
+  it('eine Kultur bleibt im System und wird nicht erfragt (01.10.2026)', () => {
+    // Flüssigkultur und Petrischale werden viele Male benutzt.
     const r = anlegen(
       [
         { kind: 'bag', id: G + '-01' },
@@ -494,8 +494,8 @@ describe('Beim Anlegen: Körnerbrut, deren Antwort feststeht, ohne Frage ausbuch
       [liegt(G + '-01')]
     );
     assert.equal(r.gepostet.length, 1, 'der Beutel geht gleich');
-    assert.equal(r.gefragt.length, 1);
-    assert.match(r.gefragt[0], /"names":"LC-CHUT-1"/, 'die Frage nennt nur die Kultur');
+    assert.deepEqual(r.gefragt, []);
+    assert.deepEqual(r.status, []);
   });
 });
 
@@ -611,8 +611,8 @@ describe('Beimpft mit, im geführten Ablauf', () => {
   it('der Scan-Knopf öffnet die Kamera für den Ablauf', () => {
     assert.match(APP, /if \(a === 'inoc-scan'\) \{[\s\S]{0,400}msqOpenScan\('wkb'\);/);
     const p = hebe('processScan');
-    assert.match(p, /_inocScanPrefix === 'wkb' \? wkbInocAdd\(val\) : inocAdd\(val\)/);
-    assert.match(p, /_inocScanPrefix === 'wkb' \? wkbInocAdd\(hit\.id\) : inocAdd\(hit\.id\)/);
+    assert.match(p, /_inocScanPrefix === 'wkb' \? wkbInocAdd\(val\) :/);
+    assert.match(p, /_inocScanPrefix === 'wkb'\s*\? wkbInocAdd\(hit\.id\)\s*:/);
   });
 
   it('wer den Ablauf verlässt, nimmt die Liste nicht in die nächste Charge mit', () => {

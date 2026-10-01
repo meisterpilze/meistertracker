@@ -5642,7 +5642,8 @@ function insertHarvest(db, h) {
 // retroactive cleanup, just enforce the constraint going forward.
 const VALID_CULTURE_PARENT_TYPES = {
   MC: [], // mother culture is the lineage root — no parent allowed
-  PD: ['MC', 'PD'],
+  // A plate streaked from a liquid culture is how an LC is checked and cleaned up.
+  PD: ['MC', 'PD', 'LC'],
   LC: ['MC', 'PD', 'LC'],
   G2G: ['MC', 'PD', 'LC', 'G2G', 'GS'],
   GS: ['MC', 'PD', 'LC', 'G2G', 'GS'],

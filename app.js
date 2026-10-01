@@ -9244,10 +9244,9 @@ function nbPreview() {
 // sits in `batches` as G-… with barcoded bags. Two separate fields asked them to
 // know the difference; scanning does not.
 //
-// Nothing is consumed automatically. A liquid culture or petri normally survives
-// many inoculations, and even a grain bag makes 5-15 blocks, so whether it is
-// spent is a question only the operator can answer — asked once after the batch
-// saves. Answer no and it stays in inventory.
+// A grain bag always goes whole into the blocks, so it is written off when the
+// batch saves. A liquid culture or petri is used many times over and stays in the
+// system untouched — it leaves only when someone marks it used or contaminated.
 // [{ kind: 'culture' | 'bag', id }]
 let _inoc = [];
 function inocAvailable() {
@@ -9310,9 +9309,18 @@ function inocRender(prefix) {
   if (sel) {
     // Im geführten Ablauf nur, was zur gewählten Sorte passt: alle Kulturen und
     // Körnerbeutel des Betriebs in einer Liste liest am Telefon niemand.
-    const sorte = prefix === 'wkb' ? WKB.strainId : null;
+    // In der Laborarbeit ebenso, und dazu nur, woraus diese Art angesetzt
+    // werden darf (Körnerbeutel nur für Körnerbrut).
+    const art = prefix === 'ms-q' ? msqParentTypes() : null;
+    const sorte = prefix === 'wkb' ? WKB.strainId : art && _msQuickCtx.ms ? _msQuickCtx.ms.id : null;
+    const passtZurArt = (x) => {
+      if (!art) return true;
+      if (x.kind === 'bag') return art === LAB_PARENT_TYPES.KB;
+      const c = cultures.find((y) => y.id === x.id);
+      return !!c && art.includes(c.type);
+    };
     const free = inocAvailable().filter(
-      (x) => !_inoc.some((y) => y.id === x.id) && (!sorte || !x.strainId || x.strainId === sorte)
+      (x) => !_inoc.some((y) => y.id === x.id) && (!sorte || !x.strainId || x.strainId === sorte) && passtZurArt(x)
     );
     sel.innerHTML =
       `<option value="">${esc(t('inoc.pick'))}</option>` +
@@ -9323,31 +9331,20 @@ function inocRender(prefix) {
 function inocPicked(prefix) {
   const sel = document.getElementById(prefix + '-inoc-pick');
   if (!sel || !sel.value) return;
-  const err = inocAdd(sel.value);
+  const err = prefix === 'ms-q' ? msqInocAdd(sel.value) : inocAdd(sel.value);
   if (err) setFb('err', err, { noModal: true });
-  inocRender(prefix);
+  if (prefix === 'ms-q') msQuickRender();
+  else inocRender(prefix);
 }
-// After the batch is safely saved: was the inoculant used up? Yes writes it off,
-// no leaves it exactly where it was.
-//
-// Nur noch für Kulturen: eine Flüssigkultur oder Petrischale hält meist für mehr
-// als eine Charge, das weiß nur, wer sie in der Hand hat. Ein Körnerbeutel geht
-// dagegen immer ganz in die Blöcke —
-// gescannt ist er verbraucht, auf jedem Weg und ohne Frage. Eine Kultur, deren
-// Antwort der geführte Ablauf schon mitgibt (`spent`), wird auch nicht gefragt.
+// After the batch is safely saved. Ein Körnerbeutel geht immer ganz in die
+// Blöcke — gescannt ist er
+// verbraucht, auf jedem Weg und ohne Frage. Flüssigkultur und Petrischale werden
+// viele Male benutzt: sie bleiben im System, und es wird auch nicht gefragt.
+// Leer oder verunreinigt bucht sie aus, wer sie in der Hand hat.
 function inocAskConsume(batchObj, list) {
   if (!list.length) return;
   const n = inocVerbrauchtBuchen(batchObj, list);
   if (n) toast(t('batch.spawnConsumed', { n: n, id: batchObj.batchId }));
-  const offen = list.filter((x) => x.kind === 'culture' && x.spent === undefined);
-  if (!offen.length) return;
-  const names = offen.map((x) => x.id).join(', ');
-  // OK writes it off; Cancel is the "no, still have some" answer and leaves
-  // everything untouched — which is what Cancel already means, so no custom
-  // button label is needed.
-  confirm2(t('inoc.spentTitle'), t('inoc.spentMsg', { names, id: batchObj.batchId }), t('inoc.spentYes'), () =>
-    inocConsume(batchObj, offen)
-  );
 }
 // Die Körnerbeutel der Liste ausbuchen, mit der neuen Charge als Grund — alle,
 // ohne Frage. Kein eigenes Rückgängig: die Leiste unten gehört dann der Meldung
@@ -9355,16 +9352,6 @@ function inocAskConsume(batchObj, list) {
 function inocVerbrauchtBuchen(batchObj, list) {
   const bags = list.filter((x) => x.kind === 'bag').map((x) => x.id);
   return bags.length ? spawnBuchen(bags, 'spawn:' + batchObj.batchId).length : 0;
-}
-function inocConsume(batchObj, list) {
-  const bags = list.filter((x) => x.kind === 'bag').map((x) => x.id);
-  if (bags.length) nbConsumeSpawnBags(batchObj, bags);
-  list
-    .filter((x) => x.kind === 'culture')
-    .forEach((x) => {
-      const c = cultures.find((y) => y.id === x.id);
-      if (c && c.status !== 'used') setCultureStatus(c.id, 'used');
-    });
 }
 // ── Grain spawn consumed by a new block batch ────────────────
 // Grain spawn lives in `batches` (G-… with barcoded bags), never in `cultures`,
@@ -18797,7 +18784,13 @@ function msQuickRender() {
   const titleEl = document.getElementById('ms-q-title');
   const subEl = document.getElementById('ms-q-sub');
   const goEl = document.getElementById('ms-q-go');
-  if (titleEl) titleEl.textContent = mode === 'charge' ? t('msq.chargeTitle') : t('msq.laborTitle');
+  const intake = _msQuickCtx.intake || null;
+  if (titleEl)
+    titleEl.textContent = intake
+      ? t('intake.dialogTitle', { id: intake.id })
+      : mode === 'charge'
+        ? t('msq.chargeTitle')
+        : t('msq.laborTitle');
   const lt = document.getElementById('ms-q-labtype-wrap');
   if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
   // Grain spawn is a Charge in everything but name: it is weighed, incubates,
@@ -18814,7 +18807,8 @@ function msQuickRender() {
   const sw = document.getElementById('ms-q-sizes-wrap');
   if (sw) sw.style.display = grain ? '' : 'none';
   const qw = document.getElementById('ms-q-qty-wrap');
-  if (qw) qw.style.display = grain ? 'none' : '';
+  // Ein aufgenommenes Etikett ist genau ein Glas.
+  if (qw) qw.style.display = grain || intake ? 'none' : '';
   const grid = document.getElementById('ms-q-grid');
   if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
   if (grain && !_msqSizesTouched) msqSeedSizes();
@@ -18827,8 +18821,8 @@ function msQuickRender() {
     if (goEl) goEl.disabled = true;
     const prev = document.getElementById('ms-q-preview');
     if (prev) prev.textContent = '';
-    const cw = document.getElementById('ms-q-culture-wrap');
-    if (cw) cw.style.display = 'none';
+    // Die Herkunft scannen geht schon jetzt: sie bringt die Sorte mit.
+    msQuickFillCulture();
     return;
   }
   // An incomplete recipe is rejected downstream by createBatch, long after this
@@ -18857,6 +18851,112 @@ function msQuickRender() {
       prev.style.color = 'var(--c-red-dark)';
     }
   }
+}
+// Woraus die gewählte Laborarbeit angesetzt werden darf, oder null, wenn der
+// Dialog keine Laborarbeit ist. [] heißt: diese Art hat keine Herkunft (Slant).
+function msqParentTypes() {
+  if (!_msQuickCtx || _msQuickCtx.mode !== 'labor') return null;
+  const el = document.getElementById('ms-q-labtype');
+  return LAB_PARENT_TYPES[(el && el.value) || 'MC'] || [];
+}
+// Etwas für "Beimpft mit" im Schnelldialog, gescannt oder gewählt. Bei einer
+// Laborarbeit muss es zur Art passen, und es gibt genau eine Herkunft: die
+// zweite ersetzt die erste, statt ungenutzt danebenzustehen. Ist noch keine
+// Sorte gewählt, kommen Sorte und Stamm von der gescannten Kultur — die steht
+// auf dem Glas in der Hand, niemand soll sie noch einmal heraussuchen.
+// null wenn genommen, sonst der Grund in Worten.
+function msqInocAdd(rawId) {
+  const types = msqParentTypes();
+  const id = String(rawId || '').trim();
+  const c = cultures.find((x) => x.id.toUpperCase() === id.toUpperCase());
+  if (types) {
+    const art = document.getElementById('ms-q-labtype');
+    const artName = art && art.selectedOptions[0] ? art.selectedOptions[0].textContent : '';
+    const isKb = art && art.value === 'KB';
+    // Körnerbrut darf auch aus einem Körnerbeutel kommen (Körner aus Körnern).
+    if (!(isKb && !c) && (!c || !types.includes(c.type)))
+      return t('msq.parentWrongType', { id: id, art: artName, types: types.join(', ') });
+    const ms = _msQuickCtx.ms;
+    if (c && ms && c.strainId && c.strainId !== ms.id)
+      return t('msq.parentOtherSorte', { id: c.id, sorte: c.strainName || c.species || '', ziel: ms.name });
+    if (!isKb) _inoc = [];
+  }
+  const err = inocAdd(id);
+  if (err) return err;
+  if (types && c && !_msQuickCtx.ms && c.strainId) {
+    const ms = mushroomStrains.find((x) => x.id === c.strainId);
+    if (ms) {
+      _msQuickCtx.ms = ms;
+      const sel = document.getElementById('ms-q-sorte');
+      if (sel) sel.value = String(ms.id);
+      const st = stammState('ms-q');
+      st.strainId = ms.id;
+      st.wert = staemmeFor(ms.id).some((x) => stammGleich(x.name, c.strainText || '')) ? c.strainText : '';
+    }
+  }
+  return null;
+}
+// ── Ein Etikett aufnehmen, das das System nicht kennt ────────
+// Ein gedrucktes Kultur-Etikett, zu dem es keine Kultur gibt: meist eine, deren
+// Speichern fehlschlug, nachdem das Etikett schon gedruckt war (cprShow druckt
+// dann mit der Kennung als Barcode). Statt "gibt es nicht" nimmt die App sie
+// wieder auf — mit genau dieser Kennung, damit das Etikett am Glas gilt.
+// Art, Sorte, Stamm und Tag stehen in der Kennung und sind vorausgefüllt.
+function kulturKennungLesen(id) {
+  const parts = String(id).toUpperCase().split('-');
+  if (parts.length < 4) return null;
+  const type = parts[0];
+  const tag = parts[parts.length - 2];
+  const kz = parts[1];
+  const stamm = parts.length === 5 ? parts[2] : '';
+  const ms =
+    mushroomStrains.find((x) => (x.kuerzel || '').toUpperCase() === kz) ||
+    mushroomStrains.find((x) => abbrev(x.name) === kz) ||
+    null;
+  // TTMMJJ → JJJJ-MM-TT; ein Tag in der Zukunft oder Unsinn bleibt leer (= heute).
+  let datum = '';
+  if (/^\d{6}$/.test(tag)) {
+    const d = '20' + tag.slice(4, 6) + '-' + tag.slice(2, 4) + '-' + tag.slice(0, 2);
+    const dt = new Date(d + 'T12:00:00');
+    if (!isNaN(dt) && localDateStr(dt) === d && d <= localDateStr(new Date())) datum = d;
+  }
+  return { id: String(id).toUpperCase(), type, ms, stamm, datum };
+}
+function kulturAufnehmenAnbieten(id) {
+  _scanBeep(500, 120);
+  const k = kulturKennungLesen(id);
+  // Aufnehmen geht über den Laborarbeit-Dialog, und der kennt diese Arten.
+  if (!k || !['MC', 'PD', 'LC', 'SY'].includes(k.type)) {
+    setFb('err', t('scanFb.cultureNotInSystem', { id: id }));
+    return;
+  }
+  closeCamScan();
+  confirm2(t('intake.title'), t('intake.msg', { id: k.id }), t('intake.yes'), () => msQuickOpenIntake(k));
+}
+function msQuickOpenIntake(k) {
+  msQuickOpen('labor', null);
+  if (!_msQuickCtx) return;
+  _msQuickCtx.intake = k;
+  const art = document.getElementById('ms-q-labtype');
+  if (art) {
+    art.value = k.type;
+    art.disabled = true;
+  }
+  if (k.ms) {
+    _msQuickCtx.ms = k.ms;
+    const sel = document.getElementById('ms-q-sorte');
+    if (sel) sel.value = String(k.ms.id);
+    if (k.stamm) {
+      const st = stammState('ms-q');
+      st.strainId = k.ms.id;
+      const hit = staemmeFor(k.ms.id).find((x) => x.name.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === k.stamm);
+      st.wert = hit ? hit.name : '';
+    }
+  }
+  if (k.datum) ANLAGE['ms-q'] = { offen: true, datum: k.datum };
+  const qty = document.getElementById('ms-q-qty');
+  if (qty) qty.value = 1;
+  msQuickRender();
 }
 // True when the quick dialog is in Laborarbeit mode with Grainspawn selected.
 // Grain spawn (KB) is not a culture: it goes through createGrainBatch, not
@@ -18888,6 +18988,8 @@ function msQuickSorteChanged() {
 }
 function msQuickClose() {
   _msQuickCtx = null;
+  const art = document.getElementById('ms-q-labtype');
+  if (art) art.disabled = false;
   _inocScanPrefix = null;
   // Drop the inoculant list. Abandoning the dialog must not leave it armed for
   // whatever batch is created next. The confirm path closes the dialog before
@@ -19089,7 +19191,9 @@ function msQuickPreview() {
 function msQuickFillCulture() {
   const wrap = document.getElementById('ms-q-culture-wrap');
   const sel = document.getElementById('ms-q-culture');
-  if (!wrap || !sel || !_msQuickCtx || !_msQuickCtx.ms) {
+  // Eine Charge braucht ihre Sorte zuerst (das Rezept). Eine Laborarbeit nicht:
+  // dort bringt die gescannte Herkunft die Sorte mit.
+  if (!wrap || !sel || !_msQuickCtx || (_msQuickCtx.mode === 'charge' && !_msQuickCtx.ms)) {
     if (wrap) wrap.style.display = 'none';
     return;
   }
@@ -19098,12 +19202,15 @@ function msQuickFillCulture() {
     // Körner aus Körnern: eine bestehende Körnerbrut darf die nächste ansetzen.
     types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC', 'GS'] : ['PD', 'LC', 'G2G', 'GS'];
   } else {
-    const lt = document.getElementById('ms-q-labtype').value;
-    // KB matches the full grain form, which inoculates from a PD or LC.
-    types =
-      lt === 'PD' ? ['MC', 'PD', 'LC'] : lt === 'LC' ? ['MC', 'PD'] : lt === 'KB' ? ['PD', 'LC'] : null; // MC = new isolation
+    types = msqParentTypes();
+    // Eine Herkunft, die zur neuen Art nicht mehr passt, fällt heraus.
+    _inoc = _inoc.filter((x) => {
+      if (x.kind === 'bag') return types === LAB_PARENT_TYPES.KB;
+      const c = cultures.find((y) => y.id === x.id);
+      return !!c && types.includes(c.type);
+    });
   }
-  if (!types) {
+  if (!types || !types.length) {
     sel.value = '';
     wrap.style.display = 'none';
     return;
@@ -19165,7 +19272,7 @@ async function msQuickConfirm() {
       fieldError('ms-q-qty', t('batch.fillQty'));
       return;
     }
-    _msqSaveQty(mode, qty);
+    if (!_msQuickCtx.intake) _msqSaveQty(mode, qty);
   }
   // Ein Tag in der Zukunft wird hier abgewiesen, solange der Dialog noch steht.
   const angesetzt = anlageLesen('ms-q');
@@ -19190,6 +19297,7 @@ async function msQuickConfirm() {
   // msQuickClose() leert die Liste, damit ein abgebrochener Dialog nichts in die
   // nächste Charge trägt. Wer anlegt, nimmt sie mit hinüber.
   const inocMit = _inoc.slice();
+  const intake = _msQuickCtx.intake || null;
   if (mode === 'labor') {
     const labType = document.getElementById('ms-q-labtype').value || 'MC';
     // Grainspawn is not a culture: it is weighed, incubates and yields
@@ -19233,7 +19341,7 @@ async function msQuickConfirm() {
     lwUpdate();
     const parent = document.getElementById('lw-parent');
     if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
-    logLabWork();
+    logLabWork(intake ? { id: intake.id } : undefined);
     return;
   }
   // Charge: prefill the existing Charge form from the recipe and reuse its
@@ -19479,6 +19587,17 @@ function deleteCulture(id) {
 }
 
 // ─── LAB WORK ────────────────────────────────────────────────
+// Woraus eine Laborarbeit angesetzt werden darf, je Art. Dieselben Regeln wie
+// VALID_CULTURE_PARENT_TYPES in db.js — standen hier andere, bot das Formular
+// eine Herkunft an, die der Server dann abwies. Ein Slant (MC) ist der Ursprung
+// und hat keine; Körnerbrut (KB) ist keine Kultur und geht über createGrainBatch.
+const LAB_PARENT_TYPES = {
+  MC: [],
+  PD: ['MC', 'PD', 'LC'],
+  LC: ['MC', 'PD', 'LC'],
+  SY: ['MC', 'PD', 'LC'],
+  KB: ['PD', 'LC']
+};
 function lwUpdate() {
   const type = document.getElementById('lw-type').value;
   const pr = document.getElementById('lw-parent-row'),
@@ -19510,13 +19629,13 @@ function lwUpdate() {
     } else if (type === 'PD') {
       pr.style.display = 'block';
       document.getElementById('lw-parent-lbl').textContent = t('lab.parentMcPdLc');
-      fillParentSelect(['MC', 'PD', 'LC']);
+      fillParentSelect(LAB_PARENT_TYPES.PD);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtyDishes');
     } else if (type === 'LC') {
       pr.style.display = 'block';
-      document.getElementById('lw-parent-lbl').textContent = t('lab.sourcePdMc');
-      fillParentSelect(['MC', 'PD']);
+      document.getElementById('lw-parent-lbl').textContent = t('lab.sourceLcPdMc');
+      fillParentSelect(LAB_PARENT_TYPES.LC);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtyFlasks');
     } else if (type === 'SY') {
@@ -19524,7 +19643,7 @@ function lwUpdate() {
       // lineage rules in db.js allow — grain cannot go into a syringe.
       pr.style.display = 'block';
       document.getElementById('lw-parent-lbl').textContent = t('lab.sourceLcPdMc');
-      fillParentSelect(['MC', 'PD', 'LC']);
+      fillParentSelect(LAB_PARENT_TYPES.SY);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtySyringes');
     } else {
@@ -19586,11 +19705,18 @@ function lwPreview() {
   box.style.display = 'block';
 }
 // lw-st change and lw-qty input listeners live in initEventListeners()
-function logLabWork() {
+// opts.id: ein vorhandenes Etikett wird aufgenommen (msQuickOpenIntake) — genau
+// eine Kultur mit genau dieser Kennung, und kein neues Etikett, das hängt schon.
+function logLabWork(opts) {
+  const intakeId = (opts && opts.id) || null;
   // Angesetzt am, wie in createBatch: einmal gelesen und geleert, bevor irgendeine
   // Prüfung abbricht. Die Kennung trägt diesen Tag, wie das Etikett am Glas.
   const angesetzt = anlageNehmen(document.getElementById('lw-created'));
   const wann = anlageZeitpunkt(angesetzt);
+  if (intakeId && cultures.some((c) => c.id.toUpperCase() === intakeId)) {
+    toast(t('intake.exists', { id: intakeId }), 'err');
+    return;
+  }
   const type = document.getElementById('lw-type').value;
   const strainSel = document.getElementById('lw-st');
   const strainId = strainSel ? parseInt(strainSel.value) || null : null;
@@ -19607,8 +19733,8 @@ function logLabWork() {
   const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr(wann) + '-';
   const base = maxCultureSuffix(prefix);
-  const newC = Array.from({ length: qty }, (_, i) => ({
-    id: prefix + String(base + i + 1).padStart(2, '0'),
+  const newC = Array.from({ length: intakeId ? 1 : qty }, (_, i) => ({
+    id: intakeId || prefix + String(base + i + 1).padStart(2, '0'),
     type,
     species: sp,
     strain: st || '',
@@ -19624,6 +19750,17 @@ function logLabWork() {
   }));
   cultures.push(...newC);
   const saved = apiPost('/api/cultures', { cultures: newC }).then((r) => {
+    // Abgewiesen: vorher blieb die Kultur hier stehen, bis die App neu lud, und
+    // das Etikett druckte trotzdem — ein Glas mit einem Etikett, das danach
+    // "nicht im System" hieß. Jetzt geht sie gleich wieder raus, und es steht da.
+    if (r && r.error) {
+      const ids = new Set(newC.map((c) => c.id));
+      cultures = cultures.filter((c) => !ids.has(c.id));
+      renderLabLog();
+      cprClose();
+      toast(t('lab.saveFailed', { msg: r.error }), 'err');
+      throw new Error(r.error);
+    }
     if (r && r.cultureBarcodes) {
       for (const [id, bc] of Object.entries(r.cultureBarcodes)) {
         barcodeRegistry.set(bc, { type: 'culture', id });
@@ -19631,6 +19768,7 @@ function logLabWork() {
       }
     }
   });
+  saved.catch(() => {}); // gemeldet im then oben; gedruckt wird nur nach Erfolg
   document.getElementById('lw-notes').value = '';
   document.getElementById('lw-qty').value = '1';
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
@@ -19638,6 +19776,13 @@ function logLabWork() {
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
   lwPreview();
+  if (intakeId) {
+    saved.then(
+      () => toast(t('intake.done', { id: intakeId })),
+      () => {}
+    );
+    return;
+  }
   // Der Schluss jedes Weges, der Kulturen anlegt: das Etiketten-Fenster, wie
   // nbPlaceAndPrint() für Beutel. Vorher stand hier eine Ergebniskarte mit
   // Druckknopf im langen Formular — und der Schnelldialog, der dieses Formular
@@ -22185,10 +22330,10 @@ async function printCultureLabelsInline() {
     return;
   }
   // Ein schneller Daumen schlägt sonst die Antwort des Servers: erst speichern
-  // lassen, dann drucken. Schlägt das Speichern fehl, steht die Kultur trotzdem
-  // schon im Speicher — dann druckt das Etikett mit der ID-Kodierung, wie die
-  // Druckseite es auch täte.
-  if (_cprSaved) await _cprSaved.catch(() => {});
+  // lassen, dann drucken. Schlägt das Speichern fehl, gibt es die Kultur nicht —
+  // dann kein Etikett: eins am Glas hieße beim nächsten Scan "nicht im System".
+  // Was schiefging, hat logLabWork schon gesagt.
+  if (_cprSaved && !(await _cprSaved.then(() => true).catch(() => false))) return;
   const modeEl = document.getElementById('lab-mode');
   const qrEl = document.getElementById('lab-qr');
   const zpl = makeLabZPL(ids, modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
@@ -23567,7 +23712,12 @@ function processScan(raw, opts) {
     return;
   }
   // Culture ID scan → auto-fill parent (lab work) or source (new batch), else open lineage
-  if (/^(MC|PD|LC|G2G|GS)-[A-Z0-9]+-\d{6}-\d{2}$/.test(val)) {
+  // Die Kennung einer Kultur: Art, Kürzel der Sorte, der Stamm, wenn einer gewählt
+  // war (logLabWork hängt ihn an), Tag und Nummer — PD-KO-KOKQ07-090926-05. Ohne
+  // den Stamm-Teil hier lief so ein Etikett in die Beutel-Logik und kam als "nicht
+  // im System" zurück, obwohl die Kultur in der Liste stand. SY: Spritzen genauso.
+  // Dasselbe Muster steht in isKnownBarcode.
+  if (/^(MC|PD|LC|SY|G2G|GS)-[A-Z0-9]+(?:-[A-Z0-9]+)?-\d{6}-\d{2}$/.test(val)) {
     // Lab stocktake: a scan means "this culture is on the shelf in front of me",
     // so it ticks the check list rather than running the normal culture flow.
     // Checked before the used/contam guard below — finding a written-off culture
@@ -23594,13 +23744,19 @@ function processScan(raw, opts) {
         setFb('err', cultureRefusal(hit));
         return;
       }
-      const addErr = _inocScanPrefix === 'wkb' ? wkbInocAdd(hit.id) : inocAdd(hit.id);
+      const addErr =
+        _inocScanPrefix === 'wkb'
+          ? wkbInocAdd(hit.id)
+          : _inocScanPrefix === 'ms-q'
+            ? msqInocAdd(hit.id)
+            : inocAdd(hit.id);
       if (addErr) {
         _scanBeep(300, 150);
         setFb('err', addErr);
         return;
       }
-      inocRender(_inocScanPrefix);
+      if (_inocScanPrefix === 'ms-q') msQuickRender();
+      else inocRender(_inocScanPrefix);
       _scanBeep(800, 60);
       setFb('ok', t('scanFb.cultureAutofilled', { id: hit.id }));
       closeCamScan();
@@ -23662,7 +23818,7 @@ function processScan(raw, opts) {
       scanAfterSync(raw);
       return;
     }
-    setFb('err', t('scanFb.cultureNotInSystem', { id: val }));
+    kulturAufnehmenAnbieten(val);
     return;
   }
   const isBag = /-\d{2}$/.test(val);
@@ -23725,13 +23881,15 @@ function processScan(raw, opts) {
     // so an explicit MOVE/REMOVE still wins. Closing the camera is what brings
     // the quick dialog back into view (it steps aside for the camera).
     if (isBag && !scan.action && _inocScanPrefix) {
-      const err = _inocScanPrefix === 'wkb' ? wkbInocAdd(val) : inocAdd(val);
+      const err =
+        _inocScanPrefix === 'wkb' ? wkbInocAdd(val) : _inocScanPrefix === 'ms-q' ? msqInocAdd(val) : inocAdd(val);
       if (err) {
         _scanBeep(300, 150);
         setFb('err', err);
         return;
       }
-      inocRender(_inocScanPrefix);
+      if (_inocScanPrefix === 'ms-q') msQuickRender();
+      else inocRender(_inocScanPrefix);
       _scanBeep(800, 60);
       setFb('ok', t('inoc.added', { id: val }));
       closeCamScan();
@@ -24056,7 +24214,7 @@ function isKnownBarcode(val) {
   // For bag/batch patterns, convert underscores to hyphens
   const h = val.replace(/_/g, '-');
   if (/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(h)) return true;
-  if (/^(MC|PD|LC)-[A-Z]+-\d{6}-\d{2}$/.test(h)) return true;
+  if (/^(MC|PD|LC|SY|G2G|GS)-[A-Z0-9]+(?:-[A-Z0-9]+)?-\d{6}-\d{2}$/.test(h)) return true; // wie in processScan
   if (/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(h)) return true;
   if (/^[A-Z]+-\d{6}-\d{2}$/.test(h)) return true;
   return false;
