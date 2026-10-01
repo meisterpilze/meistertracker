@@ -24268,6 +24268,7 @@ function openCultureSheet(c) {
     `<div class="met"><div class="met-l">${esc(k)}</div><div class="fs-base" style="font-weight:600">${v}</div></div>`;
   const name = c.strainName || c.species || '';
   document.getElementById('bi-body').innerHTML =
+    ciVerfuegbarHtml(c) +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">' +
     met(t('ci.type'), esc(t('ci.type.' + c.type))) +
     met(t('batch.species'), spDot(name) + esc(name)) +
@@ -24283,6 +24284,41 @@ function openCultureSheet(c) {
   closeCamScan();
   closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
+}
+// Wieviele aus demselben Ansatz noch da sind: dieselbe Kennung bis auf die
+// letzte Nummer (SY-…-011026-01 bis -04). Das ist die erste Frage, wenn man ein
+// Glas oder eine Spritze in der Hand hat, also steht es zuoberst — die Zahl groß,
+// darunter die Nummern, die gemeinsam angesetzten, die schon raus sind,
+// durchgestrichen und die gescannte hervorgehoben.
+function ciGeschwister(c) {
+  const stamm = c.id.slice(0, c.id.lastIndexOf('-') + 1);
+  return cultures
+    .filter((x) => x.id.startsWith(stamm) && /^\d+$/.test(x.id.slice(stamm.length)))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+function ciVerfuegbarHtml(c) {
+  const alle = ciGeschwister(c);
+  const da = (x) => x.status === 'active' || x.status === 'stored';
+  const n = alle.filter(da).length;
+  const chips = alle
+    .map((x) => {
+      const nr = x.id.slice(x.id.lastIndexOf('-') + 1);
+      const ich = x.id === c.id;
+      const stil = ich
+        ? 'background:var(--c-text);color:#fff;border-color:var(--c-text)'
+        : da(x)
+          ? 'background:var(--c-bg);color:var(--c-text-sec)'
+          : 'background:transparent;color:var(--c-text-muted);text-decoration:line-through';
+      return `<span class="fs-xs" style="font-family:monospace;padding:3px 8px;border-radius:5px;border:1px solid var(--c-border);${stil}">${esc(nr)}</span>`;
+    })
+    .join('');
+  return (
+    `<div class="met" style="margin-bottom:12px"><div class="met-l">${esc(t('ci.availableLbl'))}</div>` +
+    `<div style="font-size:1.75rem;font-weight:700;line-height:1.1;color:${n ? 'var(--c-primary)' : 'var(--c-red-dark)'}">` +
+    `${esc(t('ci.available', { n: n, total: alle.length }))}</div>` +
+    (alle.length > 1 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${chips}</div>` : '') +
+    '</div>'
+  );
 }
 // Der Stammbaum nach oben, gleich im Fenster: Slant → Petrischale → … → diese.
 // Wer eine Spritze in der Hand hat, will wissen, woher sie kommt, und dafür

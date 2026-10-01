@@ -25,6 +25,50 @@ function herkunft(cultures, id) {
   )(cultures, id);
 }
 
+function verfuegbar(cultures, id) {
+  return new Function(
+    'cultures',
+    'id',
+    `
+    const t = (k, p) => (p ? k + ' ' + JSON.stringify(p) : k);
+    const esc = (s) => String(s);
+    ${hebe('ciGeschwister')}
+    ${hebe('ciVerfuegbarHtml')}
+    return ciVerfuegbarHtml(cultures.find((c) => c.id === id));
+  `
+  )(cultures, id);
+}
+
+describe('Kultur-Fenster: wieviele aus dem Ansatz noch da sind', () => {
+  const ansatz = [
+    { id: 'SY-CHUT-CHEKQ07-011026-01', status: 'active' },
+    { id: 'SY-CHUT-CHEKQ07-011026-02', status: 'active' },
+    { id: 'SY-CHUT-CHEKQ07-011026-03', status: 'used' },
+    { id: 'SY-CHUT-CHEKQ07-011026-04', status: 'stored' },
+    // Ein anderer Tag und ein anderer Stamm gehören nicht dazu.
+    { id: 'SY-CHUT-CHEKQ07-021026-01', status: 'active' },
+    { id: 'SY-CHUT-011026-01', status: 'active' }
+  ];
+
+  it('zählt die noch aktiven oder gelagerten aus genau diesem Ansatz', () => {
+    const h = verfuegbar(ansatz, 'SY-CHUT-CHEKQ07-011026-01');
+    assert.match(h, /ci\.available \{"n":3,"total":4\}/);
+  });
+
+  it('zeigt jede Nummer, die gescannte hervorgehoben, die verbrauchte durchgestrichen', () => {
+    const h = verfuegbar(ansatz, 'SY-CHUT-CHEKQ07-011026-02');
+    assert.equal((h.match(/>0[1-4]</g) || []).length, 4);
+    assert.match(h, /color:#fff[^>]*>02</);
+    assert.match(h, /line-through">03</);
+  });
+
+  it('ohne Geschwister keine Nummernreihe', () => {
+    const h = verfuegbar([{ id: 'LC-CHUT-KQ07-090326-01', status: 'active' }], 'LC-CHUT-KQ07-090326-01');
+    assert.match(h, /"n":1,"total":1/);
+    assert.doesNotMatch(h, /monospace/);
+  });
+});
+
 describe('Kultur-Fenster: die Herkunft', () => {
   const kultur = [
     { id: 'MC-KO-010126-01', type: 'MC', parentId: null },

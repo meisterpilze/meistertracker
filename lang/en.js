@@ -933,6 +933,8 @@ window.LANG['en'] = {
   'ci.status': 'Status',
   'ci.created': 'Started',
   'ci.children': '{n} culture(s) made from it',
+  'ci.availableLbl': 'Available from this batch',
+  'ci.available': '{n} of {total} available',
   'ci.herkunft': 'Origin',
   'ci.noParent': 'No origin recorded.',
   'ci.out': 'Take out of the system',

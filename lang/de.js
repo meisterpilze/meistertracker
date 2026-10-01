@@ -938,6 +938,8 @@ window.LANG['de'] = {
   'ci.status': 'Status',
   'ci.created': 'Angesetzt',
   'ci.children': '{n} Kultur(en) daraus angesetzt',
+  'ci.availableLbl': 'Aus diesem Ansatz verfügbar',
+  'ci.available': '{n} von {total} da',
   'ci.herkunft': 'Herkunft',
   'ci.noParent': 'Keine Herkunft eingetragen.',
   'ci.out': 'Raus aus dem System',

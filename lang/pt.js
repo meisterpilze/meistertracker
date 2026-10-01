@@ -729,6 +729,8 @@ window.LANG['pt'] = {
   'ci.status': 'Estado',
   'ci.created': 'Iniciada',
   'ci.children': '{n} cultura(s) feitas a partir dela',
+  'ci.availableLbl': 'Disponíveis deste lote',
+  'ci.available': '{n} de {total} disponíveis',
   'ci.herkunft': 'Origem',
   'ci.noParent': 'Sem origem registada.',
   'ci.out': 'Retirar do sistema',
