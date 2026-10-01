@@ -542,6 +542,7 @@ async function loadCurrentUser() {
     const r = await authFetch('/api/auth/me');
     currentUser = await r.json();
     // Die Kachel-Reihenfolge hängt am Benutzer; vorher galt die ohne Namen.
+    syncWkTileOrderUp();
     applyWkTileOrder();
   } catch (e) {
     if (e.message !== 'unauthorized') console.error('Auth check failed:', e);
@@ -30034,9 +30035,10 @@ window.addEventListener('appinstalled', () => {
 });
 
 // Die Reihenfolge der Kacheln stellt jeder selbst ein. Wer jeden Tag erntet,
-// will Ernte oben, wer im Labor steht, Labor. Gemerkt je Benutzer auf diesem
-// Gerät: der Server kennt keine Benutzer-Einstellungen, und die Leute arbeiten
-// an ihrem eigenen Telefon. Umsortiert wird mit ↑/↓ in einer Liste statt mit
+// will Ernte oben, wer im Labor steht, Labor. Gespeichert am Benutzer auf dem
+// Server (/api/auth/me bringt sie mit, /api/me/tile-order schreibt sie), damit
+// sie auf jedem Telefon gilt, auf dem man sich anmeldet; dazu eine Kopie auf
+// dem Gerät für den Start ohne Netz. Umsortiert wird mit ↑/↓ in einer Liste statt mit
 // Ziehen — Ziehen auf dem Telefon kämpft mit dem Scrollen, und ein Knopf in
 // einer Kachel ginge nicht, die Kachel ist selbst einer.
 const WK_TILES = {
@@ -30052,26 +30054,46 @@ const WK_TILE_DEFAULT = Object.keys(WK_TILES);
 function _wkOrderKey() {
   return 'mp-tile-order:' + ((currentUser && currentUser.username) || '');
 }
-function wkTileOrder() {
-  let saved = [];
+function _wkLocalOrder() {
   try {
-    saved = JSON.parse(localStorage.getItem(_wkOrderKey()) || '[]');
+    const v = JSON.parse(localStorage.getItem(_wkOrderKey()) || 'null');
+    return Array.isArray(v) ? v : null;
   } catch (_) {
-    saved = [];
+    return null;
   }
-  if (!Array.isArray(saved)) saved = [];
+}
+function wkTileOrder() {
+  // Der Server zuerst; die Kopie auf dem Gerät nur, solange er nichts gesagt hat.
+  const fromServer = currentUser && Array.isArray(currentUser.tileOrder) ? currentUser.tileOrder : null;
+  const saved = fromServer || _wkLocalOrder() || [];
   // Eine gespeicherte Liste von gestern kennt eine neue Kachel nicht, und eine
   // gestrichene gibt es nicht mehr: die eine hinten anhängen, die andere weglassen.
   const order = saved.filter((id, i) => WK_TILES[id] && saved.indexOf(id) === i);
   for (const id of WK_TILE_DEFAULT) if (!order.includes(id)) order.push(id);
   return order;
 }
+let _wkOrderSendTimer = null;
 function saveWkTileOrder(order) {
   try {
     localStorage.setItem(_wkOrderKey(), JSON.stringify(order));
   } catch (_) {
-    /* bleibt dann bis zum Neuladen */
+    /* dann gilt der Server */
   }
+  if (!currentUser) return;
+  currentUser.tileOrder = order.slice();
+  // Mehrere ↑-Tipps hintereinander sind ein Umsortieren, nicht fünf: erst
+  // senden, wenn eine Weile Ruhe ist, und dann nur den letzten Stand.
+  clearTimeout(_wkOrderSendTimer);
+  _wkOrderSendTimer = setTimeout(() => {
+    apiPost('/api/me/tile-order', { order: currentUser.tileOrder });
+  }, 600);
+}
+// Wer schon vor dem Server-Speicher sortiert hat, hat die Reihenfolge nur auf
+// dem Telefon. Kennt der Server noch keine, geht die vom Gerät einmal hinauf.
+function syncWkTileOrderUp() {
+  if (!currentUser || currentUser.tileOrder !== null) return;
+  const local = _wkLocalOrder();
+  if (local && local.length) saveWkTileOrder(wkTileOrder());
 }
 function applyWkTileOrder() {
   const grid = document.getElementById('wk-tiles');

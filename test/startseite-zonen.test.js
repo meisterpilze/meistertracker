@@ -96,19 +96,28 @@ describe('Startseite — Wo steht was', () => {
 });
 
 describe('Startseite — eigene Reihenfolge', () => {
-  function load(stored, username) {
+  function load(stored, username, serverOrder) {
     const store = new Map(stored ? [['mp-tile-order:' + username, stored]] : []);
     const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v) };
     const src = ['WK_TILES', 'WK_TILE_DEFAULT']
       .map((n) => APP.match(new RegExp(`^const ${n} = [\\s\\S]*?;\\n`, 'm'))[0])
       .join('\n');
-    const fns = ['_wkOrderKey', 'wkTileOrder', 'saveWkTileOrder'].map(lift).join('\n');
-    return new Function(
-      'localStorage',
-      'currentUser',
-      `${src}\n${fns}\nreturn { wkTileOrder, saveWkTileOrder, store: null };`
-    )(localStorage, username ? { username } : null);
+    const fns = ['_wkOrderKey', '_wkLocalOrder', 'wkTileOrder'].map(lift).join('\n');
+    return new Function('localStorage', 'currentUser', `${src}\n${fns}\nreturn { wkTileOrder };`)(
+      localStorage,
+      username ? { username, tileOrder: serverOrder === undefined ? null : serverOrder } : null
+    );
   }
+
+  it('takes the order stored on the server over the copy on the phone', () => {
+    const o = load(JSON.stringify(['lab']), 'max', ['grain', 'contam']).wkTileOrder();
+    assert.deepEqual(o.slice(0, 2), ['grain', 'contam']);
+    assert.equal(o.length, 7);
+  });
+
+  it('falls back to the phone copy while the server has none', () => {
+    assert.equal(load(JSON.stringify(['lab']), 'max', null).wkTileOrder()[0], 'lab');
+  });
 
   it('starts from the default order with Kontamination last', () => {
     const o = load(null, 'max').wkTileOrder();
@@ -125,7 +134,7 @@ describe('Startseite — eigene Reihenfolge', () => {
     const src = ['WK_TILES', 'WK_TILE_DEFAULT']
       .map((n) => APP.match(new RegExp(`^const ${n} = [\\s\\S]*?;\\n`, 'm'))[0])
       .join('\n');
-    const fns = ['_wkOrderKey', 'wkTileOrder'].map(lift).join('\n');
+    const fns = ['_wkOrderKey', '_wkLocalOrder', 'wkTileOrder'].map(lift).join('\n');
     const forErika = new Function('localStorage', 'currentUser', `${src}\n${fns}\nreturn wkTileOrder;`)(ls, {
       username: 'erika'
     });

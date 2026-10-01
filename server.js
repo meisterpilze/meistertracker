@@ -6500,7 +6500,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ userId: session.user_id, username: session.username, role: session.role }));
+    res.end(
+      JSON.stringify({
+        userId: session.user_id,
+        username: session.username,
+        role: session.role,
+        tileOrder: db.getUserTileOrder(database, session.user_id)
+      })
+    );
     return;
   }
 
@@ -6566,6 +6573,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       return;
     }
     req.authUser = authUser;
+  }
+
+  // ── Own start-screen tile order (any authenticated user, only their own) ──
+  // body { order: ["move", "harvest", …] } or { order: null } for the default.
+  if (url === '/api/me/tile-order' && req.method === 'POST') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const order = data && data.order === null ? null : data && data.order;
+      try {
+        jsonOk(res, { tileOrder: db.setUserTileOrder(database, req.authUser.user_id, order) });
+      } catch (err) {
+        if (err.message === 'invalid tile order') jsonErr(res, 400, err.message);
+        else safeErr(res, err);
+      }
+    });
+    return;
   }
 
   // ── Username list (any authenticated user) ────────────────

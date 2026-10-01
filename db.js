@@ -2798,6 +2798,20 @@ const MIGRATIONS = [
         db.exec('ALTER TABLE experiments ADD COLUMN work_package_id INTEGER REFERENCES work_packages(id)');
       }
     }
+  },
+  {
+    version: 94,
+    description: 'Reihenfolge der Startseiten-Kacheln je Benutzer',
+    fn(db) {
+      // JSON-Liste der Kachel-Kürzel, NULL = Standard. Am Benutzer und nicht am
+      // Gerät: wer sich auf einem anderen Telefon anmeldet, findet seine
+      // Reihenfolge dort wieder.
+      const spalten = db
+        .prepare("SELECT name FROM pragma_table_info('users')")
+        .all()
+        .map((s) => s.name);
+      if (!spalten.includes('tile_order')) db.exec('ALTER TABLE users ADD COLUMN tile_order TEXT');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4113,6 +4127,31 @@ function createSession(db, userId) {
     expires
   );
   return token;
+}
+
+// Kachel-Reihenfolge je Benutzer. Der Server kennt die Kacheln nicht; er nimmt
+// eine kurze Liste kurzer Kürzel an und gibt sie unverändert zurück — was davon
+// eine Kachel ist, entscheidet die Oberfläche (wkTileOrder in app.js).
+const TILE_ORDER_MAX = 20;
+function normTileOrder(order) {
+  if (!Array.isArray(order) || order.length > TILE_ORDER_MAX) return null;
+  if (!order.every((id) => typeof id === 'string' && /^[a-z]{1,20}$/.test(id))) return null;
+  return [...new Set(order)];
+}
+function getUserTileOrder(db, userId) {
+  const row = db.prepare('SELECT tile_order FROM users WHERE id = ?').get(userId);
+  if (!row || !row.tile_order) return null;
+  try {
+    return normTileOrder(JSON.parse(row.tile_order));
+  } catch (_) {
+    return null;
+  }
+}
+function setUserTileOrder(db, userId, order) {
+  const clean = order === null ? null : normTileOrder(order);
+  if (order !== null && !clean) throw new Error('invalid tile order');
+  db.prepare('UPDATE users SET tile_order = ? WHERE id = ?').run(clean ? JSON.stringify(clean) : null, userId);
+  return clean;
 }
 
 function getSession(db, token) {
@@ -11927,6 +11966,8 @@ module.exports = {
   passwordNeedsUpgrade,
   createSession,
   getSession,
+  getUserTileOrder,
+  setUserTileOrder,
   deleteSession,
   revokeUserCredentials,
   deleteExpiredSessions,
