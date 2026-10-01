@@ -299,6 +299,21 @@
       >
         <div class="sec" id="ms-q-title">—</div>
         <div id="ms-q-sub" class="muted fs-meta" style="margin: 4px 0 10px"></div>
+        <!-- One "Beimpft mit" field for every kind of inoculant — camera first,
+             since the barcode is on the thing in your hand. Applies to a Charge
+             and to new Grainspawn alike (scan the LC it came from). Steht ganz
+             oben: was man in der Hand hat, scannt man zuerst, und es bringt Sorte
+             und Stamm mit (msqInocAdd). -->
+        <div id="ms-q-culture-wrap" style="display: none; margin-bottom: 10px">
+          <label data-i18n="inoc.label">Beimpft mit (optional)</label>
+          <div style="display: flex; gap: 6px; align-items: center">
+            <button type="button" class="btn btn-sm" id="ms-q-inoc-scan" style="flex: none; white-space: nowrap">
+              <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
+            </button>
+            <select id="ms-q-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('ms-q')"></select>
+          </div>
+          <div id="ms-q-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
+        </div>
         <div id="ms-q-sorte-wrap" style="display: none; margin-bottom: 8px">
           <label data-i18n="msq.pickSorte">Pilzsorte</label>
           <select id="ms-q-sorte" onchange="msQuickSorteChanged()"></select>
@@ -391,19 +406,6 @@
              mehr als freier Text — dieselbe Linie hieß sonst jedes Mal anders.
              Gefüllt von stammRender(), sobald die Sorte feststeht. -->
         <div id="ms-q-stamm-wrap" class="stamm-wrap"></div>
-        <!-- One "Beimpft mit" field for every kind of inoculant — camera first,
-             since the barcode is on the thing in your hand. Applies to a Charge
-             and to new Grainspawn alike (scan the LC it came from). -->
-        <div id="ms-q-culture-wrap" style="display: none; margin-top: 8px">
-          <label data-i18n="inoc.label">Beimpft mit (optional)</label>
-          <div style="display: flex; gap: 6px; align-items: center">
-            <button type="button" class="btn btn-sm" id="ms-q-inoc-scan" style="flex: none; white-space: nowrap">
-              <span aria-hidden="true">📷</span> <span data-i18n="inoc.scan">Scannen</span>
-            </button>
-            <select id="ms-q-inoc-pick" style="flex: 1; min-width: 0" onchange="inocPicked('ms-q')"></select>
-          </div>
-          <div id="ms-q-inoc-chips" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px"></div>
-        </div>
         <!-- Kept only so msQuickConfirm can hand a culture to nb-culture/gs-culture. -->
         <select id="ms-q-culture" style="display: none"></select>
         <!-- Angesetzt am: zu und auf heute, bis es jemand braucht (anlageRender). -->

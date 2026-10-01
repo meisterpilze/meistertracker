@@ -18689,6 +18689,25 @@ function _msqLastQty(mode) {
   }
   return 1;
 }
+// Die Art, mit der die Laborarbeit aufgeht: die zuletzt angelegte, sonst
+// Petrischale. Vorher stand immer "Slant registrieren" da — die eine Art ohne
+// Herkunft, also ohne "Beimpft mit", und genau das Feld fehlte dann.
+function _msqLastArt() {
+  try {
+    const a = localStorage.getItem('mp-msq-art');
+    if (a && LAB_PARENT_TYPES[a]) return a;
+  } catch (e) {
+    /* storage disabled */
+  }
+  return 'PD';
+}
+function _msqSaveArt(art) {
+  try {
+    localStorage.setItem('mp-msq-art', art);
+  } catch (e) {
+    /* storage disabled — next open starts at Petrischale */
+  }
+}
 function _msqSaveQty(mode, qty) {
   if (!(qty > 0)) return;
   try {
@@ -18772,6 +18791,8 @@ function msQuickOpen(mode, ms) {
   // "ohne Stamm" und heute an.
   stammReset('ms-q');
   anlageReset('ms-q');
+  const art = document.getElementById('ms-q-labtype');
+  if (art && mode === 'labor') art.value = _msqLastArt();
   msQuickRender();
   document.getElementById('ms-quick-modal').style.display = 'flex';
 }
@@ -18883,15 +18904,22 @@ function msqInocAdd(rawId) {
   }
   const err = inocAdd(id);
   if (err) return err;
-  if (types && c && !_msQuickCtx.ms && c.strainId) {
-    const ms = mushroomStrains.find((x) => x.id === c.strainId);
-    if (ms) {
+  // Noch keine Sorte: die vom gescannten Glas oder Körnerbeutel. Eine Charge
+  // nimmt sie nur, wenn die Sorte ein Rezept hat — sonst steht sie nicht in der
+  // Liste, und die Wahl bleibt beim Arbeiter.
+  const bag = c ? null : nbAvailableSpawnBags().find((b) => b.bag.toUpperCase() === id.toUpperCase());
+  const von = c || bag;
+  if (von && !_msQuickCtx.ms && von.strainId) {
+    const ms = mushroomStrains.find((x) => x.id === von.strainId);
+    if (ms && (types || ms.recBatchType)) {
       _msQuickCtx.ms = ms;
       const sel = document.getElementById('ms-q-sorte');
       if (sel) sel.value = String(ms.id);
       const st = stammState('ms-q');
       st.strainId = ms.id;
-      st.wert = staemmeFor(ms.id).some((x) => stammGleich(x.name, c.strainText || '')) ? c.strainText : '';
+      const name = (von.strainText || '').trim();
+      const hit = staemmeFor(ms.id).find((x) => stammGleich(x.name, name));
+      st.wert = hit ? hit.name : '';
     }
   }
   return null;
@@ -19191,16 +19219,17 @@ function msQuickPreview() {
 function msQuickFillCulture() {
   const wrap = document.getElementById('ms-q-culture-wrap');
   const sel = document.getElementById('ms-q-culture');
-  // Eine Charge braucht ihre Sorte zuerst (das Rezept). Eine Laborarbeit nicht:
-  // dort bringt die gescannte Herkunft die Sorte mit.
-  if (!wrap || !sel || !_msQuickCtx || (_msQuickCtx.mode === 'charge' && !_msQuickCtx.ms)) {
+  // Steht vor der Sorte und gilt schon ohne sie: die gescannte Herkunft bringt
+  // die Sorte mit.
+  if (!wrap || !sel || !_msQuickCtx) {
     if (wrap) wrap.style.display = 'none';
     return;
   }
   let types;
   if (_msQuickCtx.mode === 'charge') {
     // Körner aus Körnern: eine bestehende Körnerbrut darf die nächste ansetzen.
-    types = _msQuickCtx.ms.recBatchType === 'grain' ? ['PD', 'LC', 'GS'] : ['PD', 'LC', 'G2G', 'GS'];
+    const ms = _msQuickCtx.ms;
+    types = ms && ms.recBatchType === 'grain' ? ['PD', 'LC', 'GS'] : ['PD', 'LC', 'G2G', 'GS'];
   } else {
     types = msqParentTypes();
     // Eine Herkunft, die zur neuen Art nicht mehr passt, fällt heraus.
@@ -19300,6 +19329,7 @@ async function msQuickConfirm() {
   const intake = _msQuickCtx.intake || null;
   if (mode === 'labor') {
     const labType = document.getElementById('ms-q-labtype').value || 'MC';
+    if (!intake) _msqSaveArt(labType);
     // Grainspawn is not a culture: it is weighed, incubates and yields
     // G-prefixed barcoded bags, so it goes through createGrainBatch like the
     // full Körnerbrut form rather than logLabWork.
