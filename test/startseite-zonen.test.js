@@ -18,21 +18,27 @@ function lift(name) {
 }
 
 describe('Startseite — Kacheln', () => {
-  it('puts the daily jobs in the first row and the weekly ones in the small row', () => {
-    const first = HTML.indexOf('<div class="wk-tiles">');
-    const small = HTML.indexOf('<div class="wk-tiles wk-tiles-row2 wk-tiles-small">');
-    assert.ok(first > 0 && small > first);
-    const order = [...HTML.matchAll(/id="wk-t-(\w+)"/g)].map((m) => [m[1], m.index]);
-    const big = order.filter(([, i]) => i > first && i < small).map(([id]) => id);
-    const weekly = order.filter(([, i]) => i > small).map(([id]) => id);
-    assert.deepEqual(big, ['move', 'harvest', 'contam', 'batch']);
-    assert.deepEqual(weekly, ['lab', 'grain', 'sub']);
+  it('has one grid, daily jobs first and Kontamination last', () => {
+    assert.equal((HTML.match(/class="wk-tiles/g) || []).length, 1);
+    const ids = [...HTML.matchAll(/id="wk-t-(\w+)"/g)].map((m) => m[1]);
+    assert.deepEqual(ids, ['move', 'harvest', 'batch', 'lab', 'grain', 'sub', 'contam']);
   });
 
   it('has every new text in all three languages', () => {
     for (const lang of ['de', 'en', 'pt']) {
       const src = fs.readFileSync(path.join(ROOT, 'lang', lang + '.js'), 'utf8');
-      for (const k of ['work.tileBatch', 'work.tileSubstrate', 'work.todayNone', 'work.alertFull', 'work.tentsTitle']) {
+      for (const k of [
+        'work.tileBatch',
+        'work.tileSubstrate',
+        'work.todayNone',
+        'work.alertFull',
+        'work.tentsTitle',
+        'work.orderEdit',
+        'work.orderReset',
+        'work.orderDone',
+        'work.orderUp',
+        'work.orderDown'
+      ]) {
         assert.ok(src.includes(`'${k}':`), `${lang} lacks ${k}`);
       }
     }
@@ -86,5 +92,55 @@ describe('Startseite — Wo steht was', () => {
     assert.equal((html.match(/class="wk-tent-row"/g) || []).length, 2);
     assert.match(html, /2 Beutel/);
     assert.match(html, /LM-2<\/span> 01, 02/);
+  });
+});
+
+describe('Startseite — eigene Reihenfolge', () => {
+  function load(stored, username) {
+    const store = new Map(stored ? [['mp-tile-order:' + username, stored]] : []);
+    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v) };
+    const src = ['WK_TILES', 'WK_TILE_DEFAULT']
+      .map((n) => APP.match(new RegExp(`^const ${n} = [\\s\\S]*?;\\n`, 'm'))[0])
+      .join('\n');
+    const fns = ['_wkOrderKey', 'wkTileOrder', 'saveWkTileOrder'].map(lift).join('\n');
+    return new Function(
+      'localStorage',
+      'currentUser',
+      `${src}\n${fns}\nreturn { wkTileOrder, saveWkTileOrder, store: null };`
+    )(localStorage, username ? { username } : null);
+  }
+
+  it('starts from the default order with Kontamination last', () => {
+    const o = load(null, 'max').wkTileOrder();
+    assert.equal(o[o.length - 1], 'contam');
+    assert.equal(o.length, 7);
+  });
+
+  it('keeps each user their own order', () => {
+    const mine = JSON.stringify(['lab', 'harvest', 'move']);
+    assert.deepEqual(load(mine, 'max').wkTileOrder().slice(0, 3), ['lab', 'harvest', 'move']);
+    // Max's order is stored under his name; Erika on the same phone has none.
+    const store = new Map([['mp-tile-order:max', mine]]);
+    const ls = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: () => {} };
+    const src = ['WK_TILES', 'WK_TILE_DEFAULT']
+      .map((n) => APP.match(new RegExp(`^const ${n} = [\\s\\S]*?;\\n`, 'm'))[0])
+      .join('\n');
+    const fns = ['_wkOrderKey', 'wkTileOrder'].map(lift).join('\n');
+    const forErika = new Function('localStorage', 'currentUser', `${src}\n${fns}\nreturn wkTileOrder;`)(ls, {
+      username: 'erika'
+    });
+    assert.equal(forErika()[0], 'move');
+  });
+
+  it('drops unknown and duplicate tiles and appends missing ones', () => {
+    const o = load(JSON.stringify(['old', 'harvest', 'harvest']), 'max').wkTileOrder();
+    assert.equal(o[0], 'harvest');
+    assert.equal(o.length, 7);
+    assert.ok(!o.includes('old'));
+  });
+
+  it('survives garbage in storage', () => {
+    assert.equal(load('{not json', 'max').wkTileOrder().length, 7);
+    assert.equal(load('{"a":1}', 'max').wkTileOrder().length, 7);
   });
 });

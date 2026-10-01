@@ -541,6 +541,8 @@ async function loadCurrentUser() {
   try {
     const r = await authFetch('/api/auth/me');
     currentUser = await r.json();
+    // Die Kachel-Reihenfolge hängt am Benutzer; vorher galt die ohne Namen.
+    applyWkTileOrder();
   } catch (e) {
     if (e.message !== 'unauthorized') console.error('Auth check failed:', e);
   }
@@ -30031,7 +30033,122 @@ window.addEventListener('appinstalled', () => {
   wkInstallRender();
 });
 
+// Die Reihenfolge der Kacheln stellt jeder selbst ein. Wer jeden Tag erntet,
+// will Ernte oben, wer im Labor steht, Labor. Gemerkt je Benutzer auf diesem
+// Gerät: der Server kennt keine Benutzer-Einstellungen, und die Leute arbeiten
+// an ihrem eigenen Telefon. Umsortiert wird mit ↑/↓ in einer Liste statt mit
+// Ziehen — Ziehen auf dem Telefon kämpft mit dem Scrollen, und ein Knopf in
+// einer Kachel ginge nicht, die Kachel ist selbst einer.
+const WK_TILES = {
+  move: 'work.move',
+  harvest: 'work.harvest',
+  batch: 'work.tileBatch',
+  lab: 'work.lab',
+  grain: 'work.grain',
+  sub: 'work.tileSubstrate',
+  contam: 'work.contam'
+};
+const WK_TILE_DEFAULT = Object.keys(WK_TILES);
+function _wkOrderKey() {
+  return 'mp-tile-order:' + ((currentUser && currentUser.username) || '');
+}
+function wkTileOrder() {
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem(_wkOrderKey()) || '[]');
+  } catch (_) {
+    saved = [];
+  }
+  if (!Array.isArray(saved)) saved = [];
+  // Eine gespeicherte Liste von gestern kennt eine neue Kachel nicht, und eine
+  // gestrichene gibt es nicht mehr: die eine hinten anhängen, die andere weglassen.
+  const order = saved.filter((id, i) => WK_TILES[id] && saved.indexOf(id) === i);
+  for (const id of WK_TILE_DEFAULT) if (!order.includes(id)) order.push(id);
+  return order;
+}
+function saveWkTileOrder(order) {
+  try {
+    localStorage.setItem(_wkOrderKey(), JSON.stringify(order));
+  } catch (_) {
+    /* bleibt dann bis zum Neuladen */
+  }
+}
+function applyWkTileOrder() {
+  const grid = document.getElementById('wk-tiles');
+  if (!grid) return;
+  const order = wkTileOrder();
+  const now = [...grid.children].map((el) => el.id.replace('wk-t-', ''));
+  if (now.join() === order.join()) return;
+  for (const id of order) {
+    const el = document.getElementById('wk-t-' + id);
+    if (el) grid.appendChild(el);
+  }
+}
+function renderWkOrderList() {
+  const list = document.getElementById('wk-order-list');
+  if (!list) return;
+  const order = wkTileOrder();
+  list.innerHTML = order
+    .map(
+      (id, i) =>
+        '<li class="wk-order-row"><span class="wk-order-name">' +
+        esc(t(WK_TILES[id])) +
+        '</span><button type="button" class="btn btn-sm" data-wk-order="' +
+        id +
+        '" data-dir="-1" aria-label="' +
+        esc(t('work.orderUp', { name: t(WK_TILES[id]) })) +
+        '"' +
+        (i === 0 ? ' disabled' : '') +
+        '>↑</button><button type="button" class="btn btn-sm" data-wk-order="' +
+        id +
+        '" data-dir="1" aria-label="' +
+        esc(t('work.orderDown', { name: t(WK_TILES[id]) })) +
+        '"' +
+        (i === order.length - 1 ? ' disabled' : '') +
+        '>↓</button></li>'
+    )
+    .join('');
+}
+function setWkOrderOpen(open) {
+  const panel = document.getElementById('wk-order');
+  const btn = document.getElementById('wk-order-btn');
+  if (!panel || !btn) return;
+  panel.hidden = !open;
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) renderWkOrderList();
+}
+function wireWkTileOrder() {
+  const btn = document.getElementById('wk-order-btn');
+  const list = document.getElementById('wk-order-list');
+  if (!btn || !list) return;
+  btn.addEventListener('click', () => setWkOrderOpen(document.getElementById('wk-order').hidden));
+  list.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-wk-order]');
+    if (!b || b.disabled) return;
+    const order = wkTileOrder();
+    const i = order.indexOf(b.dataset.wkOrder);
+    const j = i + Number(b.dataset.dir);
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    saveWkTileOrder(order);
+    applyWkTileOrder();
+    renderWkOrderList();
+    // Den Fokus beim selben Pfeil der verschobenen Kachel lassen, damit man
+    // mehrmals hintereinander tippen kann.
+    const again = list.querySelector('[data-wk-order="' + order[j] + '"][data-dir="' + b.dataset.dir + '"]');
+    if (again && !again.disabled) again.focus();
+  });
+  document.getElementById('wk-order-reset').addEventListener('click', () => {
+    saveWkTileOrder(WK_TILE_DEFAULT.slice());
+    applyWkTileOrder();
+    renderWkOrderList();
+  });
+  document.getElementById('wk-order-done').addEventListener('click', () => setWkOrderOpen(false));
+  applyWkTileOrder();
+}
+
 (function wireWorkSteps() {
+  wireWkTileOrder();
   const tiles = [
     ['wk-t-lab', msQuickLaborNew],
     ['wk-t-grain', wkOpenGrain],

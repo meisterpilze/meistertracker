@@ -7496,9 +7496,6 @@ body:has(#m-camscan.open) .update-bar {
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
-.wk-tiles-row2 {
-  margin-top: 12px;
-}
 /* Wo steht was: one chip per zone, and under the chosen one a tap-to-unfold row
    per species and move-in day. The date line is the reason the card exists, so
    it is set in the secondary text colour rather than muted. */
@@ -7746,50 +7743,92 @@ body:has(#m-camscan.open) .update-bar {
    query adds no specificity, so between two `.wk-tile` rules the later one wins
    and the base min-height would simply have stood. */
 @media (max-width: 768px) {
-  /* Two tiles side by side, each about 165px wide at 375px. There the when-line
-     would wrap to four or five lines of 13px, so the phone shows the title
-     alone, the drawing shrinks into the corner, and the height drops from the
-     desk's 156px to a short tile that is still well above --tap, the floor
-     every other control on a Feld screen answers to. The when-line stays on
-     wider screens. */
+  /* Two tiles side by side, each about 165px wide at 375px. There the
+     when-line would wrap to four or five lines of 13px, so the phone shows
+     the title alone. The drawing does not bleed here: at this size a
+     corner of a picture reads as a smudge, so it stands whole on the right
+     at one fixed size on every tile, and the title takes the rest. No veil
+     is needed with nothing underneath the words. */
   .wk-tiles {
     gap: 10px;
   }
-  .wk-tiles-row2 {
-    margin-top: 10px;
-  }
   .wk-tile {
+    grid-template-columns: minmax(0, 1fr) 52px;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: 8px;
     min-height: 72px;
-    padding: 12px 14px;
-    align-content: center;
+    padding: 10px 10px 10px 14px;
+  }
+  .wk-tile::after {
+    display: none;
   }
   .wk-tile-art {
-    width: 72px;
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
+    width: 52px;
   }
   .wk-tile-t {
-    max-width: 78%;
+    grid-column: 1;
+    grid-row: 1;
+    max-width: none;
+    overflow-wrap: anywhere;
   }
   .wk-tile-when {
     display: none;
   }
-  /* The weekly jobs (Labor, Körnerbrut, Substrat) three to a row, smaller and
-     without the drawing: they are there when needed, not what the eye lands on. */
-  .wk-tiles-small {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .wk-tiles-small .wk-tile {
-    min-height: 56px;
-    padding: 8px 10px;
-  }
-  .wk-tiles-small .wk-tile-art {
-    display: none;
-  }
-  .wk-tiles-small .wk-tile-t {
-    max-width: none;
-    font-size: 0.9375rem;
-    overflow-wrap: anywhere;
-  }
+}
+
+/* Reihenfolge ändern: a quiet link under the tiles, and a numbered list with
+   up/down buttons that moves the tiles as you tap. */
+.wk-order-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.wk-order-link {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--c-text-sec);
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.wk-order {
+  margin-top: 4px;
+  padding: 10px 14px;
+}
+.wk-order[hidden] {
+  display: none;
+}
+.wk-order-list {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.wk-order-row {
+  padding: 2px 0;
+}
+.wk-order-row > * {
+  vertical-align: middle;
+}
+.wk-order-name {
+  display: inline-block;
+  min-width: 9em;
+  margin-right: 8px;
+}
+.wk-order-row .btn {
+  min-width: 44px;
+  margin-left: 4px;
+}
+.wk-order-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 /* ── flow modal ─────────────────────────────────────────────────────────── */

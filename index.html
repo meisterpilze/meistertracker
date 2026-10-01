@@ -2494,7 +2494,7 @@
               </div>
             </div>
           </div>
-          <div class="wk-tiles">
+          <div class="wk-tiles" id="wk-tiles">
             <button type="button" class="wk-tile" id="wk-t-move" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2521,27 +2521,6 @@
               <span class="wk-tile-t" data-i18n="work.harvest">Ernte erfassen</span>
               <span class="wk-tile-when" data-i18n="work.harvestWhen">Gramm pro Beutel, nach dem Ernten</span>
             </button>
-            <button type="button" class="wk-tile" id="wk-t-contam" style="--wk-c: var(--c-red-dark); --wk-cl: var(--c-red-light)">
-              <span class="wk-tile-art" aria-hidden="true">
-                <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="24" y="24" width="94" height="68" rx="8" fill="currentColor" opacity=".13"/>
-                  <path d="M24 44h94" stroke="currentColor" stroke-width="2.4" opacity=".14"/>
-                  <g fill="currentColor" opacity=".32">
-                  <circle cx="52" cy="58" r="13"/>
-                  <circle cx="67" cy="51" r="9"/>
-                  <circle cx="62" cy="69" r="8"/>
-                  <circle cx="96" cy="76" r="11"/>
-                  <circle cx="84" cy="82" r="7"/>
-                  </g>
-                  <g fill="currentColor" opacity=".22">
-                  <circle cx="38" cy="34" r="2.8"/><circle cx="79" cy="33" r="2.3"/>
-                  <circle cx="104" cy="52" r="2.5"/><circle cx="42" cy="84" r="2.3"/>
-                  </g>
-                </svg>
-              </span>
-              <span class="wk-tile-t" data-i18n="work.contam">Kontamination melden</span>
-              <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
-            </button>
             <button type="button" class="wk-tile" id="wk-t-batch" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2563,10 +2542,6 @@
               <span class="wk-tile-t" data-i18n="work.tileBatch">Beutel beimpfen</span>
               <span class="wk-tile-when" data-i18n="work.batchWhen">wenn Körnerbrut durchgewachsen ist</span>
             </button>
-          </div>
-          <!-- Die seltenen Arbeitsgänge, kleiner: Labor, Körnerbrut und Substrat
-               kommen ein- bis zweimal die Woche, die vier darüber jeden Tag. -->
-          <div class="wk-tiles wk-tiles-row2 wk-tiles-small">
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2619,6 +2594,39 @@
               <span class="wk-tile-t" data-i18n="work.tileSubstrate">Substrat</span>
               <span class="wk-tile-when" data-i18n="work.substrateWhen">bucht Pellets, Kleie und Gips vom Lager ab</span>
             </button>
+            <button type="button" class="wk-tile" id="wk-t-contam" style="--wk-c: var(--c-red-dark); --wk-cl: var(--c-red-light)">
+              <span class="wk-tile-art" aria-hidden="true">
+                <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="24" y="24" width="94" height="68" rx="8" fill="currentColor" opacity=".13"/>
+                  <path d="M24 44h94" stroke="currentColor" stroke-width="2.4" opacity=".14"/>
+                  <g fill="currentColor" opacity=".32">
+                  <circle cx="52" cy="58" r="13"/>
+                  <circle cx="67" cy="51" r="9"/>
+                  <circle cx="62" cy="69" r="8"/>
+                  <circle cx="96" cy="76" r="11"/>
+                  <circle cx="84" cy="82" r="7"/>
+                  </g>
+                  <g fill="currentColor" opacity=".22">
+                  <circle cx="38" cy="34" r="2.8"/><circle cx="79" cy="33" r="2.3"/>
+                  <circle cx="104" cy="52" r="2.5"/><circle cx="42" cy="84" r="2.3"/>
+                  </g>
+                </svg>
+              </span>
+              <span class="wk-tile-t" data-i18n="work.contam">Kontamination melden</span>
+              <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
+            </button>
+          </div>
+          <!-- Die Reihenfolge der Kacheln stellt jeder selbst ein; gemerkt wird sie
+               je Benutzer auf diesem Gerät (applyWkTileOrder). -->
+          <div class="wk-order-bar">
+            <button type="button" class="wk-order-link" id="wk-order-btn" aria-controls="wk-order" aria-expanded="false" data-i18n="work.orderEdit">Reihenfolge ändern</button>
+          </div>
+          <div class="card wk-order" id="wk-order" hidden>
+            <ol class="wk-order-list" id="wk-order-list"></ol>
+            <div class="wk-order-actions">
+              <button type="button" class="btn btn-sm" id="wk-order-reset" data-i18n="work.orderReset">Standard</button>
+              <button type="button" class="btn btn-sm btn-p" id="wk-order-done" data-i18n="work.orderDone">Fertig</button>
+            </div>
           </div>
           <!-- Was in welchem Zelt und welcher Inkubation steht, nach Sorte und Einzugstag. Gefüllt von
                renderWorkTents(); ohne solche Zonen bleibt die Karte weg. -->
