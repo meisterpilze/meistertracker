@@ -24274,11 +24274,8 @@ function openCultureSheet(c) {
     met(t('batch.strain'), (c.strainText || '').trim() ? esc(c.strainText.trim()) : '\u2014') +
     met(t('ci.status'), esc(status ? t(status) : c.status || '')) +
     met(t('ci.created'), esc(c.created ? fmtDt(c.created) : '\u2014')) +
-    met(
-      t('lab.parentCulture'),
-      c.parentId ? `<span style="font-family:monospace">${esc(c.parentId)}</span>` : '\u2014'
-    ) +
     '</div>' +
+    ciHerkunftHtml(c) +
     (kinder
       ? `<div class="fs-meta muted" style="margin-bottom:10px">${esc(t('ci.children', { n: kinder }))}</div>`
       : '');
@@ -24286,6 +24283,34 @@ function openCultureSheet(c) {
   closeCamScan();
   closeScanModal();
   document.getElementById('m-baginfo').classList.add('open');
+}
+// Der Stammbaum nach oben, gleich im Fenster: Slant → Petrischale → … → diese.
+// Wer eine Spritze in der Hand hat, will wissen, woher sie kommt, und dafür
+// musste man sonst auf die Laborseite. Ohne Herkunft steht da, dass es keine gibt.
+function ciHerkunftHtml(c) {
+  const kette = [];
+  const seen = new Set([c.id]);
+  let p = c.parentId ? cultures.find((x) => x.id === c.parentId) : null;
+  while (p && !seen.has(p.id) && kette.length < 10) {
+    seen.add(p.id);
+    kette.unshift(p);
+    p = p.parentId ? cultures.find((x) => x.id === p.parentId) : null;
+  }
+  const zeile = (x, ich) =>
+    `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${ctBadge(x.type)}<span class="fs-meta" style="font-family:monospace;${ich ? 'font-weight:700' : ''}">${esc(x.id)}</span></div>`;
+  // Eine Herkunft, die nicht (mehr) in der Liste steht, wird trotzdem genannt.
+  const oben = kette.length ? kette[0] : c;
+  if (oben.parentId && !cultures.some((x) => x.id === oben.parentId))
+    kette.unshift({ id: oben.parentId, type: oben.parentId.split('-')[0] });
+  const inhalt = kette.length
+    ? kette.map((x) => zeile(x, false)).join('<div class="fs-xs muted" style="margin-left:10px">↓</div>') +
+      '<div class="fs-xs muted" style="margin-left:10px">↓</div>' +
+      zeile(c, true)
+    : `<div class="fs-meta muted">${esc(t('ci.noParent'))}</div>`;
+  return (
+    `<div class="met" style="margin-bottom:12px"><div class="met-l">${esc(t('ci.herkunft'))}</div>` +
+    `<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">${inhalt}</div></div>`
+  );
 }
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
@@ -24332,6 +24357,10 @@ function ciAction(a) {
       const sel = document.getElementById('lineage-sel');
       if (sel) sel.value = 'C:' + c.id;
       renderLineage();
+      // Am Telefon steht über dem Stammbaum der Laborbestand; ohne das hier sah
+      // man nur den oberen Teil der Laborseite, und der Baum lag darunter.
+      const sp = document.getElementById('sp-lab-lineage');
+      if (sp) sp.scrollIntoView({ block: 'start' });
     }, 100);
     return;
   }
