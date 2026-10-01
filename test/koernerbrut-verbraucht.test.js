@@ -278,7 +278,7 @@ function knopf(scanZustand, lauf) {
         classList: { toggle(c, an) { if (an) cls.add(c); else cls.delete(c); }, has: (c) => cls.has(c) }
       };
     };
-    for (const n of ['move', 'harvest', 'trash', 'used']) {
+    for (const n of ['move', 'harvest', 'trash']) {
       els['btn-cam-' + n] = mk();
       els['cam-' + n + '-count'] = mk();
     }
@@ -305,7 +305,7 @@ function knopf(scanZustand, lauf) {
     return {
       els,
       letzte: () => fb[fb.length - 1],
-      tippen: () => toggleModeScan('USED'),
+      tippen: () => toggleModeScan('REMOVE'),
       zustand: () => scan,
       lauf: () => _modeRun,
       weiter: () => modeRunResumable()
@@ -314,35 +314,41 @@ function knopf(scanZustand, lauf) {
   )(scanZustand, lauf);
 }
 
-describe('Der Knopf Verbraucht', () => {
+// Entsorgen und Verbraucht waren zwei Knöpfe, die fast dasselbe taten; seit
+// 01.10.2026 ist es einer, "Raus". Ein Körnerbeutel geht darüber weiter als
+// verbraucht raus (processScan → verbrauchtScan), eine Kultur als verbraucht.
+describe('Der Knopf Raus', () => {
   it('ein Tipp stellt scharf und sagt, was jetzt passiert', () => {
     const k = knopf(aus(), null);
     k.tippen();
-    assert.equal(k.zustand().action, 'USED');
-    assert.ok(k.els['btn-cam-used'].classList.has('on'));
-    assert.equal(k.els['btn-cam-used'].attrs['aria-pressed'], 'true');
-    assert.equal(k.letzte().msg, 'cam.usedArmed');
+    assert.equal(k.zustand().action, 'REMOVE');
+    assert.ok(k.els['btn-cam-trash'].classList.has('on'));
+    assert.equal(k.els['btn-cam-trash'].attrs['aria-pressed'], 'true');
+    assert.equal(k.letzte().msg, 'cam.trashArmed');
   });
 
-  it('zeigt, wieviele es schon waren, und der zweite Tipp sagt es noch einmal', () => {
-    const k = knopf(verbraucht(), { action: 'USED', to: null, n: 3, at: Date.now() });
-    assert.equal(k.els['cam-used-count'].textContent, '3');
-    assert.equal(k.els['cam-used-count'].hidden, false);
-    k.tippen();
-    assert.equal(k.zustand().action, null);
-    assert.ok(!k.els['btn-cam-used'].classList.has('on'));
-    assert.match(k.letzte().msg, /^cam\.usedEnded .*"n":3/);
-  });
-
-  it('überlebt die geschlossene Kamera nie — wie Entsorgen', () => {
-    const k = knopf(verbraucht(), { action: 'USED', to: null, n: 2, at: Date.now() - 60 * 1000 });
+  it('überlebt die geschlossene Kamera nie', () => {
+    const k = knopf(
+      { action: 'REMOVE', to: null, from: null },
+      { action: 'REMOVE', to: null, n: 2, at: Date.now() - 60 * 1000 }
+    );
     assert.equal(k.weiter(), false);
   });
 
-  it('steht als fünfte Kachel in der Kamera und ist verdrahtet', () => {
+  it('ist der einzige Knopf dafür: Verbraucht steht nicht mehr in der Kamera', () => {
     const modi = HTML.slice(HTML.indexOf('id="cam-hud-modes"'), HTML.indexOf('class="cam-hud-btns"'));
-    assert.match(modi, /id="btn-cam-used"[\s\S]*data-i18n="cam\.used"[\s\S]*id="cam-used-count"/);
-    assert.match(APP, /\['btn-cam-used', \(\) => toggleModeScan\('USED'\)\]/);
+    assert.match(modi, /id="btn-cam-trash"[\s\S]*data-i18n="cam\.trash"[\s\S]*id="cam-trash-count"/);
+    assert.doesNotMatch(modi, /btn-cam-used/);
+    assert.match(APP, /\['btn-cam-trash', \(\) => toggleModeScan\('REMOVE'\)\]/);
+  });
+
+  it('bucht einen Körnerbeutel auch im Raus-Modus als verbraucht', () => {
+    const p = hebe('processScan');
+    assert.match(
+      p,
+      /scan\.action === 'REMOVE' && isBag && batch && batch\.batchType === 'grain'[\s\S]{0,80}verbrauchtScan\(/
+    );
+    assert.match(hebe('verbrauchtScan'), /modeRunTally\(scan\.action === 'REMOVE' \? 'REMOVE' : 'USED'/);
   });
 });
 
@@ -355,6 +361,7 @@ describe('↩ in der Kamera', () => {
       const a = { _tempId: 's1', action: 'REMOVE', bag: 'G-1', _serverId: 11, _run: 'USED' };
       const b = { _tempId: 's2', action: 'REMOVE', bag: 'G-2', _serverId: 12, _run: 'USED' };
       const sessionEntries = [a, b];
+      const _kulturRaus = [];
       const scanLog = [a, b];
       const movements = [a, b];
       const scan = { count: 2 };

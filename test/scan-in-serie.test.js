@@ -102,6 +102,10 @@ function werkbank(stand) {
     const scanAfterSync = (raw) => nachgefragt.push(raw);
     const aufnehmen = [];
     const kulturAufnehmenAnbieten = (id) => aufnehmen.push(id);
+    const raus = [];
+    const kulturRausScan = (c) => raus.push(c.id);
+    const kulturFenster = [];
+    const openCultureSheet = (c) => kulturFenster.push(c.id);
     ${hebe('modeRunTally')}
     ${hebe('armMode')}
     ${hebe('armMoveRun')}
@@ -115,6 +119,8 @@ function werkbank(stand) {
       gepostet,
       nachgefragt,
       aufnehmen,
+      raus,
+      kulturFenster,
       beutelFenster,
       geerntet,
       zustand: () => scan,
@@ -336,6 +342,22 @@ describe('Unbekannt heißt: erst nachfragen, dann sagen, was los ist', () => {
     const danach = werkbank({ scan: neutral(), cultures: [] });
     danach.scan('MC-LM-160926-01', { synced: true });
     assert.deepEqual(danach.aufnehmen, ['MC-LM-160926-01']);
+  });
+
+  it('öffnet für eine gescannte Kultur ihr Fenster, statt nur die Kamera zu schließen', () => {
+    const w = werkbank({ scan: neutral(), cultures: [{ id: 'SY-KO-090926-01', status: 'active' }] });
+    w.scan('SY-KO-090926-01');
+    assert.deepEqual(w.kulturFenster, ['SY-KO-090926-01']);
+  });
+
+  it('nimmt im Raus-Modus eine Kultur aus dem System, ohne Fenster', () => {
+    const w = werkbank({
+      scan: { ...neutral(), action: 'REMOVE' },
+      cultures: [{ id: 'LC-KO-090926-01', status: 'active' }]
+    });
+    w.scan('LC-KO-090926-01');
+    assert.deepEqual(w.raus, ['LC-KO-090926-01']);
+    assert.deepEqual(w.kulturFenster, []);
   });
 
   it('erkennt eine Kultur mit Stamm in der Kennung, und Spritzen', () => {
@@ -791,11 +813,11 @@ describe('Ernten aus der Kamera geht in die Kamera zurück', () => {
 describe('Kamera-Leiste: Aufbau und Stil', () => {
   const leiste = HTML.slice(HTML.indexOf('id="cam-scan-hud"'), HTML.indexOf('<!-- Sidebar -->'));
 
-  it('hat fünf beschriftete Knöpfe in einer eigenen Reihe', () => {
+  it('hat vier beschriftete Knöpfe in einer eigenen Reihe', () => {
     const modi = leiste.slice(leiste.indexOf('id="cam-hud-modes"'), leiste.indexOf('class="cam-hud-btns"'));
     const ids = [...modi.matchAll(/id="(btn-cam-[a-z]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(ids, ['btn-cam-move', 'btn-cam-harvest', 'btn-cam-contam', 'btn-cam-trash', 'btn-cam-used']);
-    for (const k of ['cam.move', 'cam.harvest', 'cam.contam', 'cam.trash', 'cam.used']) {
+    assert.deepEqual(ids, ['btn-cam-move', 'btn-cam-harvest', 'btn-cam-contam', 'btn-cam-trash']);
+    for (const k of ['cam.move', 'cam.harvest', 'cam.contam', 'cam.trash']) {
       assert.match(modi, new RegExp('data-i18n="' + k.replace('.', '\\.') + '"'), k + ' ohne Wort');
     }
   });

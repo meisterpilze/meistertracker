@@ -1521,22 +1521,12 @@ body:has(.modal-bg.open) .cam-fab {
 .cam-mode-btn.cam-mode-contam.on:active {
   background: rgba(220, 38, 38, 0.7);
 }
-/* Entsorgen hell auf dunkel: eine vierte Farbe wäre zu nah am Rot der
+/* Raus hell auf dunkel: eine vierte Farbe wäre zu nah am Rot der
    Kontamination, und die zwei darf man nicht verwechseln. */
 .cam-mode-btn.cam-mode-trash.on {
   background: #f5f5f4;
   color: #1c1917;
   box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
-}
-/* Verbraucht in Lila, der Farbe der Körnerbrut in der ganzen App (Spawn-Zone,
-   Kultur-Knoten) — nur für die gibt es den Knopf. */
-.cam-mode-btn.cam-mode-used.on {
-  background: var(--c-purple-dark);
-  color: #fff;
-  box-shadow: 0 0 16px rgba(147, 51, 234, 0.6);
-}
-.cam-mode-used .cam-hud-badge {
-  color: var(--c-purple-dark);
 }
 .cam-mode-move .cam-hud-badge {
   color: #1d4ed8;

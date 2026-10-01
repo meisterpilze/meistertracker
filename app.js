@@ -18694,8 +18694,9 @@ function _msqLastQty(mode) {
 // Herkunft, also ohne "Beimpft mit", und genau das Feld fehlte dann.
 function _msqLastArt() {
   try {
+    // Nie auf Slant: der hat keine Herkunft, und das Feld wäre wieder weg.
     const a = localStorage.getItem('mp-msq-art');
-    if (a && LAB_PARENT_TYPES[a]) return a;
+    if (a && a !== 'MC' && LAB_PARENT_TYPES[a]) return a;
   } catch (e) {
     /* storage disabled */
   }
@@ -23203,8 +23204,7 @@ function updateCamModeBtns() {
   const knoepfe = [
     ['move', moveOn, moveOn ? t('cam.moveOnAria', { loc: loc }) : t('cam.moveAria'), modeRunCount('MOVE', scan.to)],
     ['harvest', scan.action === 'HARVEST', t('cam.harvestAria'), modeRunCount('HARVEST', null)],
-    ['trash', scan.action === 'REMOVE', t('cam.trashAria'), modeRunCount('REMOVE', null)],
-    ['used', scan.action === 'USED', t('cam.usedAria'), modeRunCount('USED', null)]
+    ['trash', scan.action === 'REMOVE', t('cam.trashAria'), modeRunCount('REMOVE', null)]
   ];
   for (const [name, on, aria, zahl] of knoepfe) {
     const b = document.getElementById('btn-cam-' + name);
@@ -23801,6 +23801,10 @@ function processScan(raw, opts) {
       return;
     }
     const c = cultures.find((x) => x.id.toUpperCase() === val);
+    if (c && scan.action === 'REMOVE') {
+      kulturRausScan(c);
+      return;
+    }
     if (c) {
       if (c.status === 'used' || c.status === 'contam') {
         setFb('err', cultureRefusal(c));
@@ -23832,13 +23836,10 @@ function processScan(raw, opts) {
         setFb('ok', 'Parent gesetzt: ' + c.id);
         return;
       }
-      go('lab', 'n-lab');
-      openStab('lab', 'lineage');
-      setTimeout(() => {
-        document.getElementById('lineage-sel').value = 'C:' + c.id;
-        renderLineage();
-      }, 100);
-      setFb('ok', t('scanFb.cultureScanned', { val: val }));
+      // Ein Fenster mit Knöpfen, wie beim Beutel. Vorher ging die Kamera zu und
+      // der Stammbaum auf, ohne einen Knopf — gescannt, und dann nichts.
+      openCultureSheet(c);
+      setFb('ok', t('scanFb.cultureScanned', { val: val }), { noModal: true });
       return;
     }
     // Eine Kultur-Nummer, die hier keiner kennt. Ohne diese Stelle lief sie
@@ -23964,7 +23965,9 @@ function processScan(raw, opts) {
       updateSD();
       return;
     }
-    if (scan.action === 'USED') {
+    // Raus mit einem Körnerbeutel heißt: er ging in Blöcke. Gebucht wie
+    // "Verbraucht", damit er nicht als weggeworfen zählt.
+    if (scan.action === 'USED' || (scan.action === 'REMOVE' && isBag && batch && batch.batchType === 'grain')) {
       verbrauchtScan(val, isBag, batchId, batch);
       return;
     }
@@ -24225,9 +24228,127 @@ function verbrauchtScan(val, isBag, batchId, batch) {
   }
   const [entry] = spawnBuchen([bag], 'spawn', { sitzung: true });
   _lastScanVal = bag;
-  const n = modeRunTally('USED', null, entry);
+  const n = modeRunTally(scan.action === 'REMOVE' ? 'REMOVE' : 'USED', null, entry);
   setFb('ok', t('scanFb.usedLogged', { bag: bag, n: n }), entry);
   updateSD();
+}
+// ── Raus: eine Kultur aus dem System ─────────────────────────
+// Im Raus-Modus der Kamera ist eine gescannte Kultur verbraucht — derselbe
+// Status, den "Verbraucht" in der Kulturliste setzt. ↩ nimmt die letzte zurück
+// (camUndoLastScan), darum merkt sich _kulturRaus, was vorher war.
+const _kulturRaus = [];
+function kulturRausScan(c) {
+  if (c.status === 'used' || c.status === 'contam') {
+    _scanBeep(500, 120);
+    setFb('warn', cultureRefusal(c));
+    return;
+  }
+  _kulturRaus.push({ id: c.id, prev: c.status, at: Date.now() });
+  if (_kulturRaus.length > 50) _kulturRaus.shift();
+  setCultureStatus(c.id, 'used');
+  _lastScanVal = c.id;
+  const n = modeRunTally('REMOVE', null, null);
+  _scanBeep(800, 60);
+  setFb('ok', t('scanFb.cultureOut', { id: c.id, n: n }));
+  updateSD();
+}
+// ── Das Kultur-Fenster ───────────────────────────────────────
+// Eine gescannte Kultur zeigt, was sie ist, und was man mit ihr tun kann — im
+// selben Fenster wie ein Beutel (m-baginfo), mit eigenen Knöpfen (data-bi="ci-…").
+let ciCultureId = null;
+function openCultureSheet(c) {
+  biBagId = null;
+  biBatchId = null;
+  ciCultureId = c.id;
+  document.getElementById('bi-title').textContent = c.id;
+  const STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
+  const status = STATUS[c.status];
+  const kinder = cultures.filter((x) => x.parentId === c.id).length;
+  const met = (k, v) =>
+    `<div class="met"><div class="met-l">${esc(k)}</div><div class="fs-base" style="font-weight:600">${v}</div></div>`;
+  const name = c.strainName || c.species || '';
+  document.getElementById('bi-body').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">' +
+    met(t('ci.type'), esc(t('ci.type.' + c.type))) +
+    met(t('batch.species'), spDot(name) + esc(name)) +
+    met(t('batch.strain'), (c.strainText || '').trim() ? esc(c.strainText.trim()) : '\u2014') +
+    met(t('ci.status'), esc(status ? t(status) : c.status || '')) +
+    met(t('ci.created'), esc(c.created ? fmtDt(c.created) : '\u2014')) +
+    met(
+      t('lab.parentCulture'),
+      c.parentId ? `<span style="font-family:monospace">${esc(c.parentId)}</span>` : '\u2014'
+    ) +
+    '</div>' +
+    (kinder
+      ? `<div class="fs-meta muted" style="margin-bottom:10px">${esc(t('ci.children', { n: kinder }))}</div>`
+      : '');
+  renderCiActions(c);
+  closeCamScan();
+  closeScanModal();
+  document.getElementById('m-baginfo').classList.add('open');
+}
+function renderCiActions(c) {
+  const el = document.getElementById('bi-actions');
+  if (!el) return;
+  const aktiv = c.status === 'active' || c.status === 'stored';
+  // Dieselben Formen wie renderBiActions.
+  const big =
+    'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-weight:600;margin-bottom:8px;cursor:pointer';
+  const sec =
+    'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
+  // Woraus eine Laborarbeit angesetzt werden kann: eine Spritze ist das Ende.
+  const alsHerkunft = Object.values(LAB_PARENT_TYPES).some((l) => l.includes(c.type));
+  let html = '';
+  if (aktiv)
+    html += `<button type="button" data-bi="ci-out" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-purple-dark);color:#fff">✓ ${esc(t('ci.out'))}</button>`;
+  html += '<div style="display:flex;gap:8px;margin-bottom:8px">';
+  if (aktiv && alsHerkunft)
+    html += `<button type="button" data-bi="ci-labor" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('ci.labor'))}</button>`;
+  html += `<button type="button" data-bi="ci-lineage" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('ci.lineage'))}</button>`;
+  html += '</div>';
+  if (aktiv)
+    html += `<button type="button" data-bi="ci-contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('ci.contam'))}</button>`;
+  el.innerHTML = html;
+}
+// Ein Tipp, mit Rückgängig unten — wie überall, wo etwas aus dem System geht.
+function ciSetStatus(status, msgKey) {
+  const c = cultures.find((x) => x.id === ciCultureId);
+  if (!c) return;
+  const prev = c.status;
+  document.getElementById('m-baginfo').classList.remove('open');
+  setCultureStatus(c.id, status);
+  showUndoBar(t(msgKey, { id: c.id }), () => setCultureStatus(c.id, prev));
+}
+function ciAction(a) {
+  const c = cultures.find((x) => x.id === ciCultureId);
+  if (!c) return;
+  if (a === 'ci-out') return ciSetStatus('used', 'ci.outDone');
+  if (a === 'ci-contam') return ciSetStatus('contam', 'ci.contamDone');
+  document.getElementById('m-baginfo').classList.remove('open');
+  if (a === 'ci-lineage') {
+    go('lab', 'n-lab');
+    openStab('lab', 'lineage');
+    setTimeout(() => {
+      const sel = document.getElementById('lineage-sel');
+      if (sel) sel.value = 'C:' + c.id;
+      renderLineage();
+    }, 100);
+    return;
+  }
+  if (a === 'ci-labor') {
+    // Der Dialog, mit dieser Kultur schon unter "Beimpft mit". Passt sie nicht
+    // zur zuletzt benutzten Art, dann zur Petrischale — die nimmt jede.
+    msQuickOpen('labor', null);
+    if (!_msQuickCtx) return;
+    let err = msqInocAdd(c.id);
+    if (err) {
+      const art = document.getElementById('ms-q-labtype');
+      if (art) art.value = 'PD';
+      err = msqInocAdd(c.id);
+    }
+    msQuickRender();
+    if (err) toast(err, 'err');
+  }
 }
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
 const _scanBuf = { chars: [], timer: null };
@@ -28263,16 +28384,22 @@ function flipCamera() {
 // Undo the most recent non-HARVEST scan from inside the camera HUD.
 // Reuses undoScanEntry via the hidden scan-log row (created on every successful scan).
 function camUndoLastScan() {
-  if (!sessionEntries || sessionEntries.length === 0) {
-    _showCamHudToast('info', t('cam.nothingToUndo'));
-    return;
-  }
   let last = null;
-  for (let i = sessionEntries.length - 1; i >= 0; i--) {
+  for (let i = (sessionEntries || []).length - 1; i >= 0; i--) {
     if (sessionEntries[i].action !== 'HARVEST') {
       last = sessionEntries[i];
       break;
     }
+  }
+  // Eine Kultur, die nach dem letzten Beutel rausging, kommt zuerst zurück.
+  const k = _kulturRaus[_kulturRaus.length - 1];
+  if (k && (!last || k.at >= Date.parse(last.time || 0))) {
+    _kulturRaus.pop();
+    setCultureStatus(k.id, k.prev);
+    if (_modeRun && _modeRun.action === 'REMOVE') _modeRun.n = Math.max(0, _modeRun.n - 1);
+    updateSD();
+    _showCamHudToast('info', t('cam.cultureBack', { id: k.id }));
+    return;
   }
   if (!last) {
     _showCamHudToast('info', t('cam.nothingToUndo'));
@@ -28365,6 +28492,7 @@ function initEventListeners() {
       renderBiActions();
       return;
     }
+    if (a.startsWith('ci-')) return ciAction(a);
     if (!biBatchId) return;
     if (a === 'harvest') return biOpenHarvest();
     if (a === 'contam') return biReportContam();
@@ -28492,8 +28620,7 @@ function initEventListeners() {
   for (const [id, fn] of [
     ['btn-cam-move', toggleMoveScan],
     ['btn-cam-harvest', () => toggleModeScan('HARVEST')],
-    ['btn-cam-trash', () => toggleModeScan('REMOVE')],
-    ['btn-cam-used', () => toggleModeScan('USED')]
+    ['btn-cam-trash', () => toggleModeScan('REMOVE')]
   ]) {
     const knopf = $(id);
     if (knopf) knopf.addEventListener('click', fn);
