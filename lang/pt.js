@@ -1430,8 +1430,6 @@ window.LANG['pt'] = {
   'cam.harvestResumed': 'Ainda colhendo — toque no botão para parar',
   'cam.trashArmed': 'Retirar — cada saco e cada cultura lida sai do sistema. ↩ desfaz a última.',
   'cam.trashEnded': 'Retirar terminado — {n} retirados do sistema',
-  'cam.usedArmed': 'Consumido — cada saco de grão escaneado sai do estoque. ↩ desfaz o último.',
-  'cam.usedEnded': 'Consumo concluído — {n} sacos de grão baixados',
   'scanFb.location': 'Local: {loc} \u2192 agora escaneie sacos',
   'scanFb.to': 'Para: {loc} \u2192 agora escaneie sacos',
   'scanFb.setAction':
@@ -1470,9 +1468,6 @@ window.LANG['pt'] = {
   'scanFb.alreadyRemoved': '{bag} já foi descartado — nada a fazer.',
   'scanFb.usedLogged': '{bag} consumido · nº {n}',
   'scanFb.alreadyUsed': '{bag} já foi baixado como consumido — nada a fazer.',
-  'scanFb.usedNotGrain': '{bag} não é um saco de grão. Consumido só dá baixa em grão — para jogar fora: Descartar.',
-  'scanFb.usedNeedsBag': '{batch} é um lote inteiro — escaneie a etiqueta do saco de grão.',
-  'scanFb.usedNotCulture': '{id} é uma cultura, não um saco de grão. Marque uma cultura vazia como “Esgotada” no laboratório.',
   'scanFb.dupeConfirm': '{bag} já foi registrado nesta rodada. De propósito? Então escaneie de novo.',
   'scanFb.movedMeanwhile':
     '{bag} está agora em {loc} segundo o sistema — não foi movido. Dados atualizados, escaneie de novo.',
@@ -2152,8 +2147,6 @@ window.LANG['pt'] = {
   'offline.queued': '{n} na fila',
   'sw.scanQueueOverflow': 'Fila de scans offline cheia ({max}). Descartadas {dropped} entradas mais antigas.',
   // Task delete
-  'task.deleteTitle': 'Apagar tarefa?',
-  'task.deleteMsg': 'Esta tarefa ser\u00e1 permanentemente removida.',
   // No bags to move
   'batch.noBagsToMove': 'Sem sacos para mover',
   'batch.allAlreadyAt': 'Todos os {n} sacos j\u00e1 est\u00e3o em {loc}',

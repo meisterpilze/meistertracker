@@ -1524,8 +1524,6 @@ window.LANG['de'] = {
   'cam.harvestResumed': 'Ernten läuft noch — zum Beenden den Knopf antippen',
   'cam.trashArmed': 'Raus — jeder gescannte Beutel und jede Kultur geht aus dem System. ↩ nimmt den letzten zurück.',
   'cam.trashEnded': 'Raus beendet — {n} aus dem System genommen',
-  'cam.usedArmed': 'Verbraucht — jeder gescannte Körnerbeutel geht aus dem Bestand. ↩ nimmt den letzten zurück.',
-  'cam.usedEnded': 'Verbraucht beendet — {n} Körnerbeutel ausgebucht',
   'scanFb.location': 'Standort: {loc} \u2192 jetzt Beutel scannen',
   'scanFb.to': 'Nach: {loc} \u2192 jetzt Beutel scannen',
   'scanFb.setAction':
@@ -1563,9 +1561,6 @@ window.LANG['de'] = {
   'scanFb.alreadyRemoved': '{bag} ist schon entsorgt — nichts zu tun.',
   'scanFb.usedLogged': '{bag} verbraucht · Nr. {n}',
   'scanFb.alreadyUsed': '{bag} ist schon als verbraucht ausgebucht — nichts zu tun.',
-  'scanFb.usedNotGrain': '{bag} ist kein Körnerbeutel. Verbraucht bucht nur Körnerbrut aus — zum Wegwerfen: Entsorgen.',
-  'scanFb.usedNeedsBag': '{batch} ist eine ganze Charge — das Etikett des einzelnen Körnerbeutels scannen.',
-  'scanFb.usedNotCulture': '{id} ist eine Kultur, kein Körnerbeutel. Eine leere Kultur im Labor auf „Aufgebraucht“ stellen.',
   'scanFb.dupeConfirm': '{bag} ist in dieser Runde schon erfasst. Absicht? Dann nochmal scannen.',
   'scanFb.movedMeanwhile':
     '{bag} ist laut System inzwischen in {loc} — nicht umgezogen. Stand ist aktualisiert, nochmal scannen.',
@@ -2158,8 +2153,6 @@ window.LANG['de'] = {
   'offline.queued': '{n} in Warteschlange',
   'sw.scanQueueOverflow': 'Offline-Scan-Warteschlange voll ({max}). {dropped} älteste Einträge verworfen.',
   // Task delete
-  'task.deleteTitle': 'Aufgabe l\u00f6schen?',
-  'task.deleteMsg': 'Diese Aufgabe wird unwiderruflich entfernt.',
   // No bags to move
   'batch.noBagsToMove': 'Keine Beutel umzuziehen',
   'batch.allAlreadyAt': 'Alle {n} Beutel sind bereits in {loc}',

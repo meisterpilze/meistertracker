@@ -819,10 +819,6 @@ body:has(.modal-bg.open) .cam-fab {
   background: #fffbeb;
   border-bottom-color: #fcd34d;
 }
-.scan-modal.scan-action-used .scan-modal-header {
-  background: var(--c-purple-light);
-  border-bottom-color: var(--c-purple-accent);
-}
 
 .scan-modal-tabs {
   display: flex;
@@ -4397,32 +4393,6 @@ tr:hover td {
    Dieselben Bausteine wie die Sorten- und Labor-Kacheln — .sbar für den Balken,
    .sup für die Ampel — damit "geschafft" hier aussieht wie "Bestand reicht"
    dort und nicht wie eine neue Sprache. */
-.goal-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  border-top: 1px solid var(--c-border-light);
-  font-size: max(0.6875rem, var(--fs-min));
-}
-.goal-wk {
-  font-weight: 600;
-  flex: none;
-  min-width: 48px;
-}
-.goal-span {
-  color: var(--c-text-muted);
-  flex: none;
-  min-width: 92px;
-}
-.goal-bar {
-  flex: 1;
-  min-width: 40px;
-}
-.goal-n {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
 .lab-rows {
   display: flex;
   flex-direction: column;
@@ -8905,28 +8875,6 @@ body:has(#m-camscan.open) .update-bar {
 .pj-out {
   flex: 0 0 auto;
   width: auto;
-}
-/* Mengen und Fazit gehören zum Versuch und nicht in seine Zeile: man schreibt
-   sie einmal am Anfang und einmal am Ende. */
-.pj-v-more {
-  margin-top: 12px;
-}
-.pj-v-more > summary {
-  cursor: pointer;
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
-  min-height: max(24px, var(--tap-min));
-  display: flex;
-  align-items: center;
-}
-.pj-v-more label {
-  display: block;
-  margin-top: 8px;
-}
-.pj-arch + .pj-arch {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--c-border);
 }
 .pj-run-ro .pj-run-res {
   flex: 2 1 150px;

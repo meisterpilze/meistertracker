@@ -315,7 +315,7 @@ function rebuildZoneConstants() {
   REF_GROUPS = [
     {
       g: 'Actions',
-      items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM', 'USED'].map((a) => ({ val: a, label: a }))
+      items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a }))
     }
   ];
   REF_GROUPS.push({
@@ -9289,7 +9289,7 @@ function inocRemove(id) {
   _inoc = _inoc.filter((x) => x.id !== id);
 }
 // A batch's source_id column takes a culture. Grain bags are not cultures and are
-// recorded in the scan log instead (nbConsumeSpawnBags), so only the first culture
+// recorded in the scan log instead (inocVerbrauchtBuchen), so only the first culture
 // in the list lands there — the full list still drives what gets written off.
 function inocCultureId() {
   const c = _inoc.find((x) => x.kind === 'culture');
@@ -9452,17 +9452,6 @@ function spawnZuruecknehmen(entries) {
   renderStatus();
   // Dieselbe Leiste, auf der eben noch Rückgängig stand: dort schaut man hin.
   toast(t('batch.spawnBack', { n: entries.length }));
-}
-// Write off each grain bag consumed by `batchObj`. from = its current location so
-// the zone counts drop, and reason ties it to the batch it became. Ein Fehltipp
-// kostet einen Tipp: Rückgängig stellt die Beutel zurück.
-function nbConsumeSpawnBags(batchObj, bags) {
-  if (!bags.length) return;
-  const entries = spawnBuchen(bags, 'spawn:' + batchObj.batchId);
-  if (!entries.length) return;
-  const msg = t('batch.spawnConsumed', { n: entries.length, id: batchObj.batchId });
-  setFb('ok', msg, { noModal: true });
-  showUndoBar(msg, () => spawnZuruecknehmen(entries));
 }
 // Grain bags written off for a batch, read back out of the scan log.
 function spawnSourceFor(batchId) {
@@ -12156,16 +12145,6 @@ function toggleTask(id) {
   renderCalendar();
   updateTodoBadge();
   if (caldav.enabled && t.caldavUid) pushTaskCaldav(t);
-}
-function deleteTask(id) {
-  const tk = manualTasks.find((x) => x.id === id);
-  if (!tk) return;
-  confirm2(t('task.deleteTitle'), t('task.deleteMsg'), t('common.delete'), () => {
-    manualTasks = manualTasks.filter((x) => x.id !== id);
-    apiDelete('/api/tasks/' + id);
-    renderCalendar();
-    updateTodoBadge();
-  });
 }
 function updateTodoBadge() {
   const n = manualTasks.filter((t) => !t.done).length;
@@ -23019,8 +22998,7 @@ function armScanAction(val, opts) {
       MOVE_BATCH: 'MOVE BATCH — Ziel scannen',
       REMOVE: t('scanFb.actionRemove'),
       HARVEST: t('scanFb.actionHarvest'),
-      CONTAM: t('scanFb.actionContam'),
-      USED: t('cam.usedArmed')
+      CONTAM: t('scanFb.actionContam')
     }[val],
     opts && opts.noModal ? { noModal: true } : undefined
   );
@@ -23107,8 +23085,7 @@ function toggleMoveScan() {
 function toggleModeScan(action) {
   const [an, aus] = {
     HARVEST: ['cam.harvestArmed', 'cam.harvestEnded'],
-    REMOVE: ['cam.trashArmed', 'cam.trashEnded'],
-    USED: ['cam.usedArmed', 'cam.usedEnded']
+    REMOVE: ['cam.trashArmed', 'cam.trashEnded']
   }[action];
   if (scan.action === action) {
     const n = modeRunCount(action, null);
@@ -23699,7 +23676,9 @@ function processScan(raw, opts) {
     }
   }
   if (ACTIONS.includes(val)) {
-    armScanAction(val);
+    // Ein gedrucktes USED-Etikett aus der Zeit vor dem einen Raus-Knopf stellt
+    // Raus scharf: Körnerbrut geht darüber ohnehin als verbraucht raus.
+    armScanAction(val === 'USED' ? 'REMOVE' : val);
     return;
   }
   if (LOCS.includes(val)) {
@@ -23790,14 +23769,6 @@ function processScan(raw, opts) {
       _scanBeep(800, 60);
       setFb('ok', t('scanFb.cultureAutofilled', { id: hit.id }));
       closeCamScan();
-      return;
-    }
-    // Verbraucht bucht Körnerbeutel aus. Eine Kultur hieß hier sonst: Kamera zu,
-    // Stammbaum auf — mitten in einer Reihe. Stattdessen sagt der Scanner, wo
-    // eine leere Kultur hingehört, und die Reihe geht weiter.
-    if (scan.action === 'USED') {
-      _scanBeep(300, 150);
-      setFb('err', t('scanFb.usedNotCulture', { id: val }));
       return;
     }
     const c = cultures.find((x) => x.id.toUpperCase() === val);
@@ -23967,8 +23938,8 @@ function processScan(raw, opts) {
     }
     // Raus mit einem Körnerbeutel heißt: er ging in Blöcke. Gebucht wie
     // "Verbraucht", damit er nicht als weggeworfen zählt.
-    if (scan.action === 'USED' || (scan.action === 'REMOVE' && isBag && batch && batch.batchType === 'grain')) {
-      verbrauchtScan(val, isBag, batchId, batch);
+    if (scan.action === 'REMOVE' && isBag && batch && batch.batchType === 'grain') {
+      verbrauchtScan(val, batch);
       return;
     }
     if (scan.action === 'ADD' && !scan.to) {
@@ -24203,22 +24174,10 @@ function cultureRefusal(c) {
 // ihn jemand entsorgte — und dann zählte er als weggeworfen. "Verbraucht" bucht
 // ihn aus wie Entsorgen: ein Knopf, dann Beutel für Beutel scannen, ↩ nimmt den
 // letzten zurück. Gebucht wird, was das Anlegen einer Charge bucht, wenn dort
-// Körnerbrut als verbraucht angegeben wird (nbConsumeSpawnBags): ein REMOVE mit
+// Körnerbrut als verbraucht angegeben wird (inocVerbrauchtBuchen): ein REMOVE mit
 // dem Grund "spawn". Ohne die Charge dahinter — in welche der Beutel ging, weiß
 // der Scanner nicht; das weiß "Charge anlegen", und dort wird sie mitgeschrieben.
-function verbrauchtScan(val, isBag, batchId, batch) {
-  if (!isBag) {
-    _scanBeep(300, 150);
-    setFb('err', t('scanFb.usedNeedsBag', { batch: batchId }));
-    return;
-  }
-  // Nur Körnerbrut. Ein Block, der hier landet, ist fast immer ein falsch
-  // gewählter Knopf — und ein ausgebuchter Block zählte in keiner Ernte mehr.
-  if (!batch || batch.batchType !== 'grain') {
-    _scanBeep(300, 150);
-    setFb('err', t('scanFb.usedNotGrain', { bag: val }));
-    return;
-  }
+function verbrauchtScan(val, batch) {
   const bag = (batch.bags || []).find((x) => x.toUpperCase() === val.toUpperCase()) || val;
   const last = buildLastPlacementByBag().get(bag.toUpperCase());
   if (last && last.action === 'REMOVE') {
@@ -24228,7 +24187,7 @@ function verbrauchtScan(val, isBag, batchId, batch) {
   }
   const [entry] = spawnBuchen([bag], 'spawn', { sitzung: true });
   _lastScanVal = bag;
-  const n = modeRunTally(scan.action === 'REMOVE' ? 'REMOVE' : 'USED', null, entry);
+  const n = modeRunTally('REMOVE', null, entry);
   setFb('ok', t('scanFb.usedLogged', { bag: bag, n: n }), entry);
   updateSD();
 }

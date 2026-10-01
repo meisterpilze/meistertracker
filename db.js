@@ -2993,11 +2993,6 @@ function lookupBarcode(db, barcode) {
   return db.prepare('SELECT entity_type, entity_id FROM barcodes WHERE barcode=?').get(barcode) || null;
 }
 
-function getBarcodeForEntity(db, entityType, entityId) {
-  const row = db.prepare('SELECT barcode FROM barcodes WHERE entity_type=? AND entity_id=?').get(entityType, entityId);
-  return row ? row.barcode : null;
-}
-
 function getAllBarcodes(db) {
   return db.prepare('SELECT barcode, entity_type, entity_id FROM barcodes ORDER BY barcode').all();
 }
@@ -10727,10 +10722,6 @@ function addContaminationPhoto(db, reportId, photo) {
   return r.lastInsertRowid;
 }
 
-function findContaminationPhotoBySha(db, sha256) {
-  return db.prepare('SELECT id, report_id, uuid, rel_path FROM contamination_photos WHERE sha256 = ?').get(sha256);
-}
-
 function listContaminationReports(db, filters) {
   filters = filters || {};
   const where = [];
@@ -12186,7 +12177,6 @@ module.exports = {
   assignBarcode,
   assignBarcodes,
   lookupBarcode,
-  getBarcodeForEntity,
   getAllBarcodes,
   snapshotDailyKPIs,
   getKpiSnapshots,
@@ -12206,7 +12196,6 @@ module.exports = {
   listContaminationTypes,
   createContaminationReport,
   addContaminationPhoto,
-  findContaminationPhotoBySha,
   listContaminationReports,
   getContaminationReportById,
   getContaminationPhotoByUuid,

@@ -56,7 +56,8 @@ const liegt = (bag, to, action, reason) => ({
   reason: reason || null
 });
 const aus = () => ({ action: null, to: null, from: null, count: 0, harvestBag: null });
-const verbraucht = () => ({ ...aus(), action: 'USED' });
+// Raus: seit 01.10.2026 der eine Knopf für Entsorgen und Verbraucht.
+const verbraucht = () => ({ ...aus(), action: 'REMOVE' });
 
 // processScan() gegen Attrappen, wie in scan-in-serie.test.js — dazu, was
 // "Verbraucht" bucht.
@@ -135,6 +136,9 @@ function werkbank(stand) {
     const openContamReport = () => {};
     const moveBatchTo = () => {};
     const armScanAction = (v) => { scan.action = v; };
+    const raus = [];
+    const kulturRausScan = (c) => raus.push(c.id);
+    const openCultureSheet = () => {};
     const scanAfterSync = () => {};
     ${hebe('modeRunTally')}
     ${hebe('scanActionName')}
@@ -153,6 +157,7 @@ function werkbank(stand) {
       beutelFenster,
       kameraZu,
       wege,
+      raus,
       zustand: () => scan,
       lauf: () => _modeRun,
       caches: () => [_statusByBatch, _placementByBag, _rhythmIndex]
@@ -161,7 +166,7 @@ function werkbank(stand) {
   )(stand);
 }
 
-describe('Verbraucht — der Scan', () => {
+describe('Raus — Körnerbrut geht als verbraucht raus', () => {
   it('bucht jeden Körnerbeutel mit einem Scan aus, als verbraucht, nicht als entsorgt', () => {
     const w = werkbank({
       scan: verbraucht(),
@@ -177,10 +182,10 @@ describe('Verbraucht — der Scan', () => {
         ['REMOVE', G + '-02', 'INC_R1', null, 'spawn', G]
       ]
     );
-    assert.equal(w.lauf().action, 'USED');
+    assert.equal(w.lauf().action, 'REMOVE');
     assert.equal(w.lauf().n, 2);
     assert.match(w.letzte().msg, /^scanFb\.usedLogged .*"n":2/);
-    assert.equal(w.zustand().action, 'USED', 'Verbraucht bleibt an');
+    assert.equal(w.zustand().action, 'REMOVE', 'Raus bleibt an');
     assert.equal(w.runde.length, 2, 'beide stehen in der Runde, ↩ nimmt sie zurück');
     assert.deepEqual(w.caches(), [null, null, null], 'der Bestand auf dem Telefon rechnet neu');
   });
@@ -193,22 +198,12 @@ describe('Verbraucht — der Scan', () => {
     assert.equal(w.gepostet[0].reason, 'spawn');
   });
 
-  it('nimmt keinen Block: dafür gibt es Entsorgen', () => {
+  it('ein Block geht raus wie beim Entsorgen, ohne "verbraucht"', () => {
     const w = werkbank({ scan: verbraucht(), batches: [BLOCK], scanLog: [liegt('CHUT-280926-01-01', 'INC_R1')] });
     w.scan('CHUT-280926-01-01');
-    assert.equal(w.gepostet.length, 0);
-    assert.equal(w.letzte().type, 'err');
-    assert.match(w.letzte().msg, /^scanFb\.usedNotGrain /);
-  });
-
-  it('will den einzelnen Beutel, nicht die ganze Charge', () => {
-    // Eine Chargen-Nummer ohne Beutelnummer dahinter. Die heutigen enden auf
-    // -01 und lesen sich darum schon als Beutel; ältere tun das nicht.
-    const alt = { ...BRUT, batchId: 'G-OLD-2025-001', bags: ['G-OLD-2025-001-01'] };
-    const w = werkbank({ scan: verbraucht(), batches: [alt], scanLog: [] });
-    w.scan('G-OLD-2025-001');
-    assert.equal(w.gepostet.length, 0);
-    assert.match(w.letzte().msg, /^scanFb\.usedNeedsBag /);
+    assert.equal(w.gepostet.length, 1);
+    assert.equal(w.gepostet[0].action, 'REMOVE');
+    assert.notEqual(w.gepostet[0].reason, 'spawn');
   });
 
   it('bucht einen schon verbrauchten Beutel nicht ein zweites Mal', () => {
@@ -234,17 +229,16 @@ describe('Verbraucht — der Scan', () => {
     assert.match(w.letzte().msg, /^scanFb\.alreadyRemoved /);
   });
 
-  it('eine Kultur unterbricht die Reihe nicht: Meldung statt Stammbaum', () => {
+  it('eine Kultur geht raus, ohne die Reihe zu unterbrechen', () => {
     const w = werkbank({
       scan: verbraucht(),
       cultures: [{ id: 'LC-CHUT-200926-01', status: 'active' }]
     });
     w.scan('LC-CHUT-200926-01');
-    assert.equal(w.letzte().type, 'err');
-    assert.match(w.letzte().msg, /^scanFb\.usedNotCulture /);
+    assert.deepEqual(w.raus, ['LC-CHUT-200926-01']);
     assert.deepEqual(w.kameraZu, [], 'die Kamera bleibt offen');
     assert.deepEqual(w.wege, [], 'und springt nicht ins Labor');
-    assert.equal(w.zustand().action, 'USED');
+    assert.equal(w.zustand().action, 'REMOVE');
   });
 
   it('ohne Vorgang öffnet ein Körnerbeutel weiter sein Beutel-Fenster', () => {
@@ -254,10 +248,11 @@ describe('Verbraucht — der Scan', () => {
     assert.equal(w.gepostet.length, 0);
   });
 
-  it('das gedruckte Etikett USED stellt Verbraucht scharf wie der Knopf', () => {
-    assert.match(APP, /const ACTIONS = \[[^\]]*'USED'\]/);
-    assert.match(APP, /items: \['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM', 'USED'\]/);
-    assert.match(hebe('armScanAction'), /USED: t\('cam\.usedArmed'\)/);
+  it('ein altes gedrucktes USED-Etikett stellt Raus scharf, neu gedruckt wird es nicht', () => {
+    const w = werkbank({ scan: aus() });
+    w.scan('USED');
+    assert.equal(w.zustand().action, 'REMOVE');
+    assert.match(APP, /items: \['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'\]\.map/);
   });
 });
 
@@ -348,7 +343,7 @@ describe('Der Knopf Raus', () => {
       p,
       /scan\.action === 'REMOVE' && isBag && batch && batch\.batchType === 'grain'[\s\S]{0,80}verbrauchtScan\(/
     );
-    assert.match(hebe('verbrauchtScan'), /modeRunTally\(scan\.action === 'REMOVE' \? 'REMOVE' : 'USED'/);
+    assert.match(hebe('verbrauchtScan'), /modeRunTally\('REMOVE', null, entry\)/);
   });
 });
 

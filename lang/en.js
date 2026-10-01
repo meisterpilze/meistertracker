@@ -1514,8 +1514,6 @@ window.LANG['en'] = {
   'cam.harvestResumed': 'Still harvesting — tap the button to stop',
   'cam.trashArmed': 'Out — every bag and culture you scan leaves the system. ↩ takes back the last one.',
   'cam.trashEnded': 'Out finished — {n} taken out of the system',
-  'cam.usedArmed': 'Used up — every grain bag you scan leaves stock. ↩ undoes the last one.',
-  'cam.usedEnded': 'Used up finished — {n} grain bags booked out',
   'scanFb.location': 'Location: {loc} \u2192 now scan bags (location stays until you change it)',
   'scanFb.to': 'To: {loc} \u2192 now scan bags',
   'scanFb.setAction':
@@ -1553,9 +1551,6 @@ window.LANG['en'] = {
   'scanFb.alreadyRemoved': '{bag} is already discarded — nothing to do.',
   'scanFb.usedLogged': '{bag} used up · no. {n}',
   'scanFb.alreadyUsed': '{bag} is already booked out as used up — nothing to do.',
-  'scanFb.usedNotGrain': '{bag} is not a grain bag. Used up only books out grain spawn — to throw it away: Discard.',
-  'scanFb.usedNeedsBag': '{batch} is a whole batch — scan the label of the single grain bag.',
-  'scanFb.usedNotCulture': '{id} is a culture, not a grain bag. Set an empty culture to “Used up” in the lab.',
   'scanFb.dupeConfirm': '{bag} was already recorded in this round. On purpose? Then scan again.',
   'scanFb.movedMeanwhile': '{bag} is now in {loc} according to the system — not moved. Data refreshed, scan again.',
   'scanFb.movedMeanwhileGone':
@@ -2135,8 +2130,6 @@ window.LANG['en'] = {
   'offline.queued': '{n} queued',
   'sw.scanQueueOverflow': 'Offline scan queue full ({max}). Dropped {dropped} oldest entries.',
   // Task delete
-  'task.deleteTitle': 'Delete task?',
-  'task.deleteMsg': 'This task will be permanently removed.',
   // No bags to move
   'batch.noBagsToMove': 'No bags to move',
   'batch.allAlreadyAt': 'All {n} bags are already at {loc}',
