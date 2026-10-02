@@ -20,6 +20,11 @@
 //     Umstellungssonntags im Herbst fällig war, endete an dem Tag, an dem er
 //     begann.
 //
+// Eine sechste Stelle rechnete nicht in Millisekunden, sondern mit der
+// falschen Uhr: ein ganztägiger Termin, den ein Kalender per CalDAV
+// zurückschrieb und der am Umstellungssonntag im Herbst endete, kam mit dem
+// Samstag davor als letztem Tag an.
+//
 // Zwei Rechenarten, zwei Regeln. Termine liegen auf Kalendertagen im Abstand
 // ganzer Wochen: die rechnet der Server in UTC, wo eine Woche immer 7 x 864e5
 // ist. Der Wochenstreifen und der Anker sind Ortszeit — dort zählt der
@@ -205,5 +210,46 @@ describe('Der Kalendereintrag einer Charge über eine Umstellung', () => {
         assert.equal(ende, kalendertag(start, 1), 'fällig ' + new Date(t).toISOString());
       }
     }
+  });
+});
+
+describe('Ein ganztägiger Termin aus dem Kalender über eine Umstellung', () => {
+  // Schreibt ein Kalender einen ganztägigen Termin zurück, steht sein Ende als
+  // DTEND;VALUE=DATE darin, und das ist nach RFC 5545 der Tag NACH dem letzten.
+  // Der Server las es als new Date('YYYY-MM-DD') — Mitternacht UTC —, zählte
+  // mit setDate() in Ortszeit einen Tag zurück und las das Ergebnis mit
+  // toISOString() wieder in UTC. Am Umstellungssonntag im Herbst ist 01:00
+  // Ortszeit noch Sommerzeit, also 23:00 UTC am Samstag: der Termin endete
+  // einen Tag zu früh. Beide Stellen gehen jetzt über _allDayLastDate(), das in
+  // UTC zählt.
+  const SERVER = quelle('server.js');
+  const letzterTag = new Function(hebeFunktion('_allDayLastDate', SERVER) + '\nreturn _allDayLastDate;')();
+  const ausDtend = (ymd) => letzterTag(...ymd.split('-'));
+
+  it('endet am Umstellungssonntag im Herbst, nicht am Samstag davor', () => {
+    // 2026-10-25 ist die Nacht mit 25 Stunden; DTEND ist der Montag danach.
+    assert.equal(ausDtend('2026-10-26'), '2026-10-25');
+  });
+
+  it('endet um beide Umstellungen herum immer am Tag vor dem DTEND', () => {
+    for (const umstellung of ['2027-03-28', '2026-10-25']) {
+      for (let n = -3; n <= 3; n++) {
+        const letzter = kalendertag(umstellung, n);
+        assert.equal(ausDtend(kalendertag(letzter, 1)), letzter, 'letzter Tag ' + letzter);
+      }
+    }
+  });
+
+  it('über Monats- und Jahresgrenzen', () => {
+    assert.equal(ausDtend('2026-11-01'), '2026-10-31');
+    assert.equal(ausDtend('2027-01-01'), '2026-12-31');
+    assert.equal(ausDtend('2028-03-01'), '2028-02-29');
+  });
+
+  it('wird an beiden Stellen benutzt, an denen der Server ein DTEND liest', () => {
+    // Die Bearbeitung eines eigenen Termins und das Anlegen eines neuen.
+    const aufrufe = SERVER.match(/_allDayLastDate\(deAllDay\[1\], deAllDay\[2\], deAllDay\[3\]\)/g) || [];
+    assert.equal(aufrufe.length, 2);
+    assert.doesNotMatch(SERVER, /new Date\(deAllDay\[1\]/, 'ein DTEND wird wieder über new Date() gelesen');
   });
 });

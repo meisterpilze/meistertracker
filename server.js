@@ -3712,6 +3712,17 @@ function _nextDayCompact(ymd) {
   return d.toISOString().slice(0, 10).replace(/-/g, '');
 }
 
+// The last day of an all-day event as YYYY-MM-DD, from the year, month and day
+// of its DTEND;VALUE=DATE. RFC 5545 makes that DTEND exclusive, so this is the
+// day before, counted in UTC like _nextDayCompact. The CalDAV PUT used to parse
+// the DTEND with new Date('YYYY-MM-DD'), which is UTC midnight, step it back
+// with the local setDate() and read it out with toISOString(). Around the
+// autumn change that came out a day early: in Europe/Berlin an event ending on
+// the change Sunday arrived ending on the Saturday. See test/sommerzeit.test.js.
+function _allDayLastDate(y, m, d) {
+  return new Date(Date.UTC(+y, +m - 1, +d - 1)).toISOString().slice(0, 10);
+}
+
 // Convert a batch to VEVENT .ics content (all-day event for due date)
 function batchToVEVENT(batch, scanLog) {
   const uid = 'batch-' + batch.batchId + '@meisterpilze';
@@ -5264,10 +5275,8 @@ function handlePut(parts, body, req, res) {
               const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
               const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (deAllDay) {
-                // RFC 5545: DTEND for all-day is exclusive, subtract one day
-                const d = new Date(deAllDay[1] + '-' + deAllDay[2] + '-' + deAllDay[3]);
-                d.setDate(d.getDate() - 1);
-                fields.endDate = d.toISOString().split('T')[0];
+                // RFC 5545: DTEND for all-day is exclusive, so the last day is the one before
+                fields.endDate = _allDayLastDate(deAllDay[1], deAllDay[2], deAllDay[3]);
                 fields.endTime = null;
               } else if (deTimed) {
                 fields.endDate = deTimed[1] + '-' + deTimed[2] + '-' + deTimed[3];
@@ -5338,9 +5347,7 @@ function handlePut(parts, body, req, res) {
               const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
               const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
               if (deAllDay) {
-                const d = new Date(deAllDay[1] + '-' + deAllDay[2] + '-' + deAllDay[3]);
-                d.setDate(d.getDate() - 1);
-                endDate = d.toISOString().split('T')[0];
+                endDate = _allDayLastDate(deAllDay[1], deAllDay[2], deAllDay[3]);
               } else if (deTimed) {
                 endDate = deTimed[1] + '-' + deTimed[2] + '-' + deTimed[3];
                 endTime = deTimed[4] + ':' + deTimed[5];
