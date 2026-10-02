@@ -231,6 +231,37 @@ describe('end to end, against a throwaway database', () => {
     fs.unlinkSync(p);
   });
 
+  it('reads a crashed server’s WAL to decide, and writes none of it back', async () => {
+    // A server killed right after a successful update has that success only in
+    // its -wal. The probe has to see it, or it acts on a stale timestamp, and
+    // it has to leave the -wal alone: a read-write handle closing last would
+    // checkpoint it into the database file.
+    const { DatabaseSync } = require('node:sqlite');
+    const p = tempDb({ last_ip_update: new Date(Date.now() - 60 * 60000).toISOString() });
+    const server = new DatabaseSync(p);
+    server.exec('PRAGMA wal_autocheckpoint = 0');
+    server
+      .prepare('UPDATE duckdns_config SET last_ip_update=? WHERE id=1')
+      .run(new Date(Date.now() - 60000).toISOString());
+    // Its files as they stand, held by no process: what a crash leaves. Read
+    // and rewritten rather than copyFileSync, since Windows' CopyFile may not
+    // share a file the writer still has open.
+    const crashed = p.replace(/\.db$/, '-crashed.db');
+    for (const suffix of ['', '-wal', '-shm']) fs.writeFileSync(crashed + suffix, fs.readFileSync(p + suffix));
+    server.close();
+
+    const dbBefore = fs.readFileSync(crashed);
+    const walBefore = fs.readFileSync(crashed + '-wal');
+    let calls = 0;
+    assert.equal(await run(crashed, { deps: { httpGet: () => (calls++, Promise.resolve(okReply)) } }), 0);
+    assert.equal(calls, 0, 'the update in the -wal must be read, or this acts on a stale timestamp');
+    assert.ok(fs.readFileSync(crashed).equals(dbBefore), 'the probe must not write the database file');
+    assert.ok(
+      fs.existsSync(crashed + '-wal') && fs.readFileSync(crashed + '-wal').equals(walBefore),
+      'nor checkpoint the -wal into it'
+    );
+  });
+
   it('--force acts even then', async () => {
     let calls = 0;
     const p = tempDb({ last_ip_update: new Date(Date.now() - 60000).toISOString() });

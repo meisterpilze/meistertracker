@@ -31,9 +31,15 @@
 // minutes is left to its own retries instead of being raced.
 //
 // **It opens the database read-only to decide.** Answering "should I act" is a
-// read, and taking a write handle on the live database to perform one is how a
-// probe that runs on every deploy ends up creating -wal/-shm files owned by the
-// wrong user. The write handle is opened only on the path that actually writes.
+// read, and a read-only handle keeps it one. After a crash it reads the dead
+// server's WAL where it lies; a read-write handle closing last would checkpoint
+// that WAL into the database file. (`readOnly`, camelCase: node:sqlite ignores
+// the lowercase spelling this used to have, and opened read-write.) What it
+// does not do is keep -wal/-shm files from appearing. On a cleanly closed
+// database a read-only handle creates both and leaves them, where a read-write
+// one deletes them on close. Who owns them is settled by who runs this, which
+// the Linux installer takes from the database file's owner. The write handle is
+// opened only on the path that actually writes.
 //
 // **It does not open the database the way the server does.** `db.openDb` runs
 // migrations and backfills, which is right for an application starting up and
@@ -129,7 +135,7 @@ function shouldRun(cfg, now, force) {
 function readConfig(dbFile) {
   let conn;
   try {
-    conn = new DatabaseSync(dbFile, { readonly: true });
+    conn = new DatabaseSync(dbFile, { readOnly: true });
     conn.exec('PRAGMA busy_timeout = 5000');
     return { cfg: db.getDuckdnsCfg(conn) };
   } catch (e) {

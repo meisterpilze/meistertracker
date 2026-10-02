@@ -115,11 +115,16 @@ function sqliteHeaderOk(filePath) {
 // PRAGMA quick_check, which catches torn writes / bad pages that leave the
 // first 16 bytes intact. A failed open ("disk image is malformed") or a
 // non-'ok' result means the backup is not restorable.
+//
+// `readOnly` is camelCase. node:sqlite ignores the lowercase spelling this used
+// to have, so the check opened every backup read-write. The auto-backups are
+// VACUUM INTO copies, which come out in rollback-journal mode, so a read-only
+// open leaves no -wal or -shm beside them for the rotation to miss.
 function integrityOk(filePath) {
   let conn;
   try {
     const { DatabaseSync } = require('node:sqlite');
-    conn = new DatabaseSync(filePath, { readonly: true });
+    conn = new DatabaseSync(filePath, { readOnly: true });
     const r = conn.prepare('PRAGMA quick_check').get();
     return !!r && r.quick_check === 'ok';
   } catch (_) {

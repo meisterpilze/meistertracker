@@ -74,11 +74,30 @@ const MODULES = [
 /**
  * A consistent copy of the live database, made without writing to it.
  *
- * VACUUM INTO is read-only with respect to the source, so this is safe to run
- * while the server is up and holding the file open in WAL mode.
+ * `readOnly`, camelCase. node:sqlite ignores an option name it does not know,
+ * so the `readonly` this used to pass opened a read-write handle, and nothing
+ * said so.
+ *
+ * While the server is up the difference does not show: VACUUM INTO only reads,
+ * and a second handle closing does not checkpoint. It shows after a crash, with
+ * the server down and its last commits still in the -wal. A read-write handle
+ * closing last checkpoints them into the database file, so the step promising
+ * not to write was the one writing. A read-only handle leaves the file and the
+ * -wal byte for byte as they were, for the server to recover when it starts.
+ *
+ * Read-only does not cost the crash case its snapshot. The WAL index is rebuilt
+ * in the -shm, which SQLite opens read-write even under a read-only handle.
+ * Measured against a killed writer with its -shm left as it was, deleted,
+ * zeroed, and swapped for an older copy: every snapshot had every row. The one
+ * setup where read-only could not open the file at all, no -shm and a directory
+ * it may not write, refuses a read-write handle the same way. That is why there
+ * is no fallback to one: there is nothing for it to catch.
+ *
+ * What it does leave behind, on a cleanly closed database, is an empty -wal and
+ * a -shm. The server removes both at its next clean shutdown.
  */
 function snapshot(liveDb, destPath) {
-  const ro = new DatabaseSync(liveDb, { readonly: true });
+  const ro = new DatabaseSync(liveDb, { readOnly: true });
   try {
     ro.exec('VACUUM INTO ' + quoteSqlPath(destPath));
   } finally {
@@ -92,7 +111,7 @@ function quoteSqlPath(p) {
 
 /** Row counts for every table, so a migration that loses data cannot pass. */
 function census(dbFile) {
-  const conn = new DatabaseSync(dbFile, { readonly: true });
+  const conn = new DatabaseSync(dbFile, { readOnly: true });
   try {
     const out = {};
     const tables = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
@@ -155,7 +174,7 @@ function main(argv, opts) {
 
     // 2. What is in it now.
     const before = census(copy);
-    const beforeVersions = new DatabaseSync(copy, { readonly: true });
+    const beforeVersions = new DatabaseSync(copy, { readOnly: true });
     let priorVersion = 0;
     try {
       priorVersion = beforeVersions.prepare('SELECT MAX(version) AS v FROM schema_version').get().v || 0;

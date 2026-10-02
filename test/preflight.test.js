@@ -79,7 +79,7 @@ describe('against a real database', () => {
     // one whose column this rewind actually drops.
     const FALLBACK_MIGRATION = 76;
     const vorher = (() => {
-      const d = new DatabaseSync(live, { readonly: true });
+      const d = new DatabaseSync(live, { readOnly: true });
       const v = d.prepare('SELECT MAX(version) AS v FROM schema_version').get().v;
       d.close();
       return v;
@@ -89,7 +89,7 @@ describe('against a real database', () => {
     r.prepare('DELETE FROM schema_version WHERE version >= ?').run(FALLBACK_MIGRATION);
     r.close();
     const zurueckgesetztAuf = (() => {
-      const d = new DatabaseSync(live, { readonly: true });
+      const d = new DatabaseSync(live, { readOnly: true });
       const v = d.prepare('SELECT MAX(version) AS v FROM schema_version').get().v;
       d.close();
       return v;
@@ -98,7 +98,7 @@ describe('against a real database', () => {
 
     assert.equal(preflight.main(['--quiet'], Object.assign({ dbFile: live }, silent)), 0);
 
-    const after = new DatabaseSync(live, { readonly: true });
+    const after = new DatabaseSync(live, { readOnly: true });
     const v = after.prepare('SELECT MAX(version) AS v FROM schema_version').get().v;
     const col = after
       .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('duckdns_config') WHERE name='fallback_last'")
@@ -114,6 +114,102 @@ describe('against a real database', () => {
     assert.equal(code, 2);
     assert.ok(lines.some((l) => /no database at/.test(l)));
   });
+});
+
+describe('the snapshot reads through the WAL and writes nothing back', () => {
+  // The handle used to be opened with `readonly`, which node:sqlite ignores, so
+  // it was read-write. Under a running server that changes nothing. After a
+  // crash it does: closing last, a read-write handle checkpoints the dead
+  // server's WAL into the live file. Each case below holds rows only in the
+  // -wal, so the snapshot has to read through it, and the file and the -wal
+  // have to come out byte for byte as they went in.
+  const ROWS = 40;
+  let dir;
+  before(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mt_pf_wal_'));
+  });
+  after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  /** A writer in WAL mode that never checkpoints: its rows live in the -wal. */
+  function writer(file) {
+    const w = new DatabaseSync(file);
+    w.exec('PRAGMA journal_mode = WAL');
+    w.exec('PRAGMA wal_autocheckpoint = 0');
+    w.exec('CREATE TABLE t (v TEXT)');
+    return w;
+  }
+
+  function write(w, from, to) {
+    const ins = w.prepare('INSERT INTO t (v) VALUES (?)');
+    for (let i = from; i < to; i++) ins.run('row ' + i);
+  }
+
+  function rows(file) {
+    const c = new DatabaseSync(file, { readOnly: true });
+    try {
+      return c.prepare('SELECT COUNT(*) AS n FROM t').get().n;
+    } finally {
+      c.close();
+    }
+  }
+
+  function assertUntouched(live, db, wal) {
+    assert.ok(fs.readFileSync(live).equals(db), 'the database file must not be written');
+    assert.ok(
+      fs.existsSync(live + '-wal') && fs.readFileSync(live + '-wal').equals(wal),
+      'and the -wal must not be checkpointed into it'
+    );
+  }
+
+  it('under a running server, the way the deploy chain calls it', () => {
+    const live = path.join(dir, 'running.db');
+    const server = writer(live);
+    try {
+      write(server, 0, ROWS);
+      const db = fs.readFileSync(live);
+      const wal = fs.readFileSync(live + '-wal');
+      const snap = path.join(dir, 'running-snap.db');
+      preflight.snapshot(live, snap);
+      assert.equal(rows(snap), ROWS, 'the snapshot must have the rows only the -wal holds');
+      assertUntouched(live, db, wal);
+    } finally {
+      server.close();
+    }
+  });
+
+  // What a killed server leaves: its files as they stood mid-run, held by no
+  // process, so whoever opens them next has to rebuild the WAL index. Copying
+  // them while the writer is still open gives exactly that without killing
+  // anything. The -shm can survive a crash as it was, as an older copy that
+  // describes fewer frames than the -wal holds, or not at all.
+  //
+  // Read and rewritten rather than copyFileSync: a plain read goes through
+  // libuv's open, which shares the file with a writer on Windows as well, and
+  // CopyFile there may not.
+  const copy = (from, to) => fs.writeFileSync(to, fs.readFileSync(from));
+  for (const shm of ['as it was', 'stale', 'missing']) {
+    it('after a crash, with the -shm ' + shm, () => {
+      const name = 'crashed-' + shm.replace(/ /g, '-');
+      const src = path.join(dir, name + '-writer.db');
+      const live = path.join(dir, name + '.db');
+      const w = writer(src);
+      write(w, 0, ROWS / 2);
+      const earlierShm = fs.readFileSync(src + '-shm');
+      write(w, ROWS / 2, ROWS);
+      copy(src, live);
+      copy(src + '-wal', live + '-wal');
+      if (shm === 'as it was') copy(src + '-shm', live + '-shm');
+      if (shm === 'stale') fs.writeFileSync(live + '-shm', earlierShm);
+      w.close();
+
+      const db = fs.readFileSync(live);
+      const wal = fs.readFileSync(live + '-wal');
+      const snap = path.join(dir, name + '-snap.db');
+      preflight.snapshot(live, snap);
+      assert.equal(rows(snap), ROWS, 'the snapshot must have the rows only the -wal holds');
+      assertUntouched(live, db, wal);
+    });
+  }
 });
 
 describe('a tree that would not start', () => {
