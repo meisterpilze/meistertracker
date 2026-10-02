@@ -115,26 +115,17 @@ pm2 startup
 pm2 save
 ```
 
-**Windows** — two equally valid options:
-
-1. **Startup folder shortcut** (per-user, runs at logon)
-   - `Win + R` → `shell:startup` → Enter
-   - Right-click in the folder → New → Shortcut → point at `C:\path\to\meistertracker\START.bat`
-   - Optional: in the shortcut Properties, set "Run" to **Minimized** so the console window doesn't pop into focus.
-
-2. **Task Scheduler** (more robust — works even without an interactive logon)
-   - Open Task Scheduler → Create Basic Task
-   - Trigger: At log on (or At startup, if you want it before login)
-   - Action: Start a program
-     - Program: `C:\path\to\meistertracker\START.bat`
-     - "Start in": `C:\path\to\meistertracker`
-   - Optional: in the task's Settings tab, enable "Run task as soon as possible after a scheduled start is missed".
-
-After either setup, PM2 needs to know the process list to restore. Run once after starting the server normally:
-```cmd
-pm2 save
+**Windows** — register the boot task once, from an elevated PowerShell in the checkout:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-autostart.ps1
 ```
-PM2 then writes `%USERPROFILE%\.pm2\dump.pm2` and `START.bat` reads it on the next launch to restore the meisterpilze process.
+This registers a scheduled task named `MeisterTracker`. One minute after every boot it runs `autostart.bat`, which runs `START.bat`, as your user and without anyone having to log in. Test it right away with `Start-ScheduledTask -TaskName MeisterTracker` (this restarts the server, about 10 s of downtime), then check `pm2 list`. Remove it with `Unregister-ScheduledTask -TaskName MeisterTracker -Confirm:$false`.
+
+On an administrator account, Windows gives this kind of task the full administrator token whatever it asks for, and a PM2 started with it could not be managed from an ordinary window afterwards. `START.bat` therefore drops those rights itself before it starts PM2 (`scripts\unelevated.ps1`, which notes each boot run in `%TEMP%\meistertracker-unelevated.log`).
+
+If an older setup starts `START.bat` at logon, through a shortcut in the Startup folder (`shell:startup`) or a task of its own, remove it. The boot task already starts the server, and a second `START.bat` at login restarts it once more.
+
+`START.bat` does not restore a saved PM2 process list: every run starts `server.js` fresh under PM2.
 
 ## 📷 Scanning Workflow
 
