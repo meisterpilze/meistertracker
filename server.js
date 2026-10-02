@@ -682,6 +682,28 @@ function certCoveredHosts() {
   }
 }
 
+// The issuer of every certificate Let's Encrypt signs carries this line.
+// X509Certificate#issuer gives one attribute per line.
+const LE_ISSUER = /^O=Let's Encrypt$/m;
+
+// What the certificate on disk says about itself: when it expires, and whether
+// Let's Encrypt issued it. null when there is none or it cannot be read. It
+// never throws: checkCertRenewal() runs while the server loads.
+//
+// The issuer decides, not the PEM text. PEM is base64, so "Let's Encrypt" never
+// appears in it, and a needle like "R3" turns up by chance: measured, about one
+// self-signed certificate in six contains one of the old needles.
+function certOnDisk() {
+  try {
+    if (!fs.existsSync(CERT_CRT)) return null;
+    const x = new crypto.X509Certificate(fs.readFileSync(CERT_CRT));
+    const validTo = new Date(x.validTo);
+    return { validTo: isNaN(validTo) ? null : validTo, letsEncrypt: LE_ISSUER.test(x.issuer || '') };
+  } catch {
+    return null;
+  }
+}
+
 /** Which of `hosts` the certificate does NOT cover. Empty when it covers them all. */
 function certUncoveredHosts(hosts) {
   const covered = certCoveredHosts();
@@ -2643,7 +2665,16 @@ function requestLetsEncryptCert(callback) {
         return callback(err);
       }
       const now = new Date();
-      const expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      // The expiry the certificate itself carries. The lifetime is the CA's
+      // choice and is getting shorter; a fixed 90 days would put the renewal
+      // after the expiry of a shorter one. 90 days only if it cannot be read.
+      let expiry = null;
+      try {
+        expiry = new Date(new crypto.X509Certificate(certPem).validTo);
+      } catch {
+        /* fall back below */
+      }
+      if (!expiry || isNaN(expiry)) expiry = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
       db.updateDuckdnsStatus(database, {
         leLastRenewal: now.toISOString(),
         leExpiry: expiry.toISOString()
@@ -2655,25 +2686,54 @@ function requestLetsEncryptCert(callback) {
   );
 }
 
+// The expiry the renewal goes by, and whether le_expiry should be set to it.
+//
+// A Let's Encrypt certificate on disk is the fact. le_expiry is a note about
+// the last issuance, written by it and never read back, so the note alone went
+// wrong after an ordinary restore: a database from before the first issuance
+// has no note, and the renewal returned on every tick while the certificate
+// ran out; one from an earlier issuance has an old date, and the renewal asked
+// for a certificate the disk already had. Without a Let's Encrypt certificate
+// on disk (none, or the self-signed fallback) the note is all there is.
+function renewalExpiry(note, disk) {
+  const noted = note ? new Date(note) : null;
+  if (disk && disk.letsEncrypt && disk.validTo) {
+    const same = noted && noted.getTime() === disk.validTo.getTime();
+    return { expiry: disk.validTo, writeBack: !same };
+  }
+  return { expiry: noted && !isNaN(noted) ? noted : null, writeBack: false };
+}
+
 function checkCertRenewal() {
   // Worktree instance must not race prod for the ACME challenge: both
   // would try to bind port 80 for http-01 and hammer the LE rate limit
   // on the same hostname. Cert files live in this worktree's certs/
   // (per-directory) so the renewal would be lost anyway.
   if (WORKTREE_MODE) return;
-  const cfg = db.getDuckdnsCfg(database);
-  if (!cfg.leEnabled || !cfg.domain || !cfg.token) return;
-  if (!cfg.leExpiry) return;
+  // This runs while the server loads, so nothing in it may stop a start.
+  try {
+    const cfg = db.getDuckdnsCfg(database);
+    if (!cfg.leEnabled || !cfg.domain || !cfg.token) return;
+    const { expiry, writeBack } = renewalExpiry(cfg.leExpiry, certOnDisk());
+    if (!expiry) return; // no certificate and no note: nothing to renew
+    if (writeBack) {
+      log('info', 'le_expiry did not match the certificate on disk; taken from the certificate', {
+        note: cfg.leExpiry || null,
+        expiry: expiry.toISOString()
+      });
+      db.updateDuckdnsStatus(database, { leExpiry: expiry.toISOString() });
+    }
+    const daysLeft = (expiry - Date.now()) / (24 * 60 * 60 * 1000);
 
-  const expiry = new Date(cfg.leExpiry);
-  const daysLeft = (expiry - Date.now()) / (24 * 60 * 60 * 1000);
-
-  if (daysLeft < 30) {
-    log('info', "Let's Encrypt cert expires in " + Math.round(daysLeft) + ' days, renewing...');
-    requestLetsEncryptCert((err, result) => {
-      if (err) log('error', 'Auto-renewal failed', { error: err.message });
-      else log('info', 'Auto-renewal succeeded', result);
-    });
+    if (daysLeft < 30) {
+      log('info', "Let's Encrypt cert expires in " + Math.round(daysLeft) + ' days, renewing...');
+      requestLetsEncryptCert((err, result) => {
+        if (err) log('error', 'Auto-renewal failed', { error: err.message });
+        else log('info', 'Auto-renewal succeeded', result);
+      });
+    }
+  } catch (e) {
+    log('error', 'Certificate renewal check failed', { error: e.message });
   }
 }
 
@@ -7351,7 +7411,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const validTo = x509.validTo;
         const expiryMs = new Date(validTo).getTime();
         const daysLeft = Number.isFinite(expiryMs) ? Math.round((expiryMs - Date.now()) / 86400000) : null;
-        const isLE = certPem.includes("Let's Encrypt") || /CN=R\d+|CN=E\d+/.test(certPem);
+        const isLE = LE_ISSUER.test(x509.issuer || '');
         return { configured: true, expiry: validTo, daysLeft, type: isLE ? 'lets-encrypt' : 'self-signed' };
       } catch (e) {
         return { error: e.message };
@@ -11425,19 +11485,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const cfg = db.getDuckdnsCfg(database);
       const health = duckdns.status(cfg.lastIpUpdate);
       let certInfo = { type: 'none', exists: false };
-      try {
-        if (fs.existsSync(CERT_CRT)) {
-          const certPem = fs.readFileSync(CERT_CRT, 'utf8');
-          const isLE =
-            certPem.includes("Let's Encrypt") ||
-            certPem.includes('R3') ||
-            certPem.includes('R10') ||
-            certPem.includes('R11');
-          certInfo = { type: isLE ? 'letsencrypt' : 'self-signed', exists: true };
-        }
-      } catch (e) {
-        /* ignore */
-      }
+      const disk = certOnDisk();
+      if (disk) certInfo = { type: disk.letsEncrypt ? 'letsencrypt' : 'self-signed', exists: true };
+      // The certificate's own expiry when Let's Encrypt issued it, so a restored
+      // database without the note still shows the warning.
+      const { expiry: leExpiry } = renewalExpiry(cfg.leExpiry, disk);
       jsonOk(res, {
         enabled: cfg.enabled,
         domain: cfg.domain ? cfg.domain + '.duckdns.org' : null,
@@ -11450,7 +11502,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // one of those, and it said the wrong one.
         fallbackLast: cfg.fallbackLast,
         leEnabled: cfg.leEnabled,
-        leExpiry: cfg.leExpiry,
+        leExpiry: leExpiry ? leExpiry.toISOString() : null,
         cert: certInfo,
         // `updaterRunning` alone said only that a timer object existed. The UI
         // painted a green banner off `lastIp` whenever one had ever been
