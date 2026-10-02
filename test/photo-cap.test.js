@@ -13,7 +13,8 @@ const {
   enforceCap,
   removeContaminationPhotos,
   experimentPhotoScope,
-  PhotoCapError
+  PhotoCapError,
+  enforceFreeSpace
 } = require('../scripts/photo-cap.js');
 
 function tmpDir() {
@@ -153,5 +154,39 @@ describe('reset — removes contamination photos, keeps experiment photos', () =
       route.indexOf('_ensurePhotoDirSize(true)') > route.indexOf("'Reset: photo cleanup failed'"),
       'the rescan must follow the removal and its catch'
     );
+  });
+});
+
+describe('the free space the disk keeps', () => {
+  const GB = 1024 * 1024 * 1024;
+  const platte = (frei) => () => ({ bavail: frei / 4096, bsize: 4096 });
+
+  it('lets a photo through while enough stays free, and says how much stays', () => {
+    assert.equal(enforceFreeSpace('/x', 5 * 1024 * 1024, 2 * GB, platte(10 * GB)), 10 * GB - 5 * 1024 * 1024);
+  });
+
+  it('refuses the photo that would leave less than the reserve', () => {
+    assert.throws(
+      () => enforceFreeSpace('/x', 2 * 1024 * 1024, 2 * GB, platte(2 * GB + 1024 * 1024)),
+      (e) => e instanceof PhotoCapError && /2\.0 GB must stay free, see PHOTO_MIN_FREE_GB/.test(e.message)
+    );
+  });
+
+  it('names a floor below a gigabyte in megabytes', () => {
+    assert.throws(
+      () => enforceFreeSpace('/x', 1, 256 * 1024 * 1024, platte(100 * 1024 * 1024)),
+      (e) => e instanceof PhotoCapError && /\(256 MB must stay free/.test(e.message)
+    );
+  });
+
+  it('lets the write through when the platform cannot say, leaving the folder cap to guard', () => {
+    const stumm = () => {
+      throw new Error('ENOSYS');
+    };
+    assert.equal(enforceFreeSpace('/x', 1, 2 * GB, stumm), null);
+  });
+
+  it('asks the real disk by default', () => {
+    assert.ok(enforceFreeSpace(os.tmpdir(), 1, 0) > 0);
   });
 });

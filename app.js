@@ -713,6 +713,12 @@ function defaultInventory() {
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
 let _mutating = 0; // tracks in-flight mutations to block pollSync from overwriting
+// Die Fotos, deren Original noch unterwegs ist (pjOriginaleHochladen). Sie
+// zaehlen nicht zu _mutating: ein Original braucht auf dem Handy Minuten, und
+// so lange darf der Sync nicht stehen. Ein Neuladen fuer ein Update wartet
+// aber auf sie, wer die Seite schliesst, wird gefragt, und ihre Kachel bietet
+// das Nachreichen erst an, wenn sie fertig sind.
+const pjOriginaleUnterwegs = new Set();
 let lastSyncTime = null;
 function formatRelativeTime(ts) {
   const sec = Math.round((Date.now() - ts) / 1000);
@@ -1034,7 +1040,7 @@ function checkForUpdate() {
 
 // Ist gerade etwas offen, unterwegs oder eingetippt, das ein Neuladen verlöre?
 function reloadIsSafe() {
-  if (_mutating > 0) return false;
+  if (_mutating > 0 || pjOriginaleUnterwegs.size > 0) return false;
   if (leaveGuards.some((g) => askGuard(g))) return false;
   // Jedes Fenster, die Kamera eingeschlossen — sie ist auch eines.
   if (document.querySelector('.modal-bg.open')) return false;
@@ -1343,6 +1349,13 @@ function mayLeavePage() {
 // to be non-empty. The sentence people actually read is the one in mayLeavePage().
 window.addEventListener('beforeunload', (e) => {
   if (!leaveGuards.some((g) => askGuard(g))) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+// Originale unterwegs halten nur das Schliessen auf, nicht go(): ein Wechsel
+// der Seite in der App laesst sie weiterlaufen.
+window.addEventListener('beforeunload', (e) => {
+  if (!pjOriginaleUnterwegs.size) return;
   e.preventDefault();
   e.returnValue = '';
 });
@@ -16697,7 +16710,24 @@ function pjFotoKachel(v, f, nr) {
   return (
     `<figure class="pj-foto${f.removedAt ? ' pj-foto-entfernt' : ''}"><a href="${esc(url)}" target="_blank" rel="noopener">` +
     `<img src="${esc(url)}?thumb=1" alt="${esc(t('exp.photoAlt', name))}" loading="lazy"></a>` +
-    `<figcaption>${esc(fmtDt(f.uploadedAt))}</figcaption>` +
+    `<figcaption>${esc(fmtDt(f.uploadedAt))}` +
+    // Das Original in voller Aufloesung, wo es eins gibt: zum Heranzoomen, zum
+    // Ausmessen, zum Beilegen.
+    (f.original
+      ? ` · <a class="pj-foto-original" href="${esc(url)}?original=1" target="_blank" rel="noopener" ` +
+        `aria-label="${esc(t('exp.originalNamed', name))}">${esc(t('exp.original'))}</a>`
+      : '') +
+    // Ohne Original, weil die App geschlossen wurde, das Netz zu lange weg war
+    // oder das Foto von vor den Originalen ist: wer es hochgeladen hat, oder
+    // ein Admin, reicht es nach. Der Server prueft dasselbe.
+    (!f.original &&
+    !f.removedAt &&
+    !pjOriginaleUnterwegs.has(f.id) &&
+    (admin || (f.uploadedBy && currentUser && f.uploadedBy === currentUser.userId))
+      ? ` · <button type="button" class="pj-foto-original-neu" data-pj-original="${f.id}" ` +
+        `aria-label="${esc(t('exp.originalAddNamed', name))}">${esc(t('exp.originalAdd'))}</button>`
+      : '') +
+    '</figcaption>' +
     (f.removedAt
       ? `<button type="button" class="btn btn-sm fs-xs pj-foto-zurueck" data-pj-photoback="${f.id}" ` +
         `aria-label="${esc(t('exp.restorePhotoNamed', name))}">${esc(t('exp.restore'))}</button>` +
@@ -16745,7 +16775,8 @@ function pjDetail(v) {
     '</div>' +
     '<input type="file" id="pj-cam" accept="image/*" capture="environment" multiple hidden>' +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-cam="${v.id}">${esc(t('exp.takePhoto'))}</button>` +
-    '<span class="pj-count" id="pj-cam-status"></span>' +
+    `<span class="pj-count" id="pj-cam-status">${esc(pjKameraZeile.id === v.id ? pjKameraZeile.text : '')}</span>` +
+    '<input type="file" id="pj-orig" accept="image/jpeg" hidden>' +
     pjEntfernte(
       'exp.removedPhotos',
       wegF.length,
@@ -17181,6 +17212,9 @@ function pjLbGefaess(r) {
 // seine Pruefsumme. Mit ihr laesst sich spaeter zeigen, dass eine Datei im
 // Archiv genau die ist, die an dem Tag hochgeladen wurde. Ein endgueltig
 // geloeschtes Foto hat kein Bild mehr, seine Pruefsumme steht trotzdem da.
+function pjMb(bytes) {
+  return (Number(bytes || 0) / (1024 * 1024)).toLocaleString(loc(), { maximumFractionDigits: 1 });
+}
 function pjLbFoto(v, f, nr, codes) {
   const wann = fmtDtTime(f.uploadedAt);
   const bild = f.purged
@@ -17191,10 +17225,18 @@ function pjLbFoto(v, f, nr, codes) {
     .filter(Boolean)
     .join(' · ');
   const weg = pjLbEntfernt(f);
+  // Das Original belegt, was die Kamera aufgenommen hat; das gedruckte Bild ist
+  // die verkleinerte Fassung. Beide Pruefsummen, damit sich jede Datei im
+  // Archiv zuordnen laesst.
+  const o = f.original;
+  const original = o
+    ? `<div class="hash">${esc(t('exp.lbOriginal', { w: o.width || '?', h: o.height || '?', mb: pjMb(o.bytes) }))}` +
+      `<br>SHA-256 ${esc(o.sha256)}</div>`
+    : '';
   return (
     `<figure${f.removedAt ? ' class="weg"' : ''}>${bild}<figcaption>${esc(zeile)}` +
     (weg ? '<br>' + esc(weg) : '') +
-    `<div class="hash">SHA-256 ${esc(f.sha256)}</div></figcaption></figure>`
+    `<div class="hash">SHA-256 ${esc(f.sha256)}</div>${original}</figcaption></figure>`
   );
 }
 function pjLbVersuch(v, pakete) {
@@ -17367,8 +17409,17 @@ function pjKameraAuswahl(eingabe, id) {
 }
 // Mehr nimmt der Server in einem Zug nicht an (EXP_MAX_PHOTOS_PER_CALL).
 const PJ_MAX_FOTOS = 8;
+// Die Zeile unter "Foto aufnehmen": was die Kamera eines Versuchs gerade tut.
+// Sie steht im Zustand, nicht nur im Element: der Sync nach dem eigenen
+// Speichern zeichnet die Seite neu, und eine gemerkte Zeile schrieb danach in
+// ein Element, das nicht mehr auf der Seite hing. pjDetail zeichnet sie mit.
+let pjKameraZeile = { id: null, text: '' };
+function pjKameraStatus(versuchId, text) {
+  pjKameraZeile = { id: versuchId, text: text || '' };
+  const el = document.getElementById('pj-cam-status');
+  if (el && pjOffen === versuchId) el.textContent = pjKameraZeile.text;
+}
 async function pjKamera(versuchId, dateien) {
-  const status = document.getElementById('pj-cam-status');
   const bilder = Array.from(dateien || []).filter((f) => f && f.type && f.type.startsWith('image/'));
   if (!bilder.length) return;
   // Was ueber die Grenze geht, bleibt liegen, aber nicht stillschweigend: wer
@@ -17378,29 +17429,147 @@ async function pjKamera(versuchId, dateien) {
   }
   const fertig = [];
   for (const datei of bilder.slice(0, PJ_MAX_FOTOS)) {
-    if (status) status.textContent = t('contam.compressing', { name: datei.name });
+    pjKameraStatus(versuchId, t('contam.compressing', { name: datei.name }));
     try {
       fertig.push(await _crCompressFile(datei));
     } catch (e) {
-      if (status) status.textContent = t('contam.compressErr');
+      pjKameraStatus(versuchId, t('contam.compressErr'));
       return;
     }
   }
-  if (status) status.textContent = t('exp.uploading', { n: fertig.length });
+  pjKameraStatus(versuchId, t('exp.uploading', { n: fertig.length }));
   const r = await apiPost('/api/experiment-photos', { experimentId: versuchId, photos: fertig });
   // apiPost wirft nicht, es meldet {error}. Ohne diese Pruefung sah ein
   // gescheiterter Upload aus wie ein gelungener: die Statuszeile wurde leer,
   // das Nachladen setzte den Sync wieder auf gruen, und die Bilder waren weg.
   if (!r || r.error) {
     const warum = t('exp.uploadErr', { err: (r && r.error) || '' });
-    if (status) status.textContent = warum;
+    pjKameraStatus(versuchId, warum);
     toast(warum, 'err');
     return;
   }
   // Kein vorlaeufiges Einhaengen: die Kennung des Bildes vergibt der Server,
   // und eine Kachel ohne sie zeigt ein kaputtes Bild. Einmal nachladen ist
-  // schneller geschrieben und immer richtig.
-  if (status) status.textContent = '';
+  // schneller geschrieben und immer richtig. Die Fotos sind gespeichert und
+  // erscheinen sofort; die Originale kommen danach.
+  await loadData();
+  renderVersuch();
+  await pjOriginaleHochladen(versuchId, bilder.slice(0, PJ_MAX_FOTOS), r.ids || []);
+  pjKameraStatus(versuchId, '');
+  await loadData();
+  renderVersuch();
+}
+// Die Originale zu den Fotos, die eben gespeichert wurden: dieselbe Reihenfolge
+// wie die Kennungen, die der Server zurueckgab. Das Foto selbst ist schon da, in
+// 1280 px; scheitert ein Original, bleibt es dabei, und das wird gesagt.
+// Nur JPEG: ein anderes Format haette der Server nicht von seinem Standort
+// befreien koennen. Eins nach dem anderen, roh, ohne Base64.
+function pjIstJpeg(datei) {
+  return datei.type === 'image/jpeg' || (!datei.type && /\.jpe?g$/i.test(datei.name || ''));
+}
+// Mehr nimmt der Server fuer ein Original nicht an (ORIGINAL_MAX_BYTES).
+const PJ_ORIGINAL_MAX = 40 * 1024 * 1024;
+// Wie lange ein Original vor jedem neuen Versuch wartet: knapp eine Minute in
+// allem. Ohne Netz antwortet der Service Worker sofort mit 503, und zwei
+// Versuche ohne Pause waren in Millisekunden verbraucht.
+const PJ_ORIGINAL_PAUSEN = [2000, 5000, 15000, 30000];
+function pjWarten(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+// Ein Original zu seinem Foto. Wiederholt wird, was sich durch Warten aendern
+// kann: kein Netz, ein Fehler am Server. Nicht eine Absage (4xx), die beim
+// naechsten Mal dieselbe waere, und nicht 507: ein voller Speicher wird nicht
+// leerer, waehrend das Handy 40 MB noch einmal schickt. Gibt den Status der
+// letzten Antwort zurueck, 0 ohne Netz. beimWarten(): vor jeder Pause.
+async function pjOriginalSenden(fotoId, datei, beimWarten) {
+  for (let i = 0; ; i++) {
+    let status = 0;
+    try {
+      const antwort = await authFetch('/api/experiment-photos/' + fotoId + '/original', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: datei
+      });
+      status = antwort.status;
+    } catch (e) {
+      // authFetch wirft nach einem 401, auf dem Weg zur Anmeldung.
+      if (e && e.message === 'unauthorized') return 401;
+    }
+    if (status && (status < 500 || status === 507)) return status;
+    if (i >= PJ_ORIGINAL_PAUSEN.length) return status;
+    if (beimWarten) beimWarten();
+    await pjWarten(PJ_ORIGINAL_PAUSEN[i]);
+  }
+}
+async function pjOriginaleHochladen(versuchId, dateien, ids) {
+  const paare = dateien.map((d, i) => [d, ids[i]]).filter(([d, id]) => id && pjIstJpeg(d));
+  const senden = paare.filter(([d]) => !(d.size > PJ_ORIGINAL_MAX));
+  const zuGross = paare.length - senden.length;
+  const ohne = dateien.filter((d) => !pjIstJpeg(d)).length;
+  let fehl = 0;
+  let voll = 0;
+  for (const [, id] of senden) pjOriginaleUnterwegs.add(id);
+  try {
+    for (let i = 0; i < senden.length; i++) {
+      // Ist der Speicher voll, bleiben auch die uebrigen draussen, ohne dass
+      // jedes noch einmal ganz hochgeht, um dasselbe zu hoeren.
+      if (voll) {
+        voll++;
+        continue;
+      }
+      const [datei, id] = senden[i];
+      const zeile = t('exp.originalsUploading', { done: i + 1, total: senden.length });
+      pjKameraStatus(versuchId, zeile);
+      const status = await pjOriginalSenden(id, datei, () =>
+        pjKameraStatus(versuchId, zeile + ' ' + t('exp.originalsRetry'))
+      );
+      if (status === 507) voll++;
+      else if (status === 401) {
+        fehl += senden.length - i;
+        break;
+      } else if (status !== 200) fehl++;
+    }
+  } finally {
+    for (const [, id] of senden) pjOriginaleUnterwegs.delete(id);
+  }
+  // Eine Meldung fuer alles: zwei nacheinander teilen sich einen Platz, und die
+  // zweite ueberschrieb die erste, den Fehler eingeschlossen.
+  const teile = [];
+  if (voll) teile.push(t('exp.originalsFull', { n: voll }));
+  if (fehl) teile.push(t('exp.originalsFailed', { n: fehl }));
+  if (zuGross) teile.push(tp('exp.originalsTooBig', zuGross));
+  if (ohne) teile.push(tp('exp.originalsNotJpeg', ohne));
+  if (teile.length) toast(teile.join(' '), voll || fehl || zuGross ? 'err' : undefined);
+}
+// Ein Original nachreichen, fuer ein Foto, das noch keins hat. Gewaehlt wird
+// die Datei, die die Kamera geschrieben hat; der Server prueft, dass sie zu
+// diesem Foto passt.
+async function pjOriginalNachreichen(versuchId, fotoId, datei) {
+  if (!datei) return;
+  if (!pjIstJpeg(datei)) {
+    toast(tp('exp.originalsNotJpeg', 1), 'err');
+    return;
+  }
+  if (datei.size > PJ_ORIGINAL_MAX) {
+    toast(tp('exp.originalsTooBig', 1), 'err');
+    return;
+  }
+  const zeile = t('exp.originalsUploading', { done: 1, total: 1 });
+  pjKameraStatus(versuchId, zeile);
+  pjOriginaleUnterwegs.add(fotoId);
+  let status;
+  try {
+    status = await pjOriginalSenden(fotoId, datei, () =>
+      pjKameraStatus(versuchId, zeile + ' ' + t('exp.originalsRetry'))
+    );
+  } finally {
+    pjOriginaleUnterwegs.delete(fotoId);
+  }
+  pjKameraStatus(versuchId, '');
+  if (status === 200) toast(t('exp.originalAdded'));
+  else if (status === 422) toast(t('exp.originalMismatch'), 'err');
+  else if (status === 507) toast(t('exp.originalsFull', { n: 1 }), 'err');
+  else toast(t('exp.originalsFailed', { n: 1 }), 'err');
   await loadData();
   renderVersuch();
 }
@@ -17517,6 +17686,23 @@ function pjVersuchClick(e) {
   if (e.target.closest('[data-pj-back]')) {
     pjOffen = null;
     renderVersuch();
+    return true;
+  }
+  const nachreichen = e.target.closest('[data-pj-original]');
+  if (nachreichen) {
+    const eingabe = document.getElementById('pj-orig');
+    if (eingabe) {
+      const versuchId = pjOffen;
+      const fotoId = Number(nachreichen.dataset.pjOriginal);
+      // Wie bei der Kamera: der Zuhoerer haengt am Feld, das Feld wird nach
+      // der Auswahl geleert, damit dieselbe Datei noch einmal gewaehlt werden kann.
+      eingabe.onchange = () => {
+        const datei = (eingabe.files || [])[0];
+        eingabe.value = '';
+        pjOriginalNachreichen(versuchId, fotoId, datei);
+      };
+      eingabe.click();
+    }
     return true;
   }
   const kamera = e.target.closest('[data-pj-cam]');

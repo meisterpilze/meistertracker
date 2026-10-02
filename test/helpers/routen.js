@@ -16,10 +16,12 @@ const path = require('path');
 const crypto = require('crypto');
 const assert = require('node:assert/strict');
 const { Writable } = require('stream');
+const { EventEmitter } = require('events');
 const { ROOT, quelle, hebeFunktion, hebeKonstante } = require('./quelle');
 
 const db = require(path.join(ROOT, 'db.js'));
 const photoCap = require(path.join(ROOT, 'scripts', 'photo-cap.js'));
+const jpegLocation = require(path.join(ROOT, 'scripts', 'jpeg-location.js'));
 
 function abschnitt(src, von, bis) {
   const a = src.indexOf(von);
@@ -74,6 +76,8 @@ function jpeg(bytes) {
 //   literale    Konstanten mit Objekt- oder Listenliteral
 //   liestUrl    der Abschnitt liest url, den Pfad ohne Query
 // opts.deckel: Obergrenze der Fotoablage in Bytes (Standard 10 GB).
+// opts.frei: was auf der Platte nach einem Original frei bleiben muss, in
+// Bytes (Standard 0). Fuer die kleinen Bilder gilt, was server.js daraus macht.
 // opts.benutzer: Benutzer, die es in der Datenbank gibt.
 function routen(teil, opts = {}) {
   const { name, von, bis, helfer = [], konstanten = [], literale = [], liestUrl = false } = teil;
@@ -118,11 +122,15 @@ function routen(teil, opts = {}) {
     'broadcastSSE',
     'jsonBody',
     'deckel',
+    'frei',
+    'jpegLocation',
     `
     ${konstanten.map((k) => konstante(src, k)).join('\n')}
     ${literale.map((k) => hebeKonstante(k, src)).join('\n')}
     const PHOTO_DIR = path.join(DIR, 'data', 'photos');
     const PHOTO_DIR_MAX_BYTES = deckel;
+    const PHOTO_MIN_FREE_BYTES = frei;
+    ${konstante(src, 'PHOTO_SMALL_MIN_FREE_BYTES')}
     let _photoDirSizeBytes = 0;
     let _photoDirSizeStaleAt = 0;
     ${helfer.map((n) => hebeFunktion(n, src)).join('\n')}
@@ -131,22 +139,50 @@ function routen(teil, opts = {}) {
       return false;
     }
     return { handle, groesse: () => _photoDirSizeBytes };`
-  )(db, database, path, fs, crypto, photoCap, DIR, log, broadcastSSE, jsonBody, opts.deckel || 10 * 1024 * 1024 * 1024);
+  )(
+    db,
+    database,
+    path,
+    fs,
+    crypto,
+    photoCap,
+    DIR,
+    log,
+    broadcastSSE,
+    jsonBody,
+    opts.deckel || 10 * 1024 * 1024 * 1024,
+    opts.frei || 0,
+    jpegLocation
+  );
 
   // Eine Anfrage an die Routen. Kommt keine Antwort, meldet das Ergebnis
   // status null, statt den Test haengen zu lassen. kopf: Anfragekoepfe, klein
-  // geschrieben wie bei node:http.
-  function anfrage(method, url, body, authUser, kopf) {
+  // geschrieben wie bei node:http. Ein Buffer als body kommt roh an, ueber die
+  // Ereignisse 'data' und 'end', wie bei einer Route, die selbst liest.
+  // weiter.reisstAb: der Body kommt, sein Ende nie, und dann laeuft die
+  // Wartezeit ab, die die Route der Anfrage gesetzt hat — ein Handy, das
+  // mitten im Hochladen aus dem WLAN faellt.
+  function anfrage(method, url, body, authUser, kopf, weiter = {}) {
     const res = antwort();
-    const req = {
+    const roh = Buffer.isBuffer(body) ? body : null;
+    const req = Object.assign(new EventEmitter(), {
       method,
       url,
       headers: kopf || {},
       authUser: authUser === undefined ? { user_id: 7, username: 'anna', role: 'user' } : authUser,
-      rohBody: body === undefined ? '' : JSON.stringify(body)
-    };
+      rohBody: roh || body === undefined ? '' : JSON.stringify(body),
+      destroyed: false,
+      destroy() {
+        this.destroyed = true;
+      },
+      setTimeout(ms, cb) {
+        this.timeoutMs = ms;
+        this.onTimeout = cb;
+        return this;
+      }
+    });
     return new Promise((fertig) => {
-      const uhr = setTimeout(() => fertig({ status: null, haengt: true }), 1000);
+      const uhr = setTimeout(() => fertig({ status: null, haengt: true, req }), 1000);
       res.on('finish', () => {
         clearTimeout(uhr);
         const roh = res.inhalt();
@@ -161,6 +197,12 @@ function routen(teil, opts = {}) {
       if (innen.handle(req, res, url.split('?')[0]) === false) {
         clearTimeout(uhr);
         fertig({ status: 'keine Route' });
+      } else if (roh) {
+        setImmediate(() => {
+          req.emit('data', roh);
+          if (!weiter.reisstAb) req.emit('end');
+          else if (req.onTimeout) req.onTimeout();
+        });
       }
     });
   }

@@ -308,6 +308,7 @@ function blatt() {
     't',
     `
     const currentLang = 'de';
+    const loc = () => 'de-DE';
     ${[
       'esc',
       'fmtDt',
@@ -319,6 +320,7 @@ function blatt() {
       'pjLbTag',
       'pjLbEntfernt',
       'pjLbGefaess',
+      'pjMb',
       'pjLbFoto',
       'pjLbVersuch',
       'pjLbHtml'
@@ -445,6 +447,21 @@ describe('Das Blatt', () => {
     assert.ok(html.includes('dead'.repeat(16)), 'the purged photo keeps its checksum');
     assert.ok(html.includes('exp.purged'));
     assert.ok(html.includes('exp.lbRemovedBy('), 'removed photo says by whom');
+  });
+
+  it('nennt beim Foto mit Original dessen Groesse und Pruefsumme, beim Foto ohne nichts davon', () => {
+    const b = buch();
+    b.experiments[0].photos[0].original = {
+      sha256: 'face'.repeat(16),
+      bytes: 3355443,
+      width: 4032,
+      height: 3024
+    };
+    const html = pjLbHtml(b, 'Laborbuch', 'anna');
+    assert.ok(html.includes('exp.lbOriginal(4032,3024,3,2)'));
+    assert.ok(html.includes('SHA-256 ' + 'face'.repeat(16)));
+    assert.ok(html.includes('c0ffee'.repeat(10) + 'beef'), 'the checksum of the small picture stays');
+    assert.equal(pjLbHtml(buch(), 'Laborbuch', 'anna').includes('exp.lbOriginal'), false);
   });
 
   it('fuehrt das entfernte Gefaess mit, als entfernt', () => {

@@ -1373,14 +1373,38 @@ const PHOTO_THUMB_MAX_BYTES = 200 * 1024;
 
 // R-15: total-size cap on data/photos/. Without it, a stuck offsite-sync or
 // pathological client can fill the disk and wedge the whole server. Default
-// 10 GB; override with PHOTO_DIR_MAX_GB. Logic lives in scripts/photo-cap.js
+// 100 GB; override with PHOTO_DIR_MAX_GB. Logic lives in scripts/photo-cap.js
 // so the regression test can exercise it directly.
+//
+// It was 10 GB while every photo was a 200 KB JPEG. Experiment photos keep
+// their original now, a few MB each, and 10 GB would be a year of a busy lab.
+// What protects the disk is the free-space floor below, which the folder cap
+// never was: PHOTO_MIN_FREE_GB (default 2) has to stay free on the disk after
+// every original.
 const photoCap = require('./scripts/photo-cap.js');
+const jpegLocation = require('./scripts/jpeg-location.js');
 const PHOTO_DIR_MAX_BYTES = (() => {
   const raw = parseFloat(process.env.PHOTO_DIR_MAX_GB);
-  const gb = Number.isFinite(raw) && raw > 0 ? raw : 10;
+  const gb = Number.isFinite(raw) && raw > 0 ? raw : 100;
   return Math.round(gb * 1024 * 1024 * 1024);
 })();
+const PHOTO_MIN_FREE_BYTES = (() => {
+  const raw = parseFloat(process.env.PHOTO_MIN_FREE_GB);
+  const gb = Number.isFinite(raw) && raw >= 0 ? raw : 2;
+  return Math.round(gb * 1024 * 1024 * 1024);
+})();
+// The photos the app shows, a contamination report's among them, stop at a
+// lower floor. They are a few hundred KB, and a report is not refused because
+// the disk is below what originals of 25 MB need; the database still keeps
+// its room. Never more than PHOTO_MIN_FREE_GB, so 0 turns both off.
+const PHOTO_SMALL_MIN_FREE_BYTES = Math.min(PHOTO_MIN_FREE_BYTES, 256 * 1024 * 1024);
+// An original as the camera took it. A 48-megapixel phone writes 15-25 MB.
+const ORIGINAL_MAX_BYTES = 40 * 1024 * 1024;
+// How far an original's aspect ratio may be from its scaled photo's: the
+// scaling rounds to whole pixels, nothing more.
+const ORIGINAL_ASPECT_TOLERANCE = 0.02;
+// How long an original's upload may send nothing before it is dropped.
+const ORIGINAL_IDLE_MS = 60 * 1000;
 // Typed confirmation for the irreversible clean-slate reset. Must be echoed by
 // the client exactly, so the endpoint can't be fired by a stray/replayed POST.
 const RESET_CONFIRM_PHRASE = 'ALLES LOESCHEN';
@@ -1405,6 +1429,38 @@ function _ensurePhotoDirSize(force) {
     }
   }
   return _photoDirSizeBytes;
+}
+
+// Free space on the disk a photo goes to, checked before every write. The
+// folder cap's warning above comes at 90 GB now, and the first sign of a
+// filling disk should not be a worker's 507: below twice the originals'
+// reserve the log says so, and a photo refused for space is logged too, each
+// at most once an hour.
+const PHOTO_SPACE_LOG_MS = 60 * 60 * 1000;
+const _photoSpaceLoggedAt = { low: 0, refused: 0 };
+function _ensurePhotoSpace(dir, addBytes, minFreeBytes) {
+  const warn = (kind, msg, meta) => {
+    const now = Date.now();
+    if (now - _photoSpaceLoggedAt[kind] < PHOTO_SPACE_LOG_MS) return;
+    _photoSpaceLoggedAt[kind] = now;
+    log('warn', msg, meta);
+  };
+  let left;
+  try {
+    left = photoCap.enforceFreeSpace(dir, addBytes, minFreeBytes);
+  } catch (e) {
+    warn('refused', 'Photo refused, disk nearly full', {
+      photoMB: Math.round(addBytes / 1e6),
+      mustStayFreeMB: Math.round(minFreeBytes / 1e6)
+    });
+    throw e;
+  }
+  if (left !== null && left < 2 * PHOTO_MIN_FREE_BYTES) {
+    warn('low', 'Photo disk getting full', {
+      freeMB: Math.round(left / 1e6),
+      reserveMB: Math.round(PHOTO_MIN_FREE_BYTES / 1e6)
+    });
+  }
 }
 
 function _parseImageDataUrl(s) {
@@ -1455,6 +1511,9 @@ function savePhotoToDisk(reportId, photo, authUser) {
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
   const absDir = path.join(DIR, 'data', 'photos', yyyy, mm, String(reportId));
   fs.mkdirSync(absDir, { recursive: true });
+  // The free space of the disk the photo goes to: data/photos, or a year of
+  // it, can be a folder linked in from another disk.
+  _ensurePhotoSpace(absDir, main.length + thumb.length, PHOTO_SMALL_MIN_FREE_BYTES);
   const relPath = `photos/${yyyy}/${mm}/${reportId}/${uuid}.jpg`;
   const thumbPath = `photos/${yyyy}/${mm}/${reportId}/${uuid}_thumb.jpg`;
   fs.writeFileSync(path.join(DIR, 'data', relPath), main);
@@ -7100,11 +7159,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       } catch (_) {
         /* ignore */
       }
+      const photos = probe(PHOTO_DIR);
       return {
         backups: probe(BACKUP_DIR),
-        photos: probe(PHOTO_DIR),
+        photos,
         photosUsedMB: photoUsed,
-        photosCapMB: Math.round(PHOTO_DIR_MAX_BYTES / 1e6)
+        photosCapMB: Math.round(PHOTO_DIR_MAX_BYTES / 1e6),
+        // What has to stay free after an original, and whether the disk is
+        // below twice that, where the log starts to warn.
+        photosReserveMB: Math.round(PHOTO_MIN_FREE_BYTES / 1e6),
+        photosLow: photos && typeof photos.freeMB === 'number' ? photos.freeMB * 1e6 < 2 * PHOTO_MIN_FREE_BYTES : null
       };
     })();
 
@@ -9757,6 +9821,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && fotoTreffer) {
     const versuchId = parseInt(fotoTreffer[1], 10);
     const wantThumb = /[?&]thumb=1/.test(req.url);
+    const wantOriginal = !wantThumb && /[?&]original=1/.test(req.url);
     try {
       const foto = db.getExperimentPhotoByUuid(database, fotoTreffer[2]);
       if (!foto || foto.experiment_id !== versuchId) {
@@ -9767,7 +9832,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 404, 'photo deleted for good');
         return;
       }
-      const abs = path.join(DIR, 'data', wantThumb ? foto.thumb_path : foto.rel_path);
+      // Das Original gibt es nur bei Fotos, die eins mitgebracht haben.
+      if (wantOriginal && !foto.original_path) {
+        jsonErr(res, 404, 'no original for this photo');
+        return;
+      }
+      const abs = path.join(
+        DIR,
+        'data',
+        wantOriginal ? foto.original_path : wantThumb ? foto.thumb_path : foto.rel_path
+      );
       // Wie beim Kontaminationsbericht: nichts ausserhalb von data/photos, auch
       // wenn in der Zeile etwas anderes steht.
       if (!abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
@@ -9783,7 +9857,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // Browsers, und nach dem Abmelden an einem geteilten Geraet auch ohne
       // Anmeldung. Ein Bild aendert sich unter seiner uuid nie; die Frage kostet
       // eine 304 ohne Inhalt.
-      const etag = '"' + foto.uuid + (wantThumb ? '-t' : '') + '"';
+      const etag = '"' + foto.uuid + (wantThumb ? '-t' : wantOriginal ? '-o' : '') + '"';
       if (etagMatches(req.headers['if-none-match'], etag)) {
         res.writeHead(304, { ETag: etag, 'Cache-Control': 'private, no-cache' });
         res.end();
@@ -9873,6 +9947,166 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Das Original zu einem Foto, in voller Aufloesung, als roher JPEG-Inhalt.
+  // Die Oberflaeche schickt es gleich nach dem Foto, das sie verkleinert hat,
+  // eins nach dem anderen; Base64 in JSON waeren ein Drittel mehr und eine
+  // Anfrage, die mit acht Originalen 300 MB wiegt. Der Standort geht vor dem
+  // Speichern heraus (scripts/jpeg-location.js), und die Pruefsumme ist die
+  // der gespeicherten Datei. Einmal je Foto: ein Original wird nicht ersetzt.
+  //
+  // Lesen, pruefen, schreiben und eintragen laufen nach dem letzten Byte ohne
+  // Unterbrechung; zwei Anfragen fuer dasselbe Foto koennen sich also nicht
+  // ueberholen, die zweite findet das Original der ersten vor.
+  const originalTreffer = url.match(/^\/api\/experiment-photos\/(\d+)\/original$/);
+  if (req.method === 'PUT' && originalTreffer) {
+    const fotoId = parseInt(originalTreffer[1], 10);
+    const teile = [];
+    let groesse = 0;
+    let zuGross = false;
+    // Hinter dem HTTPS-Port hat der Server keine eigene Wartezeit fuer eine
+    // Anfrage: die Verbindungen reicht ihm der Port-Verteiler herein, und
+    // Node stellt requestTimeout nur fuer einen Server, der selbst lauscht.
+    // Ein Handy, das mitten im Hochladen aus dem WLAN faellt, schickt kein
+    // Ende; bis zu 40 MB lagen dann in `teile` bis zum naechsten Neustart.
+    // Kommt eine Minute lang nichts, wird die Anfrage beendet.
+    req.setTimeout(ORIGINAL_IDLE_MS, () => {
+      teile.length = 0;
+      req.destroy();
+    });
+    req.on('data', (c) => {
+      if (zuGross) return;
+      groesse += c.length;
+      if (groesse > ORIGINAL_MAX_BYTES) {
+        zuGross = true;
+        jsonErr(res, 413, 'original too large (max ' + Math.round(ORIGINAL_MAX_BYTES / (1024 * 1024)) + ' MB)');
+        req.destroy();
+        return;
+      }
+      teile.push(c);
+    });
+    req.on('end', () => {
+      if (zuGross) return;
+      let geschrieben = null;
+      try {
+        const foto = db.getExperimentPhotoById(database, fotoId);
+        if (!foto || !foto.rel_path) {
+          jsonErr(res, 404, 'photo not found');
+          return;
+        }
+        if (foto.removed_at) {
+          jsonErr(res, 409, 'photo is removed');
+          return;
+        }
+        // Wer das Foto hochgeladen hat, oder ein Admin: das Original belegt im
+        // Laborbuch, was die Kamera aufgenommen hat, und laesst sich nicht
+        // ersetzen. Offen fuer jedes Konto, haette jeder ein beliebiges Bild
+        // als Original an ein fremdes, laengst gespeichertes Foto haengen
+        // koennen.
+        const user = req.authUser || {};
+        if (user.role !== 'admin' && !(foto.uploaded_by && foto.uploaded_by === user.user_id)) {
+          jsonErr(res, 403, 'only whoever uploaded the photo, or an admin, can add its original');
+          return;
+        }
+        const roh = Buffer.concat(teile);
+        if (!jpegLocation.isJpeg(roh)) {
+          jsonErr(res, 415, 'an original must be a JPEG');
+          return;
+        }
+        // EXIF, das sich nicht bis zum Ende lesen laesst, ueberschreibt
+        // scrubLocation ganz (bis auf die Ausrichtung): so kommt jedes
+        // Original ohne Standort an, statt abgelehnt und verloren zu werden.
+        const ohneOrt = jpegLocation.scrubLocation(roh);
+        const daten = ohneOrt.buf;
+        // Das Original muss zum Foto passen: dasselbe Seitenverhaeltnis wie
+        // das verkleinerte Bild, das der Browser aus ihm gemacht hat (beide
+        // aufrecht gemessen). Ein anderes Bild faellt so in aller Regel auf.
+        const masse = jpegLocation.jpegSize(daten) || {};
+        if (masse.width && masse.height && foto.width && foto.height) {
+          const r1 = masse.width / masse.height;
+          const r2 = foto.width / foto.height;
+          if (Math.abs(r1 - r2) / r2 > ORIGINAL_ASPECT_TOLERANCE) {
+            jsonErr(res, 422, 'the original does not match this photo (' + masse.width + '×' + masse.height + ')');
+            return;
+          }
+        }
+        if (foto.original_sha256) {
+          // Dasselbe Original noch einmal ist kein Fehler: die Antwort auf
+          // das erste ging unterwegs verloren (Netzwechsel, Handy im
+          // Hintergrund), und die Wiederholung soll hoeren, dass es da ist.
+          // Als 409 meldete die Oberflaeche ein gespeichertes Original als
+          // nicht gespeichert.
+          const sha = crypto.createHash('sha256').update(daten).digest('hex');
+          if (sha === foto.original_sha256) {
+            jsonOk(res, { original: Object.assign({ already: true }, db.fotoOriginal(foto)) });
+            return;
+          }
+          jsonErr(res, 409, 'photo already has its original');
+          return;
+        }
+        photoCap.enforceCap(_ensurePhotoDirSize(false), daten.length, PHOTO_DIR_MAX_BYTES);
+        const rel = path.posix.join(path.posix.dirname(foto.rel_path), foto.uuid + '_orig.jpg');
+        const ziel = path.join(DIR, 'data', rel);
+        if (!ziel.startsWith(path.join(DIR, 'data', 'photos') + path.sep)) {
+          jsonErr(res, 400, 'invalid path');
+          return;
+        }
+        fs.mkdirSync(path.dirname(ziel), { recursive: true });
+        // Die Platte, auf die das Original kommt: der Fotoordner oder ein Jahr
+        // darin kann von einer anderen Platte hereinverlinkt sein.
+        _ensurePhotoSpace(path.dirname(ziel), daten.length, PHOTO_MIN_FREE_BYTES);
+        // 'w', nicht 'wx': eine Datei, die hier liegt, ohne dass die Zeile ein
+        // Original kennt, stammt von einem Versuch, der vor dem Eintragen
+        // abbrach. Sie wird ersetzt. Bricht das Schreiben selbst ab (Platte
+        // voll, ein Virenscanner), raeumt der Rueckbau unten die halbe Datei
+        // sofort wieder weg: keine Zeile nennt sie, und das endgueltige
+        // Loeschen des Fotos faende sie sonst nur ueber ihren Namen. Er zieht
+        // dabei ab, was er findet; gezaehlt wird darum auch ein Rest.
+        geschrieben = ziel;
+        try {
+          fs.writeFileSync(ziel, daten);
+        } catch (e) {
+          const rest = fs.statSync(ziel, { throwIfNoEntry: false });
+          if (rest) _photoDirSizeBytes += rest.size;
+          throw e;
+        }
+        _photoDirSizeBytes += daten.length;
+        const original = {
+          path: rel,
+          bytes: daten.length,
+          sha256: crypto.createHash('sha256').update(daten).digest('hex'),
+          width: masse.width ?? null,
+          height: masse.height ?? null
+        };
+        db.setExperimentPhotoOriginal(database, fotoId, original, req.authUser);
+        geschrieben = null;
+        log('info', 'Experiment photo original stored', {
+          photoId: fotoId,
+          bytes: original.bytes,
+          locationRemoved: ohneOrt.locationRemoved
+        });
+        broadcastSSE(res);
+        jsonOk(res, {
+          original: {
+            bytes: original.bytes,
+            sha256: original.sha256,
+            width: original.width,
+            height: original.height,
+            locationRemoved: ohneOrt.locationRemoved
+          }
+        });
+      } catch (err) {
+        if (geschrieben && _discardPhotoFiles([geschrieben]).length) {
+          log('error', 'Original left on disk after a failed save', {
+            photoId: fotoId,
+            file: path.relative(path.join(DIR, 'data'), geschrieben)
+          });
+        }
+        if (err && err.name === 'PhotoCapError') jsonErr(res, 507, err.message);
+        else safeErr(res, err);
+      }
+    });
+    return;
+  }
   // Entfernen, nicht loeschen, wie beim Gefaess. Die Datei bleibt auf der
   // Platte: ein entferntes Foto laesst sich zurueckholen, und der Verlauf nennt
   // seine Pruefsumme, die ohne die Datei nichts mehr belegen koennte.
@@ -9897,8 +10131,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const pfade = db.purgeExperimentPhoto(database, fotoId, req.authUser);
       // Nur, was unter data/photos liegt, auch wenn in der Zeile etwas anderes
       // stand; die Bytes gehen an die Deckelung zurueck.
+      // Das Original auch unter seinem Namen (<uuid>_orig.jpg neben dem
+      // Foto), wenn die Zeile keines kennt: eines, das ein abgebrochener
+      // Versuch oder eine aeltere zurueckgespielte Datenbank hinterliess,
+      // ueberlebte sonst das endgueltige Loeschen, im Spiegel und auf dem
+      // Stick gleich mit.
+      const original =
+        pfade &&
+        (pfade.original_path || (/\.jpg$/.test(pfade.rel_path) ? pfade.rel_path.replace(/\.jpg$/, '_orig.jpg') : null));
       const uebrig = _discardPhotoFiles(
-        (pfade ? [pfade.rel_path, pfade.thumb_path] : [])
+        (pfade ? [pfade.rel_path, pfade.thumb_path, original].filter(Boolean) : [])
           .map((rel) => path.join(DIR, 'data', rel))
           .filter((abs) => abs.startsWith(path.join(DIR, 'data', 'photos') + path.sep))
       );

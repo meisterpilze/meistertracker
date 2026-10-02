@@ -89,9 +89,30 @@ function enforceCap(currentSize, addBytes, capBytes) {
   return true;
 }
 
+// The disk under the photos keeps this much free. The folder cap alone says
+// nothing about the disk: a cap the disk cannot hold still fills it, and a full
+// disk stops the database along with the photos. Unknown free space (a platform
+// that cannot say) lets the write through; the folder cap still applies.
+// Returns what stays free after the write, or null when that is unknown.
+function enforceFreeSpace(dir, addBytes, minFreeBytes, statfs = fs.statfsSync) {
+  let free;
+  try {
+    const s = statfs(dir);
+    free = Number(s.bavail) * Number(s.bsize);
+  } catch {
+    return null;
+  }
+  if (!Number.isFinite(free)) return null;
+  if (free - addBytes >= minFreeBytes) return free - addBytes;
+  const gb = minFreeBytes / (1024 * 1024 * 1024);
+  const amount = gb >= 1 ? gb.toFixed(1) + ' GB' : Math.round(minFreeBytes / (1024 * 1024)) + ' MB';
+  throw new PhotoCapError(`photos: disk nearly full (${amount} must stay free, see PHOTO_MIN_FREE_GB)`);
+}
+
 module.exports = {
   computePhotoDirSize,
   enforceCap,
+  enforceFreeSpace,
   removeContaminationPhotos,
   experimentPhotoScope,
   PhotoCapError

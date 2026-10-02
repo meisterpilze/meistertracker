@@ -20,13 +20,21 @@ const ABSCHNITT = {
     'validateLengths',
     'contamReportTargets',
     '_ensurePhotoDirSize',
+    '_ensurePhotoSpace',
     '_parseImageDataUrl',
     '_isJpegMagic',
     'savePhotoToDisk',
     '_discardPhotoFiles',
     'etagMatches'
   ],
-  konstanten: ['PHOTO_MAX_BYTES', 'PHOTO_THUMB_MAX_BYTES', 'PHOTO_SIZE_REFRESH_MS', 'CONTAM_MAX_TARGETS'],
+  konstanten: [
+    'PHOTO_MAX_BYTES',
+    'PHOTO_THUMB_MAX_BYTES',
+    'PHOTO_SIZE_REFRESH_MS',
+    'PHOTO_SPACE_LOG_MS',
+    '_photoSpaceLoggedAt',
+    'CONTAM_MAX_TARGETS'
+  ],
   // Der Abschnitt liest nur req.url.
   liestUrl: false
 };

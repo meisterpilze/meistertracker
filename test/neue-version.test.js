@@ -233,6 +233,7 @@ function telefon(z) {
     `
     const geladen = [];
     let _mutating = z.mutating || 0;
+    const pjOriginaleUnterwegs = new Set(z.originale || []);
     const leaveGuards = z.ungespeichert ? [{ ask: () => 'Ungespeichert' }] : [];
     const askGuard = (g) => g.ask();
     const bar = { hidden: true };
@@ -320,6 +321,7 @@ describe('Telefon: lädt neu, wenn es niemanden stört', () => {
     ['die Scan-Hülle', { offen: ['scan-overlay'] }],
     ['das Ernte-Gewicht', { offen: ['harvest-panel'] }],
     ['eine laufende Speicherung', { mutating: 1 }],
+    ['ein Original, das noch hochlädt', { originale: [41] }],
     ['Ungespeichertes mit Wache', { ungespeichert: true }],
     ['ein Feld mit dem Cursor darin', { fokus: 'INPUT' }],
     ['ein ausgefülltes Feld auf der Seite', { felder: [TEXT('12,5')] }]

@@ -2812,6 +2812,31 @@ const MIGRATIONS = [
         .map((s) => s.name);
       if (!spalten.includes('tile_order')) db.exec('ALTER TABLE users ADD COLUMN tile_order TEXT');
     }
+  },
+  {
+    version: 95,
+    description: 'Versuchsfotos behalten ihr Original in voller Aufloesung',
+    fn(db) {
+      // Das Bild, das die Oberflaeche zeigt, ist auf 1280 px verkleinert; was
+      // die Kamera aufgenommen hat, liegt daneben als <uuid>_orig.jpg, ohne
+      // Standort (scripts/jpeg-location.js). Die Pruefsumme ist die der Datei,
+      // wie sie gespeichert ist. Leer bei Fotos von vorher und bei Bildern,
+      // die kein JPEG waren: von denen gibt es nur die verkleinerte Fassung.
+      const spalten = db
+        .prepare("SELECT name FROM pragma_table_info('experiment_photos')")
+        .all()
+        .map((s) => s.name);
+      const neu = [
+        ['original_path', 'TEXT'],
+        ['original_bytes', 'INTEGER'],
+        ['original_sha256', 'TEXT'],
+        ['original_width', 'INTEGER'],
+        ['original_height', 'INTEGER']
+      ];
+      for (const [name, typ] of neu) {
+        if (!spalten.includes(name)) db.exec('ALTER TABLE experiment_photos ADD COLUMN ' + name + ' ' + typ);
+      }
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -7337,15 +7362,38 @@ function _fotoDaten(f) {
     bytes: f.bytes,
     width: f.width,
     height: f.height,
-    uploadedAt: f.uploaded_at
+    uploadedAt: f.uploaded_at,
+    original: _fotoOriginal(f)
+  };
+}
+// Das Original in voller Aufloesung, oder null, wenn es keins gibt. Ohne Pfad:
+// der ist Sache des Servers, die Pruefsumme ist es, die etwas belegt.
+function _fotoOriginal(f) {
+  if (!f.original_sha256) return null;
+  return {
+    sha256: f.original_sha256,
+    bytes: f.original_bytes,
+    width: f.original_width,
+    height: f.original_height
   };
 }
 // Nur noch fuer Migration 89, und so, wie sie ausgeliefert wurde: eine
 // Datenbank soll danach gleich aussehen, ob v89 mit #633 lief oder erst jetzt.
 // Fuer ein Foto von vor dem Verlauf gibt es keinen Eintrag 'create'; sein
-// Ausgangsstand nennt die Nummer des Kontos, das es hochgeladen hat.
+// Ausgangsstand nennt die Nummer des Kontos, das es hochgeladen hat. Die Felder
+// stehen einzeln da, nicht als _fotoDaten: das hat seit v95 das Original, und
+// v89 soll schreiben, was es immer geschrieben hat.
 function _fotoStand(f) {
-  return { ..._fotoDaten(f), uploadedBy: f.uploaded_by };
+  return {
+    uuid: f.uuid,
+    runId: f.run_id,
+    sha256: f.sha256,
+    bytes: f.bytes,
+    width: f.width,
+    height: f.height,
+    uploadedAt: f.uploaded_at,
+    uploadedBy: f.uploaded_by
+  };
 }
 
 // Nur noch fuer Migration 89, die einmal ausgelieferte Migrationen nicht
@@ -7621,8 +7669,12 @@ function listExperiments(db) {
     width: f.width,
     height: f.height,
     uploadedAt: f.uploaded_at,
+    // Wer ein fehlendes Original nachreichen darf: wer das Foto hochgeladen
+    // hat, oder ein Admin. Die App bietet es nur ihnen an.
+    uploadedBy: f.uploaded_by,
     removedAt: f.removed_at || null,
-    purged: !f.rel_path
+    purged: !f.rel_path,
+    original: f.rel_path ? _fotoOriginal(f) : null
   });
   // Versuch und Gefaess zeigt die API so, wie der Verlauf sie festhaelt, dazu
   // die Kennungen und was nur die Anzeige braucht. Ein Foto zeigt sie knapper.
@@ -7945,6 +7997,33 @@ function addExperimentPhoto(db, experimentId, runId, foto, wer) {
     return info.lastInsertRowid;
   });
 }
+// Das Original zu einem Foto, das schon da ist, einmal und nicht wieder: eine
+// Pruefsumme, die sich spaeter aendern liesse, belegte nichts. Nur an einem
+// Foto, das in der Liste steht. Der Verlauf bekommt einen Eintrag 'original'
+// mit dem Foto, wie es danach ist.
+function setExperimentPhotoOriginal(db, id, o, wer) {
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'UPDATE experiment_photos SET original_path=?, original_bytes=?, original_sha256=?, original_width=?, original_height=? ' +
+          "WHERE id=? AND original_path IS NULL AND original_sha256 IS NULL AND rel_path != '' AND removed_at IS NULL"
+      )
+      .run(o.path, o.bytes, o.sha256, o.width ?? null, o.height ?? null, id);
+    if (info.changes !== 1) throw new Error('lab: photo ' + id + ' cannot take an original');
+    const zeile = db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id);
+    _verlauf(db, wer, {
+      entity: 'photo',
+      entityId: zeile.id,
+      experimentId: zeile.experiment_id,
+      action: 'original',
+      new: JSON.stringify(_fotoDaten(zeile))
+    });
+    return zeile;
+  });
+}
+function getExperimentPhotoById(db, id) {
+  return db.prepare('SELECT * FROM experiment_photos WHERE id=?').get(id) || null;
+}
 function getExperimentPhotoByUuid(db, uuid) {
   return db.prepare('SELECT * FROM experiment_photos WHERE uuid=?').get(uuid) || null;
 }
@@ -8076,7 +8155,7 @@ function purgeExperimentPhoto(db, id, wer) {
   if (!zeile.removed_at) throw new Error('lab: photo ' + id + ' must be removed before it is deleted for good');
   if (!zeile.rel_path) return null;
   _mitVerlauf(db, () => {
-    db.prepare("UPDATE experiment_photos SET rel_path='', thumb_path='' WHERE id=?").run(id);
+    db.prepare("UPDATE experiment_photos SET rel_path='', thumb_path='', original_path=NULL WHERE id=?").run(id);
     _verlauf(db, wer, {
       entity: 'photo',
       entityId: zeile.id,
@@ -8085,7 +8164,7 @@ function purgeExperimentPhoto(db, id, wer) {
       old: JSON.stringify(_fotoDaten(zeile))
     });
   });
-  return { rel_path: zeile.rel_path, thumb_path: zeile.thumb_path };
+  return { rel_path: zeile.rel_path, thumb_path: zeile.thumb_path, original_path: zeile.original_path || null };
 }
 
 // ── Notizen je Vorhaben-Reiter ──────────────────────────────
@@ -12065,6 +12144,9 @@ module.exports = {
   listExperiments,
   addExperimentPhoto,
   getExperimentPhotoByUuid,
+  getExperimentPhotoById,
+  fotoOriginal: _fotoOriginal,
+  setExperimentPhotoOriginal,
   removeExperimentPhoto,
   purgeExperimentPhoto,
   restoreExperimentPhoto,

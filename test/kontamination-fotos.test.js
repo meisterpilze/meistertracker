@@ -341,6 +341,49 @@ describe('Loeschen eines Berichts', () => {
   });
 });
 
+describe('Eine Meldung mit Foto, wenn die Platte knapp wird', () => {
+  // PHOTO_MIN_FREE_GB haelt Platz fuer die Originale der Versuchsfotos frei,
+  // 25 MB das Stueck. Ein Foto hier hat ein paar hundert KB, und die Meldung
+  // scheiterte an derselben Reserve: unter 2 GB frei liess sich keine
+  // Kontamination mit Foto mehr melden.
+  const GB = 1024 * 1024 * 1024;
+  const statfsSync = fs.statfsSync;
+  let r;
+  beforeEach(() => {
+    r = kontaminationsrouten({ frei: 2 * GB });
+  });
+  afterEach(() => {
+    fs.statfsSync = statfsSync;
+    r.schliessen();
+  });
+  const platte = (frei) => {
+    fs.statfsSync = () => ({ bavail: frei / 4096, bsize: 4096 });
+  };
+  const melden = () =>
+    r.anfrage('POST', '/api/contamination-reports', {
+      type_id: r.db.listContaminationTypes(r.database)[0].id,
+      severity: 'minor',
+      bag_id: 'XY-0101-01',
+      batch_id: 'XY-0101',
+      photos: [{ data_url: jpeg(700), thumb_data_url: jpeg(90) }]
+    });
+
+  it('geht unter der Reserve der Originale noch durch', async () => {
+    platte(1 * GB);
+    const a = await melden();
+    assert.equal(a.status, 200, JSON.stringify(a.json));
+    assert.equal(a.json.photoIds.length, 1);
+  });
+
+  it('antwortet 507 erst an der Grenze, die der Datenbank ihren Platz laesst', async () => {
+    platte(100 * 1024 * 1024);
+    const a = await melden();
+    assert.equal(a.status, 507);
+    assert.match(a.json.error, /256 MB must stay free/);
+    assert.equal(r.groesse(), 0);
+  });
+});
+
 describe('Jeder Weg, der Fotodateien loescht, gibt ihre Bytes zurueck', () => {
   // Die Meldung ist nicht der einzige Weg, auf dem server.js Fotodateien
   // loescht. Wie sich die Versuchsfotos dabei verhalten, prueft

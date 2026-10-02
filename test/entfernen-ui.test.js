@@ -68,6 +68,8 @@ function werkbank(v) {
     const renderVersuch = () => aufrufe.push(['render']);
     let pjGefaessUnterwegs = false;
     let pjVersuchUnterwegs = false;
+    let pjKameraZeile = { id: null, text: '' };
+    const pjOriginaleUnterwegs = new Set();
     const fokussiert = [];
     const document = { querySelector: (sel) => ({ focus: () => fokussiert.push(sel) }) };
     const toasts = [];

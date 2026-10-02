@@ -105,6 +105,18 @@ HTTP_REDIRECT_PORT=80
 # Outbound harvest feed — see Section 15. Unset means off.
 # HARVEST_WEBHOOK_URL=https://example.org/harvest
 # HARVEST_WEBHOOK_SECRET=<long-random-string>
+
+# Photos. Experiment photos keep their full-resolution original (a few MB
+# each) next to the 1280 px picture the app shows. The folder cap is the
+# outer bound (default 100 GB); what protects the disk is the free space
+# that has to remain after every original (default 2 GB). The pictures the
+# app shows, contamination photos among them, still go through below that,
+# down to 256 MB free, so a report is not refused for want of room for
+# originals. A refused photo is answered 507 and the app says the storage
+# is full. Below twice the reserve the log warns once an hour ("Photo disk
+# getting full"), and /api/health/full shows photosReserveMB and photosLow.
+# PHOTO_DIR_MAX_GB=100
+# PHOTO_MIN_FREE_GB=2
 ```
 
 ## 4. TLS Certificate Setup
@@ -377,6 +389,11 @@ Create a configuration file at `/etc/nginx/sites-available/meistertracker` — r
 server {
     listen 80;
     server_name <your-domain>;
+
+    # The largest request is an experiment photo's original, up to 40 MB.
+    # Without this, nginx refuses every body over 1 MB with 413, and no
+    # photo ever gets its original.
+    client_max_body_size 50m;
 
     # Deny access to hidden files (except .well-known for SSL challenges)
     location ~ /\.(?!well-known) {

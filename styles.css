@@ -8964,6 +8964,26 @@ body:has(#m-camscan.open) .update-bar {
   margin-top: 3px;
   line-height: 1.3;
 }
+/* The full-resolution original, as a link in the caption. The padding makes
+   it something a thumb can hit; the negative margin keeps the line where it
+   was. Where there is none yet, the same place offers to add it: a button,
+   since it opens a file picker and not a page, dressed like the link. */
+.pj-foto-original,
+.pj-foto-original-neu {
+  display: inline-block;
+  padding: 6px 4px;
+  margin: -6px 0;
+  color: var(--c-green-dark);
+  font-weight: 600;
+}
+.pj-foto-original-neu {
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .pj-foto-weg {
   position: absolute;
   top: 3px;

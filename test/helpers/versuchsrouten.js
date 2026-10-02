@@ -22,6 +22,7 @@ const ABSCHNITT = {
     'validateDay',
     'versuchPruefen',
     '_ensurePhotoDirSize',
+    '_ensurePhotoSpace',
     '_parseImageDataUrl',
     '_isJpegMagic',
     'savePhotoToDisk',
@@ -29,7 +30,17 @@ const ABSCHNITT = {
     'ansatzPruefen',
     'etagMatches'
   ],
-  konstanten: ['PHOTO_MAX_BYTES', 'PHOTO_THUMB_MAX_BYTES', 'PHOTO_SIZE_REFRESH_MS', 'EXP_MAX_PHOTOS_PER_CALL'],
+  konstanten: [
+    'PHOTO_MAX_BYTES',
+    'PHOTO_THUMB_MAX_BYTES',
+    'PHOTO_SIZE_REFRESH_MS',
+    'PHOTO_SPACE_LOG_MS',
+    '_photoSpaceLoggedAt',
+    'EXP_MAX_PHOTOS_PER_CALL',
+    'ORIGINAL_MAX_BYTES',
+    'ORIGINAL_ASPECT_TOLERANCE',
+    'ORIGINAL_IDLE_MS'
+  ],
   literale: ['ANSATZ_TYPEN'],
   // Die Versuchs-Routen vergleichen url, den Pfad ohne Query.
   liestUrl: true
