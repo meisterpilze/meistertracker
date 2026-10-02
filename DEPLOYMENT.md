@@ -830,12 +830,15 @@ cd /var/www/meistertracker
 bash update_server.sh
 ```
 
-This will:
-1. Pull the latest code from `origin/main`
-2. Install updated dependencies
-3. Back up the database
-4. Ensure TLS certificates are present
-5. Restart the server via PM2
+The script runs six steps, numbered like the `[n/6]` lines it prints:
+1. Fetch from GitHub and `git reset --hard origin/main`, which discards local changes to tracked files. Skipped when the script runs from a git worktree.
+2. Install dependencies (`npm install --production`).
+3. Snapshot the database into `backups/` as `meistertracker_YYYYMMDD_HHMMSS.db` (Section 9).
+4. Generate a self-signed TLS certificate if `certs/server.key` or `certs/server.crt` is missing (Section 4).
+5. Check the new version against a copy of the database with `scripts/preflight.js`. If that fails, the update stops here and the old server keeps running (Section 5).
+6. Restart the server via PM2 and check that it stayed up. If it did, the commit is tagged `stable`; if it crashed, the script rolls back to `stable`, the last commit that started (Section 5).
+
+On a server that uses DuckDNS, a successful update ends with a reminder if the DuckDNS fallback timer is not running (Section 6).
 
 ## 14. Docker Deployment (Alternative)
 
