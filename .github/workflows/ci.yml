@@ -268,3 +268,26 @@ jobs:
             throw 'task still registered after uninstall'
           }
           'removed'
+
+  # The webhook's update chain runs under cmd.exe on a Windows install, and the
+  # cmd.exe half of test/deploy-chain.test.js is skipped everywhere else, so
+  # until this job the first run of that line was production's. The tests run
+  # the real line end to end, with stand-ins for git, npm and pm2 and the real
+  # snapshot script. The preflight it calls had never run on Windows either,
+  # and it loads mcp-server.js, which needs the dependencies.
+  deploy-chain-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy chain and preflight under cmd.exe
+        run: node --test test/deploy-chain.test.js test/preflight.test.js

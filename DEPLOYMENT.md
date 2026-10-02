@@ -182,6 +182,9 @@ tree back. You can also run it yourself at any time:
 node scripts/preflight.js
 ```
 
+The GitHub webhook auto-deploy runs the same preflight, against the snapshot
+of the database it takes first. See Section 9.
+
 ### And if the new version still will not start
 
 The script waits for the restarted process and checks it stayed up. If it did
@@ -501,7 +504,28 @@ MeisterTracker automatically creates daily SQLite backups at midnight:
 - Keeps the last 30 days
 - Filename pattern: `meisterpilze_backup_YYYY-MM-DD.db`
 
-`update_server.sh` and `START.bat` also create a one-off snapshot before pulling new code, with the pattern `meistertracker_YYYYMMDD_HHMMSS.db`. These are NOT rotated — they accumulate until you remove them manually. Both prefixes are recognised by the health check below.
+### Snapshots before an update
+
+Every way of updating takes a snapshot of the database before the new code starts, and with it any new migrations: `update_server.sh`, `START.bat`, and the GitHub webhook auto-deploy (`/api/webhook/github`). They go into `backups/` beside the daily files, with the pattern `meistertracker_YYYYMMDD_HHMMSS.db`. Both prefixes are recognised by the health check below. `START.bat` takes it with `scripts/backup-db.js`, which reads through the WAL. The webhook deploy takes it inside the running server, through the server's own connection to the database. `update_server.sh` uses the `sqlite3` CLI and, where that is not installed, a plain copy, which misses whatever is still in `meistertracker.db-wal`.
+
+The server keeps the newest 10 of these snapshots and deletes the older ones. It rotates them at every start, with the nightly backup run, and right after the webhook's own snapshot. The number is `PRE_UPDATE_SNAPSHOT_KEEP` in `scripts/rotate-backups.js`. "Newest" is the order the server first saw them in, kept in `backups/.pre-update-snapshots.json`, not the time in the file name: every writer names its snapshot after the PC's clock, and a clock that ran ahead, or one that runs behind after a dead CMOS battery, would otherwise make the snapshot just written look like the oldest. The newest snapshot is never deleted, and neither is any file less than a minute old. Snapshots that were already there the first time the rotation ran are kept for good, as this section used to promise; delete them by hand once you no longer need them. A ledger that cannot be read starts over the same way, keeping everything that is there. The daily auto-backups keep their own 30 days, and `.enc` files, photo archives and anything you have renamed are left alone.
+
+The webhook deploy runs these steps in this order. The server does the first two itself, before anything on disk changes:
+
+1. `git fetch origin`, and the commit `origin/main` now points at
+2. the snapshot, through the server's own connection to the database
+3. `git reset --hard <that commit>`
+4. `npm install --omit=dev`
+5. `scripts/preflight.js` against the snapshot, the check described in Section 5
+6. `pm2 restart`
+
+If a step fails, the deploy stops there and the server is not restarted. It keeps running the version it has already loaded, and new migrations never run without a fresh snapshot beside them. A failed fetch or snapshot leaves everything as it was. When a later step fails, the deploy puts back the commit the server is running (`git reset --hard` and `npm install`), so the files on disk match the running code again: the phones keep the frontend that goes with the API they talk to, and a crash or a reboot starts the version that was running, not the refused one. The restart step does not roll back. The next push to main tries again.
+
+Only one deploy runs at a time. A push that arrives while one runs, or while an admin restores a backup, waits; only the newest waiting push is kept, because a deploy is always of `origin/main` as it is by then. It runs when the current deploy ends without a restart. When the current one succeeds and restarts the server, the waiting push is handed over in `data/deploy-pending.json`, and the restarted server deploys it only if `origin/main` has moved past the commit it now runs.
+
+An admin can read the outcome in `/api/health/full` under `deploy`: `status` (`in_progress`, `success` or `failed`), for a failure the `step` it stopped at (`fetch`, `snapshot`, `prepare`, `update`, `install`, `preflight` or `restart`), the commit, the name of the snapshot that attempt took, whether a failed deploy put the running commit back (`rolledBack`), and the failed step's last lines of output (`detail`). The whole output of the latest attempt's chain is in `data/deploy.log`.
+
+The webhook does not archive `data/photos`. A deploy never touches photo files, and migrations change only the database.
 
 ### Photos
 
@@ -625,7 +649,9 @@ mv meistertracker.db meistertracker.db.broken
 rm -f meistertracker.db-wal meistertracker.db-shm
 
 # 3. Pick a backup. Auto-backups: backups/meisterpilze_backup_YYYY-MM-DD.db
-#    Manual backups: backups/meistertracker_YYYYMMDD_HHMMSS.db
+#    Snapshots from before an update (the newest 10, and any that predate
+#    the rotation):
+#    backups/meistertracker_YYYYMMDD_HHMMSS.db
 ls -la backups/
 
 # 4. Verify the chosen file BEFORE swapping it in (catches a corrupt file

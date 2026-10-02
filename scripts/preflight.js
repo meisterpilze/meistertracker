@@ -25,6 +25,12 @@
 //   node scripts/preflight.js [--db <path>] [--quiet]
 //
 // Exit codes: 0 safe to proceed, 1 do not deploy, 2 could not check.
+//
+// The webhook deploy (scripts/deploy-chain.js) calls this as
+// `node scripts/preflight.js --quiet --db <path>`, and it is the running
+// version's chain that calls the version just pulled. Keep both flags and the
+// meaning of exit 0 working: a version that broke them would have every
+// webhook deploy after it refused, until someone updated by hand.
 
 const fs = require('fs');
 const os = require('os');
@@ -53,7 +59,16 @@ const MODULES = [
   'scripts/atomic-file.js',
   'scripts/photo-mirror.js',
   'scripts/usb-stick.js',
-  'scripts/usb-backup.js'
+  'scripts/usb-backup.js',
+  // The same holds for every other script server.js requires at the top level.
+  // deploy-chain.js matters most: a version that cannot load it is a server
+  // that cannot start, and the webhook that would deliver the fix lives in it.
+  // test/preflight.test.js reads server.js and fails when one is missing here.
+  'scripts/photo-cap.js',
+  'scripts/jpeg-location.js',
+  'scripts/deploy-chain.js',
+  'scripts/deploy-runner.js',
+  'scripts/rotate-backups.js'
 ];
 
 /**

@@ -166,6 +166,37 @@ describe('a tree that would not start', () => {
     assert.equal(c, 1);
     assert.ok(lines.some((l) => /missing file: sw\.js/.test(l)));
   });
+
+  // The script the webhook deploy is built from. A version that cannot load it
+  // is a server that cannot start, taking the webhook that would deliver the
+  // fix down with it.
+  it('refuses a broken scripts/deploy-chain.js', () => {
+    const file = path.join(dir, 'scripts', 'deploy-chain.js');
+    const good = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, 'module.exports = { broken: ( };\n');
+    const lines = [];
+    const c = preflight.main(['--quiet'], { dir, dbFile: live, out: () => {}, err: (m) => lines.push(m) });
+    fs.writeFileSync(file, good);
+    assert.equal(c, 1);
+    assert.ok(
+      lines.some((l) => /SYNTAX ERROR in scripts\/deploy-chain\.js/.test(l)),
+      'expected the file to be named, got: ' + lines.join(' | ')
+    );
+  });
+});
+
+// MODULES is a list kept by hand, and it had already fallen behind: three of the
+// scripts server.js requires at start-up were missing, so a version that broke
+// one of them passed the preflight and then could not start. This reads the list
+// off server.js instead of trusting anyone to remember.
+describe('the preflight loads everything server.js loads at start-up', () => {
+  it('lists every local module server.js requires at the top level', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+    const loaded = [...src.matchAll(/^(?:const|let|var)\b[^\n=]*=\s*require\('\.\/([^']+\.js)'\)/gm)].map((m) => m[1]);
+    assert.ok(loaded.length >= 10, 'the pattern no longer finds the requires: ' + loaded.join(', '));
+    const missing = loaded.filter((f) => !preflight.MODULES.includes(f));
+    assert.deepEqual(missing, [], 'server.js loads these at start-up, but the preflight never does');
+  });
 });
 
 describe('the deploy uses it, and can undo itself', () => {

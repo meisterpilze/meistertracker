@@ -147,7 +147,7 @@ names ARE translatable; the underlying schema is not.
 |---|---|---|
 | **DuckDNS** | Hardcoded in `server.js:1023+` for built-in DDNS + Let's Encrypt DNS-01 | Optional — only if you want a public hostname with a real cert. For other DNS providers (Cloudflare, Route53, etc.), use the Nginx-reverse-proxy path in DEPLOYMENT.md §7 |
 | **Let's Encrypt** | Built-in via DuckDNS | Optional — self-signed cert works for LAN-only |
-| **GitHub webhook auto-deploy** | `/api/webhook/github` calls `git pull && pm2 restart` | Optional — set `GITHUB_WEBHOOK_SECRET` to enable |
+| **GitHub webhook auto-deploy** | `/api/webhook/github` fetches `origin/main` and snapshots the database, then runs `git reset --hard`, `npm install`, the preflight and `pm2 restart`, one deploy at a time (DEPLOYMENT.md §9) | Optional — set `GITHUB_WEBHOOK_SECRET` to enable |
 
 ## 6. Deployment defaults
 

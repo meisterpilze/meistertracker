@@ -3934,14 +3934,14 @@ function checkDiskSpace(targetPath, requiredBytes) {
 }
 
 function backupDb(db, destPath) {
-  // VACUUM INTO doesn't support bound parameters — whitelist path chars to prevent injection.
-  // Allow absolute paths with letters, digits, dots, dashes, underscores, slashes, colons (Windows drive),
-  // spaces (Windows user dirs often contain them), and backslashes.
+  // The target goes in as a bound parameter, so no path is ever SQL text and
+  // none needs refusing. VACUUM INTO takes any expression for its file name.
+  // It used to be spliced in as a quoted literal behind a whitelist of plain
+  // ASCII characters, and that whitelist refused every installation whose path
+  // had an umlaut, a bracket, an ampersand or an 8.3 "~" in it: the nightly
+  // backup failed there every night, and so did every update snapshot.
   if (typeof destPath !== 'string' || !destPath.length) {
     throw new Error('Backup path required');
-  }
-  if (!/^[A-Za-z0-9 ._/\\:-]+$/.test(destPath)) {
-    throw new Error('Backup path contains unsafe characters');
   }
   // R-16: pre-flight disk-space check. Require ~3x the current DB size: the
   // VACUUM target file is up to 1x, plus headroom for SQLite's own working
@@ -3960,9 +3960,7 @@ function backupDb(db, destPath) {
     // Other errors from the space check (e.g. statSync race) shouldn't
     // block the backup itself — fall through to VACUUM.
   }
-  // Escape single quotes just in case (shouldn't match the whitelist above, but defense-in-depth)
-  const safePath = destPath.replace(/'/g, "''");
-  db.exec(`VACUUM INTO '${safePath}'`);
+  db.prepare('VACUUM INTO ?').run(destPath);
   return Promise.resolve();
 }
 

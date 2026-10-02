@@ -1755,15 +1755,18 @@ const BACKUP_DIR = path.join(DIR, 'backups');
 const BACKUP_STATUS_FILE = path.join(BACKUP_DIR, '.backup-status.json');
 const OFFSITE_MARKER_FILE = path.join(BACKUP_DIR, '.offsite-sync.json');
 // R-14: webhook auto-deploy reliability — record each attempt + outcome to
-// a sentinel JSON file so an admin can see whether the last `git fetch && npm
-// install && pm2 restart` chain actually finished without scraping logs.
-// The deploy chain itself writes the success/fail variant; this server only
-// writes `in_progress` before kicking off the spawn.
+// a sentinel JSON file so an admin can see whether the last deploy actually
+// finished without scraping logs: in_progress, then success, or failed with
+// the step it stopped at (fetch, snapshot, prepare, update, install,
+// preflight, restart). See scripts/deploy-runner.js and deploy-chain.js.
 const DEPLOY_STATE_FILE = path.join(DIR, 'data', 'deploy-state.json');
-// R-01: rotation only touches files matching this pattern, so manual backups
-// (`meistertracker_*.db`) and any other artefact in the directory stay put.
-// See scripts/rotate-backups.js for the helper.
-const { rotateAutoBackups, BACKUP_PREFIX } = require('./scripts/rotate-backups.js');
+const deployRunner = require('./scripts/deploy-runner.js');
+// R-01: auto-backup rotation only touches files matching its own pattern, so
+// the pre-update snapshots (`meistertracker_YYYYMMDD_HHMMSS.db`) are never
+// aged out with the auto-backups. They have a rotation of their own, by count.
+// Any other artefact in the directory stays put. See scripts/rotate-backups.js
+// for both helpers.
+const { rotateAutoBackups, rotatePreUpdateSnapshots, BACKUP_PREFIX } = require('./scripts/rotate-backups.js');
 const backupCrypto = require('./scripts/backup-crypto.js');
 const usbStick = require('./scripts/usb-stick.js');
 const photoMirror = require('./scripts/photo-mirror.js');
@@ -1907,9 +1910,96 @@ function runPhotoMirror() {
     });
 }
 
+// The pre-update snapshot rotation (scripts/rotate-backups.js), logged when it
+// did something. Called from runDailyBackup and right after the webhook's own
+// snapshot.
+function rotatePreUpdate() {
+  try {
+    const rot = rotatePreUpdateSnapshots(BACKUP_DIR);
+    if (rot.error || rot.ledger || rot.deleted.length || rot.skipped.length) {
+      log(rot.error ? 'warn' : 'info', 'Pre-update snapshot rotation', {
+        kept: rot.kept.length,
+        predatingRotation: rot.legacy.length,
+        deleted: rot.deleted,
+        skipped: rot.skipped,
+        ledger: rot.ledger,
+        error: rot.error
+      });
+    }
+  } catch (e) {
+    log('warn', 'Pre-update snapshot rotation failed', { error: e.message });
+  }
+}
+
+// git in this checkout, for the deploy's fetch: no shell, a time limit, and no
+// credential prompt that would wait for an answer nobody is there to give.
+function deployGit(args) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      {
+        cwd: DIR,
+        timeout: 120000,
+        windowsHide: true,
+        env: Object.assign({}, process.env, { GIT_TERMINAL_PROMPT: '0' })
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          const detail = String(stderr || '').trim();
+          if (detail) err.message = detail;
+          return reject(err);
+        }
+        resolve(String(stdout));
+      }
+    );
+  });
+}
+
+// The GitHub webhook's deploy (scripts/deploy-runner.js). Its snapshot goes
+// through this process's own handle on the database, so it is taken by the
+// code that is running and the deploy chain never opens the live file. One
+// deploy runs at a time; a push that arrives meanwhile, or during a restore,
+// waits, across the restart if need be.
+const deploys = deployRunner.createDeployRunner({
+  platform: process.platform,
+  dir: DIR,
+  node: process.execPath,
+  pm2Name: PM2_PROCESS_NAME,
+  stateFile: DEPLOY_STATE_FILE,
+  pendingFile: path.join(DIR, 'data', 'deploy-pending.json'),
+  logFile: path.join(DIR, 'data', 'deploy.log'),
+  backupDir: BACKUP_DIR,
+  git: deployGit,
+  snapshot: (dest) => {
+    db.backupDb(database, dest);
+    const bad = verifyBackupFile(dest);
+    if (bad) throw new Error(bad);
+  },
+  rotate: rotatePreUpdate,
+  restoreBusy: () => restoreInProgress,
+  runningCommit: () => (codeState && codeState.commit) || null,
+  readState: readDeployState,
+  writeState: writeDeployState,
+  log,
+  spawn
+});
+// A push that queued behind the deploy that restarted this process. Late
+// enough for the start-up to settle and for codeState to know the commit.
+if (!WORKTREE_MODE) {
+  setTimeout(() => {
+    deploys.resumePending().catch((e) => log('error', 'Queued deploy failed', { error: e.message }));
+  }, 15_000);
+}
+
 function runDailyBackup() {
   const startedAt = Date.now();
   const startedIso = new Date(startedAt).toISOString();
+  // The pre-update snapshots go on every run, ahead of the early return below
+  // for a day that already has its auto-backup. This runs once at start-up,
+  // and a start-up is what follows an update: the moment one has just been
+  // written. The newest is always kept; see scripts/rotate-backups.js.
+  rotatePreUpdate();
   runPhotoMirror();
   try {
     // Snapshot KPIs before backup — always overwrite today's snapshot
@@ -11927,146 +12017,19 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonOk(res, { ok: true, msg: 'ignored ref: ' + body.ref });
           return;
         }
-        log('info', 'GitHub webhook: push to main, restarting server', {
-          sender: body.sender && body.sender.login
-        });
+        // Defense-in-depth: even though the webhook is HMAC-verified, pin the
+        // pushed SHA to a strict hex whitelist before it is stored. It is a
+        // label for the record only: what gets deployed is whatever origin/main
+        // points at after the runner's own fetch, held to hex again there.
+        const rawSha = body.after || (body.head_commit && body.head_commit.id) || '';
+        const targetSha = /^[a-f0-9]{7,40}$/i.test(rawSha) ? rawSha.slice(0, 40) : 'unknown';
+        const sender = body.sender && body.sender.login;
+        log('info', 'GitHub webhook: push to main, deploying', { sender });
         jsonOk(res, { ok: true, message: 'Restarting...' });
         setTimeout(() => {
-          const scriptDir = path.resolve(__dirname);
-          // R-14: write a deploy-state sentinel before spawning the chain.
-          // The chain itself overwrites it with success/fail after each step
-          // (or on the next attempt) so an admin can see what happened
-          // without scraping logs. Failure is implied if a fresh attempt
-          // overwrites without a prior `success`.
-          // Defense-in-depth: even though the webhook is HMAC-verified, pin
-          // the SHA to a strict hex whitelist before it ever reaches the
-          // `bash -c "..."` interpolation below. If the GITHUB_WEBHOOK_SECRET
-          // ever leaks, an attacker still cannot smuggle shell metacharacters
-          // through `body.after`.
-          const rawSha = body.after || (body.head_commit && body.head_commit.id) || '';
-          const targetSha = /^[a-f0-9]{7,40}$/i.test(rawSha) ? rawSha.slice(0, 40) : 'unknown';
-          const startedAt = new Date().toISOString();
-          try {
-            writeDeployState({
-              status: 'in_progress',
-              sha: targetSha,
-              started: startedAt,
-              sender: body.sender && body.sender.login
-            });
-          } catch (e) {
-            log('warn', 'Could not write deploy-state sentinel', { error: e.message });
-          }
-          const stateFileEsc = DEPLOY_STATE_FILE;
-          // Use a lightweight update script instead of interactive START.bat.
-          // Sequence: git pull → npm install → pm2 restart. We append
-          // success/failure JSON to the state file so the next /api/health
-          // call can surface it.
-          const successJson = JSON.stringify({
-            status: 'success',
-            sha: targetSha,
-            started: startedAt
-          }).replace(/"/g, '\\"');
-          const failJson = JSON.stringify({
-            status: 'failed',
-            sha: targetSha,
-            started: startedAt
-          }).replace(/"/g, '\\"');
-          const script =
-            process.platform === 'win32'
-              ? [
-                  'cmd.exe',
-                  [
-                    '/c',
-                    'cd /d "' +
-                      scriptDir +
-                      '" &&' +
-                      ' git fetch origin && git reset --hard origin/main &&' +
-                      ' npm install --omit=dev &&' +
-                      ' (echo {"status":"success","sha":"' +
-                      targetSha +
-                      '","started":"' +
-                      startedAt +
-                      '","completed":"' +
-                      // cmd has no native ISO date; the JSON is best-effort, the
-                      // mtime of the file gives the actual completion time too.
-                      '"} > "' +
-                      stateFileEsc +
-                      '") &&' +
-                      ' pm2 restart ' +
-                      PM2_PROCESS_NAME +
-                      ' --update-env ||' +
-                      ' (echo {"status":"failed","sha":"' +
-                      targetSha +
-                      '","started":"' +
-                      startedAt +
-                      '"} > "' +
-                      stateFileEsc +
-                      '")'
-                  ]
-                ]
-              : [
-                  'bash',
-                  [
-                    '-c',
-                    'cd "' +
-                      scriptDir +
-                      '" && {' +
-                      ' git fetch origin && git reset --hard origin/main &&' +
-                      ' npm install --omit=dev; } && {' +
-                      " printf '%s' \"" +
-                      successJson.replace(/\\"/g, '\\\\"') +
-                      '" > "' +
-                      stateFileEsc +
-                      '";' +
-                      ' pm2 restart ' +
-                      PM2_PROCESS_NAME +
-                      ' --update-env;' +
-                      " } || { printf '%s' \"" +
-                      failJson.replace(/\\"/g, '\\\\"') +
-                      '" > "' +
-                      stateFileEsc +
-                      '"; }'
-                  ]
-                ];
-          // windowsVerbatimArguments is what makes the Windows branch work at all.
-          // Node escapes quotes inside an argv entry as \" — correct for MSVCRT
-          // programs, but cmd.exe does not understand it, so the whole `/c` string
-          // (quoted cd, quoted redirect targets, JSON) arrived mangled. cmd exited
-          // 1 immediately: no git, no npm, no pm2 restart, and neither the success
-          // nor the failed sentinel. The deploy looked like it ran, the files were
-          // never pulled, and the server kept serving the old code silently.
-          // Safe to pass the line verbatim because every interpolated value is
-          // generated here or whitelisted above — targetSha against
-          // /^[a-f0-9]{7,40}$/, PM2_PROCESS_NAME against /^[A-Za-z0-9_-]{1,64}$/,
-          // the paths from __dirname — never raw request input. The option is
-          // ignored on non-Windows platforms.
-          const child = spawn(script[0], script[1], {
-            cwd: scriptDir,
-            detached: true,
-            stdio: 'ignore',
-            windowsVerbatimArguments: true
+          deploys.deliver({ sha: targetSha, sender }).catch((e) => {
+            log('error', 'Deploy runner failed', { error: e.message, sha: targetSha });
           });
-          // A deploy that dies before its own sentinel used to be completely
-          // silent. On success this handler never fires — `pm2 restart` replaces
-          // this process first — so anything we do see here is a real failure.
-          child.on('exit', (code) => {
-            if (code === 0) return;
-            log('error', 'Deploy chain exited without deploying', { code, sha: targetSha });
-            try {
-              writeDeployState({ status: 'failed', sha: targetSha, started: startedAt, exitCode: code });
-            } catch (e) {
-              /* best effort */
-            }
-          });
-          child.on('error', (e) => {
-            log('error', 'Deploy chain failed to spawn', { error: e.message, sha: targetSha });
-            try {
-              writeDeployState({ status: 'failed', sha: targetSha, started: startedAt, error: e.message });
-            } catch (e2) {
-              /* best effort */
-            }
-          });
-          child.unref();
         }, 500);
       } catch (err) {
         log('error', 'GitHub webhook handler crashed', { error: err.message });

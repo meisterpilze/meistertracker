@@ -21,6 +21,12 @@
 // always present — and node:sqlite reads through the WAL exactly as the CLI would.
 // VACUUM INTO is the operation of record: it produces a compact, fully consistent
 // copy from a live database without stopping the writer.
+//
+// START.bat calls this as `node scripts/backup-db.js <source.db> <dest.db>`
+// while the old server still has the database open. Keep that interface.
+// test/deploy-chain.test.js holds a write open across a run and checks that
+// the live files come out byte-identical. (The webhook deploy takes its
+// snapshot inside the server instead; see scripts/deploy-runner.js.)
 
 const fs = require('fs');
 const path = require('path');
@@ -52,9 +58,9 @@ try {
   // moment at which the database should be written to. A bare handle reads the
   // WAL the same way and changes nothing.
   db = new Database(src);
-  // backupDb() checks the destination path and the free space before it runs.
-  // It reads the source size off this property, which only openDb() sets, so a
-  // bare handle would silently skip the disk-space pre-flight.
+  // backupDb() checks the free space before it runs. It reads the source size
+  // off this property, which only openDb() sets, so a bare handle would
+  // silently skip the disk-space pre-flight.
   Object.defineProperty(db, '_mpDbPath', { value: src, enumerable: false, writable: false });
   backupDb(db, dest);
 } catch (e) {
