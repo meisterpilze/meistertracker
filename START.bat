@@ -317,17 +317,12 @@ if exist "meistertracker.db" (
 ) else (
     echo  -^> No meistertracker.db found, skipping backup.
 )
-REM Contamination photos (audit Section 2). PowerShell Compress-Archive is
-REM available on Windows 10+ by default and matches the tar.gz on Linux.
-if exist "data\photos" (
-    set "PHOTO_BACKUP=backups\photos_!TIMESTAMP!.zip"
-    powershell -NoProfile -Command "try { Compress-Archive -Path 'data\photos\*' -DestinationPath '!PHOTO_BACKUP!' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo  -^> data\photos archived to !PHOTO_BACKUP!
-    ) else (
-        echo  -^> WARNING: photo archive failed.
-    )
-)
+REM The photos are not zipped here any more. Every start zipped all of
+REM data\photos again, onto this same disk, and no zip was ever deleted:
+REM the same pictures piling up until the disk is full. The server keeps a
+REM second copy under backups\photos as hard links, which cost no space, and
+REM the USB stick backup copies each photo once. An update does not touch
+REM photo files anyway; what it changes is the database, saved above.
 
 REM ============================================================
 REM  Step 4: Ensure TLS certificates

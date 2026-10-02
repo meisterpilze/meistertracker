@@ -2457,6 +2457,13 @@
           <!-- Nur wenn etwas nicht stimmt: Überfälliges, ein volles Zelt.
                Gefüllt von renderWorkSummary(); tippen öffnet die Aufgaben. -->
           <button type="button" class="wk-alert" id="wk-alert" hidden></button>
+          <!-- Admins only: today's USB stick backup — due, running, done (take
+               the stick out), failed, or not set up yet. Filled by
+               renderUsbReminder(); tapping opens Settings → Backup. -->
+          <button type="button" class="wk-usb" id="wk-usb" hidden></button>
+          <!-- Admins only, beside the line above and not instead of it: the
+               recovery key has not been confirmed as put away yet. -->
+          <button type="button" class="wk-usb wk-usb-key" id="wk-usb-key" hidden></button>
           <div class="wk-head">
             <div>
               <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
@@ -5182,6 +5189,19 @@
           </div>
           <!-- Backup -->
           <div class="sp" id="sp-settings-backup">
+            <!-- The copy that leaves the building. Three parts drawn separately,
+                 so the status, which redraws on every step of a running backup,
+                 never wipes a half-typed key or a drive picked for setup. -->
+            <div class="card" id="usb-card">
+              <div class="sec" data-i18n="usb.title">USB stick</div>
+              <p class="usb-intro" data-i18n="usb.intro">
+                Once a day, plug in a stick that is set up here. The backup starts by itself, adds only what is
+                new, and is encrypted. Then take the stick out and keep it away from this PC.
+              </p>
+              <div id="usb-key" hidden></div>
+              <div id="usb-body"></div>
+              <div id="usb-setup" hidden></div>
+            </div>
             <div class="card">
               <div class="sec" data-i18n="settings.downloadBackupTitle">Download backup</div>
               <p

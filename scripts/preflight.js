@@ -40,7 +40,21 @@ const DIR = path.join(__dirname, '..');
 //
 // server.js itself is deliberately absent: requiring it binds ports and starts
 // timers. It gets a syntax check instead.
-const MODULES = ['db.js', 'duckdns.js', 'channels.js', 'shipping.js', 'harvest-feed.js', 'mcp-server.js'];
+const MODULES = [
+  'db.js',
+  'duckdns.js',
+  'channels.js',
+  'shipping.js',
+  'harvest-feed.js',
+  'mcp-server.js',
+  // The backups. A stick backup that fails to load takes the server down with
+  // it, at start-up, which is exactly when an update has just changed it.
+  'scripts/backup-crypto.js',
+  'scripts/atomic-file.js',
+  'scripts/photo-mirror.js',
+  'scripts/usb-stick.js',
+  'scripts/usb-backup.js'
+];
 
 /**
  * A consistent copy of the live database, made without writing to it.

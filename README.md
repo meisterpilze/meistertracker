@@ -221,6 +221,8 @@ All data is stored in `meistertracker.db` (SQLite) on the server (shared by all 
 
 - **Auto-backup**: daily at midnight to `backups/` (keeps last 30 days). Uses SQLite `VACUUM INTO` so the backup is WAL-consistent even while the server is writing. Each run writes `backups/.backup-status.json` with success/failure and size, and the latest file is verified to have a valid SQLite header before the status is marked successful.
 - **Manual backup**: use the Backup tab in the app to export/import an encrypted archive (requires admin).
+- **USB stick**: set a stick up once under **Settings → Backup**; from then on, plugging it in is the whole backup. The start screen reminds admins once a day, the server writes the database and every new photo onto it by itself, encrypted with a recovery key shown once at setup, and says when the stick can come out. Only what is new is copied. Restore with **Settings → Backup → Restore** or `scripts/usb-restore.js`. See **DEPLOYMENT.md → Off-site backups**.
+- **Photos**: every night each photo gets a second name under `backups/photos/` (a hard link, so no extra space); a deleted photo stays there for 90 days.
 - **Remote backup**: `scp user@host:~/meistertracker/meistertracker.db ./backup.db`
 - **Off-machine** (REQUIRED on production): set up an `rsync`-over-SSH cron that touches `backups/.offsite-sync.json` on each successful run — the marker is read by `/api/health` and `scripts/check-backup-health.js`. See **DEPLOYMENT.md → Off-site backups (REQUIRED)** for the canonical setup. As a Windows-only convenience, placing the project folder under a cloud-synced directory (OneDrive, Dropbox, iCloud Drive, etc.) cloud-syncs `backups/` automatically.
 

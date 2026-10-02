@@ -486,6 +486,15 @@ MeisterTracker automatically creates daily SQLite backups at midnight:
 
 `update_server.sh` and `START.bat` also create a one-off snapshot before pulling new code, with the pattern `meistertracker_YYYYMMDD_HHMMSS.db`. These are NOT rotated — they accumulate until you remove them manually. Both prefixes are recognised by the health check below.
 
+### Photos
+
+Photos (contamination reports and lab-book experiments) are files under `data/photos/`, not in the database; the database only holds their path, size and SHA-256. A photo is written once under a random name and never changed, only deleted, which is what the photo backups rely on:
+
+- **A second copy on the same disk, every night.** With the daily backup (at start-up and at midnight) every photo gets a hard link under `backups/photos/` (`scripts/photo-mirror.js`). A hard link is one file with two names, so this costs no space, and a photo deleted from `data/photos/` — by the app, by a person, by a bug — keeps its bytes under `backups/photos/`. Deleted photos stay there for 90 days, then go. Where no hard link can be made (`backups/` on another file system, FAT, some network shares) each photo is copied instead, once. The result of the last run is in `/api/health → backup.photos`.
+- **The USB stick** (Section 10) copies each photo exactly once and is the copy that survives a dead disk.
+
+`START.bat` and `update_server.sh` no longer archive `data/photos` on every run. Archives from earlier versions (`backups/photos_*.zip`, `backups/photos_*.tar.gz`) are left where they are, and they are not covered by the stick or the mirror: both copy what is in `data/photos` now. An archive can hold the only copy of a photo that is gone from there — the photos of a report deleted before the upgrade, or lab-book photos removed by the old "Start clean" while their records stayed — and an older database backup (`pre-reset-*.db` is never rotated) may still refer to it. So do not simply delete them. To free the space, copy them onto another medium (the stick, outside `MEISTERTRACKER-BACKUP/`, or an external disk) first, and keep at least the newest one.
+
 ### Verify Backup Health
 ```bash
 # Quick check — exits 0 if healthy, 1 if degraded, 2 if critical.
@@ -505,7 +514,33 @@ node scripts/verify-backup.js
 
 ## 10. Off-site backups (REQUIRED)
 
-Backups stored on the same machine as the database are not enough — if the server fails, the backups go with it. The recommended pattern is `rsync` over SSH to a separate host:
+Backups stored on the same machine as the database are not enough — if the server fails, the backups go with it. On a PC someone can plug a stick into, the app does this itself (below). On a server elsewhere, use `rsync` to another host.
+
+### The USB stick (built in)
+
+**Setting up.** In **Settings → Backup → USB stick**, plug in a stick, press **Set up a stick**, pick its drive and give it a name. The app's own disk is not offered. The first stick creates the **recovery key**, 32 characters: put it in a password manager or print it, and keep it away from the PC. Without it, no stick can be read once the PC is gone. Until someone ticks that it has been put away, the key is shown again with every setup and the start screen asks for it, so a first setup that failed half-way cannot lose it. Further sticks use the same key; two sticks in rotation, one always somewhere else, is the arrangement to aim for. **Show key** displays it again for an admin.
+
+**Every day.** Admins see a line on the start screen while today's backup is missing. Plugging in a stick of this installation is all it takes: the server notices it within 15 seconds, writes the backup by itself, and the line turns into "Backed up. The stick can come out." A stick that stays plugged in is backed up once a day. A run that failed for a reason a person has to fix (stick full or write-protected) is not retried that day while the stick stays in, and its reason stays on the start screen; pull the stick and plug it in again, or press **Back up now**. A stick left in gets one more try each day. One that may pass by itself (the stick unreachable for a moment, trouble on the PC) is tried again after ten minutes. A run that finds less than half the photos, or a database under a fifth of the size, of the last backup on that stick stops instead (a new PC before its restore, an emptied folder); **Back up anyway** goes ahead when that is meant, for example after **Start clean**. A photo the PC cannot read (a file another program holds, a folder the server's account may not open) is not on the stick; the run still finishes, but the start screen says the backup is not complete, the card lists what is missing, `/api/health → backup.usb.incomplete` is true, and the next run tries those photos again.
+
+**What it writes**, below `MEISTERTRACKER-BACKUP/` on the stick:
+
+| Path | What |
+| --- | --- |
+| `stick.json` | the stick's id, name, key id and key salt — plain text, nothing secret |
+| `db/meistertracker_<number>_<UTC time>.enc` | a fresh database snapshot in the format **Settings → Backup → Restore** reads, encrypted with the recovery key; numbered in the order written, so a wrong PC clock cannot reorder them; the newest 30 stay, counted only when a run finishes — a run that fails after the database step leaves one extra snapshot, which the next run replaces, so retries cannot push the older ones out |
+| `photos/<path>.enc` | every photo, AES-256-GCM, with its path and SHA-256 inside the encryption |
+| `removed.json` | photos the app no longer has; they are deleted from the stick after 90 days |
+| `last-backup.json` | what the last run did — plain text |
+
+A photo already on the stick is never written again, so after the first run a backup takes seconds and the stick grows by the new photos only. Files are written under a temporary name, flushed and renamed, so a stick pulled half-way never holds a short file under a real name; the next run cleans up and continues.
+
+The app keeps the key and the registered sticks in `data/usb-backup.json` (owner-only, never served), flushed to disk on every save, with the previous version beside it as `usb-backup.json.bak`. If the file does not read (cut off by a power failure), the copy is used; if neither reads, the app writes nothing until one does, so a new setup cannot replace the key — put the file back from a backup, or remove it and connect the old sticks with the recovery key. After each run it writes the marker file described below, so `/api/health` and `check-backup-health.js` report a stale stick backup like a stale off-site sync; `/api/health → backup.usb` says whether today is covered, and whether the last backup is complete.
+
+`USB_BACKUP=off` in `.env` turns the stick backup off — the drive scanning and the start-screen reminder — for a server nobody can plug anything into. `USB_BACKUP_ROOTS` replaces the list of places a stick can show up (on Windows every drive letter from `C:`; elsewhere `/media`, `/run/media`, `/mnt`, `/Volumes`), separated like `PATH`.
+
+### rsync to another host
+
+The pattern for a server that is not within reach of a USB port is `rsync` over SSH to a separate host:
 
 ```bash
 # /etc/cron.d/meisterpilze-offsite
@@ -545,7 +580,7 @@ If the project lives under a OneDrive-synced folder, the `backups/` directory cl
 
 ## 11. Restoring from a backup
 
-Three scenarios in increasing severity:
+Three scenarios in increasing severity, then the stick and a single photo:
 
 ### A. Encrypted `.enc` restore via the admin UI
 
@@ -595,6 +630,56 @@ After restart, log in and confirm batches/harvests/users are present. If anythin
 If `meistertracker.db` is gone but `meistertracker.db-wal` and `meistertracker.db-shm` survive, **you cannot recover from WAL alone** — SQLite's write-ahead log is meaningless without the original DB file it amends. Treat this as scenario B and accept the loss of whatever was sitting in WAL since the last backup.
 
 To minimise this loss in the future, lower `wal_autocheckpoint` (currently 1000 pages) or run `PRAGMA wal_checkpoint(TRUNCATE)` from a cron, but **the off-site backup (Section 10) is the real defence** — it captures the consistent on-disk state every night.
+
+### D. From the USB stick
+
+You need the stick and the recovery key. Run the commands below in the app's folder, in the Windows command prompt or PowerShell, with the stick in `E:` (change the letter to the stick's). On Linux, put the stick's mount point (for example `/media/<user>/<stick>`) where `E:\` stands. Check the stick first; this reads and decrypts everything and writes nothing:
+
+```bat
+node scripts/usb-restore.js E:\ --verify
+```
+
+The key is asked for, or read from `USB_BACKUP_KEY`.
+
+**The database**, with the server running: **Settings → Backup → Restore**, pick a file from `MEISTERTRACKER-BACKUP/db/` on the stick (the highest number is the newest), and type the recovery key as the password. With no running app — a new PC — stop the server and write it into place instead:
+
+The newest snapshot:
+
+```bat
+node scripts/usb-restore.js E:\ --db meistertracker.db
+```
+
+An older one, named as it is in `db/` on the stick, replacing a database that is already there:
+
+```bat
+node scripts/usb-restore.js E:\ --db meistertracker.db --from meistertracker_000012_20261001T090000Z.enc --force
+```
+
+`--force` moves an existing `meistertracker.db` and its `-wal` and `-shm` files aside (renamed with `.before-restore-<time>`, never deleted). They have to go together: a log left beside the restored file would be replayed onto it. The snapshot is checked with SQLite's quick check, and opened on a copy the way the server opens its database (schema and migrations), before anything is moved, and if the database is still in use, everything is put back and the script says so.
+
+**The photos**: missing ones go back to their old paths, byte for byte; existing ones are left alone unless `--overwrite`:
+
+```bat
+node scripts/usb-restore.js E:\ --photos data/photos
+```
+
+A photo whose checksum or name does not match is reported and skipped. On a new PC, restore first, then open **Settings → Backup**: the stick is offered as "a stick from an earlier installation", to be connected with its key. Connecting writes nothing to it: the first backup onto it waits until someone presses **Back up now**, so a stick connected before the restore cannot get the empty database as its newest snapshot. From then on it is backed up every day by itself.
+
+### E. A deleted photo
+
+A photo deleted in the last 90 days is still under `backups/photos/` with the same path it had under `data/photos/`. Copy it back; on Windows:
+
+```bat
+copy backups\photos\2026\10\exp-4\0b1c2d3e.jpg data\photos\2026\10\exp-4\
+```
+
+On Linux (`-n` leaves a file that is there alone):
+
+```bash
+cp -n backups/photos/2026/10/exp-4/0b1c2d3e.jpg data/photos/2026/10/exp-4/
+```
+
+The database still has to know the photo; for a photo whose record is gone too, restore the database first (A, B or D).
 
 For background on the encrypted-archive format and the admin restore endpoint, see README.md → Restoring from a backup.
 

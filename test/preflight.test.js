@@ -123,6 +123,7 @@ describe('a tree that would not start', () => {
     // A copy of everything preflight loads, so one of them can be broken
     // without touching the repository.
     for (const f of preflight.MODULES.concat(['server.js', 'app.js', 'login.js', 'sw.js'])) {
+      fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
       fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     }
     live = path.join(dir, 'meistertracker.db');

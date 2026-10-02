@@ -7575,6 +7575,49 @@ body:has(#m-camscan.open) .update-bar {
 .wk-alert[hidden] {
   display: none;
 }
+/* Today's USB stick backup, for admins: the alert's shape, coloured by what
+   it asks for. Blue while a backup runs, amber when one is due or nothing is
+   set up, green when the stick can come out, red when it failed. */
+.wk-usb {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--c-blue-border);
+  border-radius: var(--radius);
+  background: var(--c-blue-light);
+  color: var(--c-blue-dark);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-usb[hidden] {
+  display: none;
+}
+.wk-usb-due,
+.wk-usb-setup,
+.wk-usb-key,
+.wk-usb-gaps,
+.wk-usb-first {
+  border-color: var(--c-amber-border);
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.wk-usb-remove {
+  border-color: var(--c-green-border);
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+}
+.wk-usb-error,
+.wk-usb-state {
+  border-color: var(--c-red-border);
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
 /* The task card's heading is the day in one line and the switch for the list. */
 .wk-today {
   display: flex;
@@ -9188,4 +9231,152 @@ body:has(#m-camscan.open) .update-bar {
   display: block;
   width: 100%;
   margin-top: 4px;
+}
+
+/* Settings → Backup → USB stick. The key box is the one thing on the page that
+   must not be overlooked, so it is the only one with a coloured frame. */
+.usb-intro {
+  font-size: 0.8125rem;
+  color: var(--c-text-sec);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.usb-status {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.usb-msg {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 6px 0;
+}
+.usb-msg-err {
+  color: var(--c-red-dark);
+}
+.usb-msg-ok {
+  color: var(--c-green-dark);
+}
+.usb-progress {
+  margin: 8px 0;
+}
+.usb-bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-bottom: 4px;
+}
+.usb-sticks {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.usb-stick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--c-border);
+}
+.usb-stick-main {
+  min-width: 0;
+}
+.usb-stick-name {
+  font-weight: 600;
+}
+.usb-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.usb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.usb-row input[type='text'] {
+  flex: 1;
+  min-width: 160px;
+}
+.usb-sub {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#usb-setup {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+}
+#usb-setup[hidden],
+#usb-key[hidden] {
+  display: none;
+}
+.usb-drives {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+.usb-drive {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.usb-drive.is-off {
+  opacity: 0.6;
+  cursor: default;
+}
+.usb-drive-root {
+  font-weight: 600;
+}
+.usb-key {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 2px solid var(--c-amber-border);
+  border-radius: var(--radius);
+  background: var(--c-amber-light);
+}
+.usb-key-code {
+  display: block;
+  margin: 8px 0;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.125rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-radius: 6px;
+  user-select: all;
+}
+.usb-key-saved {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+/* The general input rule (full width, 64px tall, padded) is for text fields;
+   a radio or a checkbox under it is a 64px column with a small circle in it. */
+.usb-drive input,
+.usb-key-saved input {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: none;
 }

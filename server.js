@@ -442,6 +442,19 @@ function broadcastSSE(excludeRes) {
     }
   }
 }
+// A named event and nothing else. Every connected client gets it, admin or
+// not, so it carries no details: a client that cares asks the matching route,
+// which checks who is asking.
+function broadcastSSEType(type) {
+  const msg = 'data: ' + JSON.stringify({ type }) + '\n\n';
+  for (const c of sseClients) {
+    try {
+      c.write(msg);
+    } catch {
+      sseClients.delete(c);
+    }
+  }
+}
 setInterval(() => {
   const hb = 'data: {"type":"heartbeat"}\n\n';
   for (const c of sseClients) {
@@ -1692,14 +1705,21 @@ const DEPLOY_STATE_FILE = path.join(DIR, 'data', 'deploy-state.json');
 // (`meistertracker_*.db`) and any other artefact in the directory stay put.
 // See scripts/rotate-backups.js for the helper.
 const { rotateAutoBackups, BACKUP_PREFIX } = require('./scripts/rotate-backups.js');
+const backupCrypto = require('./scripts/backup-crypto.js');
+const usbStick = require('./scripts/usb-stick.js');
+const photoMirror = require('./scripts/photo-mirror.js');
+const { createUsbBackup, describeError: describeUsbError } = require('./scripts/usb-backup.js');
 const AUTO_BACKUP_RETENTION_DAYS = 30;
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { mode: 0o700 });
 // Clean up orphaned temp files from interrupted backup operations.
 // R-13: also picks up `.backup-status.json.tmp.<hex>` leftovers if a process
-// crashed between writeFileSync and renameSync.
+// crashed between writeFileSync and renameSync, and the `.tmp-<hex>` an
+// atomic write (scripts/atomic-file.js) leaves when it dies half-way, such as
+// the off-site marker's.
+const { LEFTOVER: ATOMIC_LEFTOVER } = require('./scripts/atomic-file.js');
 try {
   fs.readdirSync(BACKUP_DIR)
-    .filter((f) => f.startsWith('_') || /^\.backup-status\.json\.tmp\./.test(f))
+    .filter((f) => f.startsWith('_') || /^\.backup-status\.json\.tmp\./.test(f) || ATOMIC_LEFTOVER.test(f))
     .forEach((f) => {
       try {
         fs.unlinkSync(path.join(BACKUP_DIR, f));
@@ -1786,9 +1806,52 @@ function verifyBackupFile(dest) {
   return null;
 }
 
+// The photos a second time on this disk, at no cost in space: every photo gets
+// a hard link under backups/photos (scripts/photo-mirror.js). Deleted from the
+// app, a photo stays there for 90 days. Runs with the daily backup, so on
+// every start and every midnight; incremental, so a run with nothing new only
+// reads the folders.
+const PHOTO_MIRROR_DIR = path.join(BACKUP_DIR, 'photos');
+let photoMirrorRunning = false;
+function runPhotoMirror() {
+  if (photoMirrorRunning) return;
+  photoMirrorRunning = true;
+  const started = Date.now();
+  photoMirror
+    .mirrorPhotos({ src: PHOTO_DIR, dst: PHOTO_MIRROR_DIR })
+    .then((r) => {
+      const entry = {
+        time: new Date().toISOString(),
+        linked: r.linked,
+        copied: r.copied,
+        present: r.present,
+        pending: r.pending,
+        pruned: r.pruned,
+        conflicts: r.conflicts,
+        repaired: r.repaired,
+        errors: r.errors.length,
+        durationMs: Date.now() - started
+      };
+      writeBackupStatus({ photos: entry });
+      log(
+        r.errors.length || r.conflicts ? 'warn' : 'info',
+        'Photo mirror',
+        Object.assign({}, entry, { firstError: r.errors[0] })
+      );
+    })
+    .catch((e) => {
+      writeBackupStatus({ photos: { time: new Date().toISOString(), failed: e.message } });
+      log('error', 'Photo mirror failed', { error: e.message });
+    })
+    .finally(() => {
+      photoMirrorRunning = false;
+    });
+}
+
 function runDailyBackup() {
   const startedAt = Date.now();
   const startedIso = new Date(startedAt).toISOString();
+  runPhotoMirror();
   try {
     // Snapshot KPIs before backup — always overwrite today's snapshot
     // so it captures the latest state (bags created after server start, etc.)
@@ -1892,6 +1955,81 @@ function scheduleDailyBackup() {
   );
 }
 scheduleDailyBackup();
+
+// ── USB STICK BACKUP ───────────────────────────────────────
+// The copy that leaves the building. scripts/usb-backup.js looks for a
+// registered stick every few seconds and, once a day, writes the backup onto
+// it by itself; the start screen tells admins when it is due and when the
+// stick can come out. The routes are under /api/usb-backup. USB_BACKUP=off
+// switches the looking off, for a server nobody can plug anything into.
+fs.mkdirSync(path.join(DIR, 'data'), { recursive: true });
+// A consistent copy to encrypt onto the stick. The "_" prefix is what the
+// start-up sweep above removes, should a run die before cleaning up. A
+// VACUUM INTO that fails half-way leaves its partial file (and a -journal)
+// behind; the run never gets the name, so this removes them, or a copy that
+// keeps failing would add one every ten minutes until the next restart.
+async function snapshotForStick() {
+  const tmp = path.join(BACKUP_DIR, '_usb_tmp_' + crypto.randomBytes(8).toString('hex') + '.db');
+  try {
+    await db.backupDb(database, tmp);
+  } catch (e) {
+    for (const p of [tmp, tmp + '-journal']) fs.rmSync(p, { force: true });
+    throw e;
+  }
+  return tmp;
+}
+const usbBackup = createUsbBackup({
+  stateFile: path.join(DIR, 'data', 'usb-backup.json'),
+  photoDir: PHOTO_DIR,
+  appDir: DIR,
+  markerFile: OFFSITE_MARKER_FILE,
+  snapshotDb: snapshotForStick,
+  log,
+  onChange: () => broadcastSSEType('usb-backup'),
+  enabled: process.env.USB_BACKUP !== 'off'
+});
+usbBackup.start();
+
+// What the stick routes answer when something is in the way. The code is what
+// the interface translates; anything unexpected is logged and stays generic.
+const USB_BACKUP_BAD_REQUEST = new Set(['NOT_A_DRIVE', 'BAD_KEY']);
+const USB_BACKUP_CONFLICT = new Set([
+  'SAME_DISK',
+  'NEEDS_KEY',
+  'HAS_KEY',
+  'EXISTS',
+  'WRONG_KEY',
+  'FORMAT',
+  'NO_STICK',
+  'NOT_PRESENT',
+  'BUSY',
+  'FULL',
+  'READ_ONLY',
+  'GONE',
+  'NOT_EMPTY',
+  'SHRUNK',
+  'HELD',
+  'DAMAGED',
+  'STATE'
+]);
+function usbBackupError(res, e) {
+  const code =
+    USB_BACKUP_BAD_REQUEST.has(e && e.code) || USB_BACKUP_CONFLICT.has(e && e.code) ? e.code : describeUsbError(e).code;
+  if (USB_BACKUP_BAD_REQUEST.has(code) || USB_BACKUP_CONFLICT.has(code)) {
+    res.writeHead(USB_BACKUP_BAD_REQUEST.has(code) ? 400 : 409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: e.message, code }));
+    return;
+  }
+  log('error', 'USB backup request failed', { error: e && e.message });
+  res.writeHead(500, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'USB backup request failed', code: 'FAILED' }));
+}
+// The recovery key travels in a response exactly twice: when the first stick
+// is set up, and when an admin asks to see it. Neither may be cached.
+function jsonNoStore(res, data) {
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(data));
+}
 
 // ── DUCKDNS IP UPDATE ──────────────────────────────────────
 // The updater lives in duckdns.js. What used to be here was a bare five-minute
@@ -6902,6 +7040,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         log('warn', 'Could not read off-site sync marker', { error: e.message });
       }
       health.backup.offSite = offSite;
+      // The nightly second copy of the photos (backups/photos) and the stick.
+      // The stick also writes the off-site marker above, so a stale stick
+      // backup shows there as well.
+      health.backup.photos = backupStatus.photos || null;
+      health.backup.usb = usbBackup.health();
       if (health.backup.status !== 'ok' && health.status === 'ok') {
         health.status = 'degraded';
       }
@@ -12249,6 +12392,107 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // -- USB stick backup (scripts/usb-backup.js) --
+  // Admin only, every one of them: they show the PC's drives, write to them,
+  // and one of them hands out the recovery key.
+  if (req.method === 'GET' && url === '/api/usb-backup') {
+    if (requireAdmin(req, res)) return;
+    jsonOk(res, usbBackup.status());
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/usb-backup/drives') {
+    if (requireAdmin(req, res)) return;
+    usbBackup.drives().then(
+      (drives) => jsonOk(res, { drives }),
+      (e) => usbBackupError(res, e)
+    );
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/usb-backup/setup') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      usbBackup.setup({ root: data.root, label: data.label }).then(
+        (r) => {
+          log('info', 'USB stick set up', {
+            actor: req.authUser.username,
+            stick: r.stick && r.stick.id,
+            // The key comes back with every setup until it is confirmed;
+            // whether this one created it is newKey.
+            newKey: !!r.newKey
+          });
+          jsonNoStore(res, r);
+        },
+        (err) => usbBackupError(res, err)
+      );
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/usb-backup/connect') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      usbBackup.connect({ root: data.root, recoveryKey: data.recoveryKey }).then(
+        (r) => {
+          log('info', 'USB stick connected with its key', {
+            actor: req.authUser.username,
+            stick: r.stick && r.stick.id
+          });
+          jsonOk(res, r);
+        },
+        (err) => usbBackupError(res, err)
+      );
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/usb-backup/run') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      usbBackup.runNow(typeof data.id === 'string' ? data.id : null, { force: data.force === true }).then(
+        (run) => jsonOk(res, { run }),
+        (err) => usbBackupError(res, err)
+      );
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/usb-backup/key') {
+    if (requireAdmin(req, res)) return;
+    log('info', 'USB recovery key shown', { actor: req.authUser.username });
+    jsonNoStore(res, { recoveryKey: usbBackup.revealKey() });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/usb-backup/key/confirm') {
+    if (requireAdmin(req, res)) return;
+    // confirmKey saves, and a save can fail. Thrown out of the request
+    // handler, that left the request unanswered for good: behind the HTTPS
+    // port the server has no request timeout to end it.
+    try {
+      if (!usbBackup.confirmKey()) {
+        jsonErr(res, 409, 'no recovery key yet');
+        return;
+      }
+    } catch (err) {
+      usbBackupError(res, err);
+      return;
+    }
+    log('info', 'USB recovery key confirmed as put away', { actor: req.authUser.username });
+    jsonOk(res, { ok: true });
+    return;
+  }
+  if (req.method === 'DELETE' && /^\/api\/usb-backup\/sticks\/[0-9a-f]{16}$/.test(url)) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const id = url.split('/').pop();
+      if (!usbBackup.forget(id)) {
+        jsonErr(res, 404, 'unknown stick');
+        return;
+      }
+      log('info', 'USB stick forgotten', { actor: req.authUser.username, stick: id });
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      usbBackupError(res, err);
+    }
+    return;
+  }
+
   // -- Backup Download (encrypted .db) --
   // S-04: format upgraded.
   //   v2 layout: magic(4) + version(1) + salt(32) + iv(12) + tag(16) + ciphertext
@@ -12279,20 +12523,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           log('warn', 'Failed to clean backup temp file', { error: e.message });
         }
         tmpDest = null;
-        const salt = crypto.randomBytes(32);
-        const key = crypto.scryptSync(data.password, salt, 32, {
-          N: 131072,
-          r: 8,
-          p: 4,
-          maxmem: 256 * 1024 * 1024
-        });
-        const iv = crypto.randomBytes(12);
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-        const enc = Buffer.concat([cipher.update(plain), cipher.final()]);
-        const tag = cipher.getAuthTag();
-        const magic = Buffer.from('MPLZ', 'ascii');
-        const version = Buffer.from([0x02]);
-        const out = Buffer.concat([magic, version, salt, iv, tag, enc]);
+        const out = backupCrypto.encryptBackup(plain, data.password);
         const stamp = new Date().toISOString().slice(0, 10);
         res.writeHead(200, {
           'Content-Type': 'application/octet-stream',
@@ -12364,34 +12595,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           return;
         }
         // S-04: detect format by magic prefix.
-        //   v2 (new): "MPLZ" + 0x02 + salt(32) + iv(12) + tag(16) + ct
+        //   v2 (new): "MPLZ" + 0x02 + salt(32) + iv(12) + tag(16) + ct — scripts/backup-crypto.js
         //   v1 (legacy): salt(32) + iv(12) + tag(16) + ct [+ hmac(32)]
-        const MAGIC = Buffer.from('MPLZ', 'ascii');
-        const isV2 = raw.length >= 5 && raw.subarray(0, 4).equals(MAGIC) && raw[4] === 0x02;
         let plain = null;
-        if (isV2) {
-          // v2: 4 (magic) + 1 (version) + 32 (salt) + 12 (iv) + 16 (tag) + ct
-          if (raw.length < 4 + 1 + 32 + 12 + 16) {
+        if (backupCrypto.isEncryptedBackup(raw)) {
+          if (raw.length < backupCrypto.HEADER_LEN) {
             jsonErr(res, 400, 'File too small to be a valid backup');
             return;
           }
-          const salt = raw.subarray(5, 37);
-          const iv = raw.subarray(37, 49);
-          const tag = raw.subarray(49, 65);
-          const cipherText = raw.subarray(65);
-          const key = crypto.scryptSync(password, salt, 32, {
-            N: 131072,
-            r: 8,
-            p: 4,
-            maxmem: 256 * 1024 * 1024
-          });
-          try {
-            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-            decipher.setAuthTag(tag);
-            plain = Buffer.concat([decipher.update(cipherText), decipher.final()]);
-          } catch (_) {
-            plain = null;
-          }
+          plain = backupCrypto.decryptBackup(raw, password);
+          // A snapshot off the USB stick is encrypted with the recovery key as
+          // the stick writes it: upper case, in dashed groups of four. Typed
+          // in lower case or without the dashes it is still that key. Tried
+          // only after the password as given failed, so a downloaded backup
+          // whose password merely looks like a key still opens.
+          const asKey = plain ? null : usbStick.canonicalKey(password);
+          if (asKey && asKey !== password) plain = backupCrypto.decryptBackup(raw, asKey);
         } else {
           // Legacy v1 path (no magic prefix) — kept verbatim so existing
           // backups still restore. tryDecrypt(true) handles backups that

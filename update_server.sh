@@ -108,19 +108,12 @@ backup_data() {
     else
         echo "  -> No meistertracker.db found, skipping backup."
     fi
-    # Contamination photos (audit Section 2). Only present once the feature is
-    # used; tar.gz keeps the backups directory tidy.
-    if [ -d data/photos ]; then
-        if command -v tar &>/dev/null; then
-            tar -czf "$BACKUP_DIR/photos_$stamp.tar.gz" data/photos 2>/dev/null \
-                && echo "  -> data/photos archived to $BACKUP_DIR/photos_$stamp.tar.gz" \
-                || echo "  -> WARNING: photo archive failed (tar exit $?)"
-        else
-            cp -r data/photos "$BACKUP_DIR/photos_$stamp" \
-                && echo "  -> data/photos copied to $BACKUP_DIR/photos_$stamp" \
-                || echo "  -> WARNING: photo copy failed"
-        fi
-    fi
+    # The photos are not archived here any more. Every update packed all of
+    # data/photos again, onto the same disk, and nothing ever removed an
+    # archive. The server keeps a second copy under backups/photos as hard
+    # links (no extra space), and the USB stick backup copies each photo once.
+    # An update does not touch photo files; the database above is what it
+    # changes.
 }
 
 # The DuckDNS fallback timer is a one-time root step, and one-time root steps are

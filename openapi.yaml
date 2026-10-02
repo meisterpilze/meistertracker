@@ -966,6 +966,155 @@ paths:
         '401':
           description: Wrong password
 
+  /api/usb-backup:
+    get:
+      summary: USB stick backup status (admin)
+      description: >
+        Registered sticks with their last result (with `skipped`,
+        `unreadable` and `missing` when photos on the PC could not be read),
+        sticks plugged in now (`sameDisk` marks a stick folder on the app's
+        own disk, which is never backed up to), the run in progress, and
+        `reminder` — one of running, state, setup, first, error, gaps,
+        remove, due or null — which the start screen shows. Beside it,
+        `keyConfirmed` (false shows a line asking to put the recovery key
+        away), `firstRunPending` (a connected stick waits for "Back up now"),
+        `stateError` (data/usb-backup.json cannot be read) and `enabled`
+        (false with USB_BACKUP=off). Changes are announced as the SSE event
+        `usb-backup`.
+      responses:
+        '200':
+          description: Status
+        '403':
+          description: Not an admin
+
+  /api/usb-backup/drives:
+    get:
+      summary: Drives a stick could be set up on (admin)
+      responses:
+        '200':
+          description: Drives with free space, whether they are the app's own disk, and any stick on them
+
+  /api/usb-backup/setup:
+    post:
+      summary: Set up the stick in a drive and back up onto it (admin)
+      description: >
+        The first stick creates the recovery key; later sticks use the same
+        key. The key is returned with every setup until it is confirmed as
+        put away (POST /api/usb-backup/key/confirm), so a first setup that
+        failed half-way cannot lose it (Cache-Control no-store).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [root]
+              properties:
+                root:
+                  type: string
+                  description: A drive from /api/usb-backup/drives
+                label:
+                  type: string
+                  maxLength: 40
+      responses:
+        '200':
+          description: >
+            Stick set up and a backup started. recoveryKey is set until the key
+            is confirmed; newKey says whether this setup created it.
+        '400':
+          description: Not one of the drives (code NOT_A_DRIVE)
+        '409':
+          description: >
+            Refused, with a code (SAME_DISK, NEEDS_KEY, WRONG_KEY, BUSY, FULL,
+            READ_ONLY, STATE when this PC's record cannot be read or saved …)
+
+  /api/usb-backup/connect:
+    post:
+      summary: Take back a stick from an earlier installation with its recovery key (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [root, recoveryKey]
+              properties:
+                root:
+                  type: string
+                recoveryKey:
+                  type: string
+      responses:
+        '200':
+          description: >
+            Connected. Nothing is written to the stick until someone starts the
+            first backup with POST /api/usb-backup/run (restore first on a new
+            PC); after that it is backed up every day by itself.
+        '409':
+          description: Refused (HAS_KEY, WRONG_KEY, STATE …)
+
+  /api/usb-backup/run:
+    post:
+      summary: Back up onto a plugged-in stick now (admin)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: The stick to back up onto; without it, the first registered stick plugged in
+                force:
+                  type: boolean
+                  description: >
+                    true only for "Back up anyway" after a SHRUNK stop: the run
+                    goes ahead although it finds far less than last time
+      responses:
+        '200':
+          description: The run that started
+        '409':
+          description: >
+            No registered stick plugged in (NOT_PRESENT), only a stick folder
+            on the app's own disk (SAME_DISK), or a run in progress (BUSY)
+
+  /api/usb-backup/key:
+    post:
+      summary: Show the recovery key (admin, Cache-Control no-store)
+      responses:
+        '200':
+          description: The key
+
+  /api/usb-backup/key/confirm:
+    post:
+      summary: Confirm the recovery key is put away (admin)
+      description: >
+        Stops the key being returned with every setup and the start-screen
+        line asking for it. Saved, or not made.
+      responses:
+        '200':
+          description: Confirmed
+        '409':
+          description: No recovery key yet, or the confirmation could not be saved (code STATE)
+
+  /api/usb-backup/sticks/{id}:
+    delete:
+      summary: Forget a lost or retired stick (admin); nothing on the stick is touched
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{16}$'
+      responses:
+        '200':
+          description: Forgotten
+        '404':
+          description: Unknown stick
+        '409':
+          description: Not forgotten, because this PC's record could not be saved (code STATE)
+
   /api/users:
     get:
       summary: List all users

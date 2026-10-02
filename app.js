@@ -104,6 +104,8 @@ function setLang(lang) {
     .then(() => {
       translatePage();
       refresh();
+      renderUsbSetup();
+      renderUsbKey();
     })
     .catch((err) => console.error('Locale load failed:', err));
 }
@@ -551,6 +553,7 @@ async function loadCurrentUser() {
   showMcpTab();
   showCameraTab();
   showAdminNav();
+  loadUsbBackup();
 }
 function showAdminNav() {
   const btn = document.getElementById('n-settings');
@@ -1154,6 +1157,8 @@ function connectSSE() {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'data-changed') scheduleSsePoll();
+        // The stick backup announces itself; loadUsbBackup asks only for admins.
+        if (msg.type === 'usb-backup') loadUsbBackup();
         if (msg.type === 'connected') {
           setSyncStatus('ok', 'Connected');
           // Nach einem Deploy startet der Server neu, und hier kommt als Erstes
@@ -1499,6 +1504,7 @@ function openStab(page, sub) {
     loadPickupBookings();
   }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
+  if (page === 'settings' && sub === 'backup') loadUsbBackup();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'harvestfeed') loadHarvestFeedSettings();
   if (page === 'settings' && sub === 'pickuplocations') renderPickupLocations();
@@ -1632,6 +1638,9 @@ function refresh() {
   // this page has no other way to notice that something changed.
   if (id === 'pickups') renderPickups();
   updateTodoBadge();
+  // Cheap, and how a language switch reaches the stick reminder and card.
+  renderUsbReminder();
+  if (id === 'settings') renderUsbCard();
 }
 
 // ═══ ORDER HUB (Phase 0) ═══════════════════════════════════════════════════
@@ -15136,6 +15145,564 @@ async function removeSupplier(id) {
 
 function getSuppliersForMat(mat) {
   return suppliers.filter((s) => s.mat === mat);
+}
+
+// ─── USB STICK BACKUP ────────────────────────────────────────
+// The start screen reminds admins once a day; Settings → Backup sets sticks up
+// and shows what happened. The server notices a plugged-in stick on its own
+// (scripts/usb-backup.js) and announces every change as the SSE event
+// "usb-backup", so this side asks when told — plus once a minute, which is how
+// "done for today" turns into "due" after midnight, and every two seconds
+// while a backup runs, in case the event stream is down.
+let _usb = null;
+let _usbDrives = null;
+let _usbKey = null;
+let _usbSetupOpen = false;
+let _usbTimer = null;
+
+function _usbAdmin() {
+  return !!(currentUser && currentUser.role === 'admin');
+}
+
+async function loadUsbBackup() {
+  clearTimeout(_usbTimer);
+  if (!_usbAdmin()) {
+    _usb = null;
+    renderUsbReminder();
+    return;
+  }
+  try {
+    _usb = await apiGet('/api/usb-backup');
+  } catch (e) {
+    // The last answer stays on screen; the next event or tick asks again.
+  }
+  renderUsbReminder();
+  renderUsbCard();
+  const running = !!(_usb && _usb.run && _usb.run.state === 'running');
+  _usbTimer = setTimeout(loadUsbBackup, running ? 2000 : 60000);
+}
+
+function _usbPct(run) {
+  if (!run || !run.bytesTotal) return 0;
+  return Math.min(100, Math.floor((run.bytesDone / run.bytesTotal) * 100));
+}
+
+// "today 09:12", "yesterday 17:40", or the date: when the last backup was
+// is what the reminder is about, and a timestamp makes the reader do the sum.
+function _usbWhen(iso) {
+  const d = new Date(iso);
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (localDateStr(d) === localDateStr(today)) return t('usb.today', { time: hm });
+  if (localDateStr(d) === localDateStr(yesterday)) return t('usb.yesterday', { time: hm });
+  return fmtDtTime(d);
+}
+
+function _usbSize(n) {
+  if (n === null || n === undefined) return '–';
+  if (n >= 1e9) return (n / 1e9).toLocaleString(loc(), { maximumFractionDigits: 1 }) + ' GB';
+  return Math.max(1, Math.round(n / 1e6)).toLocaleString(loc()) + ' MB';
+}
+
+// The server answers with a code; every code has a sentence in each language.
+const USB_ERR_CODES = [
+  'NOT_A_DRIVE',
+  'SAME_DISK',
+  'NEEDS_KEY',
+  'HAS_KEY',
+  'EXISTS',
+  'WRONG_KEY',
+  'BAD_KEY',
+  'FORMAT',
+  'NO_STICK',
+  'NOT_PRESENT',
+  'BUSY',
+  'FULL',
+  'READ_ONLY',
+  'GONE',
+  'NOT_EMPTY',
+  'SHRUNK',
+  'HELD',
+  'DAMAGED',
+  'STATE',
+  'FAILED'
+];
+function _usbErrText(code) {
+  return t('usb.err.' + (USB_ERR_CODES.includes(code) ? code : 'FAILED'));
+}
+
+function _usbReminderText(s) {
+  if (s.reminder === 'running') return t('usb.remRunning', { pct: _usbPct(s.run) });
+  if (s.reminder === 'state') return '⚠ ' + t('usb.err.STATE');
+  if (s.reminder === 'setup') return t('usb.remSetup');
+  if (s.reminder === 'first') return t('usb.remFirst');
+  if (s.reminder === 'error') return '⚠ ' + t('usb.remError', { why: _usbErrText(s.run && s.run.error && s.run.error.code) });
+  if (s.reminder === 'gaps') return '⚠ ' + t('usb.remGaps');
+  if (s.reminder === 'remove') return '✓ ' + t('usb.remRemove');
+  return s.lastSuccess ? t('usb.remDue', { when: _usbWhen(s.lastSuccess.time) }) : t('usb.remDueNever');
+}
+
+function _usbBindReminder(el) {
+  if (el.dataset.bound) return;
+  el.dataset.bound = '1';
+  el.addEventListener('click', () => {
+    go('settings', 'n-settings');
+    const tab = document.getElementById('st-settings-backup');
+    if (tab) tab.click();
+  });
+}
+
+// Two lines: the backup (due, running, done, failed), and beside it, never
+// instead of it, a recovery key nobody has confirmed as put away yet.
+function renderUsbReminder() {
+  const el = document.getElementById('wk-usb');
+  const keyEl = document.getElementById('wk-usb-key');
+  if (keyEl) {
+    _usbBindReminder(keyEl);
+    keyEl.hidden = !(_usb && _usb.enabled !== false && _usb.configured && !_usb.keyConfirmed);
+    keyEl.textContent = '⚠ ' + t('usb.remKey');
+  }
+  if (!el) return;
+  _usbBindReminder(el);
+  const r = _usb && _usb.reminder;
+  el.hidden = !r;
+  if (!r) return;
+  el.className = 'wk-usb wk-usb-' + r;
+  el.textContent = _usbReminderText(_usb);
+}
+
+// The key field for the stick in `root`: an id per drive.
+function _usbConnectId(root) {
+  return 'usb-connect-key-' + encodeURIComponent(root).replace(/[^A-Za-z0-9]/g, '_');
+}
+
+// A plugged-in stick a backup may be written to (as the server decides it).
+function _usbUsable(p) {
+  return !!(p && p.registered && !p.otherKey && p.supported && !p.sameDisk);
+}
+
+function _usbStatusLine(s) {
+  if (!s.configured) return t('usb.notSetUp');
+  if (!s.lastSuccess) return t('usb.noBackupYet');
+  return (
+    t('usb.lastBackup', { when: _usbWhen(s.lastSuccess.time), label: s.lastSuccess.label }) +
+    ' · ' +
+    tp('usb.newPhotos', s.lastSuccess.photosNew)
+  );
+}
+
+function _usbProgressHtml(run) {
+  const text =
+    run.phase === 'photos' && run.total
+      ? t('usb.progressPhotos', { label: run.label, done: run.done, total: run.total })
+      : t('usb.progressDb', { label: run.label });
+  return (
+    '<div class="usb-progress"><progress class="usb-bar" max="100" value="' +
+    _usbPct(run) +
+    '"></progress><div class="fs-meta">' +
+    esc(text) +
+    '</div></div>'
+  );
+}
+
+function renderUsbCard() {
+  const body = document.getElementById('usb-body');
+  if (!body) return;
+  // Someone typing a recovery key into the card: the card is drawn on every
+  // data change of anyone, every usb-backup event and once a minute, and
+  // each redraw took the field away under their fingers (on a phone, the
+  // keyboard with it). It waits until they have left the field.
+  const fokus = document.activeElement;
+  if (fokus && body.contains && body.contains(fokus) && /^usb-connect-key-/.test(fokus.id || '')) return;
+  const s = _usb;
+  if (!s) {
+    body.innerHTML = '<div class="fs-meta">' + esc(t('usb.loading')) + '</div>';
+    return;
+  }
+  const running = !!(s.run && s.run.state === 'running');
+  // Switched off on this server: nothing to set up or plug in here.
+  if (s.enabled === false) {
+    body.innerHTML = '<div class="usb-msg">' + esc(t('usb.disabled')) + '</div>';
+    return;
+  }
+  let h = '<div class="usb-status">' + esc(_usbStatusLine(s)) + '</div>';
+  if (s.stateError) h += '<div class="usb-msg usb-msg-err">⚠ ' + esc(t('usb.err.STATE')) + '</div>';
+  // Until somebody confirms the key is put away, the card says so first.
+  if (s.configured && !s.keyConfirmed) h += '<div class="usb-msg usb-msg-err">⚠ ' + esc(t('usb.keyUnconfirmed')) + '</div>';
+  if (running) h += _usbProgressHtml(s.run);
+  else if (s.firstRunPending) h += '<div class="usb-msg usb-msg-err">' + esc(t('usb.firstPending')) + '</div>';
+  else if (s.reminder === 'error') {
+    const code = s.run && s.run.error && s.run.error.code;
+    h += '<div class="usb-msg usb-msg-err">⚠ ' + esc(_usbErrText(code)) + '</div>';
+    // Far less than last time is either a mistake or meant; only a person
+    // can tell which, so the backup waits for one.
+    // For the stick that stopped, by its id: with a second stick plugged in,
+    // the server would otherwise take the first it finds.
+    const failedStick = s.run && s.run.stickId;
+    if (code === 'SHRUNK' && s.present.some((p) => p.id === failedStick && _usbUsable(p))) {
+      h +=
+        '<div class="usb-row"><button type="button" class="btn btn-r" data-usb="run-force" data-id="' +
+        esc(failedStick) +
+        '">' +
+        esc(t('usb.forceGo')) +
+        '</button></div>';
+    }
+  } else if (s.reminder === 'remove') h += '<div class="usb-msg usb-msg-ok">✓ ' + esc(t('usb.remRemove')) + '</div>';
+  // What the last backup could not read on the PC is not on the stick.
+  const ls = s.lastSuccess;
+  if (!running && ls && (ls.skipped || ls.unreadable)) {
+    const parts = [];
+    if (ls.skipped) parts.push(tp('usb.gapsFiles', ls.skipped));
+    if (ls.unreadable) parts.push(tp('usb.gapsFolders', ls.unreadable));
+    h +=
+      '<div class="usb-msg usb-msg-err">⚠ ' +
+      esc(parts.join(' ')) +
+      (ls.missing && ls.missing.length
+        ? '<div class="fs-meta">' + esc(t('usb.gapsExamples', { list: ls.missing.join(', ') })) + '</div>'
+        : '') +
+      '</div>';
+  }
+
+  // The sticks a backup can go to right now. With more than one plugged in,
+  // each gets its own button, so the backup goes where it was asked for.
+  const usable = running ? [] : s.present.filter(_usbUsable);
+  if (s.sticks.length) {
+    h += '<ul class="usb-sticks">';
+    for (const k of s.sticks) {
+      const last = k.lastSuccess ? t('usb.stickLast', { when: _usbWhen(k.lastSuccess.time) }) : t('usb.stickNever');
+      h +=
+        '<li class="usb-stick"><div class="usb-stick-main"><span class="usb-stick-name">' +
+        esc(k.label) +
+        '</span>' +
+        (k.present ? ' <span class="usb-badge">' + esc(t('usb.present')) + '</span>' : '') +
+        '<div class="fs-meta">' +
+        esc(last) +
+        (k.lastError ? ' · ⚠ ' + esc(_usbErrText(k.lastError.code)) : '') +
+        '</div></div>' +
+        (usable.length > 1 && usable.some((p) => p.id === k.id)
+          ? '<button type="button" class="btn btn-sm btn-p" data-usb="run" data-id="' +
+            esc(k.id) +
+            '">' +
+            esc(t('usb.runNow')) +
+            '</button>'
+          : '') +
+        '<button type="button" class="btn btn-sm" data-usb="forget" data-id="' +
+        esc(k.id) +
+        '" data-label="' +
+        esc(k.label) +
+        '"' +
+        (running ? ' disabled' : '') +
+        '>' +
+        esc(t('usb.forget')) +
+        '</button></li>';
+    }
+    h += '</ul>';
+  }
+
+  // A stick folder of ours on the app's own disk: a copy, never written to.
+  for (const p of s.present.filter((x) => x.registered && x.sameDisk)) {
+    h += '<div class="usb-msg">' + esc(t('usb.copyOnPc', { name: p.root })) + '</div>';
+  }
+  // A stick that is plugged in but not one of ours.
+  for (const p of s.present.filter((x) => !x.registered)) {
+    const name = p.label ? p.root + ' (' + p.label + ')' : p.root;
+    if (!p.supported) h += '<div class="usb-msg">' + esc(t('usb.foreignNewer', { name })) + '</div>';
+    else if (!s.configured) {
+      // One field per stick, each with its own id: with one id for all of
+      // them, Connect read the first field whichever row it was in. A key
+      // being typed survives the redraw, in its own field.
+      const fieldId = _usbConnectId(p.root);
+      const typed = document.getElementById(fieldId);
+      h +=
+        '<div class="usb-connect"><div class="usb-msg">' +
+        esc(t('usb.foreignConnect', { name })) +
+        '</div><div class="usb-row"><input type="text" id="' +
+        esc(fieldId) +
+        '" autocomplete="off" spellcheck="false" placeholder="' +
+        esc(t('usb.keyPh')) +
+        '" value="' +
+        esc(typed ? typed.value : '') +
+        '"><button type="button" class="btn btn-p" data-usb="connect" data-root="' +
+        esc(p.root) +
+        '" data-input="' +
+        esc(fieldId) +
+        '">' +
+        esc(t('usb.connect')) +
+        '</button></div></div>';
+    } else if (p.otherKey) h += '<div class="usb-msg">' + esc(t('usb.foreignOtherKey', { name })) + '</div>';
+    else h += '<div class="usb-msg">' + esc(t('usb.foreignForgotten', { name })) + '</div>';
+  }
+
+  h += '<div class="usb-row">';
+  if (usable.length === 1) {
+    h +=
+      '<button type="button" class="btn btn-p" data-usb="run" data-id="' +
+      esc(usable[0].id) +
+      '">' +
+      esc(t('usb.runNow')) +
+      '</button>';
+  }
+  if (!running) {
+    h +=
+      '<button type="button" class="btn" data-usb="setup-open">' +
+      esc(t(s.configured ? 'usb.setupAnother' : 'usb.setupFirst')) +
+      '</button>';
+  }
+  if (s.configured) h += '<button type="button" class="btn" data-usb="key">' + esc(t('usb.keyShow')) + '</button>';
+  h += '</div>';
+  body.innerHTML = h;
+}
+
+function renderUsbSetup() {
+  const box = document.getElementById('usb-setup');
+  if (!box) return;
+  box.hidden = !_usbSetupOpen;
+  if (!_usbSetupOpen) {
+    box.innerHTML = '';
+    return;
+  }
+  const configured = !!(_usb && _usb.configured);
+  let h = '<div class="usb-sub">' + esc(t('usb.setupTitle')) + '</div>';
+  h += '<p class="fs-meta">' + esc(t('usb.setupHint')) + '</p>';
+  if (!_usbDrives) h += '<div class="fs-meta">' + esc(t('usb.searching')) + '</div>';
+  else if (!_usbDrives.length) h += '<div class="fs-meta">' + esc(t('usb.noDrives')) + '</div>';
+  else {
+    h += '<div class="usb-drives">';
+    for (const d of _usbDrives) {
+      let why = '';
+      let off = false;
+      if (d.sameDisk) {
+        why = t('usb.driveSameDisk');
+        off = true;
+      } else if (d.stick && !d.stick.supported) {
+        why = t('usb.driveNewer');
+        off = true;
+      } else if (d.stick && d.stick.registered) {
+        why = t('usb.driveRegistered');
+        off = true;
+      } else if (d.stick && !configured) {
+        why = t('usb.driveNeedsKey');
+        off = true;
+      } else if (d.stick && d.stick.otherKey) {
+        why = t('usb.driveOtherKey');
+        off = true;
+      } else if (d.stick) why = t('usb.driveKnown');
+      const size = d.total ? t('usb.driveSize', { free: _usbSize(d.free), total: _usbSize(d.total) }) : '';
+      h +=
+        '<label class="usb-drive' +
+        (off ? ' is-off' : '') +
+        '"><input type="radio" name="usb-drive" value="' +
+        esc(d.root) +
+        '"' +
+        (off ? ' disabled' : '') +
+        '><span class="usb-drive-root">' +
+        esc(d.root) +
+        '</span><span class="fs-meta">' +
+        esc([size, why].filter(Boolean).join(' · ')) +
+        '</span></label>';
+    }
+    h += '</div>';
+  }
+  h +=
+    '<div class="usb-row"><input type="text" id="usb-label" maxlength="40" autocomplete="off" placeholder="' +
+    esc(t('usb.labelPh')) +
+    '"></div><div class="usb-row"><button type="button" class="btn btn-p" data-usb="setup-go"' +
+    (_usbDrives && _usbDrives.length ? '' : ' disabled') +
+    '>' +
+    esc(t('usb.setupGo')) +
+    '</button><button type="button" class="btn" data-usb="setup-rescan">' +
+    esc(t('usb.rescan')) +
+    '</button><button type="button" class="btn" data-usb="setup-close">' +
+    esc(t('common.cancel')) +
+    '</button></div>';
+  box.innerHTML = h;
+}
+
+// The recovery key, right after the first stick was set up or when an admin
+// asked for it. The first time, "Done" waits for the box saying it has been
+// put away: without the key, a stick is unreadable once this PC is gone.
+function renderUsbKey() {
+  const box = document.getElementById('usb-key');
+  if (!box) return;
+  box.hidden = !_usbKey;
+  if (!_usbKey) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML =
+    '<div class="usb-key"><div class="usb-sub">' +
+    esc(t('usb.keyTitle')) +
+    '</div><p class="fs-meta">' +
+    esc(t('usb.keyWhy')) +
+    '</p><code class="usb-key-code">' +
+    esc(_usbKey.key) +
+    '</code><div class="usb-row"><button type="button" class="btn btn-sm" data-usb="key-copy">' +
+    esc(t('usb.keyCopy')) +
+    '</button></div>' +
+    (_usbKey.fresh
+      ? '<label class="usb-key-saved"><input type="checkbox" id="usb-key-saved"><span>' +
+        esc(t('usb.keySaved')) +
+        '</span></label>'
+      : '') +
+    '<div class="usb-row"><button type="button" class="btn btn-p" id="usb-key-done" data-usb="key-done"' +
+    (_usbKey.fresh ? ' disabled' : '') +
+    '>' +
+    esc(t('usb.keyDone')) +
+    '</button></div></div>';
+}
+
+async function _usbLoadDrives() {
+  try {
+    _usbDrives = (await apiGet('/api/usb-backup/drives')).drives || [];
+  } catch (e) {
+    _usbDrives = [];
+    toast(t('common.error') + ': ' + (e.message || ''), 'err');
+  }
+  renderUsbSetup();
+}
+
+async function _usbSetupGo(btn) {
+  const picked = document.querySelector('input[name="usb-drive"]:checked');
+  if (!picked) {
+    toast(t('usb.pickDrive'), 'err');
+    return;
+  }
+  const labelEl = document.getElementById('usb-label');
+  btn.disabled = true;
+  const r = await apiPost('/api/usb-backup/setup', { root: picked.value, label: labelEl ? labelEl.value.trim() : '' });
+  btn.disabled = false;
+  if (!r || r.error) {
+    toast(_usbErrText(r && r.code), 'err');
+    return;
+  }
+  _usbSetupOpen = false;
+  renderUsbSetup();
+  // The key comes back with every setup until it is confirmed as put away.
+  if (r.recoveryKey) {
+    _usbKey = { key: r.recoveryKey, fresh: true };
+    renderUsbKey();
+  }
+  toast(t('usb.setupDone', { label: (r.stick && r.stick.label) || '' }), 'ok');
+  loadUsbBackup();
+}
+
+async function _usbConnect(btn) {
+  const input = document.getElementById(btn.dataset.input);
+  const key = input ? input.value.trim() : '';
+  if (!key) {
+    toast(t('usb.err.BAD_KEY'), 'err');
+    return;
+  }
+  btn.disabled = true;
+  const r = await apiPost('/api/usb-backup/connect', { root: btn.dataset.root, recoveryKey: key });
+  btn.disabled = false;
+  if (!r || r.error) {
+    toast(_usbErrText(r && r.code), 'err');
+    return;
+  }
+  if (input) input.value = '';
+  toast(t('usb.connected'), 'ok');
+  loadUsbBackup();
+}
+
+async function _usbShowKey() {
+  if (!(await askConfirm(t('usb.keyShowTitle'), t('usb.keyShowBody'), t('usb.keyShow')))) return;
+  const r = await apiPost('/api/usb-backup/key', {});
+  if (!r || r.error || !r.recoveryKey) {
+    toast(t('common.error'), 'err');
+    return;
+  }
+  // Shown on request before it was ever confirmed, it asks for the
+  // confirmation just as the first time does.
+  _usbKey = { key: r.recoveryKey, fresh: !(_usb && _usb.keyConfirmed) };
+  renderUsbKey();
+}
+
+async function _usbKeyDone() {
+  if (_usbKey && _usbKey.fresh) {
+    const r = await apiPost('/api/usb-backup/key/confirm', {});
+    if (!r || r.error) {
+      toast(t('common.error'), 'err');
+      return;
+    }
+  }
+  _usbKey = null;
+  renderUsbKey();
+  loadUsbBackup();
+}
+
+async function _usbCopyKey() {
+  if (!_usbKey) return;
+  try {
+    await navigator.clipboard.writeText(_usbKey.key);
+    toast(t('usb.keyCopied'), 'ok');
+  } catch (e) {
+    // No clipboard (an old browser, a page not served over HTTPS): select the
+    // key so it can be copied by hand.
+    const code = document.querySelector('#usb-key .usb-key-code');
+    if (code) window.getSelection().selectAllChildren(code);
+  }
+}
+
+async function _usbForget(id, label) {
+  if (!(await askConfirm(t('usb.forgetTitle'), t('usb.forgetBody', { label }), t('usb.forget')))) return;
+  const r = await apiDelete('/api/usb-backup/sticks/' + encodeURIComponent(id));
+  if (!r || r.error) {
+    toast(_usbErrText(r && r.code), 'err');
+    return;
+  }
+  loadUsbBackup();
+}
+
+async function _usbRunNow(btn, force) {
+  if (force && !(await askConfirm(t('usb.forceTitle'), t('usb.forceBody'), t('usb.forceGo')))) return;
+  btn.disabled = true;
+  const body = {};
+  if (btn.dataset.id) body.id = btn.dataset.id;
+  if (force) body.force = true;
+  const r = await apiPost('/api/usb-backup/run', body);
+  if (!r || r.error) {
+    btn.disabled = false;
+    toast(_usbErrText(r && r.code), 'err');
+    return;
+  }
+  loadUsbBackup();
+}
+
+function initUsbCard() {
+  const card = document.getElementById('usb-card');
+  if (!card) return;
+  card.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-usb]');
+    if (!b || b.disabled) return;
+    const a = b.dataset.usb;
+    if (a === 'setup-open') {
+      _usbSetupOpen = true;
+      _usbDrives = null;
+      renderUsbSetup();
+      _usbLoadDrives();
+    } else if (a === 'setup-close') {
+      _usbSetupOpen = false;
+      renderUsbSetup();
+    } else if (a === 'setup-rescan') {
+      _usbDrives = null;
+      renderUsbSetup();
+      _usbLoadDrives();
+    } else if (a === 'setup-go') _usbSetupGo(b);
+    else if (a === 'run') _usbRunNow(b, false);
+    else if (a === 'run-force') _usbRunNow(b, true);
+    else if (a === 'key') _usbShowKey();
+    else if (a === 'key-copy') _usbCopyKey();
+    else if (a === 'key-done') _usbKeyDone();
+    else if (a === 'forget') _usbForget(b.dataset.id, b.dataset.label);
+    else if (a === 'connect') _usbConnect(b);
+  });
+  card.addEventListener('change', (e) => {
+    if (e.target.id !== 'usb-key-saved') return;
+    const done = document.getElementById('usb-key-done');
+    if (done) done.disabled = !e.target.checked;
+  });
 }
 
 // ─── BACKUP ──────────────────────────────────────────────────
@@ -29618,6 +30185,7 @@ function initEventListeners() {
     renderLog();
   });
   $('btn-41').addEventListener('click', downloadBackup);
+  initUsbCard();
   $('btn-42').addEventListener('click', restoreBackup);
   $('reset-go').addEventListener('click', runCleanReset);
   $('lab-check-btn').addEventListener('click', openLabCheck);
