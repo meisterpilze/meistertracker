@@ -3702,13 +3702,23 @@ function _berlinDateCompact(date) {
     .replace(/-/g, '');
 }
 
+// The calendar day after a YYYYMMDD date, counted in UTC, where every day has
+// 864e5 ms. Adding 864e5 to the due time and reading the Berlin date instead
+// went wrong around a change: a due in the first hour of the autumn change day
+// ended on that same day, and one in the last hour of the day before the spring
+// change spanned two days. See test/sommerzeit.test.js.
+function _nextDayCompact(ymd) {
+  const d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8) + 1));
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
 // Convert a batch to VEVENT .ics content (all-day event for due date)
 function batchToVEVENT(batch, scanLog) {
   const uid = 'batch-' + batch.batchId + '@meisterpilze';
   const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const dueDate = _berlinDateCompact(new Date(batch.due));
   // DTEND is next day for all-day events per RFC 5545
-  const endDate = _berlinDateCompact(new Date(new Date(batch.due).getTime() + 86400000));
+  const endDate = _nextDayCompact(dueDate);
   const loc = scanLog ? getBatchLocServer(batch, scanLog) : '';
   const summary = escapeIcsText(batch.batchId + (loc ? ' — ' + loc : ''));
   const lines = [

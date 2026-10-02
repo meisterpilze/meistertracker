@@ -8981,7 +8981,11 @@ function ensureRhythmTasks(db, now) {
   const stamp = new Date().toISOString();
   let made = 0;
   for (let back = RHYTHM_LOOKBACK_DAYS; back >= 0; back--) {
-    const d = new Date(today.getTime() - back * 864e5);
+    // Back by calendar days, not by 864e5 ms. The spring change day has 23
+    // hours, so stepping back from midnight in fixed milliseconds lands at 23:00
+    // the day before: for two weeks after the change that Sunday never came up
+    // and the window reached fifteen days back. See test/sommerzeit.test.js.
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
     const key = _ymd(d);
     if (have.has(key)) continue;
     const t = tpl[d.getDay()];
