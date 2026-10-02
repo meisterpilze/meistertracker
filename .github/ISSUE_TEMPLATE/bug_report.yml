@@ -28,7 +28,7 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Start the server with `./update_server.sh`
+        1. Start the server with `bash update_server.sh start`
         2. Open https://localhost:3000
         3. ...
     validations:
@@ -62,5 +62,5 @@ body:
     id: logs
     attributes:
       label: Server log excerpt
-      description: Relevant lines from `watchdog.log` or terminal output. Redact any tokens or personal data.
+      description: Relevant lines from `pm2 logs meisterpilze` or terminal output. The server log includes your domain and IP addresses; redact them along with any tokens or personal data.
       render: text
