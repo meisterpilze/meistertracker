@@ -23,13 +23,15 @@ You'll need **Node.js 22 or newer**. The test suite is self-contained — no rea
 
 The `core.hooksPath` line enables the leak guard's hooks. Git does not clone hooks, so this is the only way they reach your checkout, and they are the only part of the guard that runs before anything is public — see [What must never go in](#what-must-never-go-in).
 
-To run the server locally, use the watchdog wrapper:
+To run the server locally, use the script's `start` command:
 
 ```sh
-./update_server.sh
+bash update_server.sh start
 ```
 
-This is the only supported way to start the server (see in-repo notes — it handles certificate generation, port binding, and the watchdog process).
+`start` changes nothing in git. It installs PM2 globally if it is missing, and runs `npm install --production` only when there is no `node_modules`, so after the `npm ci` above it installs nothing. If `certs/server.key` or `certs/server.crt` is missing, it runs `gen-cert.sh` to create a self-signed certificate. That needs `openssl`; without a certificate the server falls back to plain HTTP. Then it deletes any PM2 process named `meisterpilze` and starts `server.js` under that name, and PM2 restarts the server if it crashes. The server answers on https://localhost:3000; from a git worktree, the script uses port 3001 and the name `meisterpilze-worktree` instead. After changing server code, run `start` again. `bash update_server.sh stop` stops the server and removes the process.
+
+Do not run `bash update_server.sh` without an argument in your clone. That is the update command, meant for a deployed install ([DEPLOYMENT.md](DEPLOYMENT.md), Sections 5 and 13), and its first step is `git fetch origin` followed by `git reset --hard origin/main`. This moves the branch you have checked out to `origin/main`, throws away uncommitted changes to tracked files, staged or not, and leaves commits you have not pushed reachable only from the reflog. After that it reinstalls dependencies, snapshots the database into `backups/`, runs `scripts/preflight.js` and restarts the PM2 process. Only a run from a git worktree skips the git step. On Windows, `START.bat` has no start-only mode: outside a git worktree, every run begins with the same fetch and reset.
 
 ## Making changes
 

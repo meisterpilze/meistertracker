@@ -193,8 +193,9 @@ start — reinstalls dependencies and brings that version up again, rather than
 leaving the server down until somebody reads the log. A rollback across a
 migration is safe: an older build ignores columns it does not know about.
 
-The `stable` tag is written by this script after every successful start, so it
-only exists once one update has succeeded.
+The `stable` tag is written by this script after every update whose restarted
+server stayed up, so it only exists once one update has succeeded.
+`bash update_server.sh start` never writes it.
 
 ### Enable PM2 Startup on Boot
 
