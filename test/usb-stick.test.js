@@ -212,14 +212,20 @@ describe('a stick', () => {
 
     it('keeps a photo the app deleted for the grace period, then lets it go', async () => {
       fs.rmSync(path.join(photos, '2026', '09', '1', 'a_thumb.jpg'));
-      const day = new Date('2026-10-02T09:00:00Z');
+      const record = () =>
+        parseRemoved(JSON.parse(fs.readFileSync(path.join(root, usbStick.STICK_DIR, usbStick.REMOVED_FILE), 'utf8')));
+      // The runs above went on the real clock, and the record keeps the last
+      // of them. A clock behind a recorded run is taken for a wrong one, so this
+      // day has to come after it; the fixed date it used to be only did until
+      // that date had passed. Noon, so the six daily runs below land on six
+      // different days even across a change of summer time.
+      const last = new Date(record().lastRun);
+      const day = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1, 12);
       const kept = await usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null, now: day });
       assert.equal(kept.pruned, 0);
       assert.equal(kept.pendingRemoval, 1);
       assert.ok(fs.existsSync(onStick(root, '2026/09/1/a_thumb.jpg')));
-      const { removed } = parseRemoved(
-        JSON.parse(fs.readFileSync(path.join(root, usbStick.STICK_DIR, usbStick.REMOVED_FILE), 'utf8'))
-      );
+      const { removed } = record();
       assert.equal(removed['2026/09/1/a_thumb.jpg'].since, day.toISOString());
       // Plugged in on six more days.
       for (let d = 1; d < MIN_SEEN_DAYS; d++) {
