@@ -104,7 +104,7 @@ Both scripts use [PM2](https://pm2.keymetrics.io/) for process management and au
 
 ### Windows
 
-`START.bat` does the same job as `update_server.sh`: it pulls the latest code, installs deps, backs up the DB (using `sqlite3 .backup` if available, otherwise a file copy), generates a TLS cert if missing, and (re-)starts the PM2 process. Double-click it or run it from a terminal.
+`START.bat` does the same job as `update_server.sh`: it pulls the latest code, installs deps, backs up the DB (with `scripts/backup-db.js`, which includes the WAL; `sqlite3 .backup` or a plain file copy only if that fails), generates a TLS cert if missing, and (re-)starts the PM2 process. Double-click it or run it from a terminal.
 
 ### Auto-start on boot
 

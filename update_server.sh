@@ -94,17 +94,36 @@ backup_data() {
     BACKUP_DIR="backups"
     mkdir -p "$BACKUP_DIR"
     chmod u+w "$BACKUP_DIR"
-    local stamp
+    local stamp snapshot
     stamp="$(date +%Y%m%d_%H%M%S)"
     if [ -f meistertracker.db ]; then
-        # Use sqlite3 .backup for WAL-consistent snapshot if available,
-        # fall back to cp (PM2 is stopped later anyway).
-        if command -v sqlite3 &>/dev/null; then
-            sqlite3 meistertracker.db ".backup '$BACKUP_DIR/meistertracker_$stamp.db'"
+        snapshot="$BACKUP_DIR/meistertracker_$stamp.db"
+        # The same order as START.bat, for the same reason. In WAL mode
+        # meistertracker.db is only as current as the last checkpoint; what was
+        # committed since is still in meistertracker.db-wal, and `cp` leaves it
+        # behind without a word. The sqlite3 CLI does read the WAL, but the
+        # setup in DEPLOYMENT.md never installs it, so on a server set up from
+        # there the copy was the branch that always ran. node runs the server,
+        # so it is always here, and scripts/backup-db.js reads through the WAL
+        # (--no-warnings only silences node:sqlite's ExperimentalWarning, not the
+        # reason a run failed). Each attempt is an `if`, so its failure falls
+        # through to the next one instead of ending the script under `set -e`.
+        if node --no-warnings scripts/backup-db.js meistertracker.db "$snapshot" >/dev/null; then
+            echo "  -> meistertracker.db backed up to $snapshot (WAL-consistent)."
+        elif command -v sqlite3 &>/dev/null \
+            && sqlite3 meistertracker.db ".backup '$snapshot'"; then
+            echo "  -> meistertracker.db backed up to $snapshot (WAL-consistent via sqlite3)."
+        elif cp meistertracker.db "$snapshot"; then
+            echo "  -> WARNING: raw file copy only, to $snapshot."
+            echo "     Anything still in meistertracker.db-wal is NOT in this snapshot."
+            echo "     Why scripts/backup-db.js failed is printed above."
         else
-            cp meistertracker.db "$BACKUP_DIR/meistertracker_$stamp.db"
+            echo ""
+            echo "  ABORTED: no snapshot of meistertracker.db could be written (see above)."
+            echo "  The new version is not started without one. The server is still"
+            echo "  running the previous code; fix the cause and run this again."
+            exit 1
         fi
-        echo "  -> meistertracker.db backed up to $BACKUP_DIR/meistertracker_$stamp.db"
     else
         echo "  -> No meistertracker.db found, skipping backup."
     fi

@@ -22,8 +22,9 @@
 // VACUUM INTO is the operation of record: it produces a compact, fully consistent
 // copy from a live database without stopping the writer.
 //
-// START.bat calls this as `node scripts/backup-db.js <source.db> <dest.db>`
-// while the old server still has the database open. Keep that interface.
+// START.bat and update_server.sh call this as
+// `node scripts/backup-db.js <source.db> <dest.db>` while the old server still
+// has the database open. Keep that interface.
 // test/deploy-chain.test.js holds a write open across a run and checks that
 // the live files come out byte-identical. (The webhook deploy takes its
 // snapshot inside the server instead; see scripts/deploy-runner.js.)
@@ -64,8 +65,9 @@ try {
   Object.defineProperty(db, '_mpDbPath', { value: src, enumerable: false, writable: false });
   backupDb(db, dest);
 } catch (e) {
-  // A half-written target is worse than none: START.bat falls back to `copy` on
-  // a non-zero exit, and it refuses to overwrite a file that already exists.
+  // A half-written target is worse than none: START.bat and update_server.sh fall
+  // back to sqlite3 and then a raw copy on a non-zero exit, and this script
+  // refuses to overwrite a file that already exists.
   try {
     if (fs.existsSync(dest)) fs.unlinkSync(dest);
   } catch {
