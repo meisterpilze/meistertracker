@@ -11433,10 +11433,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        if (!data.token) {
-          const existing = db.getDuckdnsCfg(database);
-          data.token = existing.token || '';
-        }
+        // An empty token field keeps the stored token, and a field the request
+        // leaves out keeps its stored value (db.updateDuckdnsCfg). The settings
+        // page still sends all of them: against a server without this, as during
+        // a deploy, a request without `domain` would wipe it.
+        if (!data.token) delete data.token;
         db.updateDuckdnsCfg(database, data);
         startDuckdnsUpdater();
         log('info', 'DuckDNS config updated', { actor: req.authUser.username });

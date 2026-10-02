@@ -6100,13 +6100,33 @@ function getDuckdnsCfg(db) {
   };
 }
 
+// Writes only the fields `cfg` carries; one it leaves out keeps its stored
+// value. All four used to be written every time, so a request that sent only
+// some of them reset the rest: without `leEnabled` the certificate renewal was
+// switched off, without `enabled` the updater stopped, without `domain` the
+// name was wiped. Rotating the token with a request that carried nothing but
+// the token would have done all three.
 function updateDuckdnsCfg(db, cfg) {
-  db.prepare(`UPDATE duckdns_config SET enabled=?, domain=?, token=?, le_enabled=? WHERE id=1`).run(
-    cfg.enabled ? 1 : 0,
-    cfg.domain || '',
-    cfg.token || '',
-    cfg.leEnabled ? 1 : 0
-  );
+  const sets = [];
+  const vals = [];
+  if (cfg.enabled !== undefined) {
+    sets.push('enabled=?');
+    vals.push(cfg.enabled ? 1 : 0);
+  }
+  if (cfg.domain !== undefined) {
+    sets.push('domain=?');
+    vals.push(cfg.domain || '');
+  }
+  if (cfg.token !== undefined) {
+    sets.push('token=?');
+    vals.push(cfg.token || '');
+  }
+  if (cfg.leEnabled !== undefined) {
+    sets.push('le_enabled=?');
+    vals.push(cfg.leEnabled ? 1 : 0);
+  }
+  if (!sets.length) return;
+  db.prepare('UPDATE duckdns_config SET ' + sets.join(',') + ' WHERE id=1').run(...vals);
   incrementDataVersion(db);
 }
 
