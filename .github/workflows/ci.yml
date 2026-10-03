@@ -37,8 +37,16 @@ jobs:
       # Fail on HIGH or CRITICAL transitive vulns. Moderate findings only
       # warn (audit output is still printed). Run `npm audit fix` locally
       # when this step fails.
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      #
+      # What an installation gets (npm install --omit=dev) has no exceptions.
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high --omit=dev
+
+      # The whole tree, dev tools included, fails the same way, except for an
+      # advisory listed in scripts/audit-allow.json: one with no fix that
+      # cannot reach an installation, each with its reason.
+      - name: Audit all dependencies
+        run: node scripts/audit-check.js
 
       # Fail if any production dep ships a license outside the AGPL-3.0
       # compatible allowlist in package.json. Update the allowlist there

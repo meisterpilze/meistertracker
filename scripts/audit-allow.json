@@ -1,0 +1,7 @@
+[
+  {
+    "id": "GHSA-ch52-4w7c-c8xp",
+    "package": "http-cache-semantics",
+    "reason": "Reaches the tree only through license-checker-rseidelsohn (devDependency, CI's license check) via @npmcli/arborist, pacote, npm-registry-fetch and make-fetch-happen. Every release is affected (<= 4.2.0, no patched version), and the 4.4.2 line of the checker has its own HIGH advisories (#422). The license check reads node_modules; nothing of this is installed with --omit=dev."
+  }
+]
