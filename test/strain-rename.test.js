@@ -83,7 +83,11 @@ describe('Sorte umbenennen', () => {
   it('lässt den freien Strain-Text der Charge in Ruhe', () => {
     // Er gehört der Charge und nicht der Sorte: Wie eine Sorte heißt, sagt
     // nichts darüber, welche Linie im April in einen bestimmten Beutel ging.
-    assert.equal(db.readBatchById(d, 'LM-010826-01').strain, 'Nordlicht', 'überschrieben wäre er unwiederbringlich weg');
+    assert.equal(
+      db.readBatchById(d, 'LM-010826-01').strain,
+      'Nordlicht',
+      'überschrieben wäre er unwiederbringlich weg'
+    );
   });
 
   it('lässt Chargen anderer Sorten unberührt', () => {

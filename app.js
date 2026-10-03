@@ -22397,8 +22397,8 @@ function _lineBlockW(y, fontH, badge) {
 // ─── Jede Zeile passt ────────────────────────────────────────
 // Ein Textfeld auf dem Etikett ist ein ^FB-Block für eine Zeile, und der
 // schneidet nichts ab: was nicht hineinpasst, bricht der Drucker um und druckt
-// es ÜBER die Zeile. So stand einmal "KQ07" mitten auf "Ganoderma" —
-// "Reishi – 2,5kg – Ganoderma multipileum KQ07" war für eine Zeile zu lang.
+// es ÜBER die Zeile. So stand der Stammcode mitten auf "Ganoderma", weil
+// "Reishi – 2,0kg – Ganoderma multipileum KQ07" für eine Zeile zu lang war.
 // Deshalb geht keine Zeile mehr zum Drucker, die nicht passt: sie wird hier
 // gemessen, und was zu lang ist, kommt in die zweite Zeile. Eine Nummer wird
 // stattdessen kleiner geschrieben, die liest man in einem Stück.

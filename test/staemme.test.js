@@ -136,7 +136,11 @@ describe('Stamm umbenennen und löschen', () => {
   });
 
   it('und lässt alles andere stehen', () => {
-    assert.equal(text(d, 'cultures', 'id', 'LC-SHI-NORDLICHT-010926-01'), 'Nordlicht', 'eine andere Sorte wurde umbenannt');
+    assert.equal(
+      text(d, 'cultures', 'id', 'LC-SHI-NORDLICHT-010926-01'),
+      'Nordlicht',
+      'eine andere Sorte wurde umbenannt'
+    );
     assert.equal(text(d, 'cultures', 'id', 'LC-LM-LMKQ07-010926-01'), 'LMKQ07', 'ein anderer Stamm wurde umbenannt');
     // `batches.strain` gehört der Charge — dieselbe Regel wie beim Umbenennen
     // einer Sorte (strain-rename.test.js).
@@ -146,7 +150,11 @@ describe('Stamm umbenennen und löschen', () => {
 
   it('weist einen Namen ab, den die Sorte schon hat', () => {
     assert.throws(() => db.updateStamm(d, nordlicht, { name: 'lmkq07' }), /Stamm: already exists/);
-    assert.equal(text(d, 'batches', 'batch_id', 'LM-010926-01'), 'Nordlicht 2', 'der Fehlschlag hat trotzdem umbenannt');
+    assert.equal(
+      text(d, 'batches', 'batch_id', 'LM-010926-01'),
+      'Nordlicht 2',
+      'der Fehlschlag hat trotzdem umbenannt'
+    );
   });
 
   it('lässt einen leeren Namen nicht zu, und ein leerer Auftrag ändert nichts', () => {
@@ -394,7 +402,10 @@ describe('Der Stamm-Wähler', () => {
     w.stammRender('p', 1);
     const h = w.box.innerHTML;
     assert.match(h, /<select id="p-stamm"[^>]*><option value="">stamm\.none<\/option>/);
-    assert.ok(h.indexOf('LMKQ07 TG') > -1 && h.indexOf('LMKQ07 TG') < h.indexOf('Nordlicht'), 'nicht nach Namen sortiert');
+    assert.ok(
+      h.indexOf('LMKQ07 Acme') > -1 && h.indexOf('LMKQ07 Acme') < h.indexOf('Nordlicht'),
+      'nicht nach Namen sortiert'
+    );
     assert.doesNotMatch(h, /SHIKQ07/, 'ein Stamm einer anderen Sorte wird angeboten');
   });
 
