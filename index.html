@@ -267,6 +267,45 @@
         </div>
       </div>
     </div>
+    <!-- Beimpfen: aus einer gescannten Kultur vieles auf einmal ansetzen —
+         Körnerbeutel, Flüssigkulturen, Petrischalen, Spritzen, je eine Zahl.
+         Gefüllt von bmpRender(); geöffnet aus dem Kultur-Fenster. -->
+    <div
+      id="m-beimpfen"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 1200;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+      "
+      onclick="if (event.target === this) bmpClose();"
+    >
+      <div
+        class="card"
+        style="
+          max-width: 380px;
+          width: 100%;
+          margin: 0;
+          max-height: calc(100vh - 24px);
+          max-height: calc(100dvh - 24px);
+          overflow-y: auto;
+        "
+      >
+        <div class="sec" id="bmp-title">—</div>
+        <div id="bmp-sub" class="muted fs-meta" style="margin: 4px 0 6px"></div>
+        <div id="bmp-rows"></div>
+        <div id="bmp-anlage-wrap" class="anlage-wrap" style="margin-top: 8px"></div>
+        <div id="bmp-preview" class="muted fs-meta" style="margin-top: 8px"></div>
+        <div style="display: flex; gap: 8px; margin-top: 12px">
+          <button type="button" class="btn btn-p" id="bmp-go" data-bmp="go" data-i18n="bmp.go">Beimpfen</button>
+          <button type="button" class="btn" data-bmp="cancel" data-i18n="strains.cancel">Abbrechen</button>
+        </div>
+      </div>
+    </div>
     <!-- Quick-create: spin a Charge or Laborarbeit straight from a Sorte recipe.
          Global modal (not inside a page) so it can open from the dashboard too. -->
     <div

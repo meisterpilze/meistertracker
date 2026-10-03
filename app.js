@@ -691,7 +691,7 @@ function applyData(d) {
   cultures.forEach((c) => spColor(c.species));
   fillStrainSelects();
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-  fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
+  fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
   updateTodoBadge();
   if (typeof fillCalendarUserFilter === 'function') fillCalendarUserFilter();
   if (d.notifications && typeof d.notifications.unread === 'number') {
@@ -19103,6 +19103,7 @@ function anlageKlick(was, prefix) {
 // Assistent zeichnet seinen zweiten Schritt ohnehin frisch.
 function anlageGeaendert(prefix) {
   if (prefix === 'ms-q') msQuickPreview();
+  if (prefix === 'bmp') bmpPreview();
 }
 
 // Der Tag, an dem angesetzt wurde, als JJJJ-MM-TT — '' heißt heute. null, wenn
@@ -20078,7 +20079,7 @@ async function msQuickConfirm() {
       // trägt, ist das die ungenauere Zahl, und sie entscheidet, wie viel
       // trockenes Korn vom Lagerbestand abgeht.
       setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
-      fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
+      fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
       const gsc = document.getElementById('gs-culture');
       if (gsc) gsc.value = sourceCulture;
       setv('lw-notes', '');
@@ -20119,7 +20120,7 @@ async function msQuickConfirm() {
     gsSetLines(sizes);
     setv('gs-days', days);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
-    fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
+    fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
     const gsc = document.getElementById('gs-culture');
     if (gsc) gsc.value = sourceCulture;
     setv('lw-notes', '');
@@ -20344,7 +20345,7 @@ function deleteCulture(id) {
       renderCultures();
       renderLabLog();
       fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-      fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
+      fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
     }
   );
 }
@@ -20356,10 +20357,10 @@ function deleteCulture(id) {
 // und hat keine; Körnerbrut (KB) ist keine Kultur und geht über createGrainBatch.
 const LAB_PARENT_TYPES = {
   MC: [],
-  PD: ['MC', 'PD', 'LC'],
-  LC: ['MC', 'PD', 'LC'],
+  PD: ['MC', 'PD', 'LC', 'SY'],
+  LC: ['MC', 'PD', 'LC', 'SY'],
   SY: ['MC', 'PD', 'LC'],
-  KB: ['PD', 'LC']
+  KB: ['PD', 'LC', 'SY']
 };
 function lwUpdate() {
   const type = document.getElementById('lw-type').value;
@@ -20376,7 +20377,7 @@ function lwUpdate() {
     if (kbRows) kbRows.style.display = 'flex';
     if (strainTextRow) strainTextRow.style.display = 'block';
     document.getElementById('lw-prev-box').style.display = 'none';
-    fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
+    fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
     // Prefill grain hydration % from current inventory default
     const gsRh = document.getElementById('gs-rh');
     if (gsRh) gsRh.value = getAvgComp().grainRhPct;
@@ -20488,27 +20489,62 @@ function logLabWork(opts) {
     fieldError('lw-st', t('lab.selectPilzsorte'));
     return;
   }
+  const { newC, saved } = kulturenAnlegen({
+    type,
+    ms,
+    wann,
+    qty: parseInt(document.getElementById('lw-qty').value) || 1,
+    id: intakeId,
+    parentId: document.getElementById('lw-parent')?.value || null,
+    strainText: (document.getElementById('lw-strain-text')?.value || '').trim(),
+    source: document.getElementById('lw-source')?.value.trim() || null,
+    notes: document.getElementById('lw-notes').value.trim()
+  });
+  document.getElementById('lw-notes').value = '';
+  document.getElementById('lw-qty').value = '1';
+  if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
+  lwPreview();
+  if (intakeId) {
+    saved.then(
+      () => toast(t('intake.done', { id: intakeId })),
+      () => {}
+    );
+    return;
+  }
+  // Der Schluss jedes Weges, der Kulturen anlegt: das Etiketten-Fenster, wie
+  // nbPlaceAndPrint() für Beutel. Vorher stand hier eine Ergebniskarte mit
+  // Druckknopf im langen Formular — und der Schnelldialog, der dieses Formular
+  // nur noch als Ablage benutzt, ließ den Arbeiter ohne ein Etikett stehen.
+  cprShow(
+    newC.map((c) => c.id),
+    saved
+  );
+}
+// Legt qty Kulturen einer Art an, mit Kennung, Speichern und Barcodes — ohne ein
+// Formular zu lesen. logLabWork() und das Beimpfen-Fenster (bmpGo) teilen sich
+// das; jeder Weg zeigt danach sein eigenes Etiketten-Fenster.
+// spec: { type, ms, wann, qty, id?, parentId?, strainText?, source?, notes? }
+function kulturenAnlegen(spec) {
+  const { type, ms, wann } = spec;
   const sp = ms.name,
     st = ms.kuerzel;
-  const parentId = document.getElementById('lw-parent')?.value || null,
-    qty = parseInt(document.getElementById('lw-qty').value) || 1;
-  const lwStrainText = (document.getElementById('lw-strain-text')?.value || '').trim();
-  const stId = lwStrainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const strainText = spec.strainText || '';
+  const stId = strainText.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const prefix = type + '-' + abbrev(sp) + (stId ? '-' + stId : '') + '-' + todayStr(wann) + '-';
   const base = maxCultureSuffix(prefix);
-  const newC = Array.from({ length: intakeId ? 1 : qty }, (_, i) => ({
-    id: intakeId || prefix + String(base + i + 1).padStart(2, '0'),
+  const newC = Array.from({ length: spec.id ? 1 : spec.qty }, (_, i) => ({
+    id: spec.id || prefix + String(base + i + 1).padStart(2, '0'),
     type,
     species: sp,
     strain: st || '',
-    strainId,
+    strainId: ms.id,
     strainName: sp,
     strainKuerzel: st || null,
-    strainText: lwStrainText,
-    parentId: parentId || null,
-    source: document.getElementById('lw-source')?.value.trim() || null,
+    strainText,
+    parentId: spec.parentId || null,
+    source: spec.source || null,
     status: 'active',
-    notes: document.getElementById('lw-notes').value.trim(),
+    notes: spec.notes || '',
     created: wann.toISOString()
   }));
   cultures.push(...newC);
@@ -20532,28 +20568,10 @@ function logLabWork(opts) {
     }
   });
   saved.catch(() => {}); // gemeldet im then oben; gedruckt wird nur nach Erfolg
-  document.getElementById('lw-notes').value = '';
-  document.getElementById('lw-qty').value = '1';
-  if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
   renderLabLog();
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-  fillCultureSelect('gs-culture', ['PD', 'LC', 'GS']);
-  lwPreview();
-  if (intakeId) {
-    saved.then(
-      () => toast(t('intake.done', { id: intakeId })),
-      () => {}
-    );
-    return;
-  }
-  // Der Schluss jedes Weges, der Kulturen anlegt: das Etiketten-Fenster, wie
-  // nbPlaceAndPrint() für Beutel. Vorher stand hier eine Ergebniskarte mit
-  // Druckknopf im langen Formular — und der Schnelldialog, der dieses Formular
-  // nur noch als Ablage benutzt, ließ den Arbeiter ohne ein Etikett stehen.
-  cprShow(
-    newC.map((c) => c.id),
-    saved
-  );
+  fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
+  return { newC, saved };
 }
 function renderLabLog() {
   const body = document.getElementById('lab-log-body');
@@ -20698,7 +20716,10 @@ function gsPreview() {
   el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
   el.style.display = 'block';
 }
-function createGrainBatch() {
+// opts.ohneFenster: das Fenster zum Einlagern und für die Etiketten kommt nicht
+// von hier, sondern vom Aufrufer (bmpGo, nach den Kultur-Etiketten). Zurück kommt
+// dann { batchObj, bagIds }, oder null, wenn nichts angelegt wurde.
+function createGrainBatch(opts) {
   // Angesetzt am, wie in logLabWork: einmal gelesen und geleert, als Erstes. Ein
   // früherer Tag ist Bestand aus der Inventur und bucht kein Korn ab, wie
   // createBatch keine Pellets.
@@ -20842,12 +20863,14 @@ function createGrainBatch() {
   gsPreview();
   updateTodoBadge();
   renderBatches();
+  if (opts && opts.ohneFenster) return { batchObj, bagIds };
   // Einlagern, dann Etiketten — derselbe Schluss wie bei jeder anderen Charge.
   // Die Körnerbrut hatte ihren eigenen: eine Ergebniskarte im langen Formular
   // und ein Sprung auf die Druckseite. Vom Schnelldialog aus hieß das, auf einer
   // Seite zu landen, die man nie aufgemacht hatte, während die Charge aus dem
   // Assistenten ihr Fenster bekam, wo man stand. Ein Weg, ein Fenster.
   nbPlaceAndPrint(batchObj, bagIds);
+  return { batchObj, bagIds };
 }
 
 // ─── LINEAGE ─────────────────────────────────────────────────
@@ -20964,8 +20987,8 @@ function buildTree(rootId, rootType) {
     return bn;
   }
 }
-const NODE_BG = { MC: '#f3e8ff', PD: '#dbeafe', LC: '#dcfce7', BATCH: '#fff7ed' };
-const NODE_BD = { MC: '#c084fc', PD: '#93c5fd', LC: '#86efac', BATCH: '#fdba74' };
+const NODE_BG = { MC: '#f3e8ff', PD: '#dbeafe', LC: '#dcfce7', SY: '#e0f2fe', BATCH: '#fff7ed' };
+const NODE_BD = { MC: '#c084fc', PD: '#93c5fd', LC: '#86efac', SY: '#7dd3fc', BATCH: '#fdba74' };
 function treeHtml(node, depth) {
   const ch = node.children?.length
     ? `<div style="margin-left:${depth ? 20 : 0}px;padding-left:16px;border-left:2px solid var(--c-border);margin-top:5px">${node.children.map((c) => treeHtml(c, depth + 1)).join('')}</div>`
@@ -23066,9 +23089,13 @@ function goToPrintLabCulture() {
 // nbPlaceAndPrint() für Beutel ist, ohne die Zonenwahl davor, weil eine Kultur
 // keinen Standort hat. Kommt von selbst hoch, egal wo man steht; die Seite mit
 // dem langen Formular ist seit dem Schnelldialog nur noch dessen Ablage.
-function cprShow(ids, saved) {
+// danach: läuft, wenn das Fenster zugeht — beim Beimpfen das Einlagern der
+// Körnerbrut, das sonst hinter diesem Fenster aufginge.
+let _cprDanach = null;
+function cprShow(ids, saved, danach) {
   lastCreatedCultureIds = ids.slice();
   _cprSaved = saved || null;
+  _cprDanach = danach || null;
   const head = document.getElementById('cpr-head');
   if (head) head.textContent = t('lab.printFor', { n: ids.length });
   const list = document.getElementById('cpr-ids');
@@ -23085,6 +23112,9 @@ function cprShow(ids, saved) {
 function cprClose() {
   const m = document.getElementById('m-culture-print');
   if (m) m.classList.remove('open');
+  const weiter = _cprDanach;
+  _cprDanach = null;
+  if (weiter) weiter();
 }
 async function printCultureLabelsInline() {
   const ids = lastCreatedCultureIds;
@@ -25069,14 +25099,14 @@ function renderCiActions(c) {
     'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-weight:600;margin-bottom:8px;cursor:pointer';
   const sec =
     'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
-  // Woraus eine Laborarbeit angesetzt werden kann: eine Spritze ist das Ende.
-  const alsHerkunft = Object.values(LAB_PARENT_TYPES).some((l) => l.includes(c.type));
+  // Ob aus dieser Kultur überhaupt etwas angesetzt werden kann.
+  const alsHerkunft = bmpArten(c.type).length > 0;
   let html = '';
   if (aktiv)
     html += `<button type="button" data-bi="ci-out" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-purple-dark);color:#fff">✓ ${esc(t('ci.out'))}</button>`;
   html += '<div style="display:flex;gap:8px;margin-bottom:8px">';
   if (aktiv && alsHerkunft)
-    html += `<button type="button" data-bi="ci-labor" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('ci.labor'))}</button>`;
+    html += `<button type="button" data-bi="ci-beimpfen" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('ci.beimpfen'))}</button>`;
   html += `<button type="button" data-bi="ci-lineage" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('ci.lineage'))}</button>`;
   html += '</div>';
   if (aktiv)
@@ -25112,21 +25142,188 @@ function ciAction(a) {
     }, 100);
     return;
   }
-  if (a === 'ci-labor') {
-    // Der Dialog, mit dieser Kultur schon unter "Beimpft mit". Passt sie nicht
-    // zur zuletzt benutzten Art, dann zur Petrischale — die nimmt jede.
-    msQuickOpen('labor', null);
-    if (!_msQuickCtx) return;
-    let err = msqInocAdd(c.id);
-    if (err) {
-      const art = document.getElementById('ms-q-labtype');
-      if (art) art.value = 'PD';
-      err = msqInocAdd(c.id);
-    }
-    msQuickRender();
-    if (err) toast(err, 'err');
+  if (a === 'ci-beimpfen') bmpOpen(c);
+}
+// ── Beimpfen: aus einer Kultur vieles auf einmal ─────────────
+// Eine Spritze, 40 ml aus dem Glas: daraus gehen 4 Körnerbeutel, 3 neue
+// Flüssigkulturen und 10 Petrischalen, in einem Durchgang am Tisch. Einzeln
+// hieß das: für jede Art den Dialog öffnen und dieselbe Spritze neu scannen.
+// Hier steht je Art eine Zahl, und ein Tipp legt alles an — jede neue Kultur
+// mit dieser als Herkunft, so dass der Stammbaum zeigt, wohin sie ging.
+let _bmp = null;
+const BMP_KEY = 'mp-bmp';
+// Was aus einer Kultur dieser Art angesetzt werden darf, in der Reihenfolge der
+// Zeilen. KB ist Körnerbrut (eine Charge mit Beuteln), der Rest sind Kulturen.
+function bmpArten(type) {
+  return ['KB', 'LC', 'PD', 'SY'].filter((k) => (LAB_PARENT_TYPES[k] || []).includes(type));
+}
+function _bmpLetzte(type) {
+  try {
+    const s = JSON.parse(localStorage.getItem(BMP_KEY) || '{}');
+    return (s && s[type]) || {};
+  } catch (e) {
+    return {};
   }
 }
+function _bmpMerken(type, werte) {
+  try {
+    const s = JSON.parse(localStorage.getItem(BMP_KEY) || '{}');
+    s[type] = werte;
+    localStorage.setItem(BMP_KEY, JSON.stringify(s));
+  } catch (e) {
+    /* storage disabled — next time starts at zero */
+  }
+}
+function bmpOpen(c) {
+  const letzte = _bmpLetzte(c.type);
+  const groesse = (_msqLastSizes('labor') || [])[0];
+  _bmp = {
+    id: c.id,
+    n: Object.fromEntries(bmpArten(c.type).map((k) => [k, parseInt(letzte[k], 10) || 0])),
+    kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1
+  };
+  anlageReset('bmp');
+  document.getElementById('bmp-title').textContent = t('bmp.title', { id: c.id });
+  const name = c.strainName || c.species || '';
+  document.getElementById('bmp-sub').textContent =
+    name + ((c.strainText || '').trim() ? ' · ' + c.strainText.trim() : '');
+  bmpRender();
+  document.getElementById('m-beimpfen').style.display = 'flex';
+}
+function bmpClose() {
+  _bmp = null;
+  document.getElementById('m-beimpfen').style.display = 'none';
+}
+function bmpRender() {
+  if (!_bmp) return;
+  const c = cultures.find((x) => x.id === _bmp.id);
+  if (!c) return;
+  const knopf =
+    'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
+  document.getElementById('bmp-rows').innerHTML = bmpArten(c.type)
+    .map((k) => {
+      const zeile =
+        `<div style="display:flex;align-items:center;gap:8px">` +
+        `<button type="button" data-bmp="minus" data-k="${k}" aria-label="${esc(t('bmp.less'))}" style="${knopf}">−</button>` +
+        `<input type="number" inputmode="numeric" min="0" max="500" id="bmp-n-${k}" data-bmp-n="${k}" value="${_bmp.n[k]}" style="width:64px;text-align:center;font-weight:600" />` +
+        `<button type="button" data-bmp="plus" data-k="${k}" aria-label="${esc(t('bmp.more'))}" style="${knopf}">+</button>` +
+        `<span class="fs-base" style="font-weight:600">${esc(t('bmp.' + k))}</span></div>`;
+      const kg =
+        k === 'KB'
+          ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
+            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
+          : '';
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
+    })
+    .join('');
+  anlageRender('bmp');
+  bmpPreview();
+}
+function _bmpLesen() {
+  if (!_bmp) return;
+  for (const k of Object.keys(_bmp.n)) {
+    const el = document.getElementById('bmp-n-' + k);
+    if (el) _bmp.n[k] = Math.max(0, Math.min(500, parseInt(el.value, 10) || 0));
+  }
+  const kg = document.getElementById('bmp-kg');
+  if (kg) _bmp.kg = parseDecimal(kg.value) || 0;
+}
+function bmpPreview() {
+  if (!_bmp) return;
+  _bmpLesen();
+  const teile = Object.entries(_bmp.n)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) =>
+      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') }) : n + ' ' + t('bmp.' + k)
+    );
+  const summe = Object.values(_bmp.n).reduce((a, n) => a + n, 0);
+  const prev = document.getElementById('bmp-preview');
+  if (prev) prev.textContent = teile.length ? t('bmp.preview', { list: teile.join(' · ') }) : t('bmp.nothing');
+  const go = document.getElementById('bmp-go');
+  if (go) {
+    go.disabled = !summe;
+    go.textContent = summe ? t('bmp.goN', { n: summe }) : t('bmp.go');
+  }
+}
+function bmpGo() {
+  if (!_bmp) return;
+  _bmpLesen();
+  const c = cultures.find((x) => x.id === _bmp.id);
+  if (!c) return;
+  const ms = c.strainId ? mushroomStrains.find((x) => x.id === c.strainId) : null;
+  if (!ms) {
+    toast(t('bmp.noSorte', { id: c.id }), 'err');
+    return;
+  }
+  const n = _bmp.n;
+  if (!Object.values(n).some((x) => x > 0)) return;
+  if (n.KB > 0 && !(_bmp.kg > 0)) {
+    fieldError('bmp-kg', t('batch.enterWeight'));
+    return;
+  }
+  const angesetzt = anlageLesen('bmp');
+  if (angesetzt === null) return;
+  const wann = anlageZeitpunkt(angesetzt);
+  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg }));
+  bmpClose();
+  // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als Herkunft.
+  const ids = [];
+  const saves = [];
+  for (const k of ['LC', 'PD', 'SY']) {
+    if (!(n[k] > 0)) continue;
+    const r = kulturenAnlegen({
+      type: k,
+      ms,
+      wann,
+      qty: n[k],
+      parentId: c.id,
+      strainText: (c.strainText || '').trim()
+    });
+    ids.push(...r.newC.map((x) => x.id));
+    saves.push(r.saved);
+  }
+  // Dann die Körnerbrut, über denselben Weg wie aus dem Schnelldialog — mit der
+  // Kultur als Herkunft und ohne eigenes Fenster: das kommt nach den Etiketten.
+  let korn = null;
+  if (n.KB > 0) {
+    const setv = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', (c.strainText || '').trim());
+    setv('lw-created', angesetzt);
+    gsSetLines([{ kg: _bmp.kg || 1, qty: n.KB }]);
+    setv('gs-days', 14);
+    setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+    setv('lw-notes', '');
+    _inoc = [{ kind: 'culture', id: c.id }];
+    korn = createGrainBatch({ ohneFenster: true });
+  }
+  renderLabLog();
+  const kornFenster = korn ? () => nbPlaceAndPrint(korn.batchObj, korn.bagIds) : null;
+  if (ids.length) cprShow(ids, Promise.all(saves), kornFenster);
+  else if (kornFenster) kornFenster();
+}
+(function wireBeimpfen() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bmp]');
+    if (!b || !_bmp) return;
+    const a = b.dataset.bmp;
+    if (a === 'go') return bmpGo();
+    if (a === 'cancel') return bmpClose();
+    _bmpLesen();
+    const k = b.dataset.k;
+    if (!(k in _bmp.n)) return;
+    _bmp.n[k] = Math.max(0, Math.min(500, _bmp.n[k] + (a === 'plus' ? 1 : -1)));
+    const el = document.getElementById('bmp-n-' + k);
+    if (el) el.value = _bmp.n[k];
+    bmpPreview();
+  });
+  document.addEventListener('input', (e) => {
+    if (_bmp && e.target.closest('#m-beimpfen')) bmpPreview();
+  });
+})();
 // ─── GLOBAL BARCODE BUFFER (timing-based scanner detection) ──
 const _scanBuf = { chars: [], timer: null };
 const SCAN_MAX_GAP = 50;
@@ -28402,10 +28599,10 @@ function gsMove(step) {
 }
 
 // Every full-viewport overlay in this app, by the two class conventions plus
-// the three that carry their placement inline. Membership is checked by
+// the ones that carry their placement inline. Membership is checked by
 // test/global-search.test.js against index.html, so a new one cannot join the
 // markup without joining this.
-const GS_OVERLAY_SEL = '.modal-bg, .scan-overlay, #ms-quick-modal, #ship-modal';
+const GS_OVERLAY_SEL = '.modal-bg, .scan-overlay, #ms-quick-modal, #m-beimpfen, #ship-modal';
 
 // Is something already covering the screen?
 //

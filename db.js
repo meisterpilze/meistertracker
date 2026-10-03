@@ -5661,10 +5661,11 @@ function insertHarvest(db, h) {
 const VALID_CULTURE_PARENT_TYPES = {
   MC: [], // mother culture is the lineage root — no parent allowed
   // A plate streaked from a liquid culture is how an LC is checked and cleaned up.
-  PD: ['MC', 'PD', 'LC'],
-  LC: ['MC', 'PD', 'LC'],
-  G2G: ['MC', 'PD', 'LC', 'G2G', 'GS'],
-  GS: ['MC', 'PD', 'LC', 'G2G', 'GS'],
+  // A syringe drawn from an LC inoculates plates, new LCs and grain in one go.
+  PD: ['MC', 'PD', 'LC', 'SY'],
+  LC: ['MC', 'PD', 'LC', 'SY'],
+  G2G: ['MC', 'PD', 'LC', 'SY', 'G2G', 'GS'],
+  GS: ['MC', 'PD', 'LC', 'SY', 'G2G', 'GS'],
   // A syringe is drawn from something liquid or from a plate — never from grain,
   // which cannot be drawn into a syringe at all.
   SY: ['MC', 'PD', 'LC']

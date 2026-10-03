@@ -579,7 +579,7 @@ describe('db – cultures', () => {
             created: '2024-01-04T00:00:00Z'
           }
         ]),
-      /PD parent must be one of \[MC, PD, LC\], got GS/
+      /PD parent must be one of \[MC, PD, LC, SY\], got GS/
     );
   });
 

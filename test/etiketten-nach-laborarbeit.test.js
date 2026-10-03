@@ -28,8 +28,13 @@ describe('Etiketten nach Laborarbeit', () => {
   it('und der Druck wartet auf die Antwort des Servers', () => {
     // Die Nummern-Barcodes kommen mit der Antwort; ein Etikett davor trägt die
     // alte ID-Kodierung.
+    // Angelegt und gespeichert wird in kulturenAnlegen(), das logLabWork und
+    // das Beimpfen-Fenster teilen; logLabWork reicht die Speicherung weiter.
+    const k = hebeFunktion('kulturenAnlegen', SRC);
+    assert.match(k, /const saved = apiPost\('\/api\/cultures'/, 'die Speicherung wird nicht mehr festgehalten');
+    assert.match(k, /return \{ newC, saved \}/);
     const f = hebeFunktion('logLabWork', SRC);
-    assert.match(f, /const saved = apiPost\('\/api\/cultures'/, 'die Speicherung wird nicht mehr festgehalten');
+    assert.match(f, /const \{ newC, saved \} = kulturenAnlegen\(/);
     assert.match(f, /cprShow\([\s\S]*?\bsaved\s*\)/, 'cprShow bekommt die Speicherung nicht mit');
     const p = hebeFunktion('printCultureLabelsInline', SRC);
     assert.match(p, /await _cprSaved/, 'der Druck wartet nicht auf die Speicherung');

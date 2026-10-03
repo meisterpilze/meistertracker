@@ -498,7 +498,10 @@ describe('Jeder Weg trägt Stamm und Tag bis zum Anlegen', () => {
       // Als Erstes, und geleert: bricht eine Prüfung ab, darf kein Datum für die
       // nächste Charge stehen bleiben.
       assert.ok(f.indexOf(lesen) < f.indexOf('return'), name + ' kann abbrechen, bevor das Datum geleert ist');
-      assert.match(f, /created: wann\.toISOString\(\)/, name + ' stempelt created nicht mit dem Ansetztag');
+      // logLabWork reicht wann an kulturenAnlegen weiter, das stempelt.
+      const stempel = name === 'logLabWork' ? hebeFunktion('kulturenAnlegen', SRC) : f;
+      assert.match(stempel, /created: wann\.toISOString\(\)/, name + ' stempelt created nicht mit dem Ansetztag');
+      if (name === 'logLabWork') assert.match(f, /kulturenAnlegen\(\{[\s\S]*?\bwann,/);
       assert.doesNotMatch(f, /created: new Date\(\)/, name + ' stempelt created wieder mit jetzt');
     }
     for (const name of ['createBatch', 'createGrainBatch']) {
@@ -508,7 +511,7 @@ describe('Jeder Weg trägt Stamm und Tag bis zum Anlegen', () => {
 
   it('die Kennung trägt den Ansetztag, bei Beuteln wie bei Kulturen', () => {
     assert.match(hebeFunktion('createGrainBatch', SRC), /genGrainBatchId\(sp, lwStrainText, wann\)/);
-    assert.match(hebeFunktion('logLabWork', SRC), /todayStr\(wann\)/);
+    assert.match(hebeFunktion('kulturenAnlegen', SRC), /todayStr\(wann\)/);
   });
 
   it('der Chargen-Assistent gibt Stamm und Tag an beide Wege weiter', () => {
