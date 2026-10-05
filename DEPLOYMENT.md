@@ -676,7 +676,13 @@ If you downloaded a password-encrypted archive from **Settings → Backup → Do
 1. Log in as admin.
 2. Open **Settings → Backup → Restore** and pick the `.enc` file.
 3. Enter the password used at download time.
-4. The server validates, swaps in the new database atomically (with a `.pre-restore.bak` rollback safety net), and broadcasts the change to all connected clients.
+4. The server validates the file, copies the current database first, swaps in the new one, and broadcasts the change to all connected clients. If the new database does not open, it goes back to the copy.
+
+The copy of the database as it was before the restore is kept, not deleted: `backups/pre-restore-<time>.db`, never rotated, like the copy taken before a reset. It is taken with `VACUUM INTO`, so it is complete even while another program reads the file. It holds whatever the restore discarded, the lab notebook's history entries and timestamps among them, and every experiment's and work package's history names that file in its restore entry. Delete old ones by hand once nobody needs them.
+
+The restore is refused rather than risked in two cases: when that copy cannot be written (disk full), and when another program still has the database open after the server closed it (the DuckDNS fallback task reads it every five minutes, or a database tool). An open database leaves its write-ahead log behind, and SQLite would replay it into the restored file. Try again a minute later.
+
+If the restored file does not open, the server puts the copy back and opens that. If even that fails, it says so and keeps the database closed rather than run on a file nobody chose. The answer says whether the database file is the data from before again or still the restored backup, and names the copy; in the second case copy it over the database file before restarting, or the server comes back on the backup.
 
 This is the preferred path when the server is still reachable.
 

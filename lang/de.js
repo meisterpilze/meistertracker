@@ -158,6 +158,8 @@ window.LANG['de'] = {
   'exp.hist.baseline': 'Ab hier wird mitgeschrieben. Der Stand davor ist festgehalten.',
   'exp.hist.userGone': '(Konto gelöscht)',
   'exp.hist.backup': 'Datenbank aus einer Sicherung zurückgespielt; {n} spätere Einträge dieses Versuchs verworfen',
+  'exp.hist.backupWp': 'Datenbank aus einer Sicherung zurückgespielt; {n} spätere Einträge dieses Arbeitspakets verworfen',
+  'exp.hist.backupKept': '(der Stand davor liegt bei den Sicherungen: {file})',
   'exp.hist.create.experiment': 'Experiment angelegt',
   'exp.hist.create.run': 'Gefäß {code} angelegt',
   'exp.hist.create.photo': 'Foto hinzugefügt',

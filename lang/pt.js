@@ -154,6 +154,8 @@ window.LANG['pt'] = {
   'exp.hist.baseline': 'A partir daqui tudo fica registado. O estado anterior ficou guardado.',
   'exp.hist.userGone': '(conta apagada)',
   'exp.hist.backup': 'Base de dados reposta a partir de uma cópia de segurança; {n} entradas posteriores deste ensaio descartadas',
+  'exp.hist.backupWp': 'Base de dados reposta a partir de uma cópia de segurança; {n} entradas posteriores deste pacote de trabalho descartadas',
+  'exp.hist.backupKept': '(o estado anterior ficou guardado nas cópias de segurança: {file})',
   'exp.hist.create.experiment': 'Ensaio criado',
   'exp.hist.create.run': 'Recipiente {code} criado',
   'exp.hist.create.photo': 'Foto adicionada',

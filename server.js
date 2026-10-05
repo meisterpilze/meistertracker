@@ -1815,6 +1815,139 @@ try {
   log('warn', 'Failed to scan backup dir for orphans', { error: e.message });
 }
 
+// Tauscht die laufende Datenbank gegen eine zurueckgespielte (tmpPath, schon
+// geprueft). Danach ist `database` wieder offen: auf der neuen Datei, oder,
+// wenn etwas schiefging, auf der alten. Geht keine von beiden auf, bleibt es
+// zu, und die Antwort sagt das, statt die zurueckgespielte als den Stand davor
+// auszugeben.
+//
+// Zuerst der Stand davor, mit VACUUM INTO. Das liest durch das WAL, die Kopie
+// ist also ganz, auch wenn ein anderes Programm die Datei gerade offen hat;
+// eine Dateikopie nach dem Schliessen war es dann nicht. Ohne diese Kopie wird
+// nicht getauscht: sie ist das Netz, falls die neue Datei nicht aufgeht, und
+// sie bleibt danach bei den Sicherungen liegen, als pre-restore-<Zeit>.db, nie
+// rotiert. In ihr steht, was das Zurueckspielen verwirft, auch Eintraege des
+// Laborbuch-Verlaufs und ihre Zeitstempel. Bis hierher wurde sie geloescht.
+//
+// Hat nach dem Schliessen noch ein anderes Programm die Datei offen (der
+// DuckDNS-Ersatz liest sie alle fuenf Minuten, oder ein Datenbank-Werkzeug),
+// steht ihr WAL noch da, mit Seiten der alten Datenbank. SQLite spielte es beim
+// naechsten Oeffnen in die neue Datei, und die waere dann wieder die alte, ohne
+// dass etwas auffiele. Dann wird nicht getauscht; eine Minute spaeter geht es.
+//
+// Gibt { ok: true, kept } oder { ok: false, status, error } zurueck.
+function swapRestoredDatabase(tmpPath) {
+  const kept = path.join(BACKUP_DIR, 'pre-restore-' + new Date().toISOString().replace(/[:.]/g, '-') + '.db');
+  const weg = (p) => {
+    try {
+      fs.rmSync(p, { force: true });
+    } catch (e) {
+      log('warn', 'Restore: could not remove a file', { file: path.basename(p), error: e.message });
+    }
+  };
+  try {
+    db.backupDb(database, kept);
+  } catch (e) {
+    log('error', 'Restore refused: the current database could not be copied first', { error: e.message });
+    weg(kept);
+    return { ok: false, status: 500, error: 'Restore refused: the current database could not be secured first' };
+  }
+  try {
+    database.close();
+  } catch (e) {
+    log('warn', 'Failed to close database before restore', { error: e.message });
+  }
+  // Drop live MCP sessions — their captured DB handle is now closed and every
+  // reopen path below rebinds `database` to a new handle.
+  closeAllMcpSessions();
+  // DB_FILE wieder auf, so wie es jetzt ist; false, wenn das nicht geht.
+  const wiederAuf = () => {
+    try {
+      database = db.openDb(DB_FILE);
+      return true;
+    } catch (e) {
+      log('error', 'Failed to reopen the database after a restore went wrong', { error: e.message });
+      return false;
+    }
+  };
+  const nichtWiederAuf = { ok: false, status: 500, error: 'The database could not be reopened; restart the server' };
+  let walBytes = 0;
+  try {
+    walBytes = fs.statSync(DB_FILE + '-wal').size;
+  } catch {
+    walBytes = 0;
+  }
+  let shmWeg = true;
+  if (!walBytes) {
+    // Ohne WAL ist eine uebrige -shm nur ein Rest; sie geht mit der alten Datei.
+    try {
+      fs.rmSync(DB_FILE + '-shm', { force: true });
+    } catch {
+      shmWeg = false;
+    }
+  }
+  if (walBytes || !shmWeg) {
+    log('warn', 'Restore postponed: the database is still open in another process', { walBytes });
+    weg(kept);
+    if (!wiederAuf()) return nichtWiederAuf;
+    return { ok: false, status: 409, error: 'The database is open in another program; try again in a minute' };
+  }
+  try {
+    fs.renameSync(tmpPath, DB_FILE);
+  } catch (renameErr) {
+    // The swap failed (e.g. Windows EBUSY/EPERM). The original DB_FILE is
+    // untouched and its WAL was empty, so reopening it loses nothing.
+    log('error', 'Failed to swap in restored database, reopening original', { error: renameErr.message });
+    weg(kept);
+    if (!wiederAuf()) return nichtWiederAuf;
+    return { ok: false, status: 500, error: 'Restore failed, previous data has been preserved' };
+  }
+  // Die zurueckgespielte Datei ging schon einmal auf, als sie geprueft wurde;
+  // dass sie es jetzt nicht tut, ist selten. openDb laesst sie dann nicht offen.
+  try {
+    database = db.openDb(DB_FILE);
+  } catch (openErr) {
+    // Zurueck zum Stand davor, aus der Kopie: erst neben die Datei, dann in
+    // einem Schritt darueber, so steht DB_FILE nie halb da. Die Kopie bleibt
+    // bei den Sicherungen liegen.
+    log('error', 'Failed to open restored database, rolling back', { error: openErr.message });
+    for (const s of ['-wal', '-shm']) weg(DB_FILE + s);
+    let zurueck = false;
+    try {
+      fs.copyFileSync(kept, DB_FILE + '.rollback');
+      fs.renameSync(DB_FILE + '.rollback', DB_FILE);
+      zurueck = true;
+    } catch (e) {
+      log('error', 'Rollback copy also failed', { error: e.message });
+      weg(DB_FILE + '.rollback');
+    }
+    // Geht keine Datei auf, sagt die Antwort, welche jetzt DB_FILE ist: nach
+    // einem Neustart liefe der Server sonst unbemerkt auf der Sicherung, ohne
+    // dass der Verlauf das Zurueckspielen kennt.
+    if (!wiederAuf()) {
+      return {
+        ok: false,
+        status: 500,
+        error: zurueck
+          ? 'Restore failed and the database could not be reopened. The database file holds the data from before again (also kept as ' +
+            path.basename(kept) +
+            '); restart the server.'
+          : 'Restore failed and the database could not be reopened. The database file is still the restored backup: copy ' +
+            path.basename(kept) +
+            ' over it before restarting the server, or it starts on the backup.'
+      };
+    }
+    // Kam die Kopie nicht zurueck, ist DB_FILE noch die zurueckgespielte, und
+    // die ging nun doch auf: dann hat das Zurueckspielen geklappt.
+    if (!zurueck) return { ok: true, kept: path.basename(kept) };
+    return { ok: false, status: 500, error: 'Restore failed, previous data has been preserved' };
+  }
+  // Was das Lesen der Sicherung vor ihren Migrationen neben ihr liegen lassen
+  // kann (lastHistoryIdOfFile oeffnet sie nur lesend).
+  for (const s of ['-wal', '-shm']) weg(tmpPath + s);
+  return { ok: true, kept: path.basename(kept) };
+}
+
 function readBackupStatus() {
   try {
     if (!fs.existsSync(BACKUP_STATUS_FILE)) return {};
@@ -13092,12 +13225,23 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         fs.writeFileSync(tmpPath, plain, { mode: 0o600 });
         let tmpDb;
         // Was im Laborbuch-Verlauf verloren geht: die Eintraege der laufenden
-        // Datei, die juenger sind als der juengste der Sicherung. Gezaehlt
-        // wird vor dem Tausch; danach steht es als Eintrag in jedem Versuch.
+        // Datei, die juenger sind als der juengste der Sicherung, je Versuch und
+        // je Arbeitspaket. Der juengste der Sicherung wird gelesen, bevor openDb
+        // ihre Migrationen laufen laesst (lastHistoryIdOfFile); gezaehlt wird
+        // vor dem Tausch, danach steht es als Eintrag in jedem Versuch und Paket.
         let verworfen = {};
+        let verworfenPakete = {};
         try {
+          let bisSicherung = null;
+          try {
+            bisSicherung = db.lastHistoryIdOfFile(tmpPath);
+          } catch (e) {
+            log('warn', 'Restore: could not read the backup before migrating it', { error: e.message });
+          }
           tmpDb = db.openDb(tmpPath); // validates schema + runs migrations
-          verworfen = db.historyAfter(database, db.lastHistoryId(tmpDb));
+          if (bisSicherung === null) bisSicherung = db.lastHistoryId(tmpDb);
+          verworfen = db.historyAfter(database, bisSicherung);
+          verworfenPakete = db.historyAfterPackages(database, bisSicherung);
           tmpDb.close();
         } catch (valErr) {
           try {
@@ -13109,68 +13253,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, 'Database validation failed');
           return;
         }
-        // Atomic swap: backup current db, replace, reopen — rollback on failure
-        const bakPath = DB_FILE + '.pre-restore.bak';
-        try {
-          database.close();
-        } catch (e) {
-          log('warn', 'Failed to close database before restore', { error: e.message });
-        }
-        // Drop live MCP sessions — their captured DB handle is now closed and
-        // every reopen path below rebinds `database` to a new handle.
-        closeAllMcpSessions();
-        try {
-          fs.copyFileSync(DB_FILE, bakPath);
-        } catch (e) {
-          log('warn', 'Failed to create pre-restore backup', { error: e.message });
-        } // keep old db as safety net
-        try {
-          fs.renameSync(tmpPath, DB_FILE);
-        } catch (renameErr) {
-          // The swap failed (e.g. Windows EBUSY/EPERM). The original DB_FILE is
-          // untouched, but we already closed `database` above — reopen it so the
-          // server keeps serving instead of throwing on every request against a
-          // closed handle.
-          log('error', 'Failed to swap in restored database, reopening original', { error: renameErr.message });
-          try {
-            database = db.openDb(DB_FILE);
-          } catch (reErr) {
-            log('error', 'Failed to reopen original database after swap failure', { error: reErr.message });
-          }
-          try {
-            fs.unlinkSync(tmpPath);
-          } catch (e) {
-            log('warn', 'Failed to clean restore temp after swap failure', { error: e.message });
-          }
+        const getauscht = swapRestoredDatabase(tmpPath);
+        if (!getauscht.ok) {
+          fs.rmSync(tmpPath, { force: true });
           tmpPath = null;
-          jsonErr(res, 500, 'Restore failed, previous data has been preserved');
+          jsonErr(res, getauscht.status, getauscht.error);
           return;
         }
         tmpPath = null;
         try {
-          database = db.openDb(DB_FILE);
-        } catch (openErr) {
-          // Rollback: restore the old database
-          log('error', 'Failed to open restored database, rolling back', { error: openErr.message });
-          try {
-            fs.copyFileSync(bakPath, DB_FILE);
-          } catch (e) {
-            log('error', 'Rollback copy also failed', { error: e.message });
-          }
-          database = db.openDb(DB_FILE);
-          jsonErr(res, 500, 'Restore failed, previous data has been preserved');
-          return;
-        }
-        try {
-          db.markBackupRestore(database, verworfen, req.authUser);
+          db.markBackupRestore(database, verworfen, req.authUser, {
+            kept: getauscht.kept,
+            packages: verworfenPakete
+          });
         } catch (e) {
           log('error', 'Failed to record the restore in the lab history', { error: e.message });
-        }
-        // Cleanup backup of old db
-        try {
-          fs.unlinkSync(bakPath);
-        } catch (e) {
-          log('warn', 'Failed to clean pre-restore backup', { error: e.message });
         }
         // Trigger auto-sync of CalDAV after restore
         try {

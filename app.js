@@ -16946,8 +16946,12 @@ function pjVerlaufZeile(e, codes, fotoBild) {
       '<div class="pj-hist-wert">' +
       `<del>${esc(pjVerlaufWert(e, e.from))}</del> → <ins>${esc(pjVerlaufWert(e, e.to))}</ins></div>`;
   } else if (e.action === 'backup') {
-    // Eine zurueckgespielte Sicherung: was danach stand, ist nicht mehr da.
-    was = t('exp.hist.backup', { n: (e.record && e.record.discarded) || 0 });
+    // Eine zurueckgespielte Sicherung: was danach stand, ist nicht mehr da, aber
+    // in der Kopie von vorher, wenn der Server sie aufgehoben hat.
+    was = t(e.entity === 'work_package' ? 'exp.hist.backupWp' : 'exp.hist.backup', {
+      n: (e.record && e.record.discarded) || 0
+    });
+    if (e.record && e.record.kept) was += ' ' + t('exp.hist.backupKept', { file: e.record.kept });
   } else {
     was = t('exp.hist.' + e.action + '.' + e.entity, { code: gefaess });
     // Ein Foto sagt, zu welchem Gefaess es gehoert, wenn es eins hat.

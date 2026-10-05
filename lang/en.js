@@ -155,6 +155,8 @@ window.LANG['en'] = {
   'exp.hist.baseline': 'Recording starts here. The state before it is kept.',
   'exp.hist.userGone': '(account deleted)',
   'exp.hist.backup': 'Database restored from a backup; {n} later entries of this experiment discarded',
+  'exp.hist.backupWp': 'Database restored from a backup; {n} later entries of this work package discarded',
+  'exp.hist.backupKept': '(the state before is kept with the backups: {file})',
   'exp.hist.create.experiment': 'Experiment created',
   'exp.hist.create.run': 'Vessel {code} created',
   'exp.hist.create.photo': 'Photo added',

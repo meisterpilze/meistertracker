@@ -2998,6 +2998,24 @@ function backfillBarcodes(db) {
 
 function openDb(dbPath) {
   const db = new Database(dbPath);
+  // Scheitert danach etwas, eine Migration etwa, geht der Griff wieder zu.
+  // Unter Windows hielte er die Datei sonst gesperrt, bis der Prozess endet,
+  // und nichts koennte sie mehr ersetzen oder zurueckholen; so lief beim
+  // Zurueckspielen der Weg zum Stand davor ins Leere (swapRestoredDatabase).
+  try {
+    _dbEinrichten(db, dbPath);
+  } catch (e) {
+    try {
+      db.close();
+    } catch {
+      /* der erste Fehler ist der, der etwas erklaert */
+    }
+    throw e;
+  }
+  return db;
+}
+
+function _dbEinrichten(db, dbPath) {
   // R-16: stash the path on the handle so backupDb() can stat the source DB
   // for its disk-space pre-flight without having to plumb it through every
   // caller. Non-enumerable so it doesn't show up in stringification.
@@ -3082,7 +3100,6 @@ function openDb(dbPath) {
   db.prepare(`INSERT OR IGNORE INTO camera_calibration(id) VALUES(1)`).run();
   // Backfill: assign numeric barcodes to any entities missing them
   backfillBarcodes(db);
-  return db;
 }
 
 // ── Barcode Registry ────────────────────────────────────────
@@ -7781,11 +7798,19 @@ function experimentHistoryPage(db, experimentId, opts = {}) {
 
 // Eine Sicherung wurde zurueckgespielt. Mit ihr kommt ihr Verlauf zurueck, und
 // alles, was danach geschrieben wurde, ist weg, ohne dass der Verlauf davon
-// wuesste. Deshalb steht danach in jedem Versuch ein Eintrag 'backup': wann, wer,
-// und wie viele Eintraege dieses Versuchs dabei verworfen wurden (verworfen: ein
-// Objekt Versuch -> Anzahl, vor dem Tausch aus der alten Datei gezaehlt).
-function markBackupRestore(db, verworfen, wer) {
+// wuesste. Deshalb steht danach in jedem Versuch und in jedem Arbeitspaket ein
+// Eintrag 'backup': wann, wer, und wie viele Eintraege dabei verworfen wurden.
+// verworfen: Versuch -> Anzahl, vor dem Tausch aus der alten Datei gezaehlt
+// (historyAfter). mehr.packages: dasselbe je Arbeitspaket
+// (historyAfterPackages). mehr.kept: der Name der Kopie von vorher, die der
+// Server bei den Sicherungen aufhebt; in ihr stehen die verworfenen Eintraege.
+function markBackupRestore(db, verworfen, wer, mehr = {}) {
   const jetzt = new Date().toISOString();
+  const was = (n) => {
+    const w = { restoredAt: jetzt, discarded: n || 0 };
+    if (mehr.kept) w.kept = mehr.kept;
+    return JSON.stringify(w);
+  };
   return withSavepoint(db, 'mt_rueckspielen', () => {
     const versuche = db.prepare('SELECT id FROM experiments ORDER BY id').all();
     for (const v of versuche) {
@@ -7794,7 +7819,15 @@ function markBackupRestore(db, verworfen, wer) {
         entityId: v.id,
         experimentId: v.id,
         action: 'backup',
-        new: JSON.stringify({ restoredAt: jetzt, discarded: (verworfen && verworfen[v.id]) || 0 })
+        new: was(verworfen && verworfen[v.id])
+      });
+    }
+    for (const w of db.prepare('SELECT id FROM work_packages ORDER BY id').all()) {
+      _verlauf(db, wer, {
+        entity: 'work_package',
+        entityId: w.id,
+        action: 'backup',
+        new: was(mehr.packages && mehr.packages[w.id])
       });
     }
     return versuche.length;
@@ -7810,6 +7843,33 @@ function historyAfter(db, letzteId) {
     if (z.v != null) aus[z.v] = z.n;
   }
   return aus;
+}
+// Dasselbe je Arbeitspaket: deren Eintraege gehoeren zu keinem Versuch.
+function historyAfterPackages(db, letzteId) {
+  const aus = {};
+  for (const z of db
+    .prepare(
+      "SELECT entity_id AS w, COUNT(*) AS n FROM lab_history WHERE id>? AND entity='work_package' GROUP BY entity_id"
+    )
+    .all(letzteId || 0)) {
+    aus[z.w] = z.n;
+  }
+  return aus;
+}
+// Der juengste Eintrag einer Sicherung, so wie sie ist, bevor eine Migration
+// sie anfasst. openDb liefe ueber die Migrationen, und v96 schreibt einen
+// Ausgangsstand je Arbeitspaket dazu; gezaehlt ab dem hoeheren Stand fehlten
+// beim Verwerfen genau so viele Eintraege. Nur lesen; 0 ohne Verlauf.
+function lastHistoryIdOfFile(datei) {
+  const roh = new Database(datei, { readOnly: true });
+  try {
+    const tabelle = roh.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lab_history'").get();
+    if (!tabelle) return 0;
+    const z = roh.prepare('SELECT MAX(id) AS m FROM lab_history').get();
+    return (z && z.m) || 0;
+  } finally {
+    roh.close();
+  }
 }
 function lastHistoryId(db) {
   const z = db.prepare('SELECT MAX(id) AS m FROM lab_history').get();
@@ -12659,6 +12719,8 @@ module.exports = {
   insertLabTimestamp,
   markBackupRestore,
   historyAfter,
+  historyAfterPackages,
+  lastHistoryIdOfFile,
   lastHistoryId,
   listProjectNotes,
   insertProjectNote,
