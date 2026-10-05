@@ -17502,8 +17502,30 @@ function pjLbZeitraum() {
         '</select></label>'
       : '') +
     `<button type="button" class="btn btn-sm fs-xs" data-pj-lbdruck="1">${esc(t('exp.lbPrint'))}</button>` +
+    // Das Archiv: dasselbe als ZIP, mit Fotos, Originalen, Pruefkette und
+    // Zeitstempeln, pruefbar ohne den Tracker. Es kann gross werden; nur fuer
+    // Admins, und der Server baut eins zur Zeit.
+    (currentUser && currentUser.role === 'admin'
+      ? `<button type="button" class="btn btn-sm fs-xs" data-pj-lbarchiv="1" title="${esc(t('exp.lbArchiveHint'))}">` +
+        `${esc(t('exp.lbArchive'))}</button>`
+      : '') +
     '</div></details>'
   );
+}
+// Die Auswahl unter der Liste als Abfrage fuer /api/lab-book und das Archiv,
+// oder null, wenn das Ende vor dem Anfang liegt.
+function pjLbFrage() {
+  const von = (document.getElementById('pj-lb-von') || {}).value || '';
+  const bis = (document.getElementById('pj-lb-bis') || {}).value || '';
+  const paket = (document.getElementById('pj-lb-ap') || {}).value || '';
+  if (von && bis && von > bis) return null;
+  return [
+    von ? 'from=' + encodeURIComponent(von) : '',
+    bis ? 'to=' + encodeURIComponent(bis) : '',
+    paket ? 'workPackage=' + encodeURIComponent(paket) : ''
+  ]
+    .filter(Boolean)
+    .join('&');
 }
 // Der Griff zur Kamera. `capture="environment"` oeffnet am Telefon direkt die
 // Ruecklinse statt der Galerie. Zusammengedrueckt wird im Browser mit derselben
@@ -17902,21 +17924,29 @@ function pjVersuchClick(e) {
     return true;
   }
   if (e.target.closest('[data-pj-lbdruck]')) {
-    const von = (document.getElementById('pj-lb-von') || {}).value || '';
-    const bis = (document.getElementById('pj-lb-bis') || {}).value || '';
-    const paket = (document.getElementById('pj-lb-ap') || {}).value || '';
-    if (von && bis && von > bis) {
+    const frage = pjLbFrage();
+    if (frage === null) {
       toast(t('exp.lbBadRange'), 'err');
       return true;
     }
-    const frage = [
-      von ? 'from=' + encodeURIComponent(von) : '',
-      bis ? 'to=' + encodeURIComponent(bis) : '',
-      paket ? 'workPackage=' + encodeURIComponent(paket) : ''
-    ]
-      .filter(Boolean)
-      .join('&');
     pjLbDrucken('/api/lab-book' + (frage ? '?' + frage : ''), t('exp.lbTitle'));
+    return true;
+  }
+  // Das Archiv laedt der Browser selbst herunter: ein Link mit download, den
+  // der Server mit Content-Disposition beantwortet. Die Seite bleibt, wo sie ist.
+  if (e.target.closest('[data-pj-lbarchiv]')) {
+    const frage = pjLbFrage();
+    if (frage === null) {
+      toast(t('exp.lbBadRange'), 'err');
+      return true;
+    }
+    const a = document.createElement('a');
+    a.href = '/api/lab-book/archive' + (frage ? '?' + frage : '');
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast(t('exp.lbArchiveStarted'));
     return true;
   }
   // Ein Arbeitspaket anlegen: Code und Titel, und der Code ist frei, gross

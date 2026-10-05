@@ -36,7 +36,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Harvest logging** — per-bag weight tracking with flush numbers and yield analytics
 - **Inventory ledger** — substrate stock, delivery logging, low-stock alerts, audit trail per change
 - **Contamination reports** — photo upload + on-screen annotations, optional auto-MOVE to CONTAM zone, follow-up tasks
-- **Lab notebook** — experiments with their vessels and phone photos (with SHA-256; JPEGs keep their full-resolution original, with location data removed: EXIF GPS, XMP and IPTC places), an append-only history of who changed what, protected by a hash chain with a daily RFC 3161 timestamp, removal instead of deletion, work packages for funded projects, and a printable lab book (or PDF) per experiment, period or work package
+- **Lab notebook** — experiments with their vessels and phone photos (with SHA-256; JPEGs keep their full-resolution original, with location data removed: EXIF GPS, XMP and IPTC places), an append-only history of who changed what, protected by a hash chain with a daily RFC 3161 timestamp, removal instead of deletion, work packages for funded projects, a printable lab book (or PDF) per experiment, period or work package, and an archive (ZIP) of it with the photos, the chain and the timestamps that can be checked without the app
 - **Task management** — auto-generated batch tasks plus manual tasks with team assignment
 - **CalDAV calendar sync** — built-in CalDAV server consumed by Apple Calendar, Thunderbird, DAVx5
 - **Dashboard** — KPIs, production pipeline chart, harvest analytics, rack occupancy, contamination rate

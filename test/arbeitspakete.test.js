@@ -453,7 +453,8 @@ describe('Arbeitspakete im Laborbuch', () => {
       const document = { getElementById: (id) => felder[id] || null };
       let pjOffen = null;
       const pjExp = () => null;
-      ${['esc', 'localDateStr', 'pjLbZeitraum', 'pjVersuchClick'].map((n) => hebeFunktion(n)).join('\n')}
+      const currentUser = { role: 'user' };
+      ${['esc', 'localDateStr', 'pjLbZeitraum', 'pjLbFrage', 'pjVersuchClick'].map((n) => hebeFunktion(n)).join('\n')}
       pjVersuchClick({ target: { closest: (s) => (s === '[data-pj-lbdruck]' ? {} : null) } });
       return { html: pjLbZeitraum(), aufrufe };`
     )(t, felder);

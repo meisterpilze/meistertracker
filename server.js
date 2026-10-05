@@ -2173,6 +2173,9 @@ const labStamps = createLabTimestamps({
   log
 });
 labStamps.start();
+// Das Laborbuch als ZIP (GET /api/lab-book/archive); eins zur Zeit.
+const labArchive = require('./scripts/lab-archive.js');
+let labArchiveRunning = false;
 // Was /api/health und /api/health/full ueber die Kette sagen: der Befund aus
 // db.js ohne Token, dazu, wohin gestempelt wird und ob es zuletzt klappte.
 //
@@ -7227,6 +7230,97 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       (r) => jsonOk(res, r),
       (e) => safeErr(res, e)
     );
+    return;
+  }
+
+  // GET /api/lab-book/archive — das Laborbuch als ZIP fuers Archiv, lesbar und
+  // pruefbar ohne diese Anwendung (scripts/lab-archive.js): dieselbe Auswahl
+  // wie /api/lab-book, dazu die Fotos samt Originalen, der ganze Verlauf mit
+  // seiner Pruefkette und die Zeitstempel. Nur Admins, und nur eins zur Zeit:
+  // es liest jedes Foto zweimal und kann Gigabytes gross werden.
+  if (req.method === 'GET' && url === '/api/lab-book/archive') {
+    if (requireAdmin(req, res)) return;
+    const q = new URL(req.url, 'http://localhost').searchParams;
+    const frage = {};
+    for (const name of ['from', 'to']) {
+      const tag = q.get(name);
+      if (tag === null) continue;
+      const vd = validateDay(tag, name);
+      if (vd) {
+        jsonErr(res, 400, vd);
+        return;
+      }
+      frage[name] = tag;
+    }
+    const paket = q.get('workPackage');
+    if (paket !== null) {
+      if (!/^\d{1,15}$/.test(paket)) {
+        jsonErr(res, 400, 'workPackage must be a whole number');
+        return;
+      }
+      frage.workPackageId = Number(paket);
+    }
+    if (frage.from && frage.to && frage.from > frage.to) {
+      jsonErr(res, 400, 'from must not be after to');
+      return;
+    }
+    if (labArchiveRunning) {
+      jsonErr(res, 409, 'an archive is already being written');
+      return;
+    }
+    // Was schiefgehen kann, bevor das erste Byte rausgeht, bekommt eine
+    // richtige Antwort; danach kann der Browser nur noch einen Abbruch sehen.
+    let buch;
+    let name;
+    try {
+      buch = db.labBook(database, frage);
+      name = labArchive.fileName(frage, new Date(), buch.workPackages);
+    } catch (err) {
+      safeErr(res, err);
+      return;
+    }
+    labArchiveRunning = true;
+    res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename="' + name + '"',
+      'Cache-Control': 'no-store'
+    });
+    labArchive
+      .writeLabArchive({
+        out: res,
+        dbApi: db,
+        database,
+        dataDir: path.join(DIR, 'data'),
+        opts: frage,
+        book: buch,
+        createdBy: req.authUser.username
+      })
+      .then(
+        (r) => {
+          res.end();
+          log('info', 'Lab book archive written', {
+            entries: r.entries,
+            bytes: r.bytes,
+            photosMismatched: r.photos.mismatched.length,
+            photosMissing: r.photos.missing.length,
+            actor: req.authUser.username
+          });
+        },
+        (e) => {
+          // Die Koepfe sind schon raus; ein abgebrochener Download ist das
+          // Einzige, was der Browser noch erfahren kann. Hat ihn der Browser
+          // selbst abgebrochen, ist das kein Fehler des Servers.
+          if (e.message === 'zip: output closed') {
+            log('info', 'Lab book archive download aborted', { actor: req.authUser.username });
+          } else {
+            log('error', 'Lab book archive failed', { error: e.message });
+          }
+          res.destroy();
+        }
+      )
+      .finally(() => {
+        labArchiveRunning = false;
+      });
     return;
   }
 

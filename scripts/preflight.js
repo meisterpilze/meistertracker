@@ -71,7 +71,10 @@ const MODULES = [
   'scripts/rotate-backups.js',
   // The lab history's daily timestamp, and the RFC 3161 code it uses.
   'scripts/lab-timestamps.js',
-  'scripts/rfc3161.js'
+  'scripts/rfc3161.js',
+  // The lab book archive, and the ZIP writer under it.
+  'scripts/lab-archive.js',
+  'scripts/zip-store.js'
 ];
 
 /**

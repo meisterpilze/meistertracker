@@ -528,13 +528,19 @@ function knoepfe(felder) {
     const toasts = [];
     const toast = (m, k) => toasts.push([m, k]);
     const pjLbDrucken = (pfad, titel) => aufrufe.push([pfad, titel]);
-    const document = { getElementById: (id) => felder[id] || null };
+    const geladen = [];
+    const document = {
+      getElementById: (id) => felder[id] || null,
+      createElement: () => ({ click() { geladen.push([this.href, this.download]); }, remove() {} }),
+      body: { appendChild() {} }
+    };
     const experiments = [{ id: 5, code: 'V1', runs: [], removedRuns: [], photos: [], removedPhotos: [] }];
     const pjExp = (id) => experiments.find((v) => v.id === id) || null;
     let pjOffen = null;
+    ${hebeFunktion('pjLbFrage')}
     ${hebeFunktion('pjVersuchClick')}
     const klick = (sel, el) => pjVersuchClick({ target: { closest: (s) => (s === sel ? el : null) } });
-    return { klick, aufrufe, toasts };`
+    return { klick, aufrufe, toasts, geladen };`
   )(t, felder);
 }
 
@@ -565,6 +571,21 @@ describe('Die Knoepfe fuers Laborbuch', () => {
     k.klick('[data-pj-lbdruck]', { dataset: {} });
     assert.deepEqual(k.aufrufe, []);
     assert.deepEqual(k.toasts, [['exp.lbBadRange', 'err']]);
+  });
+
+  it('laedt das Archiv mit derselben Auswahl herunter, ohne die Seite zu verlassen', () => {
+    const k = knoepfe({
+      'pj-lb-von': { value: '2026-01-01' },
+      'pj-lb-bis': { value: '2026-09-30' },
+      'pj-lb-ap': { value: '2' }
+    });
+    assert.equal(k.klick('[data-pj-lbarchiv]', { dataset: {} }), true);
+    assert.deepEqual(k.geladen, [['/api/lab-book/archive?from=2026-01-01&to=2026-09-30&workPackage=2', '']]);
+    assert.deepEqual(k.toasts, [['exp.lbArchiveStarted', undefined]]);
+    const falsch = knoepfe({ 'pj-lb-von': { value: '2026-09-30' }, 'pj-lb-bis': { value: '2026-01-01' } });
+    falsch.klick('[data-pj-lbarchiv]', { dataset: {} });
+    assert.deepEqual(falsch.geladen, []);
+    assert.deepEqual(falsch.toasts, [['exp.lbBadRange', 'err']]);
   });
 });
 
@@ -635,17 +656,28 @@ describe('Der Zeitraum unter der Liste', () => {
       const experiments = new Array(${anzahl}).fill({});
       const workPackages = [];
       const heute = new Date();
+      let currentUser = { role: 'user' };
+      const alsAdmin = () => {
+        currentUser = { role: 'admin' };
+      };
       ${['esc', 'localDateStr', 'pjLbZeitraum'].map((n) => hebeFunktion(n)).join('\n')}
       let pjWegOffen = {};
       let pjVerlaufOffen = null;
       ${hebe([[/^let pjLbOffen = false;$/m, 'pjLbOffen']])}
       ${hebeFunktion('pjToggle')}
-      return { pjLbZeitraum, pjToggle, heute };`
+      return { pjLbZeitraum, pjToggle, heute, alsAdmin };`
     )(t);
   }
 
   it('erscheint erst, wenn es einen Versuch gibt', () => {
     assert.equal(liste(0).pjLbZeitraum(), '');
+  });
+
+  it('bietet das Archiv nur einem Admin an', () => {
+    const l = liste(1);
+    assert.equal(l.pjLbZeitraum().includes('data-pj-lbarchiv'), false);
+    l.alsAdmin();
+    assert.ok(l.pjLbZeitraum().includes('data-pj-lbarchiv="1" title="exp.lbArchiveHint">exp.lbArchive</button>'));
   });
 
   it('schlaegt das laufende Jahr bis heute vor', () => {

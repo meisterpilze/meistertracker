@@ -569,6 +569,19 @@ openssl ts -verify -digest <hash> -in stamp-1.tsr -token_in -CAfile /etc/ssl/cer
 
 Take the hash from the chain, as above, not from the stamp's own column. `Verification: OK` then means the authority signed exactly that link at the time the token names.
 
+### The lab book archive
+
+For a report, an audit or the yearly archive, an admin downloads the lab book as one ZIP file: under the experiment list, **Laborbuch drucken** → choose the period (and a work package) → **Archiv (ZIP)**. It holds what the printed lab book shows, as `laborbuch.json`, plus everything needed to check it years later without the app:
+
+- `fotos/` — every photo of the selection as the app shows it, and the camera original where there is one;
+- `pruefkette/` — the whole history and its hash chain, whatever the selection (a chain can only be recomputed from its first link);
+- `zeitstempel/` — every RFC 3161 token and the link each one covers;
+- `pruefung.json` — the chain's state and every photo file checked against its recorded SHA-256 while the archive was written (a mismatch or a missing file is listed there);
+- `SHA256SUMS` — every file's SHA-256, for `sha256sum -c SHA256SUMS`;
+- `LIESMICH.txt` — the same in words, with the commands for each check.
+
+The files are stored uncompressed (photos would not get smaller) and the archive uses ZIP64 once it passes 4 GB, which Windows Explorer, macOS and `unzip` read. The server builds one archive at a time and reads every photo twice, so a year with many originals takes a while. Keep the archive off the lab PC, like the stick.
+
 ### Verify Backup Health
 ```bash
 # Quick check — exits 0 if healthy, 1 if degraded, 2 if critical.
