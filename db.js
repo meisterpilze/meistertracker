@@ -1,6 +1,7 @@
 'use strict';
 const { DatabaseSync: Database } = require('node:sqlite');
 const crypto = require('crypto');
+const { tokenInfo } = require('./scripts/rfc3161.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -467,6 +468,23 @@ CREATE TRIGGER IF NOT EXISTS lab_history_no_delete BEFORE DELETE ON lab_history
 BEGIN
   SELECT RAISE(ABORT, 'lab_history is append-only');
 END;
+
+-- Die Pruefkette ueber den Verlauf und die Zeitstempel auf ihr (v97). Beide
+-- nur anhaengen, wie lab_history; die Trigger setzt openDb jedes Mal neu.
+CREATE TABLE IF NOT EXISTS lab_history_chain (
+  history_id INTEGER PRIMARY KEY,
+  hash       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lab_timestamps (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  history_id INTEGER NOT NULL,
+  hash       TEXT NOT NULL,
+  tsa        TEXT NOT NULL,
+  requested  TEXT NOT NULL,
+  gen_time   TEXT NOT NULL,
+  serial     TEXT NOT NULL,
+  token      BLOB NOT NULL
+);
 
 -- The work packages of a project; an experiment can belong to one
 -- (experiments.work_package_id, migration v93). Hidden, never deleted.
@@ -2858,6 +2876,37 @@ const MIGRATIONS = [
         eintragen.run(jetzt, 'work_package', w.id, 'baseline', JSON.stringify(stand));
       }
     }
+  },
+  {
+    version: 97,
+    description: 'Pruefkette ueber den Verlauf des Laborbuchs, und Zeitstempel auf ihr',
+    fn(db) {
+      // Jeder Eintrag im Verlauf bekommt ein Glied: den SHA-256 ueber das Glied
+      // davor und den Eintrag selbst (_ketteGlied). Wer einen Eintrag spaeter in
+      // der Datei aendert, loescht oder dazwischenschiebt, bricht die Kette an
+      // dieser Stelle; wer danach alle Glieder neu rechnet, passt nicht mehr zu
+      // den Zeitstempeln, die eine Stelle draussen auf fruehere Glieder gegeben
+      // hat (scripts/lab-timestamps.js). Siehe "Pruefkette" bei den Versuchen.
+      //
+      // Hier bekommt jeder Eintrag, den es schon gibt, sein Glied, in der
+      // Reihenfolge seiner Kennung. Was vor dieser Migration im Verlauf
+      // geaendert worden waere, kann die Kette nicht zeigen: sie beginnt hier.
+      db.exec(`CREATE TABLE IF NOT EXISTS lab_history_chain (
+        history_id INTEGER PRIMARY KEY,
+        hash       TEXT NOT NULL
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS lab_timestamps (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        history_id INTEGER NOT NULL,
+        hash       TEXT NOT NULL,
+        tsa        TEXT NOT NULL,
+        requested  TEXT NOT NULL,
+        gen_time   TEXT NOT NULL,
+        serial     TEXT NOT NULL,
+        token      BLOB NOT NULL
+      )`);
+      _ketteUebernehmen(db);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -2977,6 +3026,52 @@ function openDb(dbPath) {
     BEGIN
       SELECT RAISE(ABORT, 'lab_history is append-only');
     END;`);
+  // Dasselbe fuer die Pruefkette und die Zeitstempel.
+  db.exec(`DROP TRIGGER IF EXISTS lab_history_chain_no_update;
+    DROP TRIGGER IF EXISTS lab_history_chain_no_delete;
+    DROP TRIGGER IF EXISTS lab_timestamps_no_update;
+    DROP TRIGGER IF EXISTS lab_timestamps_no_delete;
+    CREATE TRIGGER lab_history_chain_no_update BEFORE UPDATE ON lab_history_chain
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_history_chain is append-only');
+    END;
+    CREATE TRIGGER lab_history_chain_no_delete BEFORE DELETE ON lab_history_chain
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_history_chain is append-only');
+    END;
+    CREATE TRIGGER lab_timestamps_no_update BEFORE UPDATE ON lab_timestamps
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_timestamps is append-only');
+    END;
+    CREATE TRIGGER lab_timestamps_no_delete BEFORE DELETE ON lab_timestamps
+    BEGIN
+      SELECT RAISE(ABORT, 'lab_timestamps is append-only');
+    END;`);
+  // Eintraege, die eine aeltere Version ohne Glied ans Ende geschrieben hat,
+  // bekommen ihre Glieder, mit einem Vermerk im Verlauf (_ketteNachtragen).
+  // BEGIN IMMEDIATE holt die Schreibsperre zuerst und wartet dafuer, wie
+  // busy_timeout es sagt; erst lesen und dann schreiben wollen scheiterte
+  // sofort, wenn ein anderer Prozess gerade schreibt. Scheitert es trotzdem,
+  // startet der Server, und der naechste Eintrag versucht es (_verlauf).
+  try {
+    if (_ketteOffen(db)) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const n = _ketteNachtragen(db);
+        db.exec('COMMIT');
+        if (n) console.log(`[lab-chain] Linked ${n} history entries written without the chain, and recorded that`);
+      } catch (e) {
+        try {
+          db.exec('ROLLBACK');
+        } catch {
+          /* SQLite hat schon zurueckgenommen; der erste Fehler erklaert es */
+        }
+        throw e;
+      }
+    }
+  } catch (e) {
+    console.error('[lab-chain] Could not link history entries written without the chain: ' + e.message);
+  }
   // Ensure singleton rows exist
   db.prepare(`INSERT OR IGNORE INTO inventory(id) VALUES(1)`).run();
   db.prepare(`INSERT OR IGNORE INTO caldav_config(id) VALUES(1)`).run();
@@ -7455,22 +7550,39 @@ function _notizStand(n) {
 function _werId(wer) {
   return wer && wer.user_id != null ? wer.user_id : null;
 }
+// Der Eintrag und sein Glied gehen zusammen oder gar nicht, auch fuer einen
+// Aufrufer ohne eigene Transaktion.
 function _verlauf(db, wer, e) {
-  db.prepare(
-    'INSERT INTO lab_history(at,user_id,username,entity,entity_id,experiment_id,action,field,old_value,new_value) ' +
-      'VALUES(?,?,?,?,?,?,?,?,?,?)'
-  ).run(
-    new Date().toISOString(),
-    _werId(wer),
-    (wer && wer.username) || '',
-    e.entity,
-    e.entityId,
-    e.experimentId ?? null,
-    e.action,
-    e.field ?? null,
-    e.old ?? null,
-    e.new ?? null
-  );
+  // Stehen am Ende Eintraege ohne Glied, etwa von einer aelteren Version,
+  // kommen sie zuerst in die Kette, mit Vermerk (_ketteNachtragen). Sonst
+  // haengte dieser Eintrag sein Glied dahinter, und sie staenden fuer immer
+  // mitten im Verlauf. Das geschieht in der Transaktion des Aufrufers: nimmt
+  // er seine zurueck, versucht es der naechste Eintrag wieder. Ein Fehler
+  // dabei geht an den Aufrufer wie jeder andere: bei voller Platte etwa hat
+  // SQLite dessen Transaktion schon zurueckgenommen, und ein Eintrag, der
+  // danach allein gespeichert wuerde, stuende fuer eine Aenderung, die es
+  // nicht gibt.
+  if (_ketteOffen(db)) _ketteNachtragen(db);
+  withSavepoint(db, 'mt_glied', () => {
+    const info = db
+      .prepare(
+        'INSERT INTO lab_history(at,user_id,username,entity,entity_id,experiment_id,action,field,old_value,new_value) ' +
+          'VALUES(?,?,?,?,?,?,?,?,?,?)'
+      )
+      .run(
+        new Date().toISOString(),
+        _werId(wer),
+        (wer && wer.username) || '',
+        e.entity,
+        e.entityId,
+        e.experimentId ?? null,
+        e.action,
+        e.field ?? null,
+        e.old ?? null,
+        e.new ?? null
+      );
+    _ketteVerknuepfen(db, Number(info.lastInsertRowid));
+  });
 }
 
 // Was ein PATCH wirklich aendert, Feld fuer Feld. null, undefined und '' gelten
@@ -7704,6 +7816,296 @@ function lastHistoryId(db) {
   return (z && z.m) || 0;
 }
 
+// ── Pruefkette ──────────────────────────────────────────────
+//
+// Die Trigger halten jeden auf, der ueber die Anwendung oder SQLite einen
+// Eintrag aendern will. Wer die Datei selbst in der Hand hat, kann sie aber
+// abheben, und dann saehe man nichts. Die Kette macht das sichtbar: jeder
+// Eintrag hat ein Glied in lab_history_chain, den SHA-256 ueber das Glied davor
+// und den Eintrag selbst. Aendert jemand einen Eintrag, passt sein Glied nicht
+// mehr; loescht er einen, fehlt das Glied seines Nachfolgers zu dem, was davor
+// steht; rechnet er alle Glieder danach neu, passen sie nicht mehr zu den
+// Zeitstempeln, die eine Stelle draussen auf fruehere Glieder gegeben hat
+// (lab_timestamps, scripts/lab-timestamps.js). Dorthin geht nur der Hash.
+//
+// Wie ein Glied gerechnet wird, darf sich nie aendern: jedes gespeicherte Glied
+// und jeder Zeitstempel haengt daran. Das erste Glied rechnet ueber
+// KETTE_ANFANG.
+const KETTE_ANFANG = '0'.repeat(64);
+function _ketteGlied(vorher, z) {
+  const eintrag = JSON.stringify([
+    z.id,
+    z.at,
+    z.user_id,
+    z.username,
+    z.entity,
+    z.entity_id,
+    z.experiment_id,
+    z.action,
+    z.field,
+    z.old_value,
+    z.new_value
+  ]);
+  return crypto
+    .createHash('sha256')
+    .update(vorher + '\n' + eintrag, 'utf8')
+    .digest('hex');
+}
+// Das Glied eines Eintrags, den _verlauf eben geschrieben hat: ueber das
+// juengste Glied vor ihm. Nur sein eigenes. Steht dazwischen ein Eintrag ohne
+// Glied, bekommt der hier keins, und die Pruefung nennt ihn (labChainStatus,
+// 'unlinked'). Eintraege ohne Glied am Ende nimmt _verlauf vorher auf, aber
+// nie stillschweigend: mit einem Vermerk, den die Pruefung immer nennt
+// (_ketteNachtragen).
+//
+// Steht unter der neuen Kennung schon ein Glied, hat es jemand in die Datei
+// geschrieben, bevor es den Eintrag gab. Der Eintrag behaelt dann das fremde
+// Glied, und die Pruefung meldet ihn als geaendert. Ein Fehler hier liesse
+// dagegen jedes Speichern im Labor scheitern.
+function _ketteVerknuepfen(db, id) {
+  const vor = db
+    .prepare('SELECT hash FROM lab_history_chain WHERE history_id < ? ORDER BY history_id DESC LIMIT 1')
+    .get(id);
+  const z = db.prepare('SELECT * FROM lab_history WHERE id=?').get(id);
+  db.prepare('INSERT OR IGNORE INTO lab_history_chain(history_id, hash) VALUES(?,?)').run(
+    id,
+    _ketteGlied(vor ? vor.hash : KETTE_ANFANG, z)
+  );
+}
+// Nur fuer Migration 97: jeder Eintrag, den es beim Einfuehren der Kette schon
+// gibt, bekommt sein Glied, in der Reihenfolge der Kennung. Dasselbe, wenn eine
+// Sicherung von vor der Kette zurueckgespielt wird; auch fuer sie beginnt die
+// Kette mit ihrer Migration.
+function _ketteUebernehmen(db) {
+  const eintragen = db.prepare('INSERT INTO lab_history_chain(history_id, hash) VALUES(?,?)');
+  let vorher = KETTE_ANFANG;
+  let n = 0;
+  for (const z of db.prepare('SELECT * FROM lab_history ORDER BY id').all()) {
+    vorher = _ketteGlied(vorher, z);
+    eintragen.run(z.id, vorher);
+    n++;
+  }
+  return n;
+}
+// Eintraege ohne Glied am Ende des Verlaufs, hinter dem juengsten Glied. So
+// etwas hinterlaesst eine aeltere Version, die die Kette nicht kennt: nach
+// einem Ruecksprung auf einen Stand vor Migration 97 schreibt sie weiter in
+// den Verlauf, nur ohne Glieder. Ohne dieses Nachtragen bliebe die Kette ab da
+// fuer immer unterbrochen, obwohl nichts gefaelscht wurde.
+//
+// openDb ruft es beim Start, und _verlauf vor jedem Eintrag, wenn am Ende
+// welche ohne Glied stehen (_ketteOffen). Sie bekommen ihre Glieder in der
+// Reihenfolge der Kennung, und ein eigener Eintrag im Verlauf (entity
+// 'chain', action 'adopt') haelt fest, welche es waren. Den nennt die
+// Pruefung danach immer (labChainStatus, adopted), auf dem Blatt und unter
+// Einstellungen: sichtbar bleibt es also, nur nicht als Bruch. Ein Eintrag ohne Glied mitten
+// im Verlauf bleibt ein Bruch; dorthin kommt keine Version, die nur anhaengt.
+// Wer dagegen etwas ans Ende schiebt, bekommt es zwar verkettet, aber mit
+// diesem Vermerk, und ein Zeitstempel auf einem frueheren Glied bleibt, wie
+// er ist.
+//
+// Gelesen wird in derselben Savepoint, in der geschrieben wird: schreibt ein
+// anderer Prozess dazwischen, scheitert das Nachtragen, statt einen Eintrag zu
+// uebergehen. Nachgetragen wird die Folge ohne Glied direkt hinter dem
+// juengsten Glied mit Eintrag, bis zum ersten Eintrag, der eines hat.
+function _ketteNachtragen(db) {
+  return withSavepoint(db, 'mt_nachtrag', () => {
+    const kopf = _ketteKopf(db);
+    const offen = [];
+    for (const z of db
+      .prepare(
+        'SELECT h.*, c.hash AS glied FROM lab_history h LEFT JOIN lab_history_chain c ON c.history_id = h.id ' +
+          'WHERE h.id > ? ORDER BY h.id'
+      )
+      .all(kopf ? kopf.history_id : 0)) {
+      if (z.glied != null) break;
+      offen.push(z);
+    }
+    if (!offen.length) return 0;
+    const von = offen[0].id;
+    const bis = offen[offen.length - 1].id;
+    const eintragen = db.prepare('INSERT INTO lab_history_chain(history_id, hash) VALUES(?,?)');
+    let vorher = kopf ? kopf.hash : KETTE_ANFANG;
+    for (const z of offen) {
+      vorher = _ketteGlied(vorher, z);
+      eintragen.run(z.id, vorher);
+    }
+    _verlauf(db, null, {
+      entity: 'chain',
+      entityId: von,
+      action: 'adopt',
+      new: JSON.stringify({ from: von, to: bis, count: offen.length })
+    });
+    return offen.length;
+  });
+}
+// Ob am Ende des Verlaufs Eintraege ohne Glied stehen: der juengste Eintrag
+// ist neuer als das juengste Glied mit Eintrag. Zwei Abfragen ueber den
+// Primaerschluessel, guenstig genug fuer jedes Speichern.
+function _ketteOffen(db) {
+  const m = db.prepare('SELECT MAX(id) AS m FROM lab_history').get().m;
+  if (m == null) return false;
+  const kopf = _ketteKopf(db);
+  return !kopf || m > kopf.history_id;
+}
+// Was _ketteNachtragen festgehalten hat, aeltestes zuerst.
+function _ketteNachgetragen(db) {
+  return db
+    .prepare("SELECT id, at, new_value FROM lab_history WHERE entity='chain' AND action='adopt' ORDER BY id")
+    .all()
+    .map((z) => {
+      let v = {};
+      try {
+        v = JSON.parse(z.new_value) || {};
+      } catch {
+        /* unlesbar: dann nur Kennung und Zeit */
+      }
+      return { id: z.id, at: z.at, from: v.from ?? null, to: v.to ?? null, count: v.count ?? null };
+    });
+}
+// Das juengste Glied, zu dem es den Eintrag gibt. Ein Glied ohne Eintrag (der
+// Eintrag geloescht, oder ein Glied, das jemand vorab unter eine kuenftige
+// Kennung geschrieben hat) zeigt die Pruefung als 'missing'. Kopf ist es
+// nicht: sonst gaelte jeder neue Zeitstempel nur noch ihm, und was danach
+// kommt, bliebe ungestempelt.
+function _ketteKopf(db) {
+  return db
+    .prepare(
+      'SELECT c.history_id, c.hash FROM lab_history_chain c JOIN lab_history h ON h.id = c.history_id ' +
+        'ORDER BY c.history_id DESC LIMIT 1'
+    )
+    .get();
+}
+// Das juengste Glied: worauf ein neuer Zeitstempel gegeben wird.
+function labChainHead(db) {
+  const z = _ketteKopf(db);
+  return z ? { historyId: z.history_id, hash: z.hash } : null;
+}
+function _stempel(z) {
+  return {
+    id: z.id,
+    historyId: z.history_id,
+    hash: z.hash,
+    tsa: z.tsa,
+    requested: z.requested,
+    genTime: z.gen_time,
+    serial: z.serial
+  };
+}
+function lastLabTimestamp(db) {
+  const z = db
+    .prepare(
+      'SELECT id, history_id, hash, tsa, requested, gen_time, serial FROM lab_timestamps ORDER BY id DESC LIMIT 1'
+    )
+    .get();
+  return z ? _stempel(z) : null;
+}
+// Alle Zeitstempel, mit dem Token, wie es von der Stelle kam (fuers Archiv).
+function listLabTimestamps(db) {
+  return db
+    .prepare('SELECT * FROM lab_timestamps ORDER BY id')
+    .all()
+    .map((z) => ({ ..._stempel(z), token: z.token }));
+}
+// Ein Zeitstempel gehoert zu einem Glied, das es so gibt. Kam die Antwort erst,
+// nachdem eine Sicherung zurueckgespielt wurde, gibt es das Glied vielleicht
+// nicht mehr, oder mit anderem Inhalt; dann wird nichts gespeichert (null).
+function insertLabTimestamp(db, s) {
+  const glied = db.prepare('SELECT hash FROM lab_history_chain WHERE history_id=?').get(s.historyId);
+  if (!glied || glied.hash !== s.hash) return null;
+  if (_stempelHash(s.token) !== s.hash) return null;
+  return db
+    .prepare('INSERT INTO lab_timestamps(history_id,hash,tsa,requested,gen_time,serial,token) VALUES(?,?,?,?,?,?,?)')
+    .run(s.historyId, s.hash, s.tsa, s.requested, s.genTime, s.serial, s.token).lastInsertRowid;
+}
+// Worueber ein gespeichertes Token ist, laut dem Token selbst, nicht laut der
+// Spalte daneben; null, wenn es sich nicht lesen laesst.
+function _stempelHash(token) {
+  try {
+    return tokenInfo(token).hash;
+  } catch {
+    return null;
+  }
+}
+// Prueft die ganze Kette, Glied fuer Glied, gegen das gespeicherte Glied davor.
+// So bricht sie genau dort, wo etwas nicht mehr passt: bei dem Eintrag, der
+// geaendert wurde, oder bei seinem Nachfolger, wenn auch das Glied des
+// geaenderten neu gerechnet wurde. Was sie nicht zeigen kann, wenn jemand ab
+// einer Stelle alle Glieder neu rechnet, zeigen die Zeitstempel: das Token
+// nennt den Hash, den das Glied damals hatte.
+//
+//   ok          alles passt
+//   entries     Eintraege im Verlauf; chained: davon mit Glied
+//   broken      die ersten zehn Stellen, die nicht passen, nach Kennung:
+//               { id, reason }, brokenTotal: wie viele es insgesamt sind
+//               'changed'   Eintrag oder Glied geaendert
+//               'missing'   ein Glied ohne Eintrag: der Eintrag ist geloescht
+//               'unlinked'  ein Eintrag ohne Glied (je Folge einmal): an der
+//                           Anwendung vorbei geschrieben, oder von einer
+//                           aelteren Version; am Ende des Verlaufs traegt ihn
+//                           der naechste Start oder Eintrag nach, mitten
+//                           darin nicht
+//               'stamp'     ein Zeitstempel, dessen Token nicht zum Glied passt
+//   head        das juengste Glied { historyId, hash }
+//   stamps      Anzahl der Zeitstempel; lastStamp: der juengste, ohne Token
+//   adopted     Eintraege, die ohne Glied ans Ende kamen und die ein Start
+//               nachgetragen hat: { id, at, from, to, count } je Mal, siehe
+//               _ketteNachtragen. Kein Bruch, aber immer zu nennen.
+//
+// Die Unterschrift der Stelle unter einem Token prueft das hier nicht, nur ob
+// das Token ueber das Glied ist. Die Unterschrift prueft openssl ts -verify
+// (DEPLOYMENT.md, und LIESMICH.txt im Archiv).
+function labChainStatus(db) {
+  const glieder = new Map(
+    db
+      .prepare('SELECT history_id, hash FROM lab_history_chain')
+      .all()
+      .map((g) => [g.history_id, g.hash])
+  );
+  const alle = [];
+  let vorher = KETTE_ANFANG;
+  let entries = 0;
+  let chained = 0;
+  let ohneGlied = false;
+  const gesehen = new Set();
+  for (const z of db.prepare('SELECT * FROM lab_history ORDER BY id').iterate()) {
+    entries++;
+    gesehen.add(z.id);
+    const glied = glieder.get(z.id);
+    if (glied === undefined) {
+      if (!ohneGlied) alle.push({ id: z.id, reason: 'unlinked' });
+      ohneGlied = true;
+      continue;
+    }
+    ohneGlied = false;
+    chained++;
+    if (_ketteGlied(vorher, z) !== glied) alle.push({ id: z.id, reason: 'changed' });
+    vorher = glied;
+  }
+  for (const id of glieder.keys()) {
+    if (!gesehen.has(id)) alle.push({ id, reason: 'missing' });
+  }
+  const stempel = db.prepare('SELECT id, history_id, hash, token FROM lab_timestamps ORDER BY id').all();
+  for (const s of stempel) {
+    const glied = glieder.get(s.history_id);
+    if (glied === undefined || _stempelHash(s.token) !== glied || s.hash !== glied) {
+      alle.push({ id: s.history_id, reason: 'stamp' });
+    }
+  }
+  alle.sort((a, b) => a.id - b.id);
+  return {
+    ok: alle.length === 0,
+    entries,
+    chained,
+    broken: alle.slice(0, 10),
+    brokenTotal: alle.length,
+    head: labChainHead(db),
+    stamps: stempel.length,
+    lastStamp: lastLabTimestamp(db),
+    adopted: _ketteNachgetragen(db)
+  };
+}
+
 // Entfernte Gefaesse und Fotos kommen getrennt mit (removedRuns,
 // removedPhotos). runs und photos bleiben, was die Oberflaeche zaehlt und
 // zeigt, und keine Stelle, die sie liest, muss erst herausfiltern.
@@ -7822,6 +8224,11 @@ function labBook(db, opts = {}) {
     // einzelnen Versuchs bleibt bei dem Versuch.
     workPackageHistory:
       opts.experimentId != null ? [] : listWorkPackageHistory(db, opts.workPackageId).filter((x) => imZeitraum(x.at)),
+    // Ob der ganze Verlauf noch so ist, wie er geschrieben wurde, und der
+    // juengste Zeitstempel darauf. Das Blatt druckt das juengste Glied mit:
+    // wer es spaeter mit der Datei vergleicht, sieht, ob seitdem etwas
+    // geaendert wurde.
+    chain: labChainStatus(db),
     experiments: versuche.map((e) => {
       const verlauf = listExperimentHistory(db, e.id);
       // Wer ein Foto hochgeladen oder etwas entfernt hat, steht mit Namen im
@@ -12245,6 +12652,11 @@ module.exports = {
   insertWorkPackage,
   updateWorkPackage,
   listWorkPackageHistory,
+  labChainStatus,
+  labChainHead,
+  lastLabTimestamp,
+  listLabTimestamps,
+  insertLabTimestamp,
   markBackupRestore,
   historyAfter,
   lastHistoryId,

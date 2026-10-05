@@ -14009,6 +14009,7 @@ async function loadServerTab() {
       ':</b> ' +
       (h.code ? esc(h.code.commit) + (h.code.date ? ' · ' + esc(fmtDtTime(h.code.date)) : '') : '–') +
       '</div>' +
+      (h.labChain ? serverKette(h.labChain) : '') +
       '<div><b>' +
       t('server.platformLabel') +
       ':</b> ' +
@@ -14032,9 +14033,65 @@ async function loadServerTab() {
       h.sseClients +
       '</div>' +
       (h.memory ? '<div><b>' + t('server.ramLabel') + ':</b> ' + h.memory.rss + ' MB</div>' : '');
+    const stempeln = document.getElementById('btn-lab-stamp');
+    if (stempeln) stempeln.addEventListener('click', labStempeln);
   } catch (e) {
     el.textContent = t('server.loadError');
   }
+}
+// Die Pruefkette des Laborbuchs in einer Zeile: ob der Verlauf noch so ist, wie
+// er geschrieben wurde, der juengste Zeitstempel, und ob der letzte Versuch,
+// einen zu holen, scheiterte. Darunter der Knopf, der gleich einen holt.
+function serverKette(k) {
+  const teile = [
+    k.ok
+      ? t('server.chainOk', { n: k.entries })
+      : t('server.chainBroken', { id: k.broken && k.broken[0] ? k.broken[0].id : '?' })
+  ];
+  // Nachgetragene Eintraege sind kein Bruch, aber sie bleiben genannt.
+  for (const a of k.adopted || []) {
+    teile.push(t('server.chainAdopted', { n: a.count ?? '?', d: fmtDtTime(a.at), from: a.from ?? '?', to: a.to ?? '?' }));
+  }
+  const s = k.lastStamp;
+  teile.push(s ? t('server.chainStamp', { d: fmtDtTime(s.genTime), id: s.historyId }) : t('server.chainNoStamp'));
+  const an = !!(k.stamping && k.stamping.tsa);
+  if (!an) teile.push(t('server.chainStampOff'));
+  else if (k.stamping.lastError) {
+    teile.push(
+      t('server.chainStampErr', { d: fmtDtTime(k.stamping.lastError.at), err: k.stamping.lastError.message })
+    );
+  }
+  return (
+    '<div><b>' +
+    esc(t('server.chainLabel')) +
+    ':</b> ' +
+    esc(teile.join(' · ')) +
+    '</div>' +
+    (an
+      ? '<div><button type="button" class="btn btn-sm fs-xs" id="btn-lab-stamp">' +
+        esc(t('server.chainStampBtn')) +
+        '</button> <span id="lab-stamp-status" class="fs-xs"></span></div>'
+      : '')
+  );
+}
+// Was die Antwort auf "Zeitstempel jetzt holen" heisst.
+function labStempelText(r) {
+  if (!r || r.error) return t('server.chainStampErr', { d: fmtDtTime(new Date().toISOString()), err: (r && r.error) || '' });
+  if (r.status === 'stamped') return t('server.chainStampDone', { d: fmtDtTime(r.stamp.genTime) });
+  if (r.status === 'current') return t('server.chainStampCurrent');
+  if (r.status === 'empty') return t('server.chainStampEmpty');
+  if (r.status === 'off') return t('server.chainStampOff');
+  return t('server.chainStampWait');
+}
+async function labStempeln() {
+  const btn = document.getElementById('btn-lab-stamp');
+  const status = document.getElementById('lab-stamp-status');
+  if (btn) btn.disabled = true;
+  const r = await apiPost('/api/lab-history/timestamp', {});
+  if (status) status.textContent = labStempelText(r);
+  if (btn) btn.disabled = false;
+  // Ein neuer Stempel steht dann auch in der Zeile darueber.
+  if (r && r.status === 'stamped') setTimeout(loadServerTab, 1500);
 }
 function restartServer() {
   confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
@@ -17180,7 +17237,9 @@ const PJ_LB_STIL =
   'figcaption{font-size:8pt;margin-top:2pt}.hash{font-family:monospace;font-size:7pt;overflow-wrap:anywhere}' +
   '.hist{list-style:none;margin:0;padding:0;font-size:9pt}.pj-hist{padding:2pt 0;border-bottom:0.5pt solid #ddd}' +
   '.pj-hist-kopf{color:#444;font-size:8pt}.pj-hist-wert{white-space:pre-wrap}' +
-  'del{color:#555}ins{text-decoration:none;font-weight:bold}';
+  'del{color:#555}ins{text-decoration:none;font-weight:bold}' +
+  '.kette{margin-top:14pt;border-top:1pt solid #000;padding-top:4pt;font-size:8.5pt;break-inside:avoid}' +
+  '.kette p{margin:2pt 0}';
 // Gedruckt wird, wenn alle Bilder da sind; sonst kaemen leere Rahmen aufs Papier.
 const PJ_LB_DRUCK =
   'function drucken(){var b=[].slice.call(document.images);' +
@@ -17324,6 +17383,30 @@ function pjLbArbeitspakete(buch, pakete) {
   });
   return `<section><h2>${esc(t('exp.lbWpHist'))}</h2>${teile.join('')}</section>`;
 }
+// Die Pruefkette unter dem Blatt: ob der Verlauf noch so ist, wie er geschrieben
+// wurde, das juengste Glied und der juengste Zeitstempel darauf. Wer das Blatt
+// spaeter neben die Datei legt, sieht an dem Glied, ob seitdem etwas geaendert
+// wurde; der Zeitstempel belegt, dass es das Glied an dem Tag schon gab.
+function pjLbKette(buch) {
+  const k = buch.chain;
+  if (!k) return '';
+  const hash = (h) => `<div class="hash">SHA-256 ${esc(h)}</div>`;
+  const zeilen = [
+    esc(k.ok ? t('exp.lbChainOk', { n: k.entries }) : t('exp.lbChainBroken', { id: k.broken[0] ? k.broken[0].id : '?' }))
+  ];
+  for (const a of k.adopted || []) {
+    zeilen.push(esc(t('exp.lbChainAdopted', { d: fmtDtTime(a.at), n: a.count ?? '?', from: a.from ?? '?', to: a.to ?? '?' })));
+  }
+  if (k.head) zeilen.push(esc(t('exp.lbChainHead', { id: k.head.historyId })) + hash(k.head.hash));
+  const s = k.lastStamp;
+  if (s) {
+    zeilen.push(esc(t('exp.lbChainStamp', { d: fmtDtTime(s.genTime), id: s.historyId, tsa: s.tsa })) + hash(s.hash));
+    if (k.head && k.head.historyId > s.historyId) zeilen.push(esc(t('exp.lbChainAfter', { id: s.historyId })));
+  } else {
+    zeilen.push(esc(t('exp.lbChainNoStamp')));
+  }
+  return `<div class="kette"><h3>${esc(t('exp.lbChain'))}</h3>${zeilen.map((z) => '<p>' + z + '</p>').join('')}</div>`;
+}
 // Das ganze Blatt. buch ist die Antwort von /api/lab-book, wer der Name dessen,
 // der druckt.
 function pjLbHtml(buch, titel, wer) {
@@ -17357,6 +17440,7 @@ function pjLbHtml(buch, titel, wer) {
     (zeitraum ? `<div class="kopf">${esc(t('exp.lbNote'))}</div>` : '') +
     pjLbArbeitspakete(buch, pakete) +
     inhalt +
+    pjLbKette(buch) +
     '<scr' +
     'ipt>' +
     PJ_LB_DRUCK +

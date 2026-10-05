@@ -373,8 +373,10 @@ describe('Verlauf: Ausgangsstand aus Migration 89', () => {
         "INSERT INTO project_notes(tab,body,created) VALUES('build','alte Notiz','2026-01-04T10:00:00.000Z')"
       ).run();
       d.exec('DROP TABLE lab_history');
-      // Eine Datenbank von vor dem Verlauf hat auch v92 noch nicht gesehen.
-      d.prepare('DELETE FROM schema_version WHERE version IN (89, 92)').run();
+      // Eine Datenbank von vor dem Verlauf hat auch v92 noch nicht gesehen, und
+      // die Pruefkette (v97) erst recht nicht.
+      d.exec('DROP TABLE lab_history_chain; DROP TABLE lab_timestamps');
+      d.prepare('DELETE FROM schema_version WHERE version IN (89, 92, 97)').run();
       d.close();
 
       d2 = db.openDb(p);

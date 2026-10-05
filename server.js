@@ -2161,6 +2161,34 @@ const usbBackup = createUsbBackup({
 });
 usbBackup.start();
 
+// Der Zeitstempel einer Stelle draussen auf die Pruefkette des Laborbuchs,
+// einmal am Tag, wenn seit dem letzten etwas dazukam (scripts/lab-timestamps.js,
+// "Pruefkette" in db.js). Dorthin geht nur ein Hash. LAB_TSA_URL waehlt die
+// Stelle, "off" schaltet es ab; eine Worktree-Instanz stempelt nicht.
+const { createLabTimestamps, tsaFromEnv } = require('./scripts/lab-timestamps.js');
+const labStamps = createLabTimestamps({
+  getDb: () => database,
+  dbApi: db,
+  url: tsaFromEnv(process.env, WORKTREE_MODE),
+  log
+});
+labStamps.start();
+// Was /api/health und /api/health/full ueber die Kette sagen: der Befund aus
+// db.js ohne Token, dazu, wohin gestempelt wird und ob es zuletzt klappte.
+//
+// Die Pruefung rechnet die ganze Kette nach, einige Millisekunden je tausend
+// Eintraege. Der Server-Reiter und der Neustart fragen oft; eine Minute lang
+// gilt deshalb der letzte Befund, solange die Datenbank dieselbe ist. Das
+// Laborbuch prueft jedes Mal selbst.
+let labChainCache = null;
+function labChainHealth() {
+  const jetzt = Date.now();
+  if (!labChainCache || labChainCache.database !== database || jetzt - labChainCache.at > 60 * 1000) {
+    labChainCache = { database, at: jetzt, befund: db.labChainStatus(database) };
+  }
+  return { ...labChainCache.befund, stamping: labStamps.health() };
+}
+
 // What the stick routes answer when something is in the way. The code is what
 // the interface translates; anything unexpected is logged and stays generic.
 const USB_BACKUP_BAD_REQUEST = new Set(['NOT_A_DRIVE', 'BAD_KEY']);
@@ -7190,6 +7218,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // POST /api/lab-history/timestamp — ein Admin holt den Zeitstempel gleich,
+  // statt auf den naechsten Tag zu warten. Nichts Neues seit dem letzten: es
+  // bleibt bei dem.
+  if (req.method === 'POST' && req.url === '/api/lab-history/timestamp') {
+    if (requireAdmin(req, res)) return;
+    labStamps.run({ force: true }).then(
+      (r) => jsonOk(res, r),
+      (e) => safeErr(res, e)
+    );
+    return;
+  }
+
   // GET /api/health
   if (req.method === 'GET' && req.url === '/api/health') {
     // S-22: reachable without a session now, so it gets the same per-IP budget
@@ -7271,6 +7311,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       // backup shows there as well.
       health.backup.photos = backupStatus.photos || null;
       health.backup.usb = usbBackup.health();
+      // Ob der Verlauf des Laborbuchs noch so ist, wie er geschrieben wurde, und
+      // der juengste Zeitstempel darauf. Eine gebrochene Kette heisst: jemand
+      // hat die Datei an der Anwendung vorbei geaendert.
+      try {
+        health.labChain = labChainHealth();
+      } catch (e) {
+        // Eine Datenbank, die gerade nicht antwortet, soll den Rest der
+        // Antwort nicht mitnehmen; sie ist dann ohnehin degraded.
+        health.labChain = { ok: false, error: e.message };
+      }
+      if (!health.labChain.ok && health.status === 'ok') health.status = 'degraded';
       if (health.backup.status !== 'ok' && health.status === 'ok') {
         health.status = 'degraded';
       }
@@ -7302,6 +7353,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       platform: process.platform,
       timestamp: new Date().toISOString()
     };
+    out.labChain = (() => {
+      try {
+        return labChainHealth();
+      } catch (e) {
+        return { error: e.message };
+      }
+    })();
 
     // disk: backup dir + photos dir free/used MB
     out.disk = (() => {

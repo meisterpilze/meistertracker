@@ -68,7 +68,10 @@ const MODULES = [
   'scripts/jpeg-location.js',
   'scripts/deploy-chain.js',
   'scripts/deploy-runner.js',
-  'scripts/rotate-backups.js'
+  'scripts/rotate-backups.js',
+  // The lab history's daily timestamp, and the RFC 3161 code it uses.
+  'scripts/lab-timestamps.js',
+  'scripts/rfc3161.js'
 ];
 
 /**

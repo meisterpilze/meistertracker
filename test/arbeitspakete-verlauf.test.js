@@ -264,6 +264,7 @@ function blatt() {
       'pjLbFoto',
       'pjLbVersuch',
       'pjLbArbeitspakete',
+      'pjLbKette',
       'pjLbHtml'
     ]
       .map((n) => hebeFunktion(n))

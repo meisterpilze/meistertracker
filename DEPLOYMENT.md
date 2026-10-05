@@ -117,6 +117,12 @@ HTTP_REDIRECT_PORT=80
 # getting full"), and /api/health/full shows photosReserveMB and photosLow.
 # PHOTO_DIR_MAX_GB=100
 # PHOTO_MIN_FREE_GB=2
+
+# Lab notebook: the daily RFC 3161 timestamp over the history's hash chain
+# (Section 9). Only a SHA-256 value leaves the server. Default: a public
+# timestamp authority over HTTPS; "off" turns stamping off. A worktree
+# instance does not stamp unless this is set.
+# LAB_TSA_URL=https://timestamp.sectigo.com
 ```
 
 ## 4. TLS Certificate Setup
@@ -191,7 +197,10 @@ The script waits for the restarted process and checks it stayed up. If it did
 not, it now rolls back to the `stable` tag — the last commit that was known to
 start — reinstalls dependencies and brings that version up again, rather than
 leaving the server down until somebody reads the log. A rollback across a
-migration is safe: an older build ignores columns it does not know about.
+migration is safe: an older build ignores columns it does not know about. One
+trace stays: history entries an older build writes have no link in the lab
+history's hash chain, and the next newer start links them and records that
+(Section 9).
 
 The `stable` tag is written by this script after every update whose restarted
 server stayed up, so it only exists once one update has succeeded.
@@ -536,6 +545,29 @@ Photos (contamination reports and lab-book experiments) are files under `data/ph
 - **The USB stick** (Section 10) copies each photo exactly once and is the copy that survives a dead disk.
 
 `START.bat` and `update_server.sh` no longer archive `data/photos` on every run. Archives from earlier versions (`backups/photos_*.zip`, `backups/photos_*.tar.gz`) are left where they are, and they are not covered by the stick or the mirror: both copy what is in `data/photos` now. An archive can hold the only copy of a photo that is gone from there — the photos of a report deleted before the upgrade, or lab-book photos removed by the old "Start clean" while their records stayed — and an older database backup (`pre-reset-*.db` is never rotated) may still refer to it. So do not simply delete them. To free the space, copy them onto another medium (the stick, outside `MEISTERTRACKER-BACKUP/`, or an external disk) first, and keep at least the newest one.
+
+### The lab history's hash chain
+
+The lab notebook's history (who changed what, and when) is append-only in the database, and triggers stop anyone who tries to change or delete an entry through the app or SQLite. Someone holding the file can remove those triggers, so every entry also gets a link in a hash chain, written in the same transaction as the entry: the SHA-256 of the link before it and the entry itself (`db.js`, "Pruefkette"). An entry changed or deleted outside the app no longer matches its link, and one slipped in between others has no link and never gets one. Either way the place shows up:
+
+- **Settings → Server** shows the chain as intact or names the first entry that no longer matches, with the newest timestamp.
+- **`/api/health → labChain`** (admin) and **`/api/health/full → labChain`** give the same, with `broken` listing up to ten places; a broken chain turns the status to `degraded`.
+- **The printed lab book** ends with the chain's state and its newest link, so a printout can later be held against the file.
+
+**Entries written without a link.** An older version of the app does not know the chain. If one runs against a database that has it, after a rollback or a revert across migration 97, its history entries go in at the end without links. The next start of a version that knows the chain, or its next history entry, links them in id order and writes an entry of its own that records which ones it took in (`entity` `chain`, `action` `adopt`). That is not reported as a break, but Settings → Server, `labChain.adopted` and every printed lab book name it from then on. Unlinked entries anywhere but at the end stay a break.
+
+**The timestamp.** Someone who changes an entry and recomputes every link after it leaves a chain that matches itself. Once a day, if anything was added since, the server therefore asks a timestamp authority (RFC 3161) to sign the newest link: the request carries that SHA-256 value and a random number, nothing else. The signed token is kept in the database (`lab_timestamps`), and a rewritten chain no longer matches it. The server tries hourly until one succeeds; a failure shows under Settings → Server and in `labChain.stamping.lastError`. An admin can ask for one at once there. `LAB_TSA_URL` chooses the authority (Section 3); the default needs outbound HTTPS (port 443). The check reads the hash inside every stored token, not the column next to it. It does not check the authority's signature on the token; that is what `openssl ts -verify` below does, and the check to rely on when it matters, since someone who can write the file could also store a token they made up. What it cannot see is a stamp deleted together with its rows, since the stamps live in the same file; printed lab books, archives and the stick's snapshots keep earlier links and stamps outside it.
+
+The chain starts when an installation first runs this version. What changed in the history before that cannot be shown by it.
+
+To check a token without the app, for example years later, write it out with the sqlite3 shell and verify it with OpenSSL against the authority's root certificate (part of the usual CA bundles):
+
+```bash
+sqlite3 meistertracker.db "SELECT writefile('stamp-' || t.id || '.tsr', t.token), c.hash FROM lab_timestamps t JOIN lab_history_chain c ON c.history_id = t.history_id"
+openssl ts -verify -digest <hash> -in stamp-1.tsr -token_in -CAfile /etc/ssl/cert.pem
+```
+
+Take the hash from the chain, as above, not from the stamp's own column. `Verification: OK` then means the authority signed exactly that link at the time the token names.
 
 ### Verify Backup Health
 ```bash
