@@ -158,6 +158,7 @@ window.LANG['en'] = {
   'exp.hist.create.experiment': 'Experiment created',
   'exp.hist.create.run': 'Vessel {code} created',
   'exp.hist.create.photo': 'Photo added',
+  'exp.hist.create.work_package': 'Work package created',
   'exp.hist.remove.run': 'Vessel {code} removed',
   'exp.hist.remove.photo': 'Photo removed',
   'exp.hist.restore.run': 'Vessel {code} restored',
@@ -217,6 +218,11 @@ window.LANG['en'] = {
   'exp.wpCodeTaken': 'A work package already has the code {code}.',
   'exp.lbWpAll': 'all',
   'exp.lbWpFilter': 'Work package {name}',
+  'exp.lbWpHist': 'Work packages: history',
+  'exp.lbWpHidden': 'hidden',
+  'exp.hist.f.work_package.code': 'Code',
+  'exp.hist.f.work_package.title': 'Title',
+  'exp.hist.f.work_package.archived': 'Hidden',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Pickups',
   'pickups.desc':

@@ -394,6 +394,7 @@ describe('Arbeitspakete im Laborbuch', () => {
         'pjLbGefaess',
         'pjLbFoto',
         'pjLbVersuch',
+        'pjLbArbeitspakete',
         'pjLbHtml'
       ]
         .map((n) => hebeFunktion(n))

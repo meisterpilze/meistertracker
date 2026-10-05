@@ -161,6 +161,7 @@ window.LANG['de'] = {
   'exp.hist.create.experiment': 'Experiment angelegt',
   'exp.hist.create.run': 'Gefäß {code} angelegt',
   'exp.hist.create.photo': 'Foto hinzugefügt',
+  'exp.hist.create.work_package': 'Arbeitspaket angelegt',
   'exp.hist.remove.run': 'Gefäß {code} entfernt',
   'exp.hist.remove.photo': 'Foto entfernt',
   'exp.hist.restore.run': 'Gefäß {code} zurückgeholt',
@@ -220,6 +221,11 @@ window.LANG['de'] = {
   'exp.wpCodeTaken': 'Den Code {code} hat schon ein Arbeitspaket.',
   'exp.lbWpAll': 'alle',
   'exp.lbWpFilter': 'Arbeitspaket {name}',
+  'exp.lbWpHist': 'Arbeitspakete: Verlauf',
+  'exp.lbWpHidden': 'ausgeblendet',
+  'exp.hist.f.work_package.code': 'Code',
+  'exp.hist.f.work_package.title': 'Titel',
+  'exp.hist.f.work_package.archived': 'Ausgeblendet',
   // Pickups — reported back by the harvest feed receiver
   'pickups.title': 'Abholungen',
   'pickups.desc':

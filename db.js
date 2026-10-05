@@ -2837,6 +2837,27 @@ const MIGRATIONS = [
         if (!spalten.includes(name)) db.exec('ALTER TABLE experiment_photos ADD COLUMN ' + name + ' ' + typ);
       }
     }
+  },
+  {
+    version: 96,
+    description: 'Arbeitspakete im Verlauf des Laborbuchs',
+    fn(db) {
+      // Seit hier steht im Verlauf, wer ein Arbeitspaket angelegt, umbenannt
+      // oder ausgeblendet hat (siehe insertWorkPackage). Fuer die Pakete, die
+      // es schon gibt, ein Ausgangsstand wie in v89: was da war, als der
+      // Verlauf der Pakete begann. Wer sie angelegt hat, weiss niemand mehr;
+      // wann, sagt die Spalte created, und die steht deshalb mit drin. Die
+      // Felder stehen einzeln da und nicht als _arbeitspaketStand, damit v96
+      // immer dasselbe schreibt.
+      const jetzt = new Date().toISOString();
+      const eintragen = db.prepare(
+        'INSERT INTO lab_history(at,entity,entity_id,experiment_id,action,new_value) VALUES(?,?,?,NULL,?,?)'
+      );
+      for (const w of db.prepare('SELECT * FROM work_packages ORDER BY id').all()) {
+        const stand = { code: w.code, title: w.title, archived: w.archived === 1, created: w.created };
+        eintragen.run(jetzt, 'work_package', w.id, 'baseline', JSON.stringify(stand));
+      }
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -7322,10 +7343,12 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 //
 // Eine Zeile in lab_history:
 //   at, user_id, username  wann und wer; der Name als Abschrift, siehe v89
-//   entity, entity_id      'experiment' | 'run' | 'photo' und seine id
+//   entity, entity_id      'experiment' | 'run' | 'photo' | 'work_package'
+//                          und seine id
 //   experiment_id          der Versuch, zu dem das gehoert, damit ein Gefaess
 //                          auch nach dem Entfernen im Verlauf seines Versuchs
-//                          steht
+//                          steht; NULL bei einem Arbeitspaket, das zu keinem
+//                          Versuch gehoert, sondern Versuche zu ihm
 //   action                 'baseline' der Stand, als der Verlauf begann (v89)
 //                          'create'   angelegt, new_value ist der Datensatz
 //                          'update'   ein Feld, old_value -> new_value
@@ -7395,6 +7418,11 @@ function _fotoOriginal(f) {
     width: f.original_width,
     height: f.original_height
   };
+}
+// Ein Arbeitspaket, wie es im Verlauf steht. Ausgeblendet ist ein Feld wie
+// jedes andere: wer ein Paket ausblendet oder wieder anbietet, steht da.
+function _arbeitspaketStand(w) {
+  return { code: w.code, title: w.title, archived: w.archived === 1 };
 }
 // Nur noch fuer Migration 89, und so, wie sie ausgeliefert wurde: eine
 // Datenbank soll danach gleich aussehen, ob v89 mit #633 lief oder erst jetzt.
@@ -7478,7 +7506,8 @@ function _mitVerlauf(db, fn) {
 const LABOR = {
   experiment: { tabelle: 'experiments', stand: _versuchStand, versuch: (z) => z.id },
   run: { tabelle: 'experiment_runs', stand: _ansatzStand, versuch: (z) => z.experiment_id },
-  photo: { tabelle: 'experiment_photos', stand: _fotoDaten, versuch: (z) => z.experiment_id }
+  photo: { tabelle: 'experiment_photos', stand: _fotoDaten, versuch: (z) => z.experiment_id },
+  work_package: { tabelle: 'work_packages', stand: _arbeitspaketStand, versuch: () => null }
 };
 // Der Eintrag zu einer frisch angelegten Zeile. Gibt die Zeile zurueck.
 function _angelegt(db, wer, art, id) {
@@ -7788,6 +7817,11 @@ function labBook(db, opts = {}) {
     to: opts.to || null,
     workPackageId: opts.workPackageId ?? null,
     workPackages: listWorkPackages(db),
+    // Wer die Pakete angelegt, umbenannt oder ausgeblendet hat, aus demselben
+    // Zeitraum. Nur im Laborbuch eines Zeitraums oder Pakets; das eines
+    // einzelnen Versuchs bleibt bei dem Versuch.
+    workPackageHistory:
+      opts.experimentId != null ? [] : listWorkPackageHistory(db, opts.workPackageId).filter((x) => imZeitraum(x.at)),
     experiments: versuche.map((e) => {
       const verlauf = listExperimentHistory(db, e.id);
       // Wer ein Foto hochgeladen oder etwas entfernt hat, steht mit Namen im
@@ -7837,8 +7871,10 @@ function labBook(db, opts = {}) {
 //
 // Ausgeblendet, nicht geloescht: ein ausgeblendetes Paket wird keinem Versuch
 // mehr angeboten, bleibt aber, wo es schon steht, und ein Eintrag im Verlauf
-// findet es auch Jahre spaeter noch. Umbenennen steht nicht im Verlauf der
-// Versuche; der zeigt, welches Paket es war, nicht, wie es damals hiess.
+// findet es auch Jahre spaeter noch. Der Verlauf eines Versuchs zeigt, welches
+// Paket es war; wer ein Paket angelegt, umbenannt oder ausgeblendet hat, steht
+// im Verlauf des Pakets selbst (entity 'work_package', ohne Versuch), und das
+// Laborbuch druckt ihn mit.
 function listWorkPackages(db) {
   return db
     .prepare('SELECT * FROM work_packages ORDER BY sort, id')
@@ -7860,21 +7896,25 @@ function _arbeitspaketCodeFrei(db, code, ausser) {
     .get(code, ausser == null ? null : ausser);
   if (belegt) throw new Error('lab: work package code already in use: ' + code);
 }
-function insertWorkPackage(db, w) {
+// `wer` ist wie bei den Versuchen die Sitzung aus req.authUser; sie landet im
+// Verlauf des Pakets.
+function insertWorkPackage(db, w, wer) {
   const code = String((w && w.code) || '').trim();
   const title = String((w && w.title) || '').trim();
   if (!code || !title) throw new Error('lab: code and title are required');
   _arbeitspaketCodeFrei(db, code);
-  // Ans Ende, in der Reihenfolge, in der sie angelegt werden: so steht es im
-  // Plan, und so werden sie auch eingetragen.
-  const max = db.prepare('SELECT MAX(sort) AS m FROM work_packages').get();
-  const info = db
-    .prepare('INSERT INTO work_packages(code,title,archived,sort,created) VALUES(?,?,0,?,?)')
-    .run(code, title, (max && max.m != null ? max.m : 0) + 1, new Date().toISOString());
-  incrementDataVersion(db);
-  return info.lastInsertRowid;
+  return _mitVerlauf(db, () => {
+    // Ans Ende, in der Reihenfolge, in der sie angelegt werden: so steht es im
+    // Plan, und so werden sie auch eingetragen.
+    const max = db.prepare('SELECT MAX(sort) AS m FROM work_packages').get();
+    const info = db
+      .prepare('INSERT INTO work_packages(code,title,archived,sort,created) VALUES(?,?,0,?,?)')
+      .run(code, title, (max && max.m != null ? max.m : 0) + 1, new Date().toISOString());
+    _angelegt(db, wer, 'work_package', info.lastInsertRowid);
+    return info.lastInsertRowid;
+  });
 }
-function updateWorkPackage(db, id, f) {
+function updateWorkPackage(db, id, f, wer) {
   const zeile = db.prepare('SELECT * FROM work_packages WHERE id=?').get(id);
   if (!zeile) throw new Error('lab: unknown work package: ' + id);
   const neu = {};
@@ -7884,18 +7924,37 @@ function updateWorkPackage(db, id, f) {
     if (f[feld] == null) continue;
     const wert = String(f[feld]).trim();
     if (!wert) throw new Error('lab: ' + feld + ' must not be empty');
-    if (wert !== zeile[feld]) neu[feld] = wert;
+    neu[feld] = wert;
   }
-  if (neu.code !== undefined) _arbeitspaketCodeFrei(db, neu.code, id);
-  if (f.archived != null && (f.archived ? 1 : 0) !== zeile.archived) neu.archived = f.archived ? 1 : 0;
-  const felder = Object.keys(neu);
-  if (!felder.length) return false;
-  db.prepare('UPDATE work_packages SET ' + felder.map((k) => k + '=?').join(',') + ' WHERE id=?').run(
-    ...felder.map((k) => neu[k]),
-    id
-  );
-  incrementDataVersion(db);
+  if (f.archived != null) neu.archived = !!f.archived;
+  // Nur, was sich wirklich aendert, kommt in die Zeile und in den Verlauf.
+  const aenderungen = _aenderungen(_arbeitspaketStand(zeile), neu, ['code', 'title', 'archived']);
+  if (!aenderungen.length) return false;
+  const neuerCode = aenderungen.find((a) => a.feld === 'code');
+  if (neuerCode) _arbeitspaketCodeFrei(db, neuerCode.neu, id);
+  _mitVerlauf(db, () => {
+    const info = db
+      .prepare('UPDATE work_packages SET ' + aenderungen.map((a) => a.feld + '=?').join(',') + ' WHERE id=?')
+      .run(...aenderungen.map((a) => (a.feld === 'archived' ? (a.neu ? 1 : 0) : a.neu)), id);
+    _nurMitZeile(info, 'work_package');
+    _geaendert(db, wer, 'work_package', zeile, aenderungen);
+  });
   return true;
+}
+// Der Verlauf der Arbeitspakete, oder eines davon, in der Reihenfolge des
+// Geschehens. Sie gehoeren zu keinem Versuch und stehen deshalb nicht in
+// listExperimentHistory.
+function listWorkPackageHistory(db, workPackageId) {
+  const nurEins = workPackageId != null;
+  return db
+    .prepare(
+      'SELECT h.*, u.username AS konto FROM lab_history h LEFT JOIN users u ON u.id = h.user_id ' +
+        "WHERE h.entity='work_package'" +
+        (nurEins ? ' AND h.entity_id=?' : '') +
+        ' ORDER BY h.id'
+    )
+    .all(...(nurEins ? [workPackageId] : []))
+    .map(_verlaufEintrag);
 }
 
 // `wer` ist bei allen schreibenden Funktionen dieses Abschnitts die Sitzung aus
@@ -12185,6 +12244,7 @@ module.exports = {
   listWorkPackages,
   insertWorkPackage,
   updateWorkPackage,
+  listWorkPackageHistory,
   markBackupRestore,
   historyAfter,
   lastHistoryId,

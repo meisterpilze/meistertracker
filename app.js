@@ -17298,6 +17298,32 @@ function pjLbVersuch(v, pakete) {
     '</section>'
   );
 }
+// Wer die Arbeitspakete angelegt, umbenannt oder ausgeblendet hat: je Paket
+// sein heutiger Name, darunter sein Verlauf, das Aelteste zuerst. Ein Paket
+// ohne Eintrag im Zeitraum kommt nicht vor, und ohne Eintraege gibt es den
+// Abschnitt nicht.
+function pjLbArbeitspakete(buch, pakete) {
+  const jePaket = new Map();
+  for (const e of buch.workPackageHistory || []) {
+    if (!jePaket.has(e.entityId)) jePaket.set(e.entityId, []);
+    jePaket.get(e.entityId).push(e);
+  }
+  if (!jePaket.size) return '';
+  const teile = [...jePaket.entries()].map(([id, eintraege]) => {
+    const zeilen = eintraege.filter((e) => e.action !== 'baseline').map((e) => pjVerlaufZeile(e, {}, null));
+    const anfang = eintraege.find((e) => e.action === 'baseline');
+    if (anfang) {
+      zeilen.unshift(
+        `<li class="pj-hist"><div class="pj-hist-kopf">${esc(fmtDtTime(anfang.at))}</div>` +
+          `<div class="pj-hist-was">${esc(t('exp.hist.baseline'))}</div></li>`
+      );
+    }
+    const paket = pakete.find((w) => w.id === id);
+    const name = pjApName(pakete, id) + (paket && paket.archived ? ' (' + t('exp.lbWpHidden') + ')' : '');
+    return `<h3>${esc(name)}</h3><ul class="hist">${zeilen.join('')}</ul>`;
+  });
+  return `<section><h2>${esc(t('exp.lbWpHist'))}</h2>${teile.join('')}</section>`;
+}
 // Das ganze Blatt. buch ist die Antwort von /api/lab-book, wer der Name dessen,
 // der druckt.
 function pjLbHtml(buch, titel, wer) {
@@ -17329,6 +17355,7 @@ function pjLbHtml(buch, titel, wer) {
     `<title>${esc(dateiname)}</title><style>${PJ_LB_STIL}</style></head><body>` +
     `<h1>${esc(titel)}</h1><div class="kopf">${esc(kopf)}</div>` +
     (zeitraum ? `<div class="kopf">${esc(t('exp.lbNote'))}</div>` : '') +
+    pjLbArbeitspakete(buch, pakete) +
     inhalt +
     '<scr' +
     'ipt>' +

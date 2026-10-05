@@ -9823,7 +9823,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   //
   // Die Gliederung eines Vorhabens in Arbeitspakete (siehe db.js). Anlegen und
   // aendern darf ein Admin; einen Versuch einem Paket zuordnen darf jeder, das
-  // ist ein PATCH am Versuch. Geloescht wird nicht, nur ausgeblendet.
+  // ist ein PATCH am Versuch. Geloescht wird nicht, nur ausgeblendet, und wer
+  // was angelegt oder geaendert hat, steht im Verlauf des Pakets.
   const paketTreffer = url.match(/^\/api\/work-packages\/(\d+)$/);
   if (req.method === 'POST' && url === '/api/work-packages') {
     if (requireAdmin(req, res)) return;
@@ -9848,7 +9849,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const id = db.insertWorkPackage(database, data);
+        const id = db.insertWorkPackage(database, data, req.authUser);
         broadcastSSE(res);
         jsonOk(res, { id });
       } catch (err) {
@@ -9881,7 +9882,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        if (db.updateWorkPackage(database, id, data)) broadcastSSE(res);
+        if (db.updateWorkPackage(database, id, data, req.authUser)) broadcastSSE(res);
         jsonOk(res);
       } catch (err) {
         safeErr(res, err);
