@@ -143,7 +143,20 @@ describe('Arbeitspakete im Verlauf', () => {
   it('steht nicht im Verlauf eines Versuchs, und ein zurueckgespieltes Backup zaehlt es keinem Versuch zu', () => {
     const v = db.insertExperiment(x.d, { code: 'V1', title: 'Lauf', started: '2026-09-01' }, CHEF);
     assert.ok(db.listExperimentHistory(x.d, v).every((e) => e.entity !== 'work_package'));
-    assert.equal(db.historyAfter(x.d, 0)[null], undefined);
+    // Gegen eine leere Sicherung ist alles verworfen: die Eintraege der Pakete
+    // zaehlen je Paket, keiner unter einem Versuch.
+    const leer = x.p + '.leer.db';
+    db.openDb(leer).close();
+    try {
+      const n = db.historyDiscarded(x.d, leer);
+      assert.deepEqual(
+        n.experiments.map((e) => e.id),
+        [Number(v)]
+      );
+      assert.ok(n.workPackages.length > 0);
+    } finally {
+      for (const s of ['', '-wal', '-shm']) fs.rmSync(leer + s, { force: true });
+    }
   });
 });
 

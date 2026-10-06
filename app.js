@@ -14061,6 +14061,17 @@ function serverKette(k) {
       t('server.chainStampErr', { d: fmtDtTime(k.stamping.lastError.at), err: k.stamping.lastError.message })
     );
   }
+  // Die juengste zurueckgespielte Sicherung in einer Zeile: wann, wie viel sie
+  // verworfen hat, und wo der Stand davor liegt. Alle stehen im Laborbuch.
+  const zurueck = k.restores || [];
+  const r = zurueck[zurueck.length - 1];
+  const sicherung = r
+    ? [
+        t('server.restoreWhen', { d: fmtDtTime(r.at), user: r.user || '—', n: r.discarded ?? '?' }),
+        r.kept ? t('server.restoreKept', { file: r.kept }) : '',
+        zurueck.length > 1 ? t('server.restoreEarlier', { n: zurueck.length - 1 }) : ''
+      ].filter(Boolean)
+    : null;
   return (
     '<div><b>' +
     esc(t('server.chainLabel')) +
@@ -14071,7 +14082,8 @@ function serverKette(k) {
       ? '<div><button type="button" class="btn btn-sm fs-xs" id="btn-lab-stamp">' +
         esc(t('server.chainStampBtn')) +
         '</button> <span id="lab-stamp-status" class="fs-xs"></span></div>'
-      : '')
+      : '') +
+    (sicherung ? '<div><b>' + esc(t('server.restoreLabel')) + ':</b> ' + esc(sicherung.join(' · ')) + '</div>' : '')
   );
 }
 // Was die Antwort auf "Zeitstempel jetzt holen" heisst.
@@ -17400,6 +17412,29 @@ function pjLbKette(buch) {
   ];
   for (const a of k.adopted || []) {
     zeilen.push(esc(t('exp.lbChainAdopted', { d: fmtDtTime(a.at), n: a.count ?? '?', from: a.from ?? '?', to: a.to ?? '?' })));
+  }
+  // Jede zurueckgespielte Sicherung: bis wohin ihr Verlauf reicht, was dabei
+  // verworfen wurde, je Versuch und Paket, auch was es seitdem nicht mehr gibt,
+  // und wo der Stand davor liegt. Ein Blatt von vorher, das ein spaeteres Glied
+  // nennt, passt danach nicht mehr zur Datei; hier steht, warum.
+  const je = (liste) =>
+    liste
+      .map((x) => (x.code || '#' + x.id) + ': ' + x.discarded + (x.inBackup === false ? ' (' + t('exp.lbChainRestoreGone') + ')' : ''))
+      .join(', ');
+  for (const r of k.restores || []) {
+    // Eine Sicherung ohne Verlauf (von bevor es ihn gab) verwirft alles, und
+    // nach Kennung gezaehlt ist das dann genau.
+    const teile = [
+      r.upTo
+        ? t('exp.lbChainRestore', { d: fmtDtTime(r.at), user: r.user || '—', last: r.upTo, n: r.discarded ?? '?' })
+        : t('exp.lbChainRestoreNone', { d: fmtDtTime(r.at), user: r.user || '—', n: r.discarded ?? '?' })
+    ];
+    if (r.experiments && r.experiments.length) teile.push(t('exp.lbChainRestoreExp', { list: je(r.experiments) }));
+    if (r.workPackages && r.workPackages.length) teile.push(t('exp.lbChainRestoreWp', { list: je(r.workPackages) }));
+    if (r.counted === 'id' && r.upTo) teile.push(t('exp.lbChainRestoreById'));
+    if (r.counted === 'migrated') teile.push(t('exp.lbChainRestoreMigrated'));
+    if (r.kept) teile.push(t('exp.lbChainRestoreKept', { file: r.kept }));
+    zeilen.push(esc(teile.join(' ')));
   }
   if (k.head) zeilen.push(esc(t('exp.lbChainHead', { id: k.head.historyId })) + hash(k.head.hash));
   const s = k.lastStamp;

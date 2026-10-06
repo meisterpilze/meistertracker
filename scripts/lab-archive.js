@@ -88,6 +88,12 @@ function readme(book, opts, createdBy, chain) {
     '              from bis to kamen ohne Glied in die Datei, etwa von einer',
     '              aelteren Version der Anwendung, und der naechste Start hat',
     '              sie verkettet. Er gehoert zur Kette wie jeder andere.',
+    '              Ein Eintrag mit entity "database" und action "backup" heisst:',
+    '              hier wurde eine Sicherung zurueckgespielt. Der Verlauf bis',
+    '              zur id in entity_id ist der der Sicherung; was die Datenbank',
+    '              davor darueber hinaus hatte, ist verworfen. new_value nennt,',
+    '              wie viele Eintraege es waren, je Versuch und Arbeitspaket,',
+    '              und unter kept die Kopie von vorher, in der sie stehen.',
     '3. Stempel:   openssl ts -verify -digest <hash> \\',
     '                -in zeitstempel/<n>.tsr -token_in -CAfile <CA-Zertifikate>',
     '              mit dem Hash aus kette.json bei der id (historyId), die',
@@ -116,6 +122,20 @@ function readme(book, opts, createdBy, chain) {
         a.id +
         ').'
     ),
+    ...(chain.restores || []).map(
+      (r) =>
+        'Zurueckgespielt am ' +
+        r.at +
+        ' (UTC): eine Sicherung ' +
+        (r.upTo ? 'mit Verlauf bis #' + r.upTo : 'ohne Verlauf') +
+        ', ' +
+        r.discarded +
+        ' Eintraege verworfen (Eintrag #' +
+        r.id +
+        ')' +
+        (r.kept ? '; der Stand davor: ' + r.kept : '') +
+        '.'
+    ),
     '',
     '',
     'Lab book archive',
@@ -129,7 +149,11 @@ function readme(book, opts, createdBy, chain) {
     'with the formula in step 2 above, and each token with openssl ts -verify as',
     'in step 3. A history entry with entity "chain" and action "adopt" records',
     'entries that reached the file without a link (from an older version of the',
-    'app, for example) and were linked by the next start.',
+    'app, for example) and were linked by the next start. One with entity',
+    '"database" and action "backup" records a restored backup: the history up to',
+    "the id in entity_id is the backup's, and new_value says how many entries",
+    'the restore discarded, per experiment and work package, and names the copy',
+    'of the database from before (kept) that holds them.',
     ''
   ].join('\n');
 }

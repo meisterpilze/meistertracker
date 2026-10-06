@@ -1943,7 +1943,7 @@ function swapRestoredDatabase(tmpPath) {
     return { ok: false, status: 500, error: 'Restore failed, previous data has been preserved' };
   }
   // Was das Lesen der Sicherung vor ihren Migrationen neben ihr liegen lassen
-  // kann (lastHistoryIdOfFile oeffnet sie nur lesend).
+  // kann (historyDiscarded oeffnet sie nur lesend).
   for (const s of ['-wal', '-shm']) weg(tmpPath + s);
   return { ok: true, kept: path.basename(kept) };
 }
@@ -13224,26 +13224,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         tmpPath = path.join(BACKUP_DIR, '_restore_tmp_' + crypto.randomBytes(8).toString('hex') + '.db');
         fs.writeFileSync(tmpPath, plain, { mode: 0o600 });
         let tmpDb;
-        // Was im Laborbuch-Verlauf verloren geht: die Eintraege der laufenden
-        // Datei, die juenger sind als der juengste der Sicherung, je Versuch und
-        // je Arbeitspaket. Der juengste der Sicherung wird gelesen, bevor openDb
-        // ihre Migrationen laufen laesst (lastHistoryIdOfFile); gezaehlt wird
-        // vor dem Tausch, danach steht es als Eintrag in jedem Versuch und Paket.
-        let verworfen = {};
-        let verworfenPakete = {};
+        // Was im Laborbuch-Verlauf verloren geht: jeder Eintrag der laufenden
+        // Datei, den die Sicherung nicht hat, gegen ihre eigene Pruefkette
+        // gezaehlt, je Versuch und je Arbeitspaket. Gelesen wird die Sicherung,
+        // bevor openDb ihre Migrationen laufen laesst und Eintraege ohne Glied
+        // an ihrem Ende in die Kette nimmt (historyDiscarded); gezaehlt wird
+        // vor dem Tausch, danach steht es im Verlauf (markBackupRestore).
+        let verworfen = null;
         try {
-          let bisSicherung = null;
           try {
-            bisSicherung = db.lastHistoryIdOfFile(tmpPath);
+            verworfen = db.historyDiscarded(database, tmpPath);
           } catch (e) {
             log('warn', 'Restore: could not read the backup before migrating it', { error: e.message });
           }
           tmpDb = db.openDb(tmpPath); // validates schema + runs migrations
-          if (bisSicherung === null) bisSicherung = db.lastHistoryId(tmpDb);
-          verworfen = db.historyAfter(database, bisSicherung);
-          verworfenPakete = db.historyAfterPackages(database, bisSicherung);
+          if (!verworfen) verworfen = db.historyDiscardedById(database, tmpDb);
           tmpDb.close();
         } catch (valErr) {
+          // Scheiterte erst das Zaehlen nach openDb, ist die Datei noch offen,
+          // und unter Windows liesse sie sich so nicht loeschen.
+          try {
+            if (tmpDb) tmpDb.close();
+          } catch {
+            /* schon zu */
+          }
           try {
             fs.unlinkSync(tmpPath);
           } catch (e) {
@@ -13262,10 +13266,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         tmpPath = null;
         try {
-          db.markBackupRestore(database, verworfen, req.authUser, {
-            kept: getauscht.kept,
-            packages: verworfenPakete
-          });
+          db.markBackupRestore(database, verworfen, req.authUser, getauscht.kept);
         } catch (e) {
           log('error', 'Failed to record the restore in the lab history', { error: e.message });
         }

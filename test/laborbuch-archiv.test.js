@@ -215,6 +215,68 @@ describe('Archiv: nachgetragene Eintraege', () => {
   });
 });
 
+describe('Archiv: zurueckgespielte Sicherungen', () => {
+  it('hat den Eintrag fuer das Ganze im Verlauf, nennt ihn in der Anleitung, und die Kette rechnet sich nach', async () => {
+    const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'mt_archiv_rueck_'));
+    const p = path.join(ordner, 'test.db');
+    let d = db.openDb(p);
+    try {
+      const v = Number(db.insertExperiment(d, { code: 'R1', title: 'Zurueck', started: '2026-10-01' }));
+      const sicherung = path.join(ordner, 'sicherung.db');
+      d.prepare('VACUUM INTO ?').run(sicherung);
+      db.updateExperiment(d, v, { outcome: 'verworfen' });
+      // Wie der Server: gegen die Sicherung zaehlen, tauschen, festhalten.
+      const gezaehlt = db.historyDiscarded(d, sicherung);
+      d.close();
+      for (const s of ['', '-wal', '-shm']) fs.rmSync(p + s, { force: true });
+      fs.copyFileSync(sicherung, p);
+      d = db.openDb(p);
+      const id = db.markBackupRestore(d, gezaehlt, { user_id: null, username: 'chef' }, 'pre-restore-test.db');
+      // Und der Eintrag, den eine Sicherung ohne Verlauf hinterliesse.
+      const ohne = db.markBackupRestore(d, { counted: 'id', last: 0, total: 3 }, { user_id: null, username: 'chef' });
+      const z = sammeln();
+      await writeLabArchive({ out: z.s, dbApi: db, database: d, dataDir: path.join(ordner, 'data'), opts: {} });
+      const { dateien } = zipLesen(z.inhalt());
+      const verlauf = JSON.parse(dateien.get('pruefkette/verlauf.json').toString('utf8'));
+      const eintrag = verlauf.find((e) => e.id === id);
+      assert.deepEqual(
+        [eintrag.entity, eintrag.entity_id, eintrag.experiment_id, eintrag.action],
+        ['database', gezaehlt.last, null, 'backup']
+      );
+      assert.equal(JSON.parse(eintrag.new_value).kept, 'pre-restore-test.db');
+      assert.equal(JSON.parse(dateien.get('laborbuch.json').toString('utf8')).chain.restores[0].id, id);
+      const liesmich = dateien.get('LIESMICH.txt').toString('utf8');
+      assert.ok(liesmich.includes('entity "database" und action "backup"'));
+      assert.ok(liesmich.includes('"database" and action "backup" records a restored backup'));
+      assert.match(
+        liesmich,
+        new RegExp(
+          'Zurueckgespielt am .*: eine Sicherung mit Verlauf bis #' +
+            gezaehlt.last +
+            ', 1 Eintraege verworfen \\(Eintrag #' +
+            id +
+            '\\); der Stand davor: pre-restore-test\\.db\\.'
+        )
+      );
+      assert.match(
+        liesmich,
+        new RegExp(
+          'Zurueckgespielt am .*: eine Sicherung ohne Verlauf, 3 Eintraege verworfen \\(Eintrag #' + ohne + '\\)\\.'
+        )
+      );
+      const kette = JSON.parse(dateien.get('pruefkette/kette.json').toString('utf8'));
+      let vorher = '0'.repeat(64);
+      verlauf.forEach((e, i) => {
+        vorher = glied(vorher, e);
+        assert.deepEqual(kette[i], { id: e.id, hash: vorher });
+      });
+    } finally {
+      d.close();
+      fs.rmSync(ordner, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Das Laborbuch als Archiv', () => {
   let ordner, d, versuch, anderer, fotos, archiv;
   const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');

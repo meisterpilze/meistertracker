@@ -7456,11 +7456,16 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 // Eine Zeile in lab_history:
 //   at, user_id, username  wann und wer; der Name als Abschrift, siehe v89
 //   entity, entity_id      'experiment' | 'run' | 'photo' | 'work_package'
-//                          und seine id
+//                          und seine id. Dazu zwei ohne Datensatz: 'chain',
+//                          ein Vermerk der Pruefkette (_ketteNachtragen), und
+//                          'database', eine zurueckgespielte Sicherung als
+//                          Ganzes, mit ihrem juengsten Eintrag als id
+//                          (markBackupRestore)
 //   experiment_id          der Versuch, zu dem das gehoert, damit ein Gefaess
 //                          auch nach dem Entfernen im Verlauf seines Versuchs
 //                          steht; NULL bei einem Arbeitspaket, das zu keinem
-//                          Versuch gehoert, sondern Versuche zu ihm
+//                          Versuch gehoert, sondern Versuche zu ihm, und bei
+//                          'chain' und 'database'
 //   action                 'baseline' der Stand, als der Verlauf begann (v89)
 //                          'create'   angelegt, new_value ist der Datensatz
 //                          'update'   ein Feld, old_value -> new_value
@@ -7471,7 +7476,11 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 //                                     old_value ist der Datensatz
 //                          'backup'   eine Sicherung wurde zurueckgespielt;
 //                                     new_value sagt, wie viele Eintraege
-//                                     dieses Versuchs dabei verworfen wurden
+//                                     dieses Versuchs dabei verworfen wurden,
+//                                     der Eintrag fuer das Ganze auch, wie
+//                                     viele insgesamt und je Versuch und Paket
+//                          'adopt'    Eintraege ohne Glied in die Kette
+//                                     genommen (bei 'chain')
 //   field                  nur bei 'update', mit dem Namen aus der API
 //
 // Ein Datensatz steht als JSON in der Form, die die API zeigt, ohne id und
@@ -7568,7 +7577,7 @@ function _werId(wer) {
   return wer && wer.user_id != null ? wer.user_id : null;
 }
 // Der Eintrag und sein Glied gehen zusammen oder gar nicht, auch fuer einen
-// Aufrufer ohne eigene Transaktion.
+// Aufrufer ohne eigene Transaktion. Gibt die Kennung des Eintrags zurueck.
 function _verlauf(db, wer, e) {
   // Stehen am Ende Eintraege ohne Glied, etwa von einer aelteren Version,
   // kommen sie zuerst in die Kette, mit Vermerk (_ketteNachtragen). Sonst
@@ -7580,7 +7589,7 @@ function _verlauf(db, wer, e) {
   // danach allein gespeichert wuerde, stuende fuer eine Aenderung, die es
   // nicht gibt.
   if (_ketteOffen(db)) _ketteNachtragen(db);
-  withSavepoint(db, 'mt_glied', () => {
+  return withSavepoint(db, 'mt_glied', () => {
     const info = db
       .prepare(
         'INSERT INTO lab_history(at,user_id,username,entity,entity_id,experiment_id,action,field,old_value,new_value) ' +
@@ -7598,7 +7607,9 @@ function _verlauf(db, wer, e) {
         e.old ?? null,
         e.new ?? null
       );
-    _ketteVerknuepfen(db, Number(info.lastInsertRowid));
+    const id = Number(info.lastInsertRowid);
+    _ketteVerknuepfen(db, id);
+    return id;
   });
 }
 
@@ -7797,29 +7808,52 @@ function experimentHistoryPage(db, experimentId, opts = {}) {
 }
 
 // Eine Sicherung wurde zurueckgespielt. Mit ihr kommt ihr Verlauf zurueck, und
-// alles, was danach geschrieben wurde, ist weg, ohne dass der Verlauf davon
-// wuesste. Deshalb steht danach in jedem Versuch und in jedem Arbeitspaket ein
-// Eintrag 'backup': wann, wer, und wie viele Eintraege dabei verworfen wurden.
-// verworfen: Versuch -> Anzahl, vor dem Tausch aus der alten Datei gezaehlt
-// (historyAfter). mehr.packages: dasselbe je Arbeitspaket
-// (historyAfterPackages). mehr.kept: der Name der Kopie von vorher, die der
-// Server bei den Sicherungen aufhebt; in ihr stehen die verworfenen Eintraege.
-function markBackupRestore(db, verworfen, wer, mehr = {}) {
+// was die Datei davor darueber hinaus hatte, ist weg, ohne dass der Verlauf
+// davon wuesste. Deshalb steht danach ein Eintrag fuer das Ganze im Verlauf
+// (entity 'database', ohne Versuch): wann, wer, bis zu welchem Eintrag der
+// Verlauf der Sicherung reicht, wie viele Eintraege verworfen wurden, je
+// Versuch und je Arbeitspaket, und die Kopie von vorher. Er steht auch da, wenn
+// die Sicherung keinen Versuch und kein Paket hat, und er nennt auch Versuche,
+// die nach der Sicherung angelegt wurden und die es jetzt nicht mehr gibt.
+// Dazu bekommt jeder Versuch und jedes Arbeitspaket einen Eintrag 'backup' mit
+// seiner eigenen Zahl, den sein Verlauf zeigt.
+//
+// verworfen: was historyDiscarded vor dem Tausch gezaehlt hat. kept: der Name
+// der Kopie von vorher, die der Server bei den Sicherungen aufhebt; in ihr
+// stehen die verworfenen Eintraege. Gibt die Kennung des Eintrags fuer das
+// Ganze zurueck.
+function markBackupRestore(db, verworfen, wer, kept) {
+  const v = { counted: null, last: 0, total: 0, experiments: [], workPackages: [], ...verworfen };
   const jetzt = new Date().toISOString();
-  const was = (n) => {
-    const w = { restoredAt: jetzt, discarded: n || 0 };
-    if (mehr.kept) w.kept = mehr.kept;
-    return JSON.stringify(w);
+  const was = (w) => JSON.stringify(kept ? { ...w, kept } : w);
+  // Die Zahl eines Versuchs oder Pakets, das mit der Sicherung zurueckkam.
+  // Fuehrte die Datei davor unter derselben Kennung einen anderen, einen, den
+  // es erst nach der Sicherung gab, gehoeren dessen Eintraege nicht hierher.
+  const eigene = (liste, id) => {
+    const x = liste.find((e) => e.id === id);
+    return x && x.inBackup ? x.discarded : 0;
   };
   return withSavepoint(db, 'mt_rueckspielen', () => {
-    const versuche = db.prepare('SELECT id FROM experiments ORDER BY id').all();
-    for (const v of versuche) {
+    const id = _verlauf(db, wer, {
+      entity: 'database',
+      entityId: v.last,
+      action: 'backup',
+      new: was({
+        restoredAt: jetzt,
+        upTo: v.last,
+        discarded: v.total,
+        counted: v.counted,
+        experiments: v.experiments,
+        workPackages: v.workPackages
+      })
+    });
+    for (const e of db.prepare('SELECT id FROM experiments ORDER BY id').all()) {
       _verlauf(db, wer, {
         entity: 'experiment',
-        entityId: v.id,
-        experimentId: v.id,
+        entityId: e.id,
+        experimentId: e.id,
         action: 'backup',
-        new: was(verworfen && verworfen[v.id])
+        new: was({ restoredAt: jetzt, discarded: eigene(v.experiments, e.id) })
       });
     }
     for (const w of db.prepare('SELECT id FROM work_packages ORDER BY id').all()) {
@@ -7827,49 +7861,185 @@ function markBackupRestore(db, verworfen, wer, mehr = {}) {
         entity: 'work_package',
         entityId: w.id,
         action: 'backup',
-        new: was(mehr.packages && mehr.packages[w.id])
+        new: was({ restoredAt: jetzt, discarded: eigene(v.workPackages, w.id) })
       });
     }
-    return versuche.length;
+    return id;
   });
 }
-// Was beim Zurueckspielen einer Sicherung je Versuch verloren geht: die
-// Eintraege der laufenden Datei, die juenger sind als der juengste der Sicherung.
-function historyAfter(db, letzteId) {
-  const aus = {};
-  for (const z of db
-    .prepare('SELECT experiment_id AS v, COUNT(*) AS n FROM lab_history WHERE id>? GROUP BY experiment_id')
-    .all(letzteId || 0)) {
-    if (z.v != null) aus[z.v] = z.n;
-  }
-  return aus;
-}
-// Dasselbe je Arbeitspaket: deren Eintraege gehoeren zu keinem Versuch.
-function historyAfterPackages(db, letzteId) {
-  const aus = {};
-  for (const z of db
-    .prepare(
-      "SELECT entity_id AS w, COUNT(*) AS n FROM lab_history WHERE id>? AND entity='work_package' GROUP BY entity_id"
-    )
-    .all(letzteId || 0)) {
-    aus[z.w] = z.n;
-  }
-  return aus;
-}
-// Der juengste Eintrag einer Sicherung, so wie sie ist, bevor eine Migration
-// sie anfasst. openDb liefe ueber die Migrationen, und v96 schreibt einen
-// Ausgangsstand je Arbeitspaket dazu; gezaehlt ab dem hoeheren Stand fehlten
-// beim Verwerfen genau so viele Eintraege. Nur lesen; 0 ohne Verlauf.
-function lastHistoryIdOfFile(datei) {
+// Was das Zurueckspielen einer Sicherung aus dem Verlauf verwirft: jeder
+// Eintrag der laufenden Datei, den die Sicherung nicht hat. Gezaehlt wird vor
+// dem Tausch und gegen die Datei der Sicherung, so wie sie ist. openDb liefe
+// ueber ihre Migrationen (v96 schreibt einen Ausgangsstand je Paket dazu) und
+// naehme Eintraege ohne Glied an ihrem Ende in die Kette, mit einem Vermerk;
+// danach hielte sie Kennungen und Glieder, die nicht ihre sind. Nur lesen.
+//
+// Hat die Sicherung eine Pruefkette (seit v97), zaehlt die: behalten ist ein
+// Eintrag, wenn die Sicherung unter seiner Kennung dasselbe Glied hat. Ein
+// Glied steht fuer den Eintrag und alles davor, gleich ist es also nur, wenn
+// sie ihn an derselben Stelle hat, mit derselben Geschichte davor. Die
+// Kennung allein reicht nicht: nach einem frueheren Zurueckspielen vergibt die
+// Datei Kennungen ein zweites Mal, und wer erst die Sicherung vom Morgen und
+// dann die vom Mittag zurueckspielte, verlor Eintraege, die als 0 gezaehlt
+// wurden. Hat eine Seite unter der Kennung kein Glied (was eine aeltere
+// Version ans Ende schrieb und der naechste Start aufnimmt, oder ein Bruch),
+// zaehlt der Eintrag selbst, Spalte fuer Spalte.
+//
+// Eine Sicherung von vor der Kette hat nur Kennungen: dort ist verworfen, was
+// juenger ist als ihr juengster Eintrag. Nach einem frueheren Zurueckspielen
+// kann das zu wenig sein.
+//
+//   counted       'chain' oder 'id': wie gezaehlt wurde; 'migrated' nach
+//                 Kennung gegen die schon geoeffnete (historyDiscardedById)
+//   last          der juengste Eintrag der Sicherung, 0 ohne Verlauf
+//   total         alle verworfenen Eintraege, auch die keines Versuchs und
+//                 keines Pakets (Vermerke der Kette, der Eintrag fuer das
+//                 Ganze eines frueheren Zurueckspielens)
+//   experiments   je Versuch mit verworfenen Eintraegen { id, code, discarded,
+//                 inBackup }, nach Kennung. inBackup false: die Sicherung hat
+//                 ihn nicht, nach dem Zurueckspielen fehlt er, und seine
+//                 Kennung traegt dort keiner oder ein anderer (_verworfen).
+//   workPackages  dasselbe je Arbeitspaket
+function historyDiscarded(db, datei) {
   const roh = new Database(datei, { readOnly: true });
   try {
-    const tabelle = roh.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lab_history'").get();
-    if (!tabelle) return 0;
-    const z = roh.prepare('SELECT MAX(id) AS m FROM lab_history').get();
-    return (z && z.m) || 0;
+    const mitVerlauf = _gibtTabelle(roh, 'lab_history');
+    const last = mitVerlauf ? lastHistoryId(roh) : 0;
+    if (!mitVerlauf || !_gibtTabelle(roh, 'lab_history_chain')) return _verworfenNachKennung(db, roh, last, 'id');
+    const glieder = new Map(
+      roh
+        .prepare('SELECT history_id, hash FROM lab_history_chain')
+        .all()
+        .map((g) => [g.history_id, g.hash])
+    );
+    const dort = roh.prepare('SELECT * FROM lab_history WHERE id=?');
+    const hier = db.prepare('SELECT * FROM lab_history WHERE id=?');
+    const behalten = (z) => {
+      const glied = glieder.get(z.id);
+      if (z.glied != null && glied != null) return z.glied === glied;
+      const zeile = dort.get(z.id);
+      return !!zeile && _gleicherEintrag(hier.get(z.id), zeile);
+    };
+    return { counted: 'chain', last, ..._verworfen(db, { behalten, merkmale: _merkmale(roh) }) };
   } finally {
     roh.close();
   }
+}
+// Dasselbe, wenn sich die Sicherung vor ihren Migrationen nicht lesen liess:
+// nach Kennung, gegen die schon geoeffnete. Ihr juengster Eintrag kann dann
+// einer sein, den eine Migration oder das Nachtragen geschrieben hat, und um
+// so viele zaehlt es zu wenig. Das Ergebnis sagt es (counted 'migrated'),
+// damit es nicht fuer eine Sicherung von vor der Kette gehalten wird.
+function historyDiscardedById(db, sicherung) {
+  return _verworfenNachKennung(db, sicherung, lastHistoryId(sicherung), 'migrated');
+}
+// Ohne Kette: verworfen ist, was juenger ist als der juengste Eintrag der
+// Sicherung. Ob ein Versuch oder Paket derselbe ist, belegt hier ein Eintrag,
+// den die Sicherung Spalte fuer Spalte genauso hat.
+function _verworfenNachKennung(db, sicherung, last, counted) {
+  const dort = _gibtTabelle(sicherung, 'lab_history')
+    ? sicherung.prepare('SELECT * FROM lab_history WHERE id=?')
+    : null;
+  const hier = db.prepare('SELECT * FROM lab_history WHERE id=?');
+  const gemeinsam = (z) => {
+    if (!dort || z.id > last) return false;
+    const zeile = dort.get(z.id);
+    return !!zeile && _gleicherEintrag(hier.get(z.id), zeile);
+  };
+  return {
+    counted,
+    last,
+    ..._verworfen(db, { behalten: (z) => z.id <= last, gemeinsam, merkmale: _merkmale(sicherung) })
+  };
+}
+// Woran sich ein Versuch oder Paket unter seiner Kennung wiedererkennen laesst,
+// Kennung -> Merkmal, in der laufenden Datei wie in einer Sicherung: beim
+// Versuch der Code, den nichts mehr aendert; beim Paket, dessen Code sich
+// aendern laesst, wann es angelegt wurde (created, seit v93 in jeder Zeile).
+// Leer, wo es die Tabelle noch nicht gab.
+function _merkmale(datei) {
+  const lesen = (tabelle, spalte) =>
+    new Map(
+      _gibtTabelle(datei, tabelle)
+        ? datei
+            .prepare('SELECT id, ' + spalte + ' AS m FROM ' + tabelle)
+            .all()
+            .map((z) => [z.id, z.m])
+        : []
+    );
+  return { experiment: lesen('experiments', 'code'), work_package: lesen('work_packages', 'created') };
+}
+// Geht den Verlauf der laufenden Datei einmal durch und zaehlt, was die
+// Sicherung nicht hat, je Versuch und je Paket. s beschreibt die Sicherung:
+//   behalten(z)   ob sie den Eintrag z hat, so wie gezaehlt wird
+//   gemeinsam(z)  ob sie genau diesen Eintrag hat; ohne Angabe gilt behalten
+//   merkmale      { experiment, work_package }: Kennung -> Merkmal bei ihr
+//                 (_merkmale)
+//
+// Ob sie einen Versuch oder ein Paket hat (inBackup), belegt ein Eintrag, den
+// beide haben, oder dieselbe Kennung mit demselben Merkmal: beim Versuch der
+// Code, beim Paket, wann es angelegt wurde. Die Kennung allein reicht nicht:
+// nach einem frueheren Zurueckspielen traegt sie vielleicht ein anderer. Ein
+// gemeinsamer Eintrag allein auch nicht: wurde dazwischen eine Sicherung von
+// vor v89 oder v96 zurueckgespielt, hat jede Seite ihren Ausgangsstand selbst
+// geschrieben, zu verschiedenen Zeiten, und eine Sicherung von vor v96 hat
+// von einem Paket gar keinen Eintrag. Der Code auch nicht: den eines Pakets
+// kann man aendern. Und fehlt der Sicherung der Eintrag, mit dem einer
+// angelegt wurde, kam er erst nach ihr; dann ist er nicht ihrer, auch wenn er
+// nach einem frueheren Zurueckspielen dieselbe Kennung und denselben Code
+// bekam wie der, der dort steht.
+function _verworfen(db, s) {
+  const je = { experiment: new Map(), work_package: new Map() };
+  const merken = (art, id, z, weg) => {
+    const x = je[art].get(id) || { discarded: 0, kept: 0, eintraege: [], danach: false };
+    x[weg ? 'discarded' : 'kept']++;
+    x.eintraege.push(z);
+    if (weg && z.action === 'create' && z.entity === art && z.entity_id === id) x.danach = true;
+    je[art].set(id, x);
+  };
+  let total = 0;
+  for (const z of db
+    .prepare(
+      'SELECT h.id, h.entity, h.entity_id, h.experiment_id, h.action, c.hash AS glied FROM lab_history h ' +
+        'LEFT JOIN lab_history_chain c ON c.history_id = h.id ORDER BY h.id'
+    )
+    .all()) {
+    const weg = !s.behalten(z);
+    if (weg) total++;
+    if (z.experiment_id != null) merken('experiment', z.experiment_id, z, weg);
+    if (z.entity === 'work_package') merken('work_package', z.entity_id, z, weg);
+  }
+  const gleich = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
+  const hier = _merkmale(db);
+  const liste = (art, tabelle) => {
+    const codes = new Map(
+      db
+        .prepare('SELECT id, code FROM ' + tabelle)
+        .all()
+        .map((z) => [z.id, z.code])
+    );
+    return [...je[art]]
+      .filter(([, x]) => x.discarded)
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, x]) => {
+        const code = codes.get(id) ?? null;
+        const geteilt = s.gemeinsam ? x.eintraege.some(s.gemeinsam) : x.kept > 0;
+        const derselbe = !x.danach && gleich(s.merkmale[art].get(id), hier[art].get(id));
+        return { id, code, discarded: x.discarded, inBackup: geteilt || derselbe };
+      });
+  };
+  return {
+    total,
+    experiments: liste('experiment', 'experiments'),
+    workPackages: liste('work_package', 'work_packages')
+  };
+}
+function _gibtTabelle(db, name) {
+  return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+}
+// Zwei Eintraege sind derselbe, wenn jede Spalte gleich ist.
+function _gleicherEintrag(a, b) {
+  return Object.keys(a).every((k) => a[k] === b[k]);
 }
 function lastHistoryId(db) {
   const z = db.prepare('SELECT MAX(id) AS m FROM lab_history').get();
@@ -8023,6 +8193,37 @@ function _ketteNachgetragen(db) {
       return { id: z.id, at: z.at, from: v.from ?? null, to: v.to ?? null, count: v.count ?? null };
     });
 }
+// Die zurueckgespielten Sicherungen, aelteste zuerst: der Eintrag fuer das
+// Ganze, den markBackupRestore schreibt. Danach ist die Kette die der
+// Sicherung und geht von deren juengstem Glied weiter. Ein Blatt von vorher,
+// das ein spaeteres Glied nennt, passt dann nicht mehr zur Datei, und dieser
+// Eintrag sagt, warum.
+function _zurueckgespielt(db) {
+  return db
+    .prepare(
+      "SELECT id, at, username, entity_id, new_value FROM lab_history WHERE entity='database' AND action='backup' ORDER BY id"
+    )
+    .all()
+    .map((z) => {
+      let v = {};
+      try {
+        v = JSON.parse(z.new_value) || {};
+      } catch {
+        /* unlesbar: dann nur Kennung und Zeit */
+      }
+      return {
+        id: z.id,
+        at: z.at,
+        user: z.username || null,
+        upTo: v.upTo ?? z.entity_id,
+        discarded: v.discarded ?? null,
+        counted: v.counted ?? null,
+        experiments: Array.isArray(v.experiments) ? v.experiments : [],
+        workPackages: Array.isArray(v.workPackages) ? v.workPackages : [],
+        kept: v.kept ?? null
+      };
+    });
+}
 // Das juengste Glied, zu dem es den Eintrag gibt. Ein Glied ohne Eintrag (der
 // Eintrag geloescht, oder ein Glied, das jemand vorab unter eine kuenftige
 // Kennung geschrieben hat) zeigt die Pruefung als 'missing'. Kopf ist es
@@ -8111,6 +8312,9 @@ function _stempelHash(token) {
 //   adopted     Eintraege, die ohne Glied ans Ende kamen und die ein Start
 //               nachgetragen hat: { id, at, from, to, count } je Mal, siehe
 //               _ketteNachtragen. Kein Bruch, aber immer zu nennen.
+//   restores    die zurueckgespielten Sicherungen: { id, at, user, upTo,
+//               discarded, counted, experiments, workPackages, kept } je Mal,
+//               siehe markBackupRestore. Auch kein Bruch, auch immer zu nennen.
 //
 // Die Unterschrift der Stelle unter einem Token prueft das hier nicht, nur ob
 // das Token ueber das Glied ist. Die Unterschrift prueft openssl ts -verify
@@ -8162,7 +8366,8 @@ function labChainStatus(db) {
     head: labChainHead(db),
     stamps: stempel.length,
     lastStamp: lastLabTimestamp(db),
-    adopted: _ketteNachgetragen(db)
+    adopted: _ketteNachgetragen(db),
+    restores: _zurueckgespielt(db)
   };
 }
 
@@ -12718,9 +12923,8 @@ module.exports = {
   listLabTimestamps,
   insertLabTimestamp,
   markBackupRestore,
-  historyAfter,
-  historyAfterPackages,
-  lastHistoryIdOfFile,
+  historyDiscarded,
+  historyDiscardedById,
   lastHistoryId,
   listProjectNotes,
   insertProjectNote,
