@@ -100,6 +100,16 @@ describe('leak-scan: the shapes that leaked', () => {
     assert.deepEqual(rules(scan('Lieferung an Lindenstraße 3a, 54321 Musterhausen')), ['postal-address']);
     assert.deepEqual(rules(scan('Treffpunkt: Alter Markt 7, 99999 Irgendwo')), []);
   });
+
+  it('catches a phone number, which reaches a person directly', () => {
+    // Der Anlass: eine Bestell-Vorrichtung trug neben einem erfundenen Namen eine
+    // Telefonnummer, die nach keinem Platzhalter aussah, und keine Regel sah hin.
+    // Die Nummern hier stammen aus den Bereichen, die die Bundesnetzagentur für
+    // Film und Fernsehen freihält; sie erreichen niemanden.
+    assert.deepEqual(rules(file("shipPhone: '+49 30 23125 789'")), ['phone']);
+    assert.deepEqual(rules(prose('Rückruf unter 0049 30 23125789')), ['phone']);
+    assert.deepEqual(rules(prose('Handy 0171 3920042')), ['phone']);
+  });
 });
 
 describe('leak-scan: the legitimate uses in this repository', () => {
@@ -109,6 +119,18 @@ describe('leak-scan: the legitimate uses in this repository', () => {
     // lange Werte braucht, keine erlaubte Wahl.
     assert.deepEqual(rules(scan("address: 'Musterweg 1, 00000 Musterstadt'")), []);
     assert.deepEqual(rules(scan("address: 'Beispielstraße 49, 00000 Musterstadt'")), []);
+  });
+
+  it('leaves a placeholder phone number alone, and digits that only look like one', () => {
+    // Vier Nullen in Folge oder sieben aufsteigende Ziffern sind niemandes
+    // Anschluss. So behält eine Vorrichtung eine Nummer, die sie benutzen darf.
+    assert.deepEqual(rules(file("phone: '+49 170 0000000'")), []);
+    assert.deepEqual(rules(file("phone: '+49 9131 000000'")), []);
+    assert.deepEqual(rules(file("phone: '+4915112345678'")), []);
+    assert.deepEqual(rules(file("shipPhone: '+4930123'")), []);
+    assert.deepEqual(rules(file('2026-10-06T08:55:10+00:00')), []);
+    // SVG-Pfade sind Ziffernkolonnen mit Punkten und Leerzeichen.
+    assert.deepEqual(rules(file('<path d="M4.6 15a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33"/>')), []);
   });
   it('leaves the DuckDNS API host alone', () => {
     // server.js posts to this, the settings tab links to it, three language
@@ -228,6 +250,14 @@ describe('leak-scan: redaction', () => {
     ].join('\n');
     assert.ok(prose(dirty).length >= 4);
     assert.deepEqual(prose(redact(dirty, { surface: 'prose' })), []);
+  });
+
+  it('replaces a phone number and keeps the sentence around it', () => {
+    assert.equal(
+      redact('Rückruf an +49 30 23125 789, danke', { surface: 'prose' }),
+      'Rückruf an <redacted-phone>, danke'
+    );
+    assert.deepEqual(prose(redact('Handy 0171 3920042', { surface: 'prose' })), []);
   });
 
   it('leaves legitimate text untouched', () => {

@@ -49,6 +49,7 @@ is an honest verification note and a published address in the same line.
 | the LAN address of a PC | `<windows-pc-ip>` |
 | any other domain | `<your-domain>`, or `example.com` |
 | a token, key or password | `<your-token>`, or leave the value out |
+| a phone number | `+49 170 0000000` |
 
 The same goes for anything else that identifies one particular installation:
 routable IP addresses, tunnel URLs (`ngrok`, `trycloudflare`, `tailscale`),
@@ -81,7 +82,13 @@ asked to "put this into the app", the quickest route is a constant in `app.js`.
   The Vorhaben tabs take their documents through the import on that page
   (`/api/project-docs`); notes and experiments through their own pages. The code
   knows the shape, never the wording.
-- **Tests and examples use made-up content.**
+- **Tests and examples use made-up content.** A real order is not a fixture,
+  not even with the name swapped: write `Erika Musterfrau`, `Musterweg 1`,
+  postcode `00000` and `+49 170 0000000`, which the guard lets through. The
+  same goes for a recipe, a production figure or a batch id from the lab.
+- **Figures a script needs come from a file outside the repository**, the way
+  `scripts/seed-substrate-recipes.js` reads its recipes. The repository keeps
+  an example with invented values.
 - **A pull request describes the code**, not what the content says.
 
 Unlike an address, content cannot be rotated. Once it has been public it stays

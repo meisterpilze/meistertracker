@@ -14,6 +14,12 @@ data.json
 *.db-wal
 *.db-shm
 
+# A farm's own substrate recipes for scripts/seed-substrate-recipes.js. They are
+# kept outside the repository; only the example with invented values is tracked.
+seed-substrate-recipes.json
+*-recipes.json
+!scripts/seed-substrate-recipes.example.json
+
 # Runtime data (photos, calendar attachments, ad-hoc per-instance state).
 # `data/photos/{YYYY}/{MM}/{report_id}/*.jpg` is written by the server when
 # operators attach photos to contamination reports — these may contain

@@ -119,6 +119,25 @@ const IPV4_RE = /(^|[^0-9A-Za-z.:-])((?:\d{1,3}\.){3}\d{1,3})(?![0-9A-Za-z.-])/g
 const POSTAL_RE =
   /\b[A-Z\u00c4\u00d6\u00dc][\w\u00e4\u00f6\u00fc\u00df.-]*\s?(?:stra\u00dfe|strasse|str\.|platz|weg|gasse|allee|ring|damm)\s+\d{1,4}[a-z]?\s*,\s*(\d{5})\s+[A-Z\u00c4\u00d6\u00dc]/giu;
 
+// A phone number. It reaches a person directly, and the one that got in sat in
+// an order fixture beside an invented name, where no rule above looked: it is not
+// a host, not an IP, not a token and not a street.
+//
+// Two shapes only, because a bare run of digits is far too common in code to mean
+// anything: the international form (+49 …, 0049 …) and a German mobile number
+// written nationally (015x, 016x, 017x). A placeholder passes — a run of four
+// zeros, or seven ascending digits, is nobody's line — so a fixture still has a
+// value it may use.
+const PHONE_RE =
+  /(?:\+|\b00)[1-9]\d{0,2}[ \t\-/()]*\d(?:[ \t\-/()]*\d){6,13}|\b01[5-7]\d[ \t\-/]*\d(?:[ \t\-/]*\d){5,8}\b/g;
+
+function looksLikePhone(match) {
+  const digits = match.replace(/\D/g, '');
+  if (/0{4,}/.test(digits)) return false;
+  if (/1234567|2345678|3456789/.test(digits)) return false;
+  return true;
+}
+
 const CREDENTIAL_RE =
   /\b[A-Za-z0-9_]*(?:token|secret|passwd|password|api[_-]?key|apikey|authorization|bearer)\b\s*[=:]\s*(?:bearer\s+|basic\s+|token\s+)?['"`]?([A-Za-z0-9_\-+/]{16,})/gi;
 
@@ -192,7 +211,8 @@ const RULES = {
   'public-ip': 'a routable IPv4 address',
   'private-ip': 'an internal LAN address',
   credential: 'something shaped like a token, key or password',
-  'postal-address': 'a street and postcode, which says where somebody actually is'
+  'postal-address': 'a street and postcode, which says where somebody actually is',
+  phone: 'a phone number, which reaches a person directly'
 };
 
 /**
@@ -250,6 +270,11 @@ function scan(text, opts) {
     while ((m = POSTAL_RE.exec(line)) !== null) {
       if (m[1] !== '00000') at(m.index, 'postal-address');
     }
+
+    PHONE_RE.lastIndex = 0;
+    while ((m = PHONE_RE.exec(line)) !== null) {
+      if (looksLikePhone(m[0])) at(m.index, 'phone');
+    }
   });
 
   return findings;
@@ -281,6 +306,7 @@ function redact(text, opts) {
           ? full.slice(0, full.length - value.length) + '<redacted>'
           : full
       );
+      out = out.replace(PHONE_RE, (full) => (looksLikePhone(full) ? '<redacted-phone>' : full));
       return out;
     })
     .join('\n');

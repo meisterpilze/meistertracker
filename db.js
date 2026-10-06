@@ -2127,9 +2127,10 @@ const MIGRATIONS = [
       // record of what it had been.
       //
       // The version number stays, so installations that already ran it are not
-      // asked to run something different under the same number. The figures moved
-      // to scripts/seed-substrate-recipes.js, which shows what it would change and
-      // only writes when told to.
+      // asked to run something different under the same number. The seeding moved
+      // to scripts/seed-substrate-recipes.js, which reads the figures from a file
+      // outside the repository, shows what it would change and only writes when
+      // told to.
     }
   },
   {

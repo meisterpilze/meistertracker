@@ -1,0 +1,14 @@
+{
+  "_note": "Invented values that only show the shape. Copy this file to a place outside the repository and put your own figures in it.",
+  "blockKg": 4,
+  "spawnPct": 6,
+  "recipes": {
+    "oyster": { "bran": 15, "corn": 0, "gyp": 1, "moist": 60, "colon": "14-18 d", "steril": "3 h" },
+    "corn-blend": { "bran": 10, "corn": 5, "gyp": 1, "moist": 60, "colon": "30 d", "steril": "3 h" }
+  },
+  "byKuerzel": {
+    "BO": "oyster",
+    "PO": "oyster",
+    "KO": "corn-blend"
+  }
+}

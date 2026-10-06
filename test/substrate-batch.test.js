@@ -22,10 +22,10 @@ function tmpDb() {
   return { path: p, db: db.openDb(p) };
 }
 
-// An invented blend: its hydration target sits far enough below the others
-// that the residual-moisture correction is plainly visible.
-const SHIITAKE = { branPct: 15, cornPct: 0, gypsumPct: 1, moisturePct: 55 };
-const MAITAKE = { branPct: 16, cornPct: 4, gypsumPct: 1, moisturePct: 58 };
+// Two invented blends. The first sets its hydration target low enough that the
+// residual-moisture correction is plainly visible; the second carries corn meal.
+const DRY_BLEND = { branPct: 15, cornPct: 0, gypsumPct: 1, moisturePct: 55 };
+const CORN_BLEND = { branPct: 16, cornPct: 4, gypsumPct: 1, moisturePct: 58 };
 
 function seedStrain(d, name, kuerzel, rec, spawnPct) {
   return db.createMushroomStrain(d, {
@@ -49,7 +49,7 @@ const sub = (d, id) => db.listSubstrateBatches(d).find((s) => s.subId === id);
 
 describe('mix arithmetic', () => {
   it('prices a mix from a blend and a target amount of finished substrate', () => {
-    const m = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 10 });
+    const m = db.computeMixBatch(DRY_BLEND, 200, { residualPct: 9, flowLmin: 10 });
     assert.equal(m.dryKg.toFixed(1), '97.8');
     assert.equal(m.pelletsKg.toFixed(1), '83.2');
     assert.equal(m.branKg.toFixed(1), '14.7');
@@ -61,15 +61,15 @@ describe('mix arithmetic', () => {
   });
 
   it('counts the moisture the delivery arrived with', () => {
-    const corrected = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9 });
+    const corrected = db.computeMixBatch(DRY_BLEND, 200, { residualPct: 9 });
     const naive = 200 * (1 - 0.55); // what a per-bag calculation charges
     assert.equal((corrected.dryKg - naive).toFixed(1), '7.8');
-    const dry0 = db.computeMixBatch({ ...SHIITAKE, gypsumPct: 0 }, 200, { residualPct: 0 }).dryKg;
+    const dry0 = db.computeMixBatch({ ...DRY_BLEND, gypsumPct: 0 }, 200, { residualPct: 0 }).dryKg;
     assert.equal(dry0.toFixed(1), naive.toFixed(1));
   });
 
   it('charges no spawn, because a mix does not know its species yet', () => {
-    const m = db.computeMixBatch(SHIITAKE, 200, {});
+    const m = db.computeMixBatch(DRY_BLEND, 200, {});
     assert.equal(
       m.deltas.some((x) => x.mat === 'grain'),
       false
@@ -77,15 +77,15 @@ describe('mix arithmetic', () => {
   });
 
   it('keeps corn meal in the blend rather than folding it into the pellets', () => {
-    const m = db.computeMixBatch(MAITAKE, 100, { residualPct: 9 });
+    const m = db.computeMixBatch(CORN_BLEND, 100, { residualPct: 9 });
     assert.equal(m.cornKg.toFixed(1), '1.8');
     assert.equal((m.pelletsKg + m.branKg + m.cornKg).toFixed(2), m.dryKg.toFixed(2));
   });
 
   it('refuses blends and targets that cannot be mixed', () => {
-    assert.throws(() => db.computeMixBatch({ ...SHIITAKE, branPct: 80, cornPct: 25 }, 100, {}), /Pellets/);
-    assert.throws(() => db.computeMixBatch({ ...SHIITAKE, moisturePct: 5 }, 100, { residualPct: 9 }), /Restfeuchte/);
-    assert.throws(() => db.computeMixBatch(SHIITAKE, 0, {}), /groesser als 0/);
+    assert.throws(() => db.computeMixBatch({ ...DRY_BLEND, branPct: 80, cornPct: 25 }, 100, {}), /Pellets/);
+    assert.throws(() => db.computeMixBatch({ ...DRY_BLEND, moisturePct: 5 }, 100, { residualPct: 9 }), /Restfeuchte/);
+    assert.throws(() => db.computeMixBatch(DRY_BLEND, 0, {}), /groesser als 0/);
   });
 });
 
@@ -456,7 +456,7 @@ describe('watering time', () => {
   const zeit = new Function(hebeFunktion('waterTimeText', APP) + '\nreturn waterTimeText;')();
 
   it('turns litres into minutes at the configured flow rate', () => {
-    const m = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 10 });
+    const m = db.computeMixBatch(DRY_BLEND, 200, { residualPct: 9, flowLmin: 10 });
     assert.equal(m.waterL.toFixed(1), '101.2');
     assert.equal(zeit(m.waterMinutes), '10:07 min');
   });
@@ -464,7 +464,7 @@ describe('watering time', () => {
   it('follows the flow rate rather than assuming ten', () => {
     // Ein anderer Hahn, dieselben Liter: die Zahl muss mitgehen, sonst wäre sie
     // für jede Anlage ausser dieser falsch.
-    const langsam = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 5 });
+    const langsam = db.computeMixBatch(DRY_BLEND, 200, { residualPct: 9, flowLmin: 5 });
     assert.equal(zeit(langsam.waterMinutes), '20:14 min');
   });
 
@@ -478,7 +478,7 @@ describe('watering time', () => {
 
   it('says nothing rather than zero when there is no flow rate', () => {
     // flowLmin 0 heisst "nicht bekannt", nicht "sofort fertig".
-    const ohne = db.computeMixBatch(SHIITAKE, 200, { residualPct: 9, flowLmin: 0 });
+    const ohne = db.computeMixBatch(DRY_BLEND, 200, { residualPct: 9, flowLmin: 0 });
     assert.equal(ohne.waterMinutes, 0);
     assert.equal(zeit(ohne.waterMinutes), '–');
     assert.equal(zeit(null), '–');
