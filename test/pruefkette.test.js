@@ -23,7 +23,7 @@ const crypto = require('crypto');
 const db = require('../db.js');
 const { quelle, hebe, hebeFunktion } = require('./helpers/quelle');
 const { createLabTimestamps, tsaFromEnv, shownTsa, DEFAULT_TSA } = require('../scripts/lab-timestamps.js');
-const { tokenFuer } = require('./helpers/tsa');
+const { tokenFuer, hex, tstInfo, zertifikat, alsCa, alsStelle, signiertesToken } = require('./helpers/tsa');
 
 const ANNA = { user_id: 7, username: 'anna' };
 
@@ -162,14 +162,16 @@ describe('Pruefkette: Glieder', () => {
     assert.equal(db.insertLabTimestamp(x.d, stempel({ ...kopf, token: Buffer.from([4]) })), null, 'not a token');
     const id = db.insertLabTimestamp(x.d, stempel(kopf));
     assert.ok(id);
+    // Zeit und Seriennummer sind die aus dem Token (tokenFuer: 09:37:28,
+    // 0a0b0c), nicht die, die der Aufrufer nannte.
     assert.deepEqual(db.lastLabTimestamp(x.d), {
       id,
       historyId: kopf.historyId,
       hash: kopf.hash,
       tsa: 'http://tsa.example',
       requested: '2026-10-03T11:00:00.000Z',
-      genTime: '2026-10-03T11:00:01.000Z',
-      serial: '03'
+      genTime: '2026-10-03T09:37:28.000Z',
+      serial: '0a0b0c'
     });
     const alle = db.listLabTimestamps(x.d);
     assert.equal(alle.length, 2);
@@ -500,6 +502,149 @@ describe('Pruefkette: was an der Anwendung vorbei geaendert wird', () => {
   });
 });
 
+describe('Pruefkette: die Signaturen der Zeitstempel', () => {
+  const ECHT = fs.readFileSync(path.join(__dirname, 'fixtures', 'rfc3161-token.der'));
+  const ECHT_HASH = '6491253b709b930450ebaea22b4ca9fd36111db9e53bbb60024fd511d773d505';
+  const stempel = (s) => ({
+    tsa: 'http://tsa.example',
+    requested: '2026-10-03T10:00:00.000Z',
+    genTime: '2026-10-03T10:00:01.000Z',
+    serial: '01',
+    ...s
+  });
+  function mitEintrag() {
+    const x = datenbank();
+    const v = db.insertExperiment(x.d, { code: 'S1', title: 'Signatur', started: '2026-10-01' }, ANNA);
+    return { x, v };
+  }
+
+  it('zaehlt sie fuer sich: ein Token ohne Unterschrift ist bad, aber kein Bruch der Kette', () => {
+    const { x } = mitEintrag();
+    try {
+      const kopf = db.labChainHead(x.d);
+      const id = db.insertLabTimestamp(x.d, stempel({ ...kopf, token: tokenFuer(kopf.hash) }));
+      const k = db.labChainStatus(x.d);
+      assert.equal(k.ok, true, 'the chain itself holds');
+      const problem = { id, historyId: kopf.historyId, signature: 'bad', reason: 'signers' };
+      assert.deepEqual(k.signatures, { ok: 0, bad: 1, unchecked: 0, problems: [problem], firstBad: problem });
+      assert.equal(k.lastStamp.id, id);
+      assert.equal(k.lastStamp.signature, 'bad');
+      assert.equal(k.lastStamp.signer, null);
+    } finally {
+      x.weg();
+    }
+  });
+
+  it('nennt den Stempel einer Stelle, deren Wurzel Node nicht mitbringt, unchecked, ohne Bruch', () => {
+    const { x } = mitEintrag();
+    try {
+      const kopf = db.labChainHead(x.d);
+      const wurzel = zertifikat({ cn: 'Eigene Wurzel', erweiterungen: alsCa() });
+      const stelle = zertifikat({ cn: 'Eigene Stelle', aussteller: wurzel, erweiterungen: alsStelle() });
+      const token = signiertesToken({ tst: tstInfo({ hash: hex(kopf.hash) }), stelle, zertifikate: [stelle, wurzel] });
+      db.insertLabTimestamp(x.d, stempel({ ...kopf, token }));
+      const k = db.labChainStatus(x.d);
+      assert.equal(k.ok, true);
+      assert.deepEqual(
+        k.signatures.problems.map((p) => [p.signature, p.reason]),
+        [['unchecked', 'root']]
+      );
+      assert.equal(k.signatures.unchecked, 1);
+      assert.equal(k.lastStamp.signature, 'unchecked');
+    } finally {
+      x.weg();
+    }
+  });
+
+  it('prueft ein echtes Token bis zur Wurzel, getrennt davon, ob die Kette passt', () => {
+    // Ein echtes Token gibt es nur ueber seinen eigenen Hash; hier steht es auf
+    // einem Glied, das jemand von Hand geschrieben hat. Die Kette bricht dort,
+    // die Signatur haelt.
+    const { x } = mitEintrag();
+    try {
+      anVorbei(x.d, 'INSERT INTO lab_history_chain(history_id, hash) VALUES(?,?)', 1e9, ECHT_HASH);
+      assert.ok(db.insertLabTimestamp(x.d, stempel({ historyId: 1e9, hash: ECHT_HASH, token: ECHT })));
+      const k = db.labChainStatus(x.d);
+      assert.equal(k.ok, false);
+      assert.deepEqual(k.broken, [{ id: 1e9, reason: 'missing' }]);
+      assert.deepEqual(k.signatures, { ok: 1, bad: 0, unchecked: 0, problems: [], firstBad: null });
+      assert.equal(k.lastStamp.signature, 'ok');
+      assert.equal(k.lastStamp.signer, 'DigiCert SHA256 RSA4096 Timestamp Responder 2026 1');
+    } finally {
+      x.weg();
+    }
+  });
+
+  it('zeigt Zeit und Seriennummer aus dem Token, und eine geaenderte Spalte bricht die Kette', () => {
+    // Das echte Token auf einem Glied von Hand, wie oben; dann die Zeit in
+    // der Spalte vorverlegt, an der Anwendung vorbei.
+    const { x } = mitEintrag();
+    try {
+      anVorbei(x.d, 'INSERT INTO lab_history_chain(history_id, hash) VALUES(?,?)', 1e9, ECHT_HASH);
+      db.insertLabTimestamp(x.d, stempel({ historyId: 1e9, hash: ECHT_HASH, token: ECHT }));
+      const vorher = db.labChainStatus(x.d);
+      assert.deepEqual(vorher.broken, [{ id: 1e9, reason: 'missing' }], 'only the hand-made link');
+      x.d.exec('DROP TRIGGER IF EXISTS lab_timestamps_no_update');
+      x.d.prepare("UPDATE lab_timestamps SET gen_time='2021-01-01T00:00:00.000Z'").run();
+      const k = db.labChainStatus(x.d);
+      assert.deepEqual(k.broken, [
+        { id: 1e9, reason: 'missing' },
+        { id: 1e9, reason: 'stamp' }
+      ]);
+      assert.equal(k.lastStamp.genTime, '2026-10-03T09:37:28.000Z', 'the time the token was signed at');
+      assert.equal(k.lastStamp.signature, 'ok', 'the token itself still holds');
+      x.d.prepare("UPDATE lab_timestamps SET gen_time='2026-10-03T09:37:28.000Z', serial='01'").run();
+      assert.deepEqual(db.labChainStatus(x.d).broken.at(-1), { id: 1e9, reason: 'stamp' }, 'the serial as well');
+    } finally {
+      x.weg();
+    }
+  });
+
+  it('nennt die ersten zehn, die nicht ok sind, und zaehlt alle', () => {
+    const { x, v } = mitEintrag();
+    try {
+      for (let i = 0; i < 12; i++) {
+        db.updateExperiment(x.d, v, { title: 'Lauf ' + i }, ANNA);
+        const kopf = db.labChainHead(x.d);
+        db.insertLabTimestamp(x.d, stempel({ ...kopf, token: tokenFuer(kopf.hash) }));
+      }
+      const k = db.labChainStatus(x.d);
+      assert.equal(k.ok, true);
+      assert.equal(k.signatures.bad, 12);
+      assert.equal(k.signatures.problems.length, 10);
+      assert.ok(k.signatures.problems[0].id < k.signatures.problems[9].id, 'the earliest first');
+    } finally {
+      x.weg();
+    }
+  });
+
+  it('nennt den ersten ungueltigen Stempel auch hinter zehn, die sich nur nicht pruefen lassen', () => {
+    const { x, v } = mitEintrag();
+    try {
+      const wurzel = zertifikat({ cn: 'Eigene Wurzel', erweiterungen: alsCa() });
+      const stelle = zertifikat({ cn: 'Eigene Stelle', aussteller: wurzel, erweiterungen: alsStelle() });
+      for (let i = 0; i < 11; i++) {
+        db.updateExperiment(x.d, v, { title: 'Lauf ' + i }, ANNA);
+        const kopf = db.labChainHead(x.d);
+        // Zehn von einer Stelle, deren Wurzel Node nicht mitbringt, dann einer ohne Unterschrift.
+        const token =
+          i < 10
+            ? signiertesToken({ tst: tstInfo({ hash: hex(kopf.hash) }), stelle, zertifikate: [stelle, wurzel] })
+            : tokenFuer(kopf.hash);
+        db.insertLabTimestamp(x.d, stempel({ ...kopf, token }));
+      }
+      const k = db.labChainStatus(x.d);
+      assert.equal(k.signatures.unchecked, 10);
+      assert.equal(k.signatures.problems.length, 10);
+      assert.ok(k.signatures.problems.every((p) => p.signature === 'unchecked'));
+      assert.equal(k.signatures.firstBad.historyId, db.labChainHead(x.d).historyId);
+      assert.equal(k.signatures.firstBad.reason, 'signers');
+    } finally {
+      x.weg();
+    }
+  });
+});
+
 describe('Migration 97: verkettet, was schon da ist', () => {
   it('gibt jedem vorhandenen Eintrag sein Glied, ohne einen Eintrag anzufassen', () => {
     const x = datenbank();
@@ -736,6 +881,14 @@ describe('Zeitstempel-Route und Gesundheit im Quelltext', () => {
     assert.ok(src.includes('return labChainHealth();'));
     assert.ok(src.includes('jetzt - labChainCache.at > 60 * 1000'), 'checked at most once a minute');
   });
+  it('macht den Status degraded bei einer Signatur, die nicht haelt, nicht bei einer, die sich nicht pruefen laesst', () => {
+    const i = src.indexOf('const labSignaturen = health.labChain.signatures;');
+    assert.ok(i > 0);
+    const stueck = src.slice(i, i + 300);
+    assert.ok(stueck.includes('labSignaturen.bad > 0'));
+    assert.ok(stueck.includes("health.status = 'degraded'"));
+    assert.equal(stueck.includes('unchecked'), false, 'a TSA whose root Node lacks is no fault');
+  });
 });
 
 // ── Oberflaeche ─────────────────────────────────────────────
@@ -826,6 +979,68 @@ describe('Pruefkette in der Oberflaeche', () => {
     assert.ok(blatt.includes(',5,15,19)'));
     // Ein Befund von einem Server ohne das Feld zeigt keine solche Zeile.
     assert.equal(o.pjLbKette({ chain: { ok: true, entries: 1, broken: [], head: KOPF } }).includes('Adopted'), false);
+  });
+
+  it('nennt unter Server die Signaturen fuer sich: geprueft, ungueltig, nicht pruefbar', () => {
+    const zeile = (signatures, stamps = 5) =>
+      o.serverKette({
+        ok: true,
+        entries: 12,
+        broken: [],
+        head: KOPF,
+        lastStamp: STEMPEL,
+        stamps,
+        signatures,
+        stamping: { tsa: 'http://tsa.example', lastError: null }
+      });
+    const gut = zeile({ ok: 5, bad: 0, unchecked: 0, problems: [] });
+    assert.ok(gut.includes('server.chainOk(12)'));
+    assert.ok(gut.includes('server.chainSigOk'));
+    const schlecht = zeile({
+      ok: 2,
+      bad: 2,
+      unchecked: 1,
+      problems: [
+        { id: 2, historyId: 4, signature: 'unchecked', reason: 'root' },
+        { id: 3, historyId: 7, signature: 'bad', reason: 'digest' },
+        { id: 4, historyId: 9, signature: 'bad', reason: 'signature' }
+      ]
+    });
+    assert.ok(schlecht.includes('server.chainOk(12)'), 'the chain itself still holds');
+    assert.ok(schlecht.includes('server.chainSigBad(2,5,7)'), 'how many, of how many, and the first bad one');
+    assert.ok(schlecht.includes('server.chainSigUnchecked(1,5)'));
+    assert.equal(schlecht.includes('server.chainSigOk'), false);
+    // Steht der erste ungueltige hinter zehn, die sich nicht pruefen lassen,
+    // nennt ihn firstBad.
+    const zehn = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, historyId: i + 2, signature: 'unchecked' }));
+    const dahinter = zeile(
+      { ok: 0, bad: 1, unchecked: 10, problems: zehn, firstBad: { id: 11, historyId: 30, signature: 'bad' } },
+      11
+    );
+    assert.ok(dahinter.includes('server.chainSigBad(1,11,30)'));
+    // Ohne Stempel, und von einem Server ohne die Pruefung: kein Wort dazu.
+    assert.equal(zeile({ ok: 0, bad: 0, unchecked: 0, problems: [] }, 0).includes('chainSig'), false);
+    assert.equal(zeile(undefined).includes('chainSig'), false);
+  });
+
+  it('druckt die Signatur des juengsten Stempels, und die der aelteren, wenn sie nicht halten', () => {
+    const blatt = (lastStamp, signatures, stamps = 5) =>
+      o.pjLbKette({ chain: { ok: true, entries: 12, broken: [], head: KOPF, lastStamp, stamps, signatures } });
+    const alleGut = { ok: 5, bad: 0, unchecked: 0, problems: [] };
+    const gut = blatt({ ...STEMPEL, signature: 'ok', signer: 'Stelle <A>' }, alleGut);
+    assert.ok(gut.includes('exp.lbChainSigOk(Stelle &lt;A&gt;)'), 'names the signer, escaped');
+    assert.equal(gut.includes('exp.lbChainSigAll'), false);
+    assert.ok(blatt({ ...STEMPEL, signature: 'bad', signer: null }, alleGut).includes('exp.lbChainSigBad'));
+    assert.ok(blatt({ ...STEMPEL, signature: 'unchecked', signer: null }, alleGut).includes('exp.lbChainSigUnchecked'));
+    const aeltere = blatt({ ...STEMPEL, signature: 'ok', signer: 'S' }, { ok: 2, bad: 1, unchecked: 2, problems: [] });
+    assert.ok(aeltere.includes('exp.lbChainSigAll(5,1,2)'));
+    // Ein einziger Stempel steht schon in seiner Zeile; ein Befund ohne
+    // Signaturen druckt keine.
+    assert.equal(
+      blatt({ ...STEMPEL, signature: 'bad' }, { ok: 0, bad: 1, unchecked: 0, problems: [] }, 1).includes('SigAll'),
+      false
+    );
+    assert.equal(blatt(STEMPEL, undefined).includes('exp.lbChainSig'), false);
   });
 
   it('sagt nach dem Knopf, was passiert ist', () => {

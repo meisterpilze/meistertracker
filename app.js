@@ -14040,8 +14040,9 @@ async function loadServerTab() {
   }
 }
 // Die Pruefkette des Laborbuchs in einer Zeile: ob der Verlauf noch so ist, wie
-// er geschrieben wurde, der juengste Zeitstempel, und ob der letzte Versuch,
-// einen zu holen, scheiterte. Darunter der Knopf, der gleich einen holt.
+// er geschrieben wurde, der juengste Zeitstempel, ob die Signaturen der Stelle
+// halten, und ob der letzte Versuch, einen zu holen, scheiterte. Darunter der
+// Knopf, der gleich einen holt.
 function serverKette(k) {
   const teile = [
     k.ok
@@ -14054,6 +14055,20 @@ function serverKette(k) {
   }
   const s = k.lastStamp;
   teile.push(s ? t('server.chainStamp', { d: fmtDtTime(s.genTime), id: s.historyId }) : t('server.chainNoStamp'));
+  // Die Signaturen fuer sich, ueber alle Stempel: welche nicht halten, welche
+  // sich nicht pruefen lassen, und sonst, dass alle geprueft sind. Ein Server
+  // von vor der Pruefung schickt sie nicht mit.
+  const sig = k.signatures;
+  if (sig && k.stamps) {
+    if (sig.bad) {
+      // firstBad auch dann, wenn vor ihm zehn stehen, die sich nur nicht
+      // pruefen lassen.
+      const erster = sig.firstBad || (sig.problems || []).find((p) => p.signature === 'bad');
+      teile.push(t('server.chainSigBad', { n: sig.bad, total: k.stamps, id: erster ? erster.historyId : '?' }));
+    }
+    if (sig.unchecked) teile.push(t('server.chainSigUnchecked', { n: sig.unchecked, total: k.stamps }));
+    if (!sig.bad && !sig.unchecked) teile.push(t('server.chainSigOk'));
+  }
   const an = !!(k.stamping && k.stamping.tsa);
   if (!an) teile.push(t('server.chainStampOff'));
   else if (k.stamping.lastError) {
@@ -17402,7 +17417,8 @@ function pjLbArbeitspakete(buch, pakete) {
 // Die Pruefkette unter dem Blatt: ob der Verlauf noch so ist, wie er geschrieben
 // wurde, das juengste Glied und der juengste Zeitstempel darauf. Wer das Blatt
 // spaeter neben die Datei legt, sieht an dem Glied, ob seitdem etwas geaendert
-// wurde; der Zeitstempel belegt, dass es das Glied an dem Tag schon gab.
+// wurde; der Zeitstempel belegt, dass es das Glied an dem Tag schon gab, und
+// seine Signatur, ob er von der Stelle kommt.
 function pjLbKette(buch) {
   const k = buch.chain;
   if (!k) return '';
@@ -17440,9 +17456,18 @@ function pjLbKette(buch) {
   const s = k.lastStamp;
   if (s) {
     zeilen.push(esc(t('exp.lbChainStamp', { d: fmtDtTime(s.genTime), id: s.historyId, tsa: s.tsa })) + hash(s.hash));
+    if (s.signature === 'ok') zeilen.push(esc(t('exp.lbChainSigOk', { signer: s.signer || '?' })));
+    else if (s.signature === 'bad') zeilen.push(esc(t('exp.lbChainSigBad')));
+    else if (s.signature === 'unchecked') zeilen.push(esc(t('exp.lbChainSigUnchecked')));
     if (k.head && k.head.historyId > s.historyId) zeilen.push(esc(t('exp.lbChainAfter', { id: s.historyId })));
   } else {
     zeilen.push(esc(t('exp.lbChainNoStamp')));
+  }
+  // Halten aeltere Stempel nicht, oder lassen sie sich nicht pruefen, steht
+  // das auch auf dem Blatt, nicht nur der juengste.
+  const sig = k.signatures;
+  if (sig && k.stamps > 1 && (sig.bad || sig.unchecked)) {
+    zeilen.push(esc(t('exp.lbChainSigAll', { total: k.stamps, bad: sig.bad, unchecked: sig.unchecked })));
   }
   return `<div class="kette"><h3>${esc(t('exp.lbChain'))}</h3>${zeilen.map((z) => '<p>' + z + '</p>').join('')}</div>`;
 }

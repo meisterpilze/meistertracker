@@ -2,6 +2,7 @@
 const { DatabaseSync: Database } = require('node:sqlite');
 const crypto = require('crypto');
 const { tokenInfo } = require('./scripts/rfc3161.js');
+const { tokenSignature } = require('./scripts/rfc3161-verify.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -8271,21 +8272,35 @@ function listLabTimestamps(db) {
 // Ein Zeitstempel gehoert zu einem Glied, das es so gibt. Kam die Antwort erst,
 // nachdem eine Sicherung zurueckgespielt wurde, gibt es das Glied vielleicht
 // nicht mehr, oder mit anderem Inhalt; dann wird nichts gespeichert (null).
+// Zeit und Seriennummer kommen aus dem Token, nicht vom Aufrufer: gezeigt und
+// gedruckt wird, was die Stelle unterschrieben hat.
 function insertLabTimestamp(db, s) {
   const glied = db.prepare('SELECT hash FROM lab_history_chain WHERE history_id=?').get(s.historyId);
   if (!glied || glied.hash !== s.hash) return null;
-  if (_stempelHash(s.token) !== s.hash) return null;
+  const info = _stempelInfo(s.token);
+  if (!info || info.hash !== s.hash) return null;
   return db
     .prepare('INSERT INTO lab_timestamps(history_id,hash,tsa,requested,gen_time,serial,token) VALUES(?,?,?,?,?,?,?)')
-    .run(s.historyId, s.hash, s.tsa, s.requested, s.genTime, s.serial, s.token).lastInsertRowid;
+    .run(s.historyId, s.hash, s.tsa, s.requested, info.genTime, info.serial, s.token).lastInsertRowid;
 }
-// Worueber ein gespeichertes Token ist, laut dem Token selbst, nicht laut der
-// Spalte daneben; null, wenn es sich nicht lesen laesst.
-function _stempelHash(token) {
+// Worueber ein gespeichertes Token ist, wann und mit welcher Seriennummer,
+// laut dem Token selbst, nicht laut den Spalten daneben; null, wenn es sich
+// nicht lesen laesst.
+function _stempelInfo(token) {
   try {
-    return tokenInfo(token).hash;
+    return tokenInfo(token);
   } catch {
     return null;
+  }
+}
+// Was die Unterschrift der Stelle unter einem gespeicherten Token taugt: 'ok',
+// 'bad' oder 'unchecked', mit Grund, und bei ok, wer unterschrieb
+// (scripts/rfc3161-verify.js). Einmal je Token gerechnet, danach gemerkt.
+function _stempelSignatur(token) {
+  try {
+    return tokenSignature(token);
+  } catch {
+    return { signature: 'bad', reason: 'format', signer: null, root: null };
   }
 }
 // Prueft die ganze Kette, Glied fuer Glied, gegen das gespeicherte Glied davor.
@@ -8306,9 +8321,18 @@ function _stempelHash(token) {
 //                           aelteren Version; am Ende des Verlaufs traegt ihn
 //                           der naechste Start oder Eintrag nach, mitten
 //                           darin nicht
-//               'stamp'     ein Zeitstempel, dessen Token nicht zum Glied passt
+//               'stamp'     ein Zeitstempel, dessen Token nicht zum Glied passt,
+//                           oder dessen Spalten eine andere Zeit oder
+//                           Seriennummer nennen als das Token selbst
 //   head        das juengste Glied { historyId, hash }
-//   stamps      Anzahl der Zeitstempel; lastStamp: der juengste, ohne Token
+//   stamps      Anzahl der Zeitstempel; lastStamp: der juengste, ohne Token,
+//               mit Zeit und Seriennummer aus dem Token, seiner signature
+//               und dem signer
+//   signatures  die Unterschrift der Stelle unter jedem Token, gezaehlt:
+//               { ok, bad, unchecked, problems, firstBad }, problems die
+//               ersten zehn Stempel, die nicht ok sind: { id, historyId,
+//               signature, reason }; firstBad der erste, der bad ist, auch
+//               wenn er hinter zehn unchecked steht, sonst null
 //   adopted     Eintraege, die ohne Glied ans Ende kamen und die ein Start
 //               nachgetragen hat: { id, at, from, to, count } je Mal, siehe
 //               _ketteNachtragen. Kein Bruch, aber immer zu nennen.
@@ -8316,9 +8340,10 @@ function _stempelHash(token) {
 //               discarded, counted, experiments, workPackages, kept } je Mal,
 //               siehe markBackupRestore. Auch kein Bruch, auch immer zu nennen.
 //
-// Die Unterschrift der Stelle unter einem Token prueft das hier nicht, nur ob
-// das Token ueber das Glied ist. Die Unterschrift prueft openssl ts -verify
-// (DEPLOYMENT.md, und LIESMICH.txt im Archiv).
+// Die Signaturen stehen fuer sich; ok sagt nur, ob die Kette passt. Ein Token,
+// dessen Wurzel Node nicht mitbringt (unchecked), ist kein Bruch, und auch
+// eines, das nicht haelt (bad), zaehlt nicht dort, sondern unter signatures.
+// Ob ein Token ueber das Glied ist, gehoert dagegen zur Kette ('stamp').
 function labChainStatus(db) {
   const glieder = new Map(
     db
@@ -8349,14 +8374,33 @@ function labChainStatus(db) {
   for (const id of glieder.keys()) {
     if (!gesehen.has(id)) alle.push({ id, reason: 'missing' });
   }
-  const stempel = db.prepare('SELECT id, history_id, hash, token FROM lab_timestamps ORDER BY id').all();
+  const stempel = db.prepare('SELECT * FROM lab_timestamps ORDER BY id').all();
+  const signatures = { ok: 0, bad: 0, unchecked: 0, problems: [], firstBad: null };
+  let signatur = null;
+  let info = null;
   for (const s of stempel) {
     const glied = glieder.get(s.history_id);
-    if (glied === undefined || _stempelHash(s.token) !== glied || s.hash !== glied) {
-      alle.push({ id: s.history_id, reason: 'stamp' });
-    }
+    // Das Token entscheidet, nicht die Spalten daneben: die Signatur deckt
+    // seinen Hash, seine Zeit und seine Seriennummer, nicht die Spalten.
+    info = _stempelInfo(s.token);
+    const passt =
+      glied !== undefined &&
+      info &&
+      info.hash === glied &&
+      s.hash === glied &&
+      info.genTime === s.gen_time &&
+      info.serial === s.serial;
+    if (!passt) alle.push({ id: s.history_id, reason: 'stamp' });
+    signatur = _stempelSignatur(s.token);
+    signatures[signatur.signature]++;
+    const problem = { id: s.id, historyId: s.history_id, signature: signatur.signature, reason: signatur.reason };
+    if (signatur.signature !== 'ok' && signatures.problems.length < 10) signatures.problems.push(problem);
+    if (signatur.signature === 'bad' && !signatures.firstBad) signatures.firstBad = problem;
   }
   alle.sort((a, b) => a.id - b.id);
+  // Der juengste Stempel ist der letzte der Schleife, samt Token und Signatur.
+  const letzter = stempel[stempel.length - 1];
+  const ausToken = info ? { genTime: info.genTime, serial: info.serial } : {};
   return {
     ok: alle.length === 0,
     entries,
@@ -8365,7 +8409,10 @@ function labChainStatus(db) {
     brokenTotal: alle.length,
     head: labChainHead(db),
     stamps: stempel.length,
-    lastStamp: lastLabTimestamp(db),
+    lastStamp: letzter
+      ? { ..._stempel(letzter), ...ausToken, signature: signatur.signature, signer: signatur.signer }
+      : null,
+    signatures,
     adopted: _ketteNachgetragen(db),
     restores: _zurueckgespielt(db)
   };

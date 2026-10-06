@@ -2313,9 +2313,10 @@ let labArchiveRunning = false;
 // db.js ohne Token, dazu, wohin gestempelt wird und ob es zuletzt klappte.
 //
 // Die Pruefung rechnet die ganze Kette nach, einige Millisekunden je tausend
-// Eintraege. Der Server-Reiter und der Neustart fragen oft; eine Minute lang
-// gilt deshalb der letzte Befund, solange die Datenbank dieselbe ist. Das
-// Laborbuch prueft jedes Mal selbst.
+// Eintraege, und die Signatur jedes Zeitstempels, beim ersten Mal etwa eine
+// halbe Millisekunde je Token, danach gemerkt. Der Server-Reiter und der
+// Neustart fragen oft; eine Minute lang gilt deshalb der letzte Befund,
+// solange die Datenbank dieselbe ist. Das Laborbuch prueft jedes Mal selbst.
 let labChainCache = null;
 function labChainHealth() {
   const jetzt = Date.now();
@@ -7548,7 +7549,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Antwort nicht mitnehmen; sie ist dann ohnehin degraded.
         health.labChain = { ok: false, error: e.message };
       }
-      if (!health.labChain.ok && health.status === 'ok') health.status = 'degraded';
+      // Degraded bei einer gebrochenen Kette und bei einem Zeitstempel, dessen
+      // Signatur nicht haelt. Nicht bei einem, den die Anwendung nur nicht
+      // pruefen kann (unchecked): dann bringt Node bloss die Wurzel der Stelle
+      // nicht mit.
+      const labSignaturen = health.labChain.signatures;
+      if ((!health.labChain.ok || (labSignaturen && labSignaturen.bad > 0)) && health.status === 'ok') {
+        health.status = 'degraded';
+      }
       if (health.backup.status !== 'ok' && health.status === 'ok') {
         health.status = 'degraded';
       }

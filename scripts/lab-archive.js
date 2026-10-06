@@ -12,8 +12,9 @@
 //   pruefkette/kette.json           every entry's link in the hash chain
 //   zeitstempel/<n>.tsr             every RFC 3161 token, as the authority sent it
 //   zeitstempel/zeitstempel.json    which link each token covers, when, from whom
-//   pruefung.json                   what was checked while writing: the chain, and
-//                                   every photo file against its recorded SHA-256
+//   pruefung.json                   what was checked while writing: the chain,
+//                                   every token's signature, and every photo
+//                                   file against its recorded SHA-256
 //   SHA256SUMS                      the SHA-256 of every file above
 //
 // The history and the chain are always complete, whatever was chosen: a chain
@@ -22,6 +23,28 @@
 const path = require('path');
 const fs = require('fs');
 const { createZipWriter } = require('./zip-store.js');
+const { tokenSignature } = require('./rfc3161-verify.js');
+const { tokenInfo } = require('./rfc3161.js');
+
+// When and with which serial number a token says it was made, from the
+// token, not from the columns next to it; nulls for one that cannot be read.
+function tokenTime(token) {
+  try {
+    const t = tokenInfo(token);
+    return { genTime: t.genTime, serial: t.serial };
+  } catch {
+    return { genTime: null, serial: null };
+  }
+}
+
+// "Stand beim Erstellen" on the signatures: how many the app checked, could
+// not check, and found invalid. Nothing without stamps, or from a chain
+// status that does not report them.
+function signatureLine(chain) {
+  const s = chain.signatures;
+  if (!s || !chain.stamps) return '';
+  return ' (Signatur: ' + s.ok + ' geprueft, ' + s.unchecked + ' nicht pruefbar, ' + s.bad + ' ungueltig)';
+}
 
 // A folder name for an experiment: its id, so two codes that clean up alike
 // stay apart, and its code with anything a file system might mind replaced.
@@ -71,8 +94,9 @@ function readme(book, opts, createdBy, chain) {
     '                      der Pruefkette (kette.json).',
     'zeitstempel/          Die Zeitstempel nach RFC 3161 (.tsr) und welches Glied sie',
     '                      belegen (zeitstempel.json).',
-    'pruefung.json         Was beim Schreiben geprueft wurde: die Kette, und jede',
-    '                      Fotodatei gegen ihre gespeicherte Pruefsumme.',
+    'pruefung.json         Was beim Schreiben geprueft wurde: die Kette, die Signatur',
+    '                      jedes Zeitstempels, und jede Fotodatei gegen ihre',
+    '                      gespeicherte Pruefsumme.',
     'SHA256SUMS            Die SHA-256-Pruefsumme jeder Datei.',
     '',
     'Pruefen',
@@ -99,7 +123,21 @@ function readme(book, opts, createdBy, chain) {
     '              mit dem Hash aus kette.json bei der id (historyId), die',
     '              zeitstempel.json fuer den Stempel nennt. "Verification: OK"',
     '              heisst: die Stelle hat genau dieses Glied zu der Zeit im',
-    '              Token unterschrieben.',
+    '              Token unterschrieben. openssl prueft die Zertifikate auf',
+    '              heute; ist das der Stelle inzwischen abgelaufen, auf die',
+    '              Zeit des Stempels pruefen: -attime <genTime in Sekunden',
+    '              seit 1970>.',
+    '              Die Anwendung hat jede Signatur beim Schreiben selbst',
+    '              geprueft, auf die Zeit des Stempels (pruefung.json, stamps).',
+    '              ok heisst: geprueft bis zu einem Stammzertifikat aus der',
+    '              Liste, die Node.js mitbringt. unchecked: alles haelt, aber',
+    '              kein solches Stammzertifikat ist zu finden, nur eines ueber',
+    '              eine CA fuer andere Zwecke, oder es haelt nur mit MD5, SHA-1',
+    '              oder einem anderen Verfahren, das nicht als stark gilt; dann',
+    '              entscheidet openssl mit dem Stammzertifikat der Stelle. bad:',
+    '              die Signatur haelt nicht, oder das Token laesst sich gar',
+    '              nicht pruefen; es wurde veraendert oder kam nicht von der',
+    '              Stelle.',
     '',
     'Stand beim Erstellen: ' +
       (chain.ok ? 'Kette unveraendert' : 'Kette passt nicht ab Eintrag #' + chain.broken[0].id) +
@@ -107,7 +145,9 @@ function readme(book, opts, createdBy, chain) {
       chain.entries +
       ' Eintraege, ' +
       chain.stamps +
-      ' Zeitstempel.',
+      ' Zeitstempel' +
+      signatureLine(chain) +
+      '.',
     ...(chain.adopted || []).map(
       (a) =>
         'Nachgetragen am ' +
@@ -147,9 +187,18 @@ function readme(book, opts, createdBy, chain) {
     'the RFC 3161 tokens; pruefung.json what was checked while writing;',
     'SHA256SUMS every file. Check files with sha256sum -c SHA256SUMS, the chain',
     'with the formula in step 2 above, and each token with openssl ts -verify as',
-    'in step 3. A history entry with entity "chain" and action "adopt" records',
-    'entries that reached the file without a link (from an older version of the',
-    'app, for example) and were linked by the next start. One with entity',
+    'in step 3. openssl checks certificates as of today: once the certificate of',
+    'the authority has expired, add -attime <genTime in seconds since 1970>. The',
+    'app checked every signature itself while writing, as of the time of the',
+    'stamp (pruefung.json, stamps): ok means checked up to a root certificate',
+    'from the list Node.js ships; unchecked that everything holds but no such',
+    'root was found, one only through a CA for other purposes, or the token holds',
+    'only with MD5, SHA-1 or another algorithm not counted as strong, so openssl',
+    'with the root certificate of the authority decides; bad that the signature',
+    'does not hold, or that the token cannot be checked at all. A history entry',
+    'with entity "chain" and action "adopt" records entries that reached the file',
+    'without a link (from an older version of the app, for example) and were',
+    'linked by the next start. One with entity',
     '"database" and action "backup" records a restored backup: the history up to',
     "the id in entity_id is the backup's, and new_value says how many entries",
     'the restore discarded, per experiment and work package, and names the copy',
@@ -248,6 +297,16 @@ async function writeLabArchive(o) {
         createdBy: o.createdBy || null,
         choice: { from: opts.from || null, to: opts.to || null, workPackageId: opts.workPackageId ?? null },
         chain: book.chain,
+        // Every token's signature as the app checked it (scripts/rfc3161-verify.js),
+        // so a reader sees which stamps it vouched for and why not the others,
+        // with the time and serial the token itself names.
+        stamps: snap.stamps.map((s) => ({
+          id: s.id,
+          historyId: s.historyId,
+          file: 'zeitstempel/' + s.id + '.tsr',
+          ...tokenTime(s.token),
+          ...tokenSignature(s.token)
+        })),
         photos: check
       },
       null,

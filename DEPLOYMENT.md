@@ -121,7 +121,9 @@ HTTP_REDIRECT_PORT=80
 # Lab notebook: the daily RFC 3161 timestamp over the history's hash chain
 # (Section 9). Only a SHA-256 value leaves the server. Default: a public
 # timestamp authority over HTTPS; "off" turns stamping off. A worktree
-# instance does not stamp unless this is set.
+# instance does not stamp unless this is set. The app checks every stamp's
+# signature up to a root certificate Node ships; another authority whose root
+# is not among them gets its stamps reported as unchecked (Section 9).
 # LAB_TSA_URL=https://timestamp.sectigo.com
 ```
 
@@ -550,13 +552,21 @@ Photos (contamination reports and lab-book experiments) are files under `data/ph
 
 The lab notebook's history (who changed what, and when) is append-only in the database, and triggers stop anyone who tries to change or delete an entry through the app or SQLite. Someone holding the file can remove those triggers, so every entry also gets a link in a hash chain, written in the same transaction as the entry: the SHA-256 of the link before it and the entry itself (`db.js`, "Pruefkette"). An entry changed or deleted outside the app no longer matches its link, and one slipped in between others has no link and never gets one. Either way the place shows up:
 
-- **Settings → Server** shows the chain as intact or names the first entry that no longer matches, with the newest timestamp.
-- **`/api/health → labChain`** (admin) and **`/api/health/full → labChain`** give the same, with `broken` listing up to ten places; a broken chain turns the status to `degraded`.
-- **The printed lab book** ends with the chain's state and its newest link, so a printout can later be held against the file.
+- **Settings → Server** shows the chain as intact or names the first entry that no longer matches, with the newest timestamp and whether the stamps' signatures checked out.
+- **`/api/health → labChain`** (admin) and **`/api/health/full → labChain`** give the same, with `broken` listing up to ten places and `signatures` counting the stamps by their signature (below); a broken chain or a bad signature turns the status to `degraded`.
+- **The printed lab book** ends with the chain's state and its newest link, so a printout can later be held against the file, and says whether the newest stamp's signature was checked and with which certificate.
 
 **Entries written without a link.** An older version of the app does not know the chain. If one runs against a database that has it, after a rollback or a revert across migration 97, its history entries go in at the end without links. The next start of a version that knows the chain, or its next history entry, links them in id order and writes an entry of its own that records which ones it took in (`entity` `chain`, `action` `adopt`). That is not reported as a break, but Settings → Server, `labChain.adopted` and every printed lab book name it from then on. Unlinked entries anywhere but at the end stay a break.
 
-**The timestamp.** Someone who changes an entry and recomputes every link after it leaves a chain that matches itself. Once a day, if anything was added since, the server therefore asks a timestamp authority (RFC 3161) to sign the newest link: the request carries that SHA-256 value and a random number, nothing else. The signed token is kept in the database (`lab_timestamps`), and a rewritten chain no longer matches it. The server tries hourly until one succeeds; a failure shows under Settings → Server and in `labChain.stamping.lastError`. An admin can ask for one at once there. `LAB_TSA_URL` chooses the authority (Section 3); the default needs outbound HTTPS (port 443). The check reads the hash inside every stored token, not the column next to it. It does not check the authority's signature on the token; that is what `openssl ts -verify` below does, and the check to rely on when it matters, since someone who can write the file could also store a token they made up. What it cannot see is a stamp deleted together with its rows, since the stamps live in the same file; printed lab books, archives and the stick's snapshots keep earlier links and stamps outside it.
+**The timestamp.** Someone who changes an entry and recomputes every link after it leaves a chain that matches itself. Once a day, if anything was added since, the server therefore asks a timestamp authority (RFC 3161) to sign the newest link: the request carries that SHA-256 value and a random number, nothing else. The signed token is kept in the database (`lab_timestamps`), and a rewritten chain no longer matches it. The server tries hourly until one succeeds; a failure shows under Settings → Server and in `labChain.stamping.lastError`. An admin can ask for one at once there. `LAB_TSA_URL` chooses the authority (Section 3); the default needs outbound HTTPS (port 443). The check reads the hash, the time and the serial number inside every stored token, not the columns next to it, and checks the authority's signature on it, since someone who can write the file could also store a token they made up. The time Settings → Server and the printed lab book show is the token's; a stamp whose columns say otherwise breaks the chain at its entry. What it cannot see is a stamp deleted together with its rows, since the stamps live in the same file; printed lab books, archives and the stick's snapshots keep earlier links and stamps outside it.
+
+**The signature.** For every stored token the app checks what `openssl ts -verify` checks (`scripts/rfc3161-verify.js`): one signer, whose signed attributes cover the token's content by its hash and name the signing certificate; the signature over those attributes (RSA PKCS #1 v1.5, RSA-PSS, ECDSA or Ed25519); a certificate meant for time stamping (extended key usage `timeStamping`, critical, and no other usage openssl knows, as RFC 3161 asks); and a chain through the certificates in the token to a root certificate in Node's bundled list (`tls.rootCertificates`), every signature in it valid, every certificate below the root valid at the time the token names rather than today (the root is trusted as Node ships it), and no CA in it limited to other usages. So neither a certificate for something else, a web server's for instance, nor a CA that may only issue such certificates can make a token that passes. The last check goes beyond `openssl ts -verify`, which does not look at the CAs' usages. Each stamp gets one of three results, reported apart from the chain:
+
+- `ok` — all of the above holds. `labChain.lastStamp.signer` names the certificate that signed the newest stamp.
+- `bad` — something does not hold: the token was changed afterwards, or it never came from the authority. A token the app cannot check at all counts here too, one without the signing certificate (the app always asks for it) or signed with an algorithm the check does not cover (DSA or Ed448, say), since it cannot be told from a changed one. `labChain.signatures.problems` lists the first ten stamps that are not `ok`, with a reason. A bad signature turns the status to `degraded`.
+- `unchecked` — everything that can be checked holds, but the app does not vouch for it: the chain ends at a root Node does not ship, it gets to one only through a CA limited to other usages, or the token holds up only with MD5, SHA-1 or another algorithm not on the check's list of strong ones. A change to the token's content, its signed attributes, its signature or the authority's own certificate never comes out `unchecked`: the digest and those signatures are checked first, whatever hash they name. A change to one of the CA certificates in the token can: once the chain no longer leads to a root Node ships, it looks like an authority whose root Node does not ship. So for an authority whose root Node does ship, the default one among them, an `unchecked` stamp deserves the same look as a `bad` one. It is no break; OpenSSL below checks such a token with the authority's root certificate.
+
+The app does not check revocation (CRL or OCSP), nor which authority signed: any authority whose time stamping certificate chains to a root in Node's list passes, including one a CA under such a root has certified, which is why the signer is named. Node's list changes with Node updates, and a root it drops turns that authority's stamps from `ok` to `unchecked`. The default authority's tokens chain up to `USERTrust RSA Certification Authority`.
 
 **A restored backup.** Restoring a backup (Section 11) brings back the backup's history and its chain, and the chain goes on from the backup's newest link. A printout or archive made before the restore can then name a link the file no longer has. The restore writes an entry that says so, with what it discarded and where that is kept; Settings → Server, `labChain.restores` and every printed lab book name it.
 
@@ -569,7 +579,7 @@ sqlite3 meistertracker.db "SELECT writefile('stamp-' || t.id || '.tsr', t.token)
 openssl ts -verify -digest <hash> -in stamp-1.tsr -token_in -CAfile /etc/ssl/cert.pem
 ```
 
-Take the hash from the chain, as above, not from the stamp's own column. `Verification: OK` then means the authority signed exactly that link at the time the token names.
+Take the hash from the chain, as above, not from the stamp's own column. `Verification: OK` then means the authority signed exactly that link at the time the token names. OpenSSL checks the certificates as of today, so once the authority's certificate has expired, add `-attime` with the token's time in seconds since 1970 (on Linux, `date -u -d <genTime> +%s`). It then checks them at the time of the stamp, as the app does.
 
 ### The lab book archive
 
@@ -578,7 +588,7 @@ For a report, an audit or the yearly archive, an admin downloads the lab book as
 - `fotos/` — every photo of the selection as the app shows it, and the camera original where there is one;
 - `pruefkette/` — the whole history and its hash chain, whatever the selection (a chain can only be recomputed from its first link);
 - `zeitstempel/` — every RFC 3161 token and the link each one covers;
-- `pruefung.json` — the chain's state and every photo file checked against its recorded SHA-256 while the archive was written (a mismatch or a missing file is listed there);
+- `pruefung.json` — the chain's state, every stamp's signature as the app checked it (`stamps`), and every photo file checked against its recorded SHA-256 while the archive was written (a mismatch or a missing file is listed there);
 - `SHA256SUMS` — every file's SHA-256, for `sha256sum -c SHA256SUMS`;
 - `LIESMICH.txt` — the same in words, with the commands for each check.
 

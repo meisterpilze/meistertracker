@@ -69,9 +69,11 @@ const MODULES = [
   'scripts/deploy-chain.js',
   'scripts/deploy-runner.js',
   'scripts/rotate-backups.js',
-  // The lab history's daily timestamp, and the RFC 3161 code it uses.
+  // The lab history's daily timestamp, the RFC 3161 code it uses, and the
+  // check of the TSA's signature that db.js runs on every stamp.
   'scripts/lab-timestamps.js',
   'scripts/rfc3161.js',
+  'scripts/rfc3161-verify.js',
   // The lab book archive, and the ZIP writer under it.
   'scripts/lab-archive.js',
   'scripts/zip-store.js'

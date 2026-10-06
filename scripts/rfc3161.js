@@ -11,8 +11,8 @@
 //
 // This file holds only as much DER as the request and the answer need: build
 // what is sent, and read whether the token belongs to our hash and our nonce,
-// with its time and serial number. It does not check the signature; that is
-// what openssl and the TSA's certificates are for.
+// with its time and serial number. The TSA's signature on a token is checked
+// in scripts/rfc3161-verify.js, with the same DER reader.
 const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
@@ -273,5 +273,6 @@ module.exports = {
   stamp,
   post,
   generalizedTime,
+  der: { readElement, children, content, expectTag, integerHex },
   MAX_ANSWER_BYTES
 };

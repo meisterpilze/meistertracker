@@ -199,6 +199,8 @@ describe('Archiv: nachgetragene Eintraege', () => {
       const { dateien } = zipLesen(z.inhalt());
       const liesmich = dateien.get('LIESMICH.txt').toString('utf8');
       assert.ok(liesmich.includes('Kette unveraendert'));
+      assert.ok(liesmich.includes(' Eintraege, 0 Zeitstempel.'), 'no word on signatures without a stamp');
+      assert.deepEqual(JSON.parse(dateien.get('pruefung.json').toString('utf8')).stamps, []);
       assert.match(liesmich, new RegExp('Nachgetragen am .*: 1 Eintraege ohne Glied, #' + fremd + ' bis #' + fremd));
       const verlauf = JSON.parse(dateien.get('pruefkette/verlauf.json').toString('utf8'));
       const kette = JSON.parse(dateien.get('pruefkette/kette.json').toString('utf8'));
@@ -418,6 +420,32 @@ describe('Das Laborbuch als Archiv', () => {
     );
     assert.deepEqual(archiv.r.photos, p.photos);
     assert.equal(archiv.r.chainOk, true);
+  });
+
+  it('nennt fuer jeden Zeitstempel, was die Anwendung von seiner Signatur haelt', () => {
+    const p = JSON.parse(archiv.dateien.get('pruefung.json').toString('utf8'));
+    const [stempel] = JSON.parse(archiv.dateien.get('zeitstempel/zeitstempel.json').toString('utf8'));
+    // Das Token hier ist ohne Unterschrift gebaut: bad, und die Kette passt
+    // trotzdem.
+    assert.deepEqual(p.stamps, [
+      {
+        id: stempel.id,
+        historyId: stempel.historyId,
+        file: 'zeitstempel/1.tsr',
+        genTime: '2026-10-03T09:37:28.000Z',
+        serial: '0a0b0c',
+        signature: 'bad',
+        reason: 'signers',
+        signer: null,
+        root: null
+      }
+    ]);
+    assert.equal(p.chain.ok, true);
+    assert.equal(p.chain.signatures.bad, 1);
+    const lies = archiv.dateien.get('LIESMICH.txt').toString('utf8');
+    assert.ok(lies.includes(' 1 Zeitstempel (Signatur: 0 geprueft, 0 nicht pruefbar, 1 ungueltig).'));
+    assert.ok(lies.includes('(pruefung.json, stamps)'));
+    assert.ok(lies.includes('-attime'), 'how to check once the certificate has expired');
   });
 
   it('laesst die Kette allein aus dem Archiv nachrechnen, bis zum Glied unter dem Zeitstempel', () => {
