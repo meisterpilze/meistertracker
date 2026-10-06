@@ -496,7 +496,12 @@ describe('order hub – review fixes (recall pass)', () => {
   });
 
   it('#1 getBilledShipment flags a billable label and ignores a test announce', () => {
-    const oid = db.upsertOrder(d, { channel: 'wix', channelOrderId: 'O-SHIP', customerEmail: 'sh@example.de', items: [] });
+    const oid = db.upsertOrder(d, {
+      channel: 'wix',
+      channelOrderId: 'O-SHIP',
+      customerEmail: 'sh@example.de',
+      items: []
+    });
     assert.equal(db.getBilledShipment(d, oid), null, 'none yet → first buy allowed');
     db.insertShipment(d, { orderId: oid, provider: 'sendcloud', providerParcelId: 'P1', status: 'announced' });
     assert.equal(db.getBilledShipment(d, oid), null, 'a test announce is not billable');

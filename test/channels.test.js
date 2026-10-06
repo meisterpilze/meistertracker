@@ -523,7 +523,15 @@ describe('Billbee: orders in', () => {
     // the whole record is searched here, not the fields one by one.
     const o = channels._normalizeBillbee(order);
     const asText = JSON.stringify(o);
-    for (const secret of ['Max', 'Mustermann', 'kunde@example.de', '+4915112345678', 'Musterstr', 'Musterstadt', '00000'])
+    for (const secret of [
+      'Max',
+      'Mustermann',
+      'kunde@example.de',
+      '+4915112345678',
+      'Musterstr',
+      'Musterstadt',
+      '00000'
+    ])
       assert.equal(asText.includes(secret), false, secret + ' must not reach the lab database');
     assert.equal(o.customerName, undefined);
     assert.equal(o.customerEmail, undefined);

@@ -151,7 +151,8 @@ describe('the push refuses to feed Billbee its own orders', () => {
 
   it('rejects a Wix order without a number', async () => {
     await assert.rejects(
-      () => channels.billbee.pushOrder({ apiKey: 'K', clientId: 'a@example.de', clientSecret: 'pw' }, { channel: 'wix' }),
+      () =>
+        channels.billbee.pushOrder({ apiKey: 'K', clientId: 'a@example.de', clientSecret: 'pw' }, { channel: 'wix' }),
       /Bestellnummer fehlt/
     );
   });

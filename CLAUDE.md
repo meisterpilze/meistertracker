@@ -82,10 +82,17 @@ asked to "put this into the app", the quickest route is a constant in `app.js`.
   The Vorhaben tabs take their documents through the import on that page
   (`/api/project-docs`); notes and experiments through their own pages. The code
   knows the shape, never the wording.
-- **Tests and examples use made-up content.** A real order is not a fixture,
-  not even with the name swapped: write `Erika Musterfrau`, `Musterweg 1`,
-  postcode `00000` and `+49 170 0000000`, which the guard lets through. The
-  same goes for a recipe, a production figure or a batch id from the lab.
+- **Test data reads as test data.** Anyone looking at a fixture, a mockup or
+  an example must see at once that it is invented, without having to check
+  the shop or the lab. A real order is not a fixture, not even with the name
+  swapped, and neither is a team member's name, a supplier, a customer or an
+  address that exists. Use the obvious placeholders: `Erika Musterfrau` and
+  `Max Mustermann` (users `erika` and `max`), `Musterweg`, `Musterstadt`,
+  postcode `00000`, `example.com`, `example.de` or `.test` for email,
+  `+49 170 0000000`, `Beispiel GmbH`, and order numbers like `1001`. The same
+  goes for a recipe, a production figure or a batch id from the lab.
+  `test/recognisable-test-data.test.js` checks emails and postcodes; leak-scan
+  checks phone numbers and a street with its postcode.
 - **Figures a script needs come from a file outside the repository**, the way
   `scripts/seed-substrate-recipes.js` reads its recipes. The repository keeps
   an example with invented values.
