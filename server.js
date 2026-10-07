@@ -952,6 +952,12 @@ function validateMixOverride(mix) {
     moisturePct: { min: 20, max: 90 }
   });
 }
+// A substrate mix names its recipe one of two ways: a stored mix (recipeId) or,
+// the older path, a Sorte whose recipe is used (recipeStrainId).
+function mixSourceMissing(data) {
+  if (data.recipeId == null && data.recipeStrainId == null) return 'Missing required field: recipeId';
+  return null;
+}
 // Validate ISO date strings (YYYY-MM-DD or full ISO)
 function validateDate(value, fieldName) {
   if (!value) return null;
@@ -8222,6 +8228,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+  // The mixes the Ansatz form offers. Read-only here; they are kept in the
+  // recipes table.
+  if (req.method === 'GET' && req.url === '/api/recipes') {
+    try {
+      jsonOk(res, db.getAllRecipes(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   const subGetMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)$/);
   if (req.method === 'GET' && subGetMatch) {
     try {
@@ -8363,12 +8379,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['recipeStrainId', 'targetKg']);
+      const vr = validateRequired(data, ['targetKg']) || mixSourceMissing(data);
       if (vr) {
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { recipeStrainId: 'number', targetKg: 'number' });
+      const vt = validateTypes(data, { recipeId: 'number', recipeStrainId: 'number', targetKg: 'number' });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
@@ -8384,7 +8400,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        const found = db.getMixRecipe(database, data.recipeStrainId);
+        const found = db.resolveMix(database, data);
         if (!found) {
           jsonOk(res, { hasRecipe: false });
           return;
@@ -8394,7 +8410,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           hasRecipe: true,
           mix: db.computeMixBatch(adj.recipe, data.targetKg, found.opts),
           adjusted: adj.adjusted,
-          recipeLabel: found.strain.name + ' (' + found.strain.kuerzel + ')'
+          recipeLabel: found.label
         });
       } catch (err) {
         safeErr(res, err);
@@ -8408,12 +8424,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['subId', 'recipeStrainId', 'targetKg']);
+      const vr = validateRequired(data, ['subId', 'targetKg']) || mixSourceMissing(data);
       if (vr) {
         jsonErr(res, 400, vr);
         return;
       }
-      const vt = validateTypes(data, { subId: 'string', recipeStrainId: 'number', targetKg: 'number' });
+      const vt = validateTypes(data, {
+        subId: 'string',
+        recipeId: 'number',
+        recipeStrainId: 'number',
+        targetKg: 'number'
+      });
       if (vt) {
         jsonErr(res, 400, vt);
         return;
