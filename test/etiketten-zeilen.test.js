@@ -12,7 +12,7 @@
 // Umbruchfunktionen stehen in beiden wortgleich; der letzte Block hält das so.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
+const { quelle, hebe, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
 const mcp = require('../mcp-server.js');
 
 const APP = quelle();
@@ -41,19 +41,34 @@ const unterkante = (src) => src.match(/^const LABEL_UNTEN = \d+;$/m)[0];
 // app.js hat keine Modulgrenze: die Etiketten-Funktionen werden herausgehoben
 // und gegen Attrappen gebaut. barcodeByEntity bleibt leer, also druckt jedes
 // Etikett den Ersatz-Code aus der Nummer — für den Text darunter egal.
-const APP_E = new Function(
-  [
-    'const barcodeByEntity = new Map();',
-    'const labelDims = { widthDots: 400, heightDots: 240 };',
-    'let _labelEmMap = null;',
-    unterkante(APP),
-    hebeKonstante('_BADGE', APP),
-    ...KONSTANTEN.map((k) => hebeKonstante(k, APP)),
-    ...['bcParams', 'fmtDt', 'labelKg', '_bagTotalBadge', ...FUNKTIONEN].map((f) => hebeFunktion(f, APP)),
-    ...['bagLabelItems', 'labLabelItems', 'zplText', 'itemsToZPL'].map((f) => hebeFunktion(f, APP)),
-    'return { bagLabelItems, labLabelItems, itemsToZPL, labelTextW };'
-  ].join('\n')
-)();
+//
+// Das Gewicht steht in der Sprache der Oberfläche (fmtKg), also wird je Sprache
+// gebaut. LOCALE_MAP und fmtKg kommen aus app.js mit: eine Kopie hier ließe
+// genau die Änderung durch, gegen die der Sprachtest unten schützt.
+function appEtiketten(sprache) {
+  return new Function(
+    [
+      'let currentLang = ' + JSON.stringify(sprache) + ';',
+      hebe(
+        [
+          [/^const LOCALE_MAP = .*$/m, 'LOCALE_MAP'],
+          [/^const fmtKg = .*$/m, 'fmtKg']
+        ],
+        APP
+      ),
+      'const barcodeByEntity = new Map();',
+      'const labelDims = { widthDots: 400, heightDots: 240 };',
+      'let _labelEmMap = null;',
+      unterkante(APP),
+      hebeKonstante('_BADGE', APP),
+      ...KONSTANTEN.map((k) => hebeKonstante(k, APP)),
+      ...['bcParams', 'fmtDt', 'labelKg', '_bagTotalBadge', ...FUNKTIONEN].map((f) => hebeFunktion(f, APP)),
+      ...['bagLabelItems', 'labLabelItems', 'zplText', 'itemsToZPL'].map((f) => hebeFunktion(f, APP)),
+      'return { bagLabelItems, labLabelItems, itemsToZPL, labelTextW, labelKg };'
+    ].join('\n')
+  )();
+}
+const APP_E = appEtiketten('de');
 
 // Beide Dateien mit derselben Unterschrift: die in app.js nimmt keine
 // Barcode-Nummer, die in mcp-server.js schon.
@@ -111,6 +126,39 @@ describe('Das Reishi-Etikett', () => {
       }
       assert.ok(zpl.includes('LC-LM-260926-01 <- PD-LM-200926-03'), name + ': Herkunft fehlt');
     }
+  });
+});
+
+// Das Gewicht stand mit festem Komma auf jedem Etikett, auch aus der englischen
+// Oberfläche: Vorschau und Druck zeigten "2,5kg". Es folgt jetzt der Sprache,
+// aus der gedruckt wird; die deutsche Halle behält ihr Komma.
+describe('Das Gewicht auf dem Etikett', () => {
+  const gewichtszeile = (items) => texte(items).find((i) => i.text.includes('kg')).text;
+  const reishi = (e) => gewichtszeile(e.bagLabelItems(BEUTEL, REISHI, 'sorte', null, false, 2.5));
+
+  it('steht in der Sprache, aus der gedruckt wird', () => {
+    assert.equal(reishi(APP_E), 'Reishi - 2,5kg - Ganoderma');
+    assert.equal(reishi(appEtiketten('pt')), 'Reishi - 2,5kg - Ganoderma');
+    assert.equal(reishi(appEtiketten('en')), 'Reishi - 2.5kg - Ganoderma');
+  });
+
+  it('geht so an den Drucker, wie die Vorschau es zeigt', () => {
+    const en = appEtiketten('en');
+    const zpl = en.itemsToZPL(en.bagLabelItems(BEUTEL, REISHI, 'sorte', null, false, 2.5));
+    assert.ok(zpl.includes('^FDReishi - 2.5kg - Ganoderma^FS'), zpl);
+  });
+
+  it('ganze Kilo ohne Nachkommastelle, auf das Gramm gerundet', () => {
+    const en = appEtiketten('en');
+    assert.equal(en.labelKg(1), '1kg');
+    assert.equal(en.labelKg(3.8), '3.8kg');
+    assert.equal(en.labelKg(2.4999), '2.5kg');
+    assert.equal(APP_E.labelKg(1.25), '1,25kg');
+  });
+
+  it('das MCP hat keine Oberfläche und druckt wie die App in ihrer Voreinstellung', () => {
+    const items = mcp.bagLabelItems(BEUTEL, REISHI, 'sorte', 1000601, false, 2.5);
+    assert.equal(gewichtszeile(items), 'Reishi - 2,5kg - Ganoderma');
   });
 });
 

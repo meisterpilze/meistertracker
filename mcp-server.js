@@ -129,7 +129,9 @@ function itemsToZPL(items) {
 }
 
 // Siehe app.js: dieselbe Beschriftung, damit gedruckt und angezeigt nicht
-// auseinanderlaufen.
+// auseinanderlaufen. Die App schreibt das Gewicht in der Sprache dessen, der
+// druckt; das MCP hat keine Oberfläche und druckt wie die App in ihrer
+// Voreinstellung, Deutsch.
 function labelKg(kg) {
   return String(Math.round(kg * 1000) / 1000).replace('.', ',') + 'kg';
 }

@@ -22963,10 +22963,12 @@ function _labelQr(bcVal, absaetze, badge) {
   return { passt: text.unten <= 240, items: [code].concat(text.items) };
 }
 // Was auf dem Beutel steht, wenn man sein Gewicht draufschreibt: 1 → "1kg",
-// 2.5 → "2,5kg". Der Punkt ist eine Programmiersprache, das Etikett liest ein
-// Mensch in einer deutschen Halle.
+// 2.5 → "2,5kg". In der Sprache dessen, der druckt, wie jede Zahl in der App
+// (fmtKg): die deutsche Halle druckt aus der deutschen Oberfläche und behält
+// ihr Komma, ein Labor, das auf Englisch arbeitet, bekommt "2.5kg" statt
+// "2,5kg". Die Vorschau ist dasselbe Etikett.
 function labelKg(kg) {
-  return String(Math.round(kg * 1000) / 1000).replace('.', ',') + 'kg';
+  return fmtKg(Math.round(kg * 1000) / 1000) + 'kg';
 }
 // Das Gewicht EINES Beutels, so wie das Etikett es braucht.
 //
