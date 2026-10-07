@@ -4676,22 +4676,55 @@ function getMixRecipe(db, strainId) {
   };
 }
 
+// Read a stored mix (the recipes table) the same way. A Ansatz is species-
+// neutral, so the form picks one of these rather than a Sorte; the Sorte path
+// above stays for callers that still send recipeStrainId.
+function getMixFromRecipe(db, recipeId) {
+  const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(recipeId);
+  if (!r) throw new Error('Mischung nicht gefunden');
+  if (!(r.rh_pct > 0)) return null;
+  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  return {
+    label: r.name,
+    recipe: {
+      substrate: 'holzkleie',
+      branPct: r.wheatbran_pct || 0,
+      cornPct: 0,
+      gypsumPct: r.gypsum_pct || 0,
+      moisturePct: r.rh_pct || 0
+    },
+    opts: {
+      residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
+    }
+  };
+}
+
+// Either source, one shape: { label, recipe, opts }. recipeId wins.
+function resolveMix(db, b) {
+  if (b.recipeId != null) return getMixFromRecipe(db, b.recipeId);
+  const found = getMixRecipe(db, b.recipeStrainId);
+  if (!found) return null;
+  return {
+    label: found.strain.name + ' (' + found.strain.kuerzel + ')',
+    recipe: found.recipe,
+    opts: found.opts,
+    strainId: found.strain.id
+  };
+}
+
 // Mix a batch of substrate. This is the only step that draws raw materials.
 function createSubstrateBatch(db, b, userId) {
-  const found = getMixRecipe(db, b.recipeStrainId);
-  if (!found) throw new Error('Diese Sorte hat noch kein Rezept. Bitte zuerst ein Rezept speichern.');
+  const found = resolveMix(db, b);
+  if (!found) throw new Error('Diese Mischung hat noch keine Soll-Feuchte. Bitte zuerst im Rezept eintragen.');
   const adj = mixWithOverride(found.recipe, b.mix);
   const mix = computeMixBatch(adj.recipe, b.targetKg, found.opts);
   // Ein abweichender Ansatz trägt seine Mischung im Namen. Ohne das stünde in
-  // der Liste "Blue Oyster (BO)" über einer abweichenden Mischung, und wer später
+  // der Liste der Rezeptname über einer abweichenden Mischung, und wer später
   // sucht, warum dieser eine Ansatz sich anders verhalten hat, findet den
   // Unterschied nur, wenn er die Zeile aufklappt.
   const label =
-    found.strain.name +
-    ' (' +
-    found.strain.kuerzel +
-    ')' +
-    (adj.adjusted ? ' · ' + Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct) : '');
+    found.label + (adj.adjusted ? ' · ' + Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct) : '');
   const created = b.created || new Date().toISOString();
   db.exec('BEGIN');
   try {
@@ -4704,7 +4737,7 @@ function createSubstrateBatch(db, b, userId) {
        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open')`
     ).run(
       b.subId,
-      b.recipeStrainId,
+      found.strainId != null ? found.strainId : null,
       label,
       mix.targetKg,
       mix.targetKg,
@@ -12875,6 +12908,7 @@ module.exports = {
   computeMixBatch,
   mixWithOverride,
   getMixRecipe,
+  resolveMix,
   createSubstrateBatch,
   listSubstrateBatches,
   getSubstrateBatch,

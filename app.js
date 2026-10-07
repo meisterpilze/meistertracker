@@ -9972,22 +9972,49 @@ function _sbSet(id, v) {
   const el = document.getElementById(id);
   if (el) el.value = v == null ? '' : String(Math.round(v * 100) / 100);
 }
-// Das Rezept der gewählten Sorte, so wie die Mischrechnung es liest. Der
-// Pelletanteil steht nicht darin: er ist der Rest, und zwei Zahlen für dieselbe
-// Größe driften auseinander.
-function sbRecipeOf(strainId) {
-  const ms = (mushroomStrains || []).find((x) => x.id === strainId);
-  if (!ms) return null;
+// Die Mischungen, aus denen ein Ansatz gewählt wird. Ein Ansatz ist
+// sortenneutral, also wählt man die Mischung, nicht die Sorte. Was es gibt,
+// steht in der Datenbank (Tabelle recipes), nicht hier.
+let _sbRecipes = [];
+let _sbRecipesLoaded = false;
+async function loadSubstrateRecipes(force) {
+  if (_sbRecipesLoaded && !force) return;
+  const r = await apiGet('/api/recipes');
+  if (!Array.isArray(r)) return;
+  _sbRecipes = r;
+  _sbRecipesLoaded = true;
+  fillSbRecipeSelect();
+}
+function sbRecipeOptions(selectedId) {
+  return _sbRecipes
+    .map((x) => `<option value="${x.id}"${x.id === selectedId ? ' selected' : ''}>${esc(x.name)}</option>`)
+    .join('');
+}
+function fillSbRecipeSelect() {
+  const el = document.getElementById('sb-recipe');
+  if (!el) return;
+  const cur = parseInt(el.value, 10);
+  const opts = '<option value="">' + esc(t('sub.pickMix')) + '</option>' + sbRecipeOptions(cur);
+  if (el.innerHTML === opts) return;
+  el.innerHTML = opts;
+  sbFillBlendFromRecipe();
+}
+// Die gewählte Mischung, so wie die Mischrechnung sie liest. Der Pelletanteil
+// steht nicht darin: er ist der Rest, und zwei Zahlen für dieselbe Größe
+// driften auseinander.
+function sbRecipeOf(recipeId) {
+  const r = _sbRecipes.find((x) => x.id === recipeId);
+  if (!r) return null;
   return {
-    branPct: +ms.recWheatbranPct || 0,
-    cornPct: +ms.recCornPct || 0,
-    gypsumPct: +ms.recGypsumPct || 0,
-    moisturePct: +ms.recRhPct || 0
+    branPct: +r.wheatbranPct || 0,
+    cornPct: 0,
+    gypsumPct: +r.gypsumPct || 0,
+    moisturePct: +r.rhPct || 0
   };
 }
-// Sorte gewechselt: die Felder kommen frisch aus deren Rezept. Eine 70/30, die
-// für den vorigen Ansatz getippt wurde, still auf die nächste Sorte
-// mitzunehmen, wäre die unangenehmere Überraschung.
+// Mischung gewechselt: die Felder kommen frisch aus deren Rezept. Eine
+// Abweichung, die für den vorigen Ansatz getippt wurde, still auf die nächste
+// Mischung mitzunehmen, wäre die unangenehmere Überraschung.
 function sbRecipeChanged() {
   sbFillBlendFromRecipe();
   sbPreview();
@@ -10067,16 +10094,16 @@ async function sbPreview() {
   const out = document.getElementById('sb-out');
   const btn = document.getElementById('sb-go');
   if (!out) return;
-  const recipeStrainId = parseInt(document.getElementById('sb-recipe').value, 10);
+  const recipeId = parseInt(document.getElementById('sb-recipe').value, 10);
   const kg = parseDecimal(document.getElementById('sb-kg').value) || 0;
   _sbLast = null;
   if (btn) btn.disabled = true;
-  if (!recipeStrainId || kg <= 0) {
+  if (!recipeId || kg <= 0) {
     out.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
     return;
   }
   const blend = sbBlend();
-  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId, targetKg: kg, mix: blend });
+  const r = await apiPost('/api/substrate-batches/preview', { recipeId, targetKg: kg, mix: blend });
   if (!r || r.error) {
     out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
     return;
@@ -10091,7 +10118,7 @@ async function sbPreview() {
   // sagen, was gleich in der Liste steht.
   const label =
     r.recipeLabel + (r.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
-  _sbLast = { recipeStrainId, kg, mix: m, label: label, blend: blend };
+  _sbLast = { recipeId, kg, mix: m, label: label, blend: blend };
   if (btn) btn.disabled = false;
   const stock = (inventory && inventory.stock) || {};
   // Red when the shelf cannot cover the line. The server clamps a deduction to
@@ -10179,7 +10206,7 @@ async function createSubstrateBatchUI() {
       setStatus(st, t('sub.running'), true);
       const r = await apiPost('/api/substrate-batches', {
         subId,
-        recipeStrainId: _sbLast.recipeStrainId,
+        recipeId: _sbLast.recipeId,
         targetKg: _sbLast.kg,
         // Dieselben Zahlen, die die Vorschau gerechnet hat. Sie hier wegzulassen
         // hieße, etwas anderes anzulegen als das, was auf dem Schirm stand.
@@ -10215,6 +10242,7 @@ async function refreshSubstrateBatches(fromPayload) {
   _sbList = Array.isArray(r) ? r : [];
   fillSubstrateSelect();
   renderSubstrateTab();
+  loadSubstrateRecipes();
 }
 
 // Die einzige Antwort auf "aus welchem Ansatz lässt sich noch ziehen": genug
@@ -18721,7 +18749,7 @@ function fillStrainSelects() {
     '</option>' +
     mushroomStrains.map((ms) => `<option value="${ms.id}">${esc(ms.name)} (${esc(ms.kuerzel)})</option>`).join('');
   const hint = mushroomStrains.length === 0;
-  ['nb-strain-sel', 'lw-st', 'sb-recipe'].forEach((id) => {
+  ['nb-strain-sel', 'lw-st'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     // Skip rewrite when options are unchanged: SSE-pushed re-syncs (any other
@@ -32304,10 +32332,10 @@ async function wkbCreate() {
 // `previewKey` sagt, zu welchem Rezept und welcher Menge die Vorschau gehört —
 // ohne das lässt sich nicht erkennen, ob sie noch gilt. `bucht` sperrt den
 // Knopf für die Dauer der Buchung, nicht für die Dauer der Rechnerei.
-const WKM = { strainId: null, kg: 200, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+const WKM = { recipeId: null, kg: 200, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
 
 function wkmKey() {
-  return String(WKM.strainId) + '|' + WKM.kg;
+  return String(WKM.recipeId) + '|' + WKM.kg;
 }
 
 function wkmStock() {
@@ -32343,7 +32371,7 @@ async function wkmLoadPreview() {
   WKM.preview = null;
   WKM.previewKey = '';
   WKM.fehler = '';
-  if (!WKM.strainId || !(WKM.kg > 0)) {
+  if (!WKM.recipeId || !(WKM.kg > 0)) {
     WKM.laedt = false;
     wkmRenderOut();
     wkmUpdateButton();
@@ -32352,7 +32380,7 @@ async function wkmLoadPreview() {
   WKM.laedt = true;
   wkmRenderOut();
   wkmUpdateButton();
-  const r = await apiPost('/api/substrate-batches/preview', { recipeStrainId: WKM.strainId, targetKg: WKM.kg });
+  const r = await apiPost('/api/substrate-batches/preview', { recipeId: WKM.recipeId, targetKg: WKM.kg });
   if (seq !== _wkmSeq) return;
   WKM.laedt = false;
   if (!r || r.error) {
@@ -32367,9 +32395,9 @@ async function wkmLoadPreview() {
   wkmUpdateButton();
 }
 
-function wkmOpen() {
-  const list = mushroomStrains.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  WKM.strainId = list.length ? list[0].id : null;
+async function wkmOpen() {
+  await loadSubstrateRecipes();
+  WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
   WKM.kg = 200;
   WKM.notes = '';
   WKM.preview = null;
@@ -32384,7 +32412,7 @@ function wkmOpen() {
 
 function wkmRead() {
   const g = (id) => document.getElementById(id);
-  if (g('wkm-recipe')) WKM.strainId = parseInt(g('wkm-recipe').value, 10) || null;
+  if (g('wkm-recipe')) WKM.recipeId = parseInt(g('wkm-recipe').value, 10) || null;
   if (g('wkm-kg')) WKM.kg = parseDecimal(g('wkm-kg').value) || 0;
   if (g('wkm-notes')) WKM.notes = g('wkm-notes').value;
 }
@@ -32461,11 +32489,7 @@ function wkmRender() {
     return;
   }
 
-  const list = mushroomStrains
-    .slice()
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    .map((x) => `<option value="${x.id}"${x.id === WKM.strainId ? ' selected' : ''}>${esc(x.name)}${x.kuerzel ? ' (' + esc(x.kuerzel) + ')' : ''}</option>`)
-    .join('');
+  const list = sbRecipeOptions(WKM.recipeId);
 
   wkf('wkf-body').innerHTML =
     `<div class="wkf-q">${esc(t('work.mQ'))}</div>
@@ -32506,7 +32530,7 @@ function wkmSubmit(subId, kg, label) {
   wkmUpdateButton();
   apiPost('/api/substrate-batches', {
     subId,
-    recipeStrainId: WKM.strainId,
+    recipeId: WKM.recipeId,
     targetKg: kg,
     notes: WKM.notes.trim()
   })
