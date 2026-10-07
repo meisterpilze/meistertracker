@@ -23807,6 +23807,12 @@ function renderScanSuccesses() {
   });
   const cnt = document.getElementById('scan-tab-succ-count');
   if (cnt) cnt.textContent = String(succ.length);
+  // The empty state stands above the list in the markup, and CSS can only look
+  // at what follows: the sibling rule meant to hide it never matched, so "No
+  // successful scans yet" stood above every list. The render that knows the
+  // count decides.
+  const empty = document.getElementById('scan-successes-empty');
+  if (empty) empty.hidden = succ.length > 0;
   // Newest first
   for (let i = succ.length - 1; i >= 0; i--) {
     const e = succ[i];
