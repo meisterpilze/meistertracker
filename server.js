@@ -8238,6 +8238,38 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+  // Restfeuchte der Sackware (Pellets, Kleie). Lesen darf jeder, der ansetzt;
+  // ändern nur ein Admin, weil es das Wasser jedes künftigen Ansatzes ändert.
+  if (req.method === 'GET' && req.url === '/api/substrate-moisture') {
+    try {
+      jsonOk(res, db.getResidualMoisture(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/substrate-moisture') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.setResidualMoisture(database, data || {});
+        log('info', 'Residual moisture updated', { actor: req.authUser.username });
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        if (/Restfeuchte/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const subGetMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)$/);
   if (req.method === 'GET' && subGetMatch) {
     try {

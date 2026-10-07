@@ -10032,8 +10032,41 @@ function sbParseBags(v) {
   });
 })();
 
+// Restfeuchte der Sackware: was Pellets und Kleie an Wasser schon mitbringen.
+// Der Server rechnet damit; hier wird sie nur gezeigt und geändert.
+async function loadResidualMoisture() {
+  const r = await apiGet('/api/substrate-moisture');
+  if (!r || r.error) return;
+  const hw = document.getElementById('sb-resid-hw');
+  const wb = document.getElementById('sb-resid-wb');
+  const sum = document.getElementById('sb-resid-sum');
+  const pct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
+  if (hw) hw.value = String(r.pelletsPct).replace('.', ',');
+  // Leer heißt: wie die Pellets. Das Feld zeigt es dann auch so, statt leer zu
+  // bleiben und nach "nicht berücksichtigt" auszusehen.
+  const bran = r.branPct == null ? r.pelletsPct : r.branPct;
+  if (wb) wb.value = String(bran).replace('.', ',');
+  if (sum)
+    sum.textContent = ' · ' + t('sub.pellets') + ' ' + pct(r.pelletsPct) + ', ' + t('sub.bran') + ' ' + pct(bran);
+}
+async function sbSaveResidual() {
+  const val = (id) => {
+    const raw = ((document.getElementById(id) || {}).value || '').trim();
+    return raw === '' ? null : parseDecimal(raw);
+  };
+  const r = await apiPost('/api/substrate-moisture', { pelletsPct: val('sb-resid-hw'), branPct: val('sb-resid-wb') });
+  if (!r || r.error) {
+    toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+    return;
+  }
+  toast(t('sub.residSaved'));
+  await loadResidualMoisture();
+  sbPreview();
+}
+
 async function loadSubstrateRecipes(force) {
   if (_sbRecipesLoaded && !force) return;
+  loadResidualMoisture();
   const r = await apiGet('/api/recipes');
   if (!Array.isArray(r)) return;
   _sbRecipes = r;

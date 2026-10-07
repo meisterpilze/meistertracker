@@ -2909,6 +2909,19 @@ const MIGRATIONS = [
       )`);
       _ketteUebernehmen(db);
     }
+  },
+  {
+    version: 98,
+    description: 'Restfeuchte der Kleie getrennt von der der Pellets',
+    fn(db) {
+      // Kleie kommt feuchter an als Pellets. Mit einer Zahl fuer beide war das
+      // Wasser jedes Ansatzes um den Unterschied zu hoch. Leer heisst: wie die
+      // Pellets (residual_pct), also aendert sich nichts, bis jemand misst.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('inventory') WHERE name='residual_bran_pct'")
+        .get().c;
+      if (!has) db.exec('ALTER TABLE inventory ADD COLUMN residual_bran_pct REAL');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4539,7 +4552,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const target = num(targetKg, 0);
   if (!(target > 0)) throw new Error('Zielmenge muss groesser als 0 kg sein');
   const o = opts || {};
-  const R = num(o.residualPct, 9) / 100;
+  const R0 = num(o.residualPct, 9) / 100;
   const flow = num(o.flowLmin, 10);
 
   const bran = num(rec.branPct, 0) / 100;
@@ -4560,6 +4573,11 @@ function computeMixBatch(rec, targetKg, opts) {
     );
   }
   if (!(moist > 0 && moist < 1)) throw new Error('Zielfeuchte muss zwischen 0 und 100 % liegen');
+  // Jeder Rohstoff bringt seine eigene Restfeuchte mit: die Kleie ihre, alles
+  // andere (Pellets bzw. Kokos, Mais) die der Pellets. Gerechnet wird mit dem
+  // gewogenen Mittel ueber die Trockenmischung; ohne Kleie-Wert ist es R0.
+  const Rbran = o.residualBranPct == null || o.residualBranPct === '' ? R0 : num(o.residualBranPct, R0 * 100) / 100;
+  const R = R0 + bran * (Rbran - R0);
   const denom = 1 + gyp - R;
   if (!(denom > 0)) throw new Error('Restfeuchte zu hoch fuer dieses Rezept');
 
@@ -4655,7 +4673,8 @@ function getMixRecipe(db, strainId) {
   // reported a complete recipe as missing and sent the operator to re-enter one
   // that was already there.
   if (!(ms.rec_rh_pct > 0)) return null;
-  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  const inv =
+    db.prepare('SELECT residual_pct, residual_bran_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
   return {
     strain: ms,
     recipe: {
@@ -4671,6 +4690,7 @@ function getMixRecipe(db, strainId) {
     blockKg: ms.rec_bag_kg || 0,
     opts: {
       residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      residualBranPct: inv.residual_bran_pct,
       flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
     }
   };
@@ -4683,7 +4703,8 @@ function getMixFromRecipe(db, recipeId) {
   const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(recipeId);
   if (!r) throw new Error('Mischung nicht gefunden');
   if (!(r.rh_pct > 0)) return null;
-  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  const inv =
+    db.prepare('SELECT residual_pct, residual_bran_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
   return {
     label: r.name,
     recipe: {
@@ -4695,6 +4716,7 @@ function getMixFromRecipe(db, recipeId) {
     },
     opts: {
       residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      residualBranPct: inv.residual_bran_pct,
       flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
     }
   };
@@ -4883,6 +4905,32 @@ function writeOffSubstrateBatch(db, subId, note, userId) {
 // Ein zweiter Aufruf überschreibt den Wert, statt eine Messreihe anzulegen: wer
 // sich vertippt, will die Zahl korrigieren, und eine Historie von Tippfehlern
 // beantwortet keine Frage, die jemand stellt. null löscht die Messung wieder.
+// Restfeuchte der Sackware, wie sie die Mischrechnung liest. branPct null
+// heisst: wie die Pellets.
+function getResidualMoisture(db) {
+  const r = db.prepare('SELECT residual_pct, residual_bran_pct FROM inventory WHERE id=1').get() || {};
+  return {
+    pelletsPct: r.residual_pct != null ? r.residual_pct : 9,
+    branPct: r.residual_bran_pct == null ? null : r.residual_bran_pct
+  };
+}
+function setResidualMoisture(db, v) {
+  const check = (x, name) => {
+    if (x === null || x === undefined || x === '') return null;
+    const n = Number(x);
+    // Sackware unter 0 oder ueber 30 % ist ein Tippfehler, kein Messwert, und
+    // ein Wert dort liesse die Wassermenge negativ werden.
+    if (!Number.isFinite(n) || n < 0 || n > 30) throw new Error(name + ' muss zwischen 0 und 30 % liegen');
+    return Math.round(n * 10) / 10;
+  };
+  const p = check(v.pelletsPct, 'Restfeuchte Pellets');
+  const b = check(v.branPct, 'Restfeuchte Kleie');
+  if (p === null) throw new Error('Restfeuchte Pellets fehlt');
+  db.prepare('UPDATE inventory SET residual_pct=?, residual_bran_pct=? WHERE id=1').run(p, b);
+  incrementDataVersion(db);
+  return getResidualMoisture(db);
+}
+
 function setSubstrateMoisture(db, subId, pct, userId) {
   const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
   if (!row) return null;
@@ -12909,6 +12957,8 @@ module.exports = {
   mixWithOverride,
   getMixRecipe,
   resolveMix,
+  getResidualMoisture,
+  setResidualMoisture,
   createSubstrateBatch,
   listSubstrateBatches,
   getSubstrateBatch,
