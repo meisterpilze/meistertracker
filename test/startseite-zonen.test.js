@@ -45,6 +45,57 @@ describe('Startseite — Kacheln', () => {
   });
 });
 
+// On a phone the tile titles broke wherever the last letter fitted:
+// "contamina / tion" at 390px, "Subst / rate" and "Repor / t" at 320px. Two
+// things stop that, and both are only written here, not rendered: the browser
+// hyphenates by the page's lang, and the title keeps the room a word it will
+// not hyphenate needs — Chrome leaves capitalised English words whole, and
+// "Substrate" is about 79px wide at 17px.
+describe('Startseite — Kacheln auf dem Telefon', () => {
+  const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+  const phone = [...CSS.matchAll(/@media \(max-width: 768px\) \{[\s\S]*?\n\}/g)]
+    .map((m) => m[0])
+    .find((b) => b.includes('.wk-tile-t {'));
+  const rule = (sel) => {
+    const m = phone && phone.match(new RegExp('\\n  ' + sel.replace(/\./g, '\\.') + ' \\{([\\s\\S]*?)\\n  \\}'));
+    assert.ok(m, sel + ' not found in the phone block of styles.css — this test reads nothing');
+    return m[1];
+  };
+
+  it('hyphenates the title, and keeps breaking anywhere only as the last resort', () => {
+    const t = rule('.wk-tile-t');
+    assert.match(t, /\n\s*hyphens: auto;/);
+    assert.match(t, /-webkit-hyphens: auto;/, 'Safari on the iPhone still wants the prefix');
+    assert.match(t, /overflow-wrap: anywhere;/);
+  });
+
+  it('hyphenates in the language on screen: translatePage() sets lang on <html>', () => {
+    const doc = { querySelectorAll: () => [], documentElement: { lang: 'de' } };
+    new Function('document', 't', 'currentLang', lift('translatePage') + '\ntranslatePage();')(doc, (k) => k, 'en');
+    assert.equal(doc.documentElement.lang, 'en');
+  });
+
+  it('leaves the title 80px from 320 to 430px wide', () => {
+    const tile = rule('.wk-tile');
+    const art = tile.match(/--wk-art: clamp\((\d+)px, (\d+)vw - (\d+)px, (\d+)px\);/);
+    assert.ok(art, 'the drawing no longer gives way on a narrow phone');
+    const [lo, vw, off, hi] = art.slice(1).map(Number);
+    const [, right, , left] = tile
+      .match(/padding: (\d+)px (\d+)px (\d+)px (\d+)px;/)
+      .slice(1)
+      .map(Number);
+    const gap = Number(tile.match(/column-gap: (\d+)px;/)[1]);
+    const between = Number(rule('.wk-tiles').match(/gap: (\d+)px;/)[1]);
+    const page = Number(CSS.match(/^ {2}--pad-page: (\d+)px;/m)[1]);
+    for (const w of [320, 340, 360, 375, 390, 414, 430]) {
+      const drawing = Math.min(hi, Math.max(lo, (vw * w) / 100 - off));
+      // Two tiles side by side, a 1px border round each.
+      const title = (w - 2 * page - between) / 2 - 2 - left - right - drawing - gap;
+      assert.ok(title >= 80, w + 'px: ' + title + 'px for the title');
+    }
+  });
+});
+
 describe('Startseite — Wo steht was', () => {
   const rows = new Function(
     'esc',

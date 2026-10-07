@@ -7755,13 +7755,18 @@ body:has(#m-camscan.open) .update-bar {
   .wk-tiles {
     gap: 10px;
   }
+  /* The title needs about 80px: Chrome does not hyphenate a capitalised English
+     word, and "Substrate" or "Inoculate" is that wide at 17px. Below about
+     384px the drawing gives the room up, down to 28px at 320, rather than the
+     title its last letters. */
   .wk-tile {
-    grid-template-columns: minmax(0, 1fr) 52px;
+    --wk-art: clamp(28px, 50vw - 140px, 52px);
+    grid-template-columns: minmax(0, 1fr) var(--wk-art);
     grid-template-rows: auto;
     align-items: center;
-    column-gap: 8px;
+    column-gap: 6px;
     min-height: 72px;
-    padding: 10px 10px 10px 14px;
+    padding: 10px 8px 10px 12px;
   }
   .wk-tile::after {
     display: none;
@@ -7770,12 +7775,19 @@ body:has(#m-camscan.open) .update-bar {
     position: static;
     grid-column: 2;
     grid-row: 1;
-    width: 52px;
+    width: var(--wk-art);
   }
+  /* A word too long for its line breaks where the language allows it
+     ("contami-nation", "Kontami-nation"), by the lang attribute that
+     translatePage() sets on <html>. overflow-wrap stays as the last resort for
+     a word without a break point; on its own it cut "contamina|tion" at
+     whatever letter came last. */
   .wk-tile-t {
     grid-column: 1;
     grid-row: 1;
     max-width: none;
+    -webkit-hyphens: auto;
+    hyphens: auto;
     overflow-wrap: anywhere;
   }
   .wk-tile-when {
