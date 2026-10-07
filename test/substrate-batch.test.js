@@ -486,12 +486,13 @@ describe('watering time', () => {
   });
 
   it('stands under the litres on the screen the mixer actually holds', () => {
-    // Der Arbeitsgang, nicht nur die Vorschau im Formular.
-    const i = APP.indexOf("zeile(t('sub.water')");
+    // Der Arbeitsgang, nicht nur die Vorschau im Formular. Seit dem Rückhalt
+    // ist es die Zeit für das Wasser, das jetzt hineingeht.
+    const i = APP.indexOf("zeile(t('sub.waterNow')");
     assert.ok(i > 0, 'die Wasserzeile des Arbeitsgangs ist fort');
     const nach = APP.slice(i, i + 700);
     assert.match(nach, /sub\.waterTime/, 'im Arbeitsgang steht keine Wässerzeit');
-    assert.match(nach, /waterTimeText\(m\.waterMinutes\)/);
+    assert.match(nach, /waterTimeText\(sbWater\(WKM\.preview\)\.nowMinutes\)/);
   });
 
   it('formats it in one place, not two', () => {

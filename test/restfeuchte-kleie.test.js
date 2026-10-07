@@ -58,7 +58,7 @@ describe('Restfeuchte speichern', () => {
 
   it('speichert beide Werte und die Mischrechnung liest sie', () => {
     db.setResidualMoisture(d, { pelletsPct: 7, branPct: 14 });
-    assert.deepEqual(db.getResidualMoisture(d), { pelletsPct: 7, branPct: 14 });
+    assert.deepEqual(db.getResidualMoisture(d), { pelletsPct: 7, branPct: 14, holdbackPct: 10 });
     const id = Number(
       db.insertRecipe(d, { name: 'Testmischung R', wheatbran_pct: BLEND.branPct, gypsum_pct: 2, rh_pct: 59 })
     );

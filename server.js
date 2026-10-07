@@ -8377,6 +8377,37 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Wie viel Wasser tatsächlich hineinging. Mit der gemessenen Feuchte zusammen
+  // lernt daraus der Vorschlag für die nächsten Ansätze (db.waterPlan).
+  const subWaterMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/water$/);
+  if (req.method === 'POST' && subWaterMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.setSubstrateWater(
+          database,
+          decodeURIComponent(subWaterMatch[1]),
+          data && 'actualWaterL' in data ? data.actualWaterL : null
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        if (/Wassermenge/.test(err.message)) {
+          jsonErr(res, 400, err.message);
+          return;
+        }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
   const subBurstMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/burst$/);
   if (req.method === 'POST' && subBurstMatch) {
     jsonBody(req, res, (e, data) => {
@@ -8438,9 +8469,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           return;
         }
         const adj = db.mixWithOverride(found.recipe, data.mix);
+        const mix = db.computeMixBatch(adj.recipe, data.targetKg, found.opts);
         jsonOk(res, {
           hasRecipe: true,
-          mix: db.computeMixBatch(adj.recipe, data.targetKg, found.opts),
+          mix,
+          water: db.waterPlan(database, mix.waterL, found.opts.flowLmin),
           adjusted: adj.adjusted,
           recipeLabel: found.label
         });
@@ -8494,7 +8527,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const userId = req.authUser ? req.authUser.user_id : null;
         const r = db.createSubstrateBatch(database, data, userId);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, subId: r.subId, mix: r.mix });
+        jsonOk(res, { ok: true, subId: r.subId, mix: r.mix, water: r.water });
       } catch (err) {
         safeErr(res, err);
       }
