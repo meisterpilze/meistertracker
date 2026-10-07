@@ -2909,6 +2909,35 @@ const MIGRATIONS = [
       )`);
       _ketteUebernehmen(db);
     }
+  },
+  {
+    version: 98,
+    description: 'Restfeuchte der Kleie getrennt von der der Pellets',
+    fn(db) {
+      // Kleie kommt feuchter an als Pellets. Mit einer Zahl fuer beide war das
+      // Wasser jedes Ansatzes um den Unterschied zu hoch. Leer heisst: wie die
+      // Pellets (residual_pct), also aendert sich nichts, bis jemand misst.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('inventory') WHERE name='residual_bran_pct'")
+        .get().c;
+      if (!has) db.exec('ALTER TABLE inventory ADD COLUMN residual_bran_pct REAL');
+    }
+  },
+  {
+    version: 99,
+    description: 'Wasser: tatsaechlich zugegeben, vorgeschlagen, und wie viel zurueckgehalten wird',
+    fn(db) {
+      const col = (t, c) => db.prepare('SELECT COUNT(*) AS c FROM pragma_table_info(?) WHERE name=?').get(t, c).c > 0;
+      // Was am Hahn wirklich hineinging. Zusammen mit der gemessenen Feuchte
+      // sagt es, wie weit die Rechnung daneben lag (siehe waterFactorOf).
+      if (!col('substrate_batches', 'actual_water_l'))
+        db.exec('ALTER TABLE substrate_batches ADD COLUMN actual_water_l REAL');
+      // Was der Ansatz zum Zugeben vorschlug, nach Lernfaktor und Rueckhalt.
+      if (!col('substrate_batches', 'water_now_l'))
+        db.exec('ALTER TABLE substrate_batches ADD COLUMN water_now_l REAL');
+      // Anteil, der erst nach dem Messen zugegeben wird. Leer = Vorgabe.
+      if (!col('inventory', 'water_holdback_pct')) db.exec('ALTER TABLE inventory ADD COLUMN water_holdback_pct REAL');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4539,7 +4568,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const target = num(targetKg, 0);
   if (!(target > 0)) throw new Error('Zielmenge muss groesser als 0 kg sein');
   const o = opts || {};
-  const R = num(o.residualPct, 9) / 100;
+  const R0 = num(o.residualPct, 9) / 100;
   const flow = num(o.flowLmin, 10);
 
   const bran = num(rec.branPct, 0) / 100;
@@ -4560,6 +4589,11 @@ function computeMixBatch(rec, targetKg, opts) {
     );
   }
   if (!(moist > 0 && moist < 1)) throw new Error('Zielfeuchte muss zwischen 0 und 100 % liegen');
+  // Jeder Rohstoff bringt seine eigene Restfeuchte mit: die Kleie ihre, alles
+  // andere (Pellets bzw. Kokos, Mais) die der Pellets. Gerechnet wird mit dem
+  // gewogenen Mittel ueber die Trockenmischung; ohne Kleie-Wert ist es R0.
+  const Rbran = o.residualBranPct == null || o.residualBranPct === '' ? R0 : num(o.residualBranPct, R0 * 100) / 100;
+  const R = R0 + bran * (Rbran - R0);
   const denom = 1 + gyp - R;
   if (!(denom > 0)) throw new Error('Restfeuchte zu hoch fuer dieses Rezept');
 
@@ -4655,7 +4689,8 @@ function getMixRecipe(db, strainId) {
   // reported a complete recipe as missing and sent the operator to re-enter one
   // that was already there.
   if (!(ms.rec_rh_pct > 0)) return null;
-  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  const inv =
+    db.prepare('SELECT residual_pct, residual_bran_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
   return {
     strain: ms,
     recipe: {
@@ -4671,6 +4706,7 @@ function getMixRecipe(db, strainId) {
     blockKg: ms.rec_bag_kg || 0,
     opts: {
       residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      residualBranPct: inv.residual_bran_pct,
       flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
     }
   };
@@ -4683,7 +4719,8 @@ function getMixFromRecipe(db, recipeId) {
   const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(recipeId);
   if (!r) throw new Error('Mischung nicht gefunden');
   if (!(r.rh_pct > 0)) return null;
-  const inv = db.prepare('SELECT residual_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
+  const inv =
+    db.prepare('SELECT residual_pct, residual_bran_pct, water_flow_lmin FROM inventory WHERE id=1').get() || {};
   return {
     label: r.name,
     recipe: {
@@ -4695,6 +4732,7 @@ function getMixFromRecipe(db, recipeId) {
     },
     opts: {
       residualPct: inv.residual_pct != null ? inv.residual_pct : 9,
+      residualBranPct: inv.residual_bran_pct,
       flowLmin: inv.water_flow_lmin != null ? inv.water_flow_lmin : 10
     }
   };
@@ -4725,6 +4763,7 @@ function createSubstrateBatch(db, b, userId) {
   // Unterschied nur, wenn er die Zeile aufklappt.
   const label =
     found.label + (adj.adjusted ? ' · ' + Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct) : '');
+  const water = waterPlan(db, mix.waterL, found.opts.flowLmin);
   const created = b.created || new Date().toISOString();
   db.exec('BEGIN');
   try {
@@ -4733,8 +4772,8 @@ function createSubstrateBatch(db, b, userId) {
          (sub_id, recipe_strain_id, recipe_label, target_kg, remaining_kg,
           hardwood_pct, wheatbran_pct, corn_pct, gypsum_pct, rh_pct,
           dry_kg, pellets_kg, bran_kg, corn_kg, gypsum_kg, water_l, moisture_pct,
-          notes, created, status)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open')`
+          notes, created, status, water_now_l)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?)`
     ).run(
       b.subId,
       found.strainId != null ? found.strainId : null,
@@ -4754,7 +4793,8 @@ function createSubstrateBatch(db, b, userId) {
       mix.waterL,
       mix.moisturePct,
       b.notes || '',
-      created
+      created,
+      water.nowL
     );
     for (const d of mix.deltas) {
       applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, 'mix', b.subId, userId || null);
@@ -4765,7 +4805,7 @@ function createSubstrateBatch(db, b, userId) {
     db.exec('ROLLBACK');
     throw e;
   }
-  return { subId: b.subId, mix };
+  return { subId: b.subId, mix, water };
 }
 
 function _mapSubstrateRow(r) {
@@ -4796,6 +4836,9 @@ function _mapSubstrateRow(r) {
     actualRhPct: r.actual_rh_pct == null ? null : r.actual_rh_pct,
     actualRhAt: r.actual_rh_at || null,
     actualRhBy: r.actual_rh_by || null,
+    actualWaterL: r.actual_water_l == null ? null : r.actual_water_l,
+    waterNowL: r.water_now_l == null ? null : r.water_now_l,
+    waterFactor: waterFactorOf(r),
     // Wie viele Beutel dieses Ansatzes im Autoklav geplatzt sind. 0 heisst
     // keiner, nicht "unbekannt" — siehe Migration 83.
     burstBags: r.burst_bags || 0,
@@ -4883,6 +4926,125 @@ function writeOffSubstrateBatch(db, subId, note, userId) {
 // Ein zweiter Aufruf überschreibt den Wert, statt eine Messreihe anzulegen: wer
 // sich vertippt, will die Zahl korrigieren, und eine Historie von Tippfehlern
 // beantwortet keine Frage, die jemand stellt. null löscht die Messung wieder.
+// ── Wasser: lernen und zurueckhalten ─────────────────────────
+// Die Rechnung kennt die Physik, aber nicht den Wasserzaehler, das Messgeraet
+// und die Lieferung von heute. Jeder Ansatz, an dem jemand die gemessene
+// Feuchte UND das tatsaechlich zugegebene Wasser eingetragen hat, sagt, wie
+// viel Wasser das Ziel getroffen haette. Das Verhaeltnis zur Rechnung ist der
+// Lernfaktor; der Median der letzten Ansaetze korrigiert den naechsten.
+//
+// Danach wird ein Teil zurueckgehalten: zu viel Wasser laesst sich nicht wieder
+// herausholen, zu wenig laesst sich nach dem Messen nachgeben.
+const WATER_HOLDBACK_DEFAULT_PCT = 10;
+const WATER_LEARN_LAST = 5;
+
+// Lernfaktor eines Ansatzes, oder null, wenn er nichts Belastbares sagt.
+// Gerechnet wird mit dem, was gebucht ist (dry_kg, gypsum_kg): was die
+// Trockenmischung an Wasser mitbrachte, ergibt sich aus gemessener Feuchte und
+// zugegebenem Wasser; daraus folgt, welche Wassermenge das Ziel getroffen haette.
+function waterFactorOf(r) {
+  const W = r.actual_water_l;
+  const a = r.actual_rh_pct / 100;
+  const t = r.rh_pct / 100;
+  if (!(W > 0) || !(r.water_l > 0) || !(r.dry_kg > 0) || !(a > 0 && a < 1) || !(t > 0 && t < 1)) return null;
+  const solids = r.dry_kg + (r.gypsum_kg || 0);
+  const ausMaterial = a * (solids + W) - W;
+  const noetig = (t * solids - ausMaterial) / (1 - t);
+  const f = noetig / r.water_l;
+  // Ausserhalb dieses Bereichs ist eher eine Zahl vertippt als die Rechnung so
+  // weit daneben; so ein Ansatz soll den naechsten nicht verbiegen.
+  return Number.isFinite(f) && f >= 0.5 && f <= 1.5 ? f : null;
+}
+
+function learnedWaterFactor(db) {
+  const rows = db
+    .prepare(
+      `SELECT water_l, dry_kg, gypsum_kg, rh_pct, actual_rh_pct, actual_water_l FROM substrate_batches
+        WHERE actual_water_l > 0 AND actual_rh_pct IS NOT NULL ORDER BY created DESC LIMIT 50`
+    )
+    .all();
+  const fs = [];
+  for (const r of rows) {
+    const f = waterFactorOf(r);
+    if (f != null) fs.push(f);
+    if (fs.length >= WATER_LEARN_LAST) break;
+  }
+  if (!fs.length) return { factor: 1, n: 0 };
+  const sorted = fs.slice().sort((x, y) => x - y);
+  const mid = sorted.length >> 1;
+  const factor = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return { factor, n: fs.length };
+}
+
+// Was am Hahn zu tun ist: erst nowL, dann messen, dann hoechstens restL.
+function waterPlan(db, waterL, flowLmin) {
+  const { factor, n } = learnedWaterFactor(db);
+  const holdbackPct = getResidualMoisture(db).holdbackPct;
+  const plannedL = waterL * factor;
+  const nowL = plannedL * (1 - holdbackPct / 100);
+  const flow = flowLmin > 0 ? flowLmin : 0;
+  return {
+    calcL: waterL,
+    factor,
+    n,
+    plannedL,
+    holdbackPct,
+    nowL,
+    restL: plannedL - nowL,
+    nowMinutes: flow ? nowL / flow : 0
+  };
+}
+
+// Was tatsaechlich zugegeben wurde. null loescht es wieder.
+function setSubstrateWater(db, subId, liters) {
+  const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  let value = null;
+  if (liters !== null && liters !== undefined && liters !== '') {
+    const n = Number(liters);
+    if (!Number.isFinite(n) || n <= 0 || n > 100000)
+      throw new Error('Wassermenge muss eine positive Zahl in Litern sein');
+    value = Math.round(n * 10) / 10;
+  }
+  db.prepare('UPDATE substrate_batches SET actual_water_l=? WHERE sub_id=?').run(value, subId);
+  incrementDataVersion(db);
+  return { subId, actualWaterL: value };
+}
+
+// Restfeuchte der Sackware, wie sie die Mischrechnung liest. branPct null
+// heisst: wie die Pellets.
+function getResidualMoisture(db) {
+  const r =
+    db.prepare('SELECT residual_pct, residual_bran_pct, water_holdback_pct FROM inventory WHERE id=1').get() || {};
+  return {
+    pelletsPct: r.residual_pct != null ? r.residual_pct : 9,
+    branPct: r.residual_bran_pct == null ? null : r.residual_bran_pct,
+    holdbackPct: r.water_holdback_pct != null ? r.water_holdback_pct : WATER_HOLDBACK_DEFAULT_PCT
+  };
+}
+function setResidualMoisture(db, v) {
+  const check = (x, name) => {
+    if (x === null || x === undefined || x === '') return null;
+    const n = Number(x);
+    // Sackware unter 0 oder ueber 30 % ist ein Tippfehler, kein Messwert, und
+    // ein Wert dort liesse die Wassermenge negativ werden.
+    if (!Number.isFinite(n) || n < 0 || n > 30) throw new Error(name + ' muss zwischen 0 und 30 % liegen');
+    return Math.round(n * 10) / 10;
+  };
+  const p = check(v.pelletsPct, 'Restfeuchte Pellets');
+  const b = check(v.branPct, 'Restfeuchte Kleie');
+  if (p === null) throw new Error('Restfeuchte Pellets fehlt');
+  db.prepare('UPDATE inventory SET residual_pct=?, residual_bran_pct=? WHERE id=1').run(p, b);
+  if (v.holdbackPct !== undefined) {
+    const h = v.holdbackPct === null || v.holdbackPct === '' ? null : Number(v.holdbackPct);
+    if (h !== null && (!Number.isFinite(h) || h < 0 || h > 50))
+      throw new Error('Zurueckgehaltenes Wasser muss zwischen 0 und 50 % liegen');
+    db.prepare('UPDATE inventory SET water_holdback_pct=? WHERE id=1').run(h === null ? null : Math.round(h * 10) / 10);
+  }
+  incrementDataVersion(db);
+  return getResidualMoisture(db);
+}
+
 function setSubstrateMoisture(db, subId, pct, userId) {
   const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
   if (!row) return null;
@@ -12909,6 +13071,11 @@ module.exports = {
   mixWithOverride,
   getMixRecipe,
   resolveMix,
+  getResidualMoisture,
+  waterPlan,
+  learnedWaterFactor,
+  setSubstrateWater,
+  setResidualMoisture,
   createSubstrateBatch,
   listSubstrateBatches,
   getSubstrateBatch,

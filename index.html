@@ -3109,6 +3109,32 @@
                   </div>
                 </div>
               </div>
+              <!-- Wie feucht Pellets und Kleie ankommen. Gilt für alle Ansätze,
+                   deshalb zugeklappt: es ändert sich mit der Lieferung, nicht
+                   mit dem Ansatz. Speichern darf nur ein Admin. -->
+              <details id="sb-resid" style="margin-top: 10px">
+                <summary class="fs-meta" style="cursor: pointer; color: var(--c-text-sec)">
+                  <span data-i18n="sub.residTitle">Restfeuchte Sackware</span>
+                  <span id="sb-resid-sum"></span>
+                </summary>
+                <div class="sb-blend-row" style="margin-top: 6px">
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.pellets">Pellets</span> %</label>
+                    <input type="text" id="sb-resid-hw" inputmode="decimal" />
+                  </div>
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.bran">Weizenkleie</span> %</label>
+                    <input type="text" id="sb-resid-wb" inputmode="decimal" />
+                  </div>
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.holdback">Wasser zurückhalten</span> %</label>
+                    <input type="text" id="sb-resid-hold" inputmode="decimal" />
+                  </div>
+                </div>
+                <button type="button" class="btn btn-sm" style="margin-top: 8px" onclick="sbSaveResidual()">
+                  <span data-i18n="sub.residSave">Speichern</span>
+                </button>
+              </details>
               <div id="sb-out" style="margin-top: 10px"></div>
               <div style="margin-top: 8px">
                 <label data-i18n="sub.notes">Notiz</label>

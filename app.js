@@ -10045,8 +10045,76 @@ function sbParseBags(v) {
   });
 })();
 
+// Das Wasser, wie es am Hahn gebraucht wird: erst `nowL`, dann messen, dann
+// höchstens `restL`. Der Server rechnet Lernfaktor und Rückhalt; ein älterer
+// Server ohne `water` bekommt hier dieselbe Form mit der reinen Rechnung.
+function sbWater(r) {
+  if (r && r.water) return r.water;
+  const m = (r && r.mix) || {};
+  return {
+    calcL: m.waterL || 0,
+    factor: 1,
+    n: 0,
+    plannedL: m.waterL || 0,
+    holdbackPct: 0,
+    nowL: m.waterL || 0,
+    restL: 0,
+    nowMinutes: m.waterMinutes || 0
+  };
+}
+// Woher die Zahl kommt, in einer Zeile: gerechnet, was gelernt ist, was
+// zurückgehalten wird.
+function sbWaterHint(w) {
+  const pct = Math.round((w.factor - 1) * 100);
+  return t(w.n ? 'sub.waterHintLearned' : 'sub.waterHintNone', {
+    calc: fmtKg(w.calcL, 1),
+    n: w.n,
+    pct: (pct > 0 ? '+' : pct < 0 ? '−' : '±') + Math.abs(pct),
+    hold: fmtKg(w.holdbackPct, w.holdbackPct % 1 ? 1 : 0)
+  });
+}
+
+// Restfeuchte der Sackware: was Pellets und Kleie an Wasser schon mitbringen.
+// Der Server rechnet damit; hier wird sie nur gezeigt und geändert.
+async function loadResidualMoisture() {
+  const r = await apiGet('/api/substrate-moisture');
+  if (!r || r.error) return;
+  const hw = document.getElementById('sb-resid-hw');
+  const wb = document.getElementById('sb-resid-wb');
+  const sum = document.getElementById('sb-resid-sum');
+  const pct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
+  if (hw) hw.value = String(r.pelletsPct).replace('.', ',');
+  // Leer heißt: wie die Pellets. Das Feld zeigt es dann auch so, statt leer zu
+  // bleiben und nach "nicht berücksichtigt" auszusehen.
+  const bran = r.branPct == null ? r.pelletsPct : r.branPct;
+  if (wb) wb.value = String(bran).replace('.', ',');
+  const hold = document.getElementById('sb-resid-hold');
+  if (hold) hold.value = String(r.holdbackPct).replace('.', ',');
+  if (sum)
+    sum.textContent = ' · ' + t('sub.pellets') + ' ' + pct(r.pelletsPct) + ', ' + t('sub.bran') + ' ' + pct(bran) + ', ' + t('sub.holdback') + ' ' + pct(r.holdbackPct);
+}
+async function sbSaveResidual() {
+  const val = (id) => {
+    const raw = ((document.getElementById(id) || {}).value || '').trim();
+    return raw === '' ? null : parseDecimal(raw);
+  };
+  const r = await apiPost('/api/substrate-moisture', {
+    pelletsPct: val('sb-resid-hw'),
+    branPct: val('sb-resid-wb'),
+    holdbackPct: val('sb-resid-hold')
+  });
+  if (!r || r.error) {
+    toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+    return;
+  }
+  toast(t('sub.residSaved'));
+  await loadResidualMoisture();
+  sbPreview();
+}
+
 async function loadSubstrateRecipes(force) {
   if (_sbRecipesLoaded && !force) return;
+  loadResidualMoisture();
   const r = await apiGet('/api/recipes');
   if (!Array.isArray(r)) return;
   _sbRecipes = r;
@@ -10223,15 +10291,19 @@ async function sbPreview() {
     row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
     (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
     row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
-    row(t('sub.water'), m.waterL, 'L') +
+    row(t('sub.waterNow'), sbWater(r).nowL, 'L') +
     '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
     esc(t('sub.waterTime')) +
     '</td><td style="padding:2px 0;text-align:right;font-weight:600">' +
-    esc(waterTimeText(m.waterMinutes)) +
+    esc(waterTimeText(sbWater(r).nowMinutes)) +
     '</td></tr>' +
+    row(t('sub.waterRest'), sbWater(r).restL, 'L') +
     row(t('sub.moisture'), m.moisturePct, '%') +
     '</table>' +
     '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:6px">' +
+    esc(sbWaterHint(sbWater(r))) +
+    '</div>' +
+    '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:4px">' +
     esc(t('sub.noSpawnHint')) +
     '</div>';
   _sbLast.shortfalls = shortfalls;
@@ -10692,9 +10764,42 @@ function measureSubstrateRh(s, opts) {
       }
       toast(raw === '' ? t('sub.rhCleared') : t('sub.rhSaved', { pct: payload.actualRhPct.toFixed(1) }));
       await refreshSubstrateBatches();
+      // Gleich danach das Wasser: erst beide Zahlen zusammen sagen, wie weit die
+      // Rechnung daneben lag, und nur so lernt der nächste Vorschlag daraus.
+      if (raw !== '') {
+        measureSubstrateWater((_sbList || []).find((x) => x.subId === s.subId) || s, opts);
+        return;
+      }
       if (!(opts && opts.stay)) openSubstrateInfo(s.subId);
     },
     { inputmode: 'decimal', value: s.actualRhPct == null ? '' : String(s.actualRhPct) }
+  );
+}
+// Wie viel Wasser insgesamt hineinging, Nachgegebenes mitgezählt. Vorbelegt mit
+// dem, was schon eingetragen ist, sonst mit dem Vorschlag "jetzt zugeben".
+function measureSubstrateWater(s, opts) {
+  closeSubstrateInfo();
+  const vor = s.actualWaterL != null ? s.actualWaterL : s.waterNowL != null ? Math.round(s.waterNowL) : '';
+  prompt2(
+    t('sub.waterPrompt', { id: s.subId }),
+    t('sub.waterPromptPh'),
+    async (v) => {
+      const raw = (v || '').replace(',', '.').trim();
+      const payload = { actualWaterL: raw === '' ? null : Number(raw) };
+      if (raw !== '' && !(payload.actualWaterL > 0)) {
+        toast(t('sub.waterNaN'), 'err');
+        return;
+      }
+      const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(s.subId) + '/water', payload);
+      if (!r || r.error) {
+        toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+        return;
+      }
+      toast(raw === '' ? t('sub.waterCleared') : t('sub.waterSaved', { l: fmtKg(payload.actualWaterL, 1) }));
+      await refreshSubstrateBatches();
+      if (!(opts && opts.stay)) openSubstrateInfo(s.subId);
+    },
+    { inputmode: 'decimal', value: vor === '' ? '' : String(vor) }
   );
 }
 
@@ -10762,9 +10867,21 @@ async function openSubstrateInfo(subId) {
     line(t('sub.bran'), kg(s.branKg)) +
     (s.cornKg > 0.005 ? line(t('sub.corn'), kg(s.cornKg)) : '') +
     line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
-    line(t('sub.water'), s.waterL.toFixed(1) + ' L') +
+    line(t('sub.waterCalc'), s.waterL.toFixed(1) + ' L') +
+    (s.waterNowL != null ? line(t('sub.waterNow'), s.waterNowL.toFixed(1) + ' L') : '') +
+    line(
+      t('sub.waterActual'),
+      s.actualWaterL == null
+        ? '<span style="font-weight:400;color:var(--c-text-muted)">' + esc(t('sub.rhNotMeasured')) + '</span>'
+        : esc(s.actualWaterL.toFixed(1)) + ' L'
+    ) +
     line(t('sub.moisture'), s.moisturePct.toFixed(1) + ' %') +
     line(t('sub.moistureActual'), _subRhCell(s)) +
+    // Was dieser Ansatz dem Vorschlag beibringt: welcher Anteil der Rechnung das
+    // Ziel getroffen hätte.
+    (s.waterFactor != null
+      ? line(t('sub.waterLearned'), esc(fmtKg(s.waterFactor * 100, 0)) + ' %')
+      : '') +
     // Immer da, auch auf 0 — wie die Kommentarzeile weiter unten. Eine Zeile,
     // die erst erscheint, wenn schon etwas kaputt ist, sieht aus wie keine, und
     // dann trägt sie niemand nach.
@@ -10855,6 +10972,7 @@ async function openSubstrateInfo(subId) {
   // bei einem verworfenen Ansatz noch erlaubt — warum er verworfen wurde, ist
   // genau die Frage, auf die eine gemessene Feuchte antwortet.
   act(s.actualRhPct == null ? t('sub.rhAdd') : t('sub.rhEdit'), 'btn-p', () => measureSubstrateRh(s));
+  act(s.actualWaterL == null ? t('sub.waterAdd') : t('sub.waterEdit'), 'btn-p', () => measureSubstrateWater(s));
   // Auch bei einem verworfenen Ansatz: geplatzte Beutel sind oft genau der
   // Grund, aus dem er verworfen wurde, und dann wird die Zahl danach eingetragen.
   act(s.burstBags ? t('sub.burstEdit') : t('sub.burstAdd'), 'btn-p', () => recordBurstBags(s));
@@ -32554,14 +32672,16 @@ function wkmRenderOut() {
         zeile(t('sub.bran'), m.branKg, 'kg') +
         (m.cornKg > 0.005 ? zeile(t('sub.corn'), m.cornKg, 'kg') : '') +
         zeile(t('sub.gypsum'), m.gypsumKg, 'kg') +
-        zeile(t('sub.water'), m.waterL, 'L') +
+        zeile(t('sub.waterNow'), sbWater(WKM.preview).nowL, 'L') +
         // Direkt unter die Literzahl: hier steht man am Hahn, und "107 L" sagt
         // nicht, wie lange er laufen soll. Die Vorschau im Formular zeigt es
         // seit jeher, der Arbeitsgang nicht — also ausgerechnet der Schirm
         // nicht, den man dabei in der Hand hat.
-        `<div><span class="wkf-r-k">${esc(t('sub.waterTime'))}</span><span>${esc(waterTimeText(m.waterMinutes))}</span></div>` +
+        `<div><span class="wkf-r-k">${esc(t('sub.waterTime'))}</span><span>${esc(waterTimeText(sbWater(WKM.preview).nowMinutes))}</span></div>` +
+        zeile(t('sub.waterRest'), sbWater(WKM.preview).restL, 'L') +
         zeile(t('sub.moisture'), m.moisturePct, '%') +
-        '</div>'
+        '</div>' +
+        `<div class="wkf-hint">${esc(sbWaterHint(sbWater(WKM.preview)))}</div>`
       : WKM.laedt
         ? `<div class="wkf-hint">${esc(t('work.mCalc'))}</div>`
         : '');
@@ -32689,7 +32809,8 @@ function wkmSubmit(subId, menge, label) {
               ? [
                   [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
                   [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
-                  [t('sub.water'), fmtKg(m.waterL, 1) + ' L']
+                  [t('sub.waterNow'), fmtKg(sbWater(r.water ? r : WKM.preview).nowL, 1) + ' L'],
+                  [t('sub.waterRest'), fmtKg(sbWater(r.water ? r : WKM.preview).restL, 1) + ' L']
                 ]
               : []
           )
