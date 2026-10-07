@@ -10083,13 +10083,13 @@ async function loadResidualMoisture() {
   const wb = document.getElementById('sb-resid-wb');
   const sum = document.getElementById('sb-resid-sum');
   const pct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
-  if (hw) hw.value = String(r.pelletsPct).replace('.', ',');
+  if (hw) hw.value = fmtKg(r.pelletsPct);
   // Leer heißt: wie die Pellets. Das Feld zeigt es dann auch so, statt leer zu
   // bleiben und nach "nicht berücksichtigt" auszusehen.
   const bran = r.branPct == null ? r.pelletsPct : r.branPct;
-  if (wb) wb.value = String(bran).replace('.', ',');
+  if (wb) wb.value = fmtKg(bran);
   const hold = document.getElementById('sb-resid-hold');
-  if (hold) hold.value = String(r.holdbackPct).replace('.', ',');
+  if (hold) hold.value = fmtKg(r.holdbackPct);
   if (sum)
     sum.textContent = ' · ' + t('sub.pellets') + ' ' + pct(r.pelletsPct) + ', ' + t('sub.bran') + ' ' + pct(bran) + ', ' + t('sub.holdback') + ' ' + pct(r.holdbackPct);
 }
