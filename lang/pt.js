@@ -486,6 +486,7 @@ window.LANG['pt'] = {
   'dash.ov.periodYear': 'Este ano',
   'dash.ov.dailyHarvest': 'Colheita diária (este mês)',
   'dash.ov.weeklySubstrate': 'Substrato por semana',
+  'dash.ov.weekNo': 'Sem. {n}',
   'dash.ov.monthlyHarvest': 'Colheita mensal',
   'dash.ov.monthlyBags': 'Sacos criados por mês',
   'dash.ov.avgYield': 'Rendimento médio / saco',

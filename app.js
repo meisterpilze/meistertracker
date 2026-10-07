@@ -79,6 +79,21 @@ function fmtDtShort(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
 }
+// Daten auf den Achsen des Dashboards, in der Sprache des Benutzers. Dort
+// standen die Wochentage fest auf Deutsch ("Mo", "Di") und die Monate fest auf
+// Englisch, auch in der jeweils anderen Oberfläche. Den Schlusspunkt, den de-DE
+// anhängt ("28.09."), braucht eine Achse nicht: Deutsch bleibt "Mo 28.09".
+function fmtDayMonth(d) {
+  return d.toLocaleDateString(loc(), { day: '2-digit', month: '2-digit' }).replace(/\.$/, '');
+}
+// "Mo 28.09", "Mon 28/09", "seg. 28/09"
+function fmtWeekdayDayMonth(d) {
+  return d.toLocaleDateString(loc(), { weekday: 'short' }) + ' ' + fmtDayMonth(d);
+}
+// Monat 0–11, kurz: "Okt", "Oct", "out."
+function fmtMonthShort(m) {
+  return new Date(2000, m, 1).toLocaleDateString(loc(), { month: 'short' });
+}
 function isoWeekNumber(d) {
   if (!(d instanceof Date)) d = new Date(d);
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -3739,7 +3754,8 @@ function renderOverviewCharts(periodStart) {
   }
   const nowDate = new Date();
   const periodHarvests = harvests.filter((h) => new Date(h.time) >= periodStart);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // A day key is a local date; new Date('2026-09-28') would read it as UTC.
+  const dayOf = (k) => new Date(k + 'T00:00:00');
 
   // ── Helpers: build time buckets depending on period ──────
   function buildTimeBuckets() {
@@ -3751,8 +3767,7 @@ function renderOverviewCharts(periodStart) {
         days.push(localDateStr(cur));
         cur.setDate(cur.getDate() + 1);
       }
-      const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-      return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => localDateStr(d) };
+      return { keys: days, label: (k) => fmtWeekdayDayMonth(dayOf(k)), groupKey: (d) => localDateStr(d) };
     }
     if (ovPeriod === 'month') {
       // Full month 1st to last day
@@ -3763,13 +3778,13 @@ function renderOverviewCharts(periodStart) {
         days.push(localDateStr(cur));
         cur.setDate(cur.getDate() + 1);
       }
-      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => localDateStr(d) };
+      return { keys: days, label: (k) => fmtDayMonth(dayOf(k)), groupKey: (d) => localDateStr(d) };
     }
     // year — monthly buckets Jan–Dec
     const mKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
     return {
       keys: mKeys,
-      label: (k) => monthNames[parseInt(k.split('-')[1]) - 1],
+      label: (k) => fmtMonthShort(parseInt(k.split('-')[1]) - 1),
       groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     };
   }
@@ -3954,7 +3969,7 @@ function renderOverviewCharts(periodStart) {
       subLabels = keys.map((k, i) => label(k, i));
     } else {
       subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap), ...Object.keys(grMap)])].sort();
-      subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
+      subLabels = subKeys.map((k) => t('dash.ov.weekNo', { n: isoWeekNumber(dayOf(k)) }));
     }
     if (ovChartSubstrateInst) {
       ovChartSubstrateInst.destroy();
@@ -4095,7 +4110,6 @@ function renderKpiHistory() {
 
   // Filter snapshots by the selected overview period + build fixed date range
   const nowDate = new Date();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   let periodStart;
   if (ovPeriod === 'week') {
     periodStart = new Date(nowDate);
@@ -4124,11 +4138,10 @@ function renderKpiHistory() {
   const histLabels = []; // display labels
   if (ovPeriod === 'week') {
     // Mon–Sun (7 days)
-    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     const cur = new Date(periodStart);
     for (let i = 0; i < 7; i++) {
       histKeys.push(localDateStr(cur));
-      histLabels.push(dayNames[i] + ' ' + fmtDtShort(cur));
+      histLabels.push(fmtWeekdayDayMonth(cur));
       cur.setDate(cur.getDate() + 1);
     }
   } else if (ovPeriod === 'month') {
@@ -4137,14 +4150,14 @@ function renderKpiHistory() {
     const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
     while (cur <= lastDay) {
       histKeys.push(localDateStr(cur));
-      histLabels.push(fmtDtShort(cur));
+      histLabels.push(fmtDayMonth(cur));
       cur.setDate(cur.getDate() + 1);
     }
   } else {
     // Year — Jan to Dec monthly buckets, use last snapshot per month
     for (let m = 0; m < 12; m++) {
       histKeys.push(`${nowDate.getFullYear()}-${String(m + 1).padStart(2, '0')}`);
-      histLabels.push(monthNames[m]);
+      histLabels.push(fmtMonthShort(m));
     }
     // Build monthly lookup: last snapshot of each month
     const monthSnap = {};
