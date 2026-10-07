@@ -11641,6 +11641,11 @@ function _dominantBagKg(b) {
   if (best) return best[0];
   return Number.isFinite(b.bagKg) && b.bagKg > 0 ? b.bagKg : null;
 }
+function _batchIstRhTag(b) {
+  const sb = b.substrateSubId ? (_sbList || []).find((x) => x.subId === b.substrateSubId) : null;
+  if (!sb || sb.actualRhPct == null) return '';
+  return `<span class="sub-tag" style="background:var(--c-blue-light);color:var(--c-blue-dark)">${esc(t('bagInfo.rhActual'))} ${esc(fmtKg(sb.actualRhPct, 1))}%</span>`;
+}
 function batchRowHtml(b) {
       const { status } = getStatus(b.batchId);
       const _grainSizes = b.batchType === 'grain' ? grainSizeSummary(b) : null;
@@ -11650,6 +11655,9 @@ function batchRowHtml(b) {
         ? [
             `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
             b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
+            // Was am Ansatz gemessen wurde, neben dem Soll: die eine Zahl, nach
+            // der man bei einer auffälligen Charge zuerst sucht.
+            _batchIstRhTag(b),
             b.substrate.gypsum
               ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
               : ''
@@ -21483,6 +21491,7 @@ function openBagInfo(bagId, batchId, batch) {
       <div class="met"><div class="met-l">${t('bagInfo.currentLocation')}</div><div class="fs-base" style="font-weight:600;color:var(--c-blue-dark)">${esc(currentLoc)}</div></div>
       <div class="met"><div class="met-l">${t('dash.totalHarvested')}</div><div class="fs-base" style="font-weight:600;color:var(--c-amber-dark)">${totalHarv > 0 ? totalHarv + 'g' : t('bagInfo.noneYet')}</div></div>
     </div>
+    ${biHerkunftHtml(b)}
     <div class="fs-xs" style="font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t('batch.batchId')} ${esc(b.batchId)} \u2014 ${t('bagInfo.allBags')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto">
       ${b.bags
@@ -21505,6 +21514,87 @@ function openBagInfo(bagId, batchId, batch) {
   renderBiActions();
   document.getElementById('m-baginfo').classList.add('open');
   setFb('info', t('scanFb.bagInfo', { bag: bagId }), { noModal: true });
+}
+// Die Kette einer Kultur nach oben, älteste zuerst: MC → PD → LC. Eine Herkunft,
+// die nicht (mehr) in der Liste steht, wird trotzdem genannt.
+function cultureChain(id) {
+  const kette = [];
+  const seen = new Set();
+  let cur = id;
+  while (cur && !seen.has(cur) && kette.length < 10) {
+    seen.add(cur);
+    const c = cultures.find((x) => x.id === cur);
+    kette.unshift(c ? { id: c.id, type: c.type } : { id: cur, type: String(cur).split('-')[0] });
+    cur = c ? c.parentId : null;
+  }
+  return kette;
+}
+function _biChainHtml(id) {
+  return cultureChain(id)
+    .map(
+      (x) =>
+        `<span style="display:inline-flex;align-items:center;gap:4px">${ctBadge(x.type)}<span class="fs-meta" style="font-family:monospace;font-weight:600">${esc(x.id)}</span></span>`
+    )
+    .join('<span class="fs-xs" style="color:var(--c-text-muted)"> → </span>');
+}
+// Die Körnerbrut einer Charge: die Beutel, die für sie abgebucht wurden, nach
+// ihrer Körnerbrut-Charge gruppiert.
+function grainSourcesFor(batchId) {
+  const byBatch = new Map();
+  for (const bag of spawnSourceFor(batchId)) {
+    const g = batches.find((x) => (x.bags || []).some((y) => y.toUpperCase() === bag.toUpperCase()));
+    const key = g ? g.batchId : '?';
+    if (!byBatch.has(key)) byBatch.set(key, { batch: g || null, bags: [] });
+    byBatch.get(key).bags.push(bag);
+  }
+  return [...byBatch.values()];
+}
+// Woraus der gescannte Beutel gemacht ist, sofort beim Scannen: Kultur,
+// Körnerbrut, Substrat-Ansatz mit Soll- und Ist-Feuchte. Bisher stand davon
+// nur die Quellkultur, und nur in der Chargenliste. Alles kommt aus dem, was
+// das Gerät schon geladen hat — kein Warten beim Scannen.
+function biHerkunftHtml(b) {
+  const zeile = (label, inhalt) =>
+    `<div style="margin-top:6px"><div class="met-l">${esc(label)}</div><div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:2px">${inhalt}</div></div>`;
+  const muted = (txt) => `<span class="fs-meta" style="color:var(--c-text-muted)">${esc(txt)}</span>`;
+  const pct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
+  let html = '';
+  if (b.sourceId) html += zeile(t('bagInfo.culture'), _biChainHtml(b.sourceId));
+  for (const g of grainSourcesFor(b.batchId)) {
+    const gb = g.batch;
+    const teile = [
+      `<span class="fs-meta" style="font-family:monospace;font-weight:600">${esc(gb ? gb.batchId : g.bags[0])}</span>`,
+      muted(t('bagInfo.nBags', { n: g.bags.length }))
+    ];
+    if (gb && gb.grainRh) teile.push(muted('RH ' + pct(gb.grainRh)));
+    html += zeile(t('bagInfo.grain'), teile.join(muted('·')));
+    if (gb && gb.sourceId) html += zeile(t('bagInfo.grainCulture'), _biChainHtml(gb.sourceId));
+  }
+  const sb = b.substrateSubId ? (_sbList || []).find((x) => x.subId === b.substrateSubId) : null;
+  if (sb) {
+    const ist =
+      sb.actualRhPct == null
+        ? muted(t('bagInfo.rhActual') + ' ' + t('sub.rhNotMeasured'))
+        : `<span class="fs-meta" style="font-weight:600">${esc(t('bagInfo.rhActual'))} ${esc(pct(sb.actualRhPct))}</span>`;
+    html += zeile(
+      t('bagInfo.substrate'),
+      [
+        `<span class="fs-meta" style="font-family:monospace;font-weight:600">${esc(sb.subId)}</span>`,
+        muted(sb.recipeLabel),
+        muted(t('bagInfo.rhTarget') + ' ' + pct(sb.composition.rhPct || sb.moisturePct)),
+        ist
+      ].join(muted('·'))
+    );
+  } else if (b.substrate && b.batchType !== 'grain' && b.substrate.rh) {
+    html += zeile(
+      t('bagInfo.substrate'),
+      muted('HW ' + b.substrate.hardwood + ' % · WB ' + b.substrate.wheatbran + ' % · RH ' + b.substrate.rh + ' %')
+    );
+  }
+  if (b.created) html += zeile(t('bagInfo.made'), muted(fmtDt(b.created)));
+  return html
+    ? `<div class="met" style="margin-bottom:12px"><div class="met-l" style="font-weight:700">${esc(t('bagInfo.herkunft'))}</div>${html}</div>`
+    : '';
 }
 // Scope of a sheet move action: false = just the scanned bag, true = whole batch.
 let biWholeBatch = false;
