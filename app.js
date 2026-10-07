@@ -11526,7 +11526,7 @@ function grainSizeSummary(b) {
   if (!counts.size) return null;
   return [...counts.entries()]
     .sort((x, y) => x[0] - y[0])
-    .map(([kg, n]) => n + ' × ' + String(kg).replace('.', ',') + ' kg');
+    .map(([kg, n]) => n + ' × ' + fmtKg(kg) + ' kg');
 }
 // Die Größe, aus der die meisten Beutel sind. Dieselbe Regel, nach der
 // createGrainBatch das Gewicht der Charge selbst bestimmt.
@@ -11762,7 +11762,7 @@ function toggleBatchBags(batchId) {
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
         const wTag = showW
-          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(String(bw).replace('.', ','))}kg</span>`
+          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(fmtKg(bw))}kg</span>`
           : '';
         // A button, not a span: this chip is the only way into the bag sheet
         // that does not involve a barcode, and the sheet is where moving,
@@ -11801,7 +11801,7 @@ function openAddBags(batchId) {
   if (kgEl) {
     const sizes = grainSizeSummary(b);
     const main = _dominantBagKg(b);
-    kgEl.value = isGrain && main ? String(main).replace('.', ',') : '';
+    kgEl.value = isGrain && main ? fmtKg(main) : '';
     kgEl.title = sizes ? sizes.join(' · ') : '';
   }
   document.getElementById('ab-preview').style.display = 'none';
@@ -20124,7 +20124,7 @@ function _msqSizeRowHtml(kg, qty) {
   return (
     '<div class="msq-size" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
     '<input type="text" inputmode="decimal" class="msq-size-kg" autocomplete="off" value="' +
-    esc(String(kg).replace('.', ',')) +
+    esc(fmtKg(kg)) +
     '" style="flex:1;min-width:0;text-align:center" />' +
     '<span class="fs-meta" style="flex:none;color:var(--c-text-muted)">kg &times;</span>' +
     '<input type="number" class="msq-size-qty" min="1" max="500" value="' +
@@ -25545,7 +25545,7 @@ function bmpRender() {
       const kg =
         k === 'KB'
           ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
-            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
+            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(fmtKg(_bmp.kg))}" style="width:64px;text-align:center" /> kg</div>`
           : '';
       return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
     })
@@ -25568,7 +25568,7 @@ function bmpPreview() {
   const teile = Object.entries(_bmp.n)
     .filter(([, n]) => n > 0)
     .map(([k, n]) =>
-      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') }) : n + ' ' + t('bmp.' + k)
+      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: fmtKg(_bmp.kg) }) : n + ' ' + t('bmp.' + k)
     );
   const summe = Object.values(_bmp.n).reduce((a, n) => a + n, 0);
   const prev = document.getElementById('bmp-preview');
@@ -32009,7 +32009,7 @@ function wkbRender() {
          <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
            <div class="wkf-chipsrow">` +
       [3.5, 3.8, 4.3, 5]
-        .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
+        .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${fmtKg(k)} kg</button>`)
         .join('') +
       `</div></div>
        </div>
@@ -32095,7 +32095,7 @@ function wkbRender() {
          <div><span class="wkf-r-k">${esc(t('stamm.label'))}</span>${stammAnzeige('wkb') ? esc(stammAnzeige('wkb')) : '&mdash;'}</div>
          ${wkbInocZeile()}
          <div><span class="wkf-r-k">${esc(t('anlage.label'))}</span>${frueher ? '<b>' + esc(fmtDt(anlageZeitpunkt(anlageState('wkb').datum))) + '</b>' : esc(t('anlage.today'))}</div>
-         <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
+         <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${fmtKg(WKB.bagKg)} kg</div>
          <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${quelle}</div>
          <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${m.hw}/${m.wb} @ ${m.rh} %${
            m.ausAnsatz ? '' : WKB.custom ? esc(t('work.bChanged')) : ''
