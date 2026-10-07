@@ -3015,17 +3015,15 @@
                   <select id="sb-recipe" onchange="sbRecipeChanged()"></select>
                 </div>
                 <div>
-                  <label data-i18n="sub.targetKg">kg fertiges Substrat</label>
-                  <input
-                    type="number"
-                    id="sb-kg"
-                    min="1"
-                    step="10"
-                    value="200"
-                    inputmode="decimal"
-                    oninput="sbPreviewSoon()"
-                  />
+                  <label data-i18n="sub.bags">Anzahl Beutel</label>
+                  <input type="text" id="sb-bags" value="50" inputmode="numeric" oninput="sbPreviewSoon()" />
                 </div>
+              </div>
+              <!-- Gezählt wird in Beuteln, nicht in Kilo: so wird abgefüllt. Die
+                   Kilo rechnet sbTargetKg() aus Anzahl mal Größe. -->
+              <div style="margin-top: 8px">
+                <label data-i18n="batch.bagWeight">Beutelgewicht</label>
+                <div class="wkf-chipsrow" id="sb-bagkg-btns"></div>
               </div>
               <!-- Die Mischung. Aus der gewählten Mischung (Tabelle recipes)
                    vorbelegt und hier für diesen einen Ansatz änderbar, ohne

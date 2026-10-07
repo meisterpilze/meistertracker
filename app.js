@@ -9977,6 +9977,61 @@ function _sbSet(id, v) {
 // steht in der Datenbank (Tabelle recipes), nicht hier.
 let _sbRecipes = [];
 let _sbRecipesLoaded = false;
+// Angesetzt wird in Beuteln: Anzahl mal Beutelgröße ergibt die Kilo, die der
+// Server rechnet. Die zuletzt gewählte Größe merkt sich das Gerät, damit nach
+// dem Wechsel auf die größeren Beutel nicht jedes Mal umgetippt werden muss.
+const SB_BAG_SIZES = [3.8, 5];
+let _sbBagKg = null;
+function sbBagKg() {
+  if (_sbBagKg == null) {
+    let v = NaN;
+    try {
+      v = parseFloat(localStorage.getItem('mp-sb-bagkg'));
+    } catch (e) {}
+    _sbBagKg = SB_BAG_SIZES.includes(v) ? v : NB_BAG_KG_DEFAULT;
+  }
+  return _sbBagKg;
+}
+function sbSetBagKg(v) {
+  if (!SB_BAG_SIZES.includes(v)) return;
+  _sbBagKg = v;
+  try {
+    localStorage.setItem('mp-sb-bagkg', String(v));
+  } catch (e) {}
+}
+function sbBagChips(attr) {
+  const cur = sbBagKg();
+  return SB_BAG_SIZES.map(
+    (k) =>
+      `<button type="button" class="wkf-w${k === cur ? ' on' : ''}" ${attr}="${k}">${esc(fmtKg(k, k % 1 ? 1 : 0))} kg</button>`
+  ).join('');
+}
+function sbRenderBagChips() {
+  const box = document.getElementById('sb-bagkg-btns');
+  if (box) box.innerHTML = sbBagChips('data-sb-bagkg');
+}
+// Auf Gramm gerundet: 3,8 × 3 ist in Gleitkomma 11,399999…
+function sbTargetKg(bags, bagKg) {
+  return Math.round(bags * bagKg * 1000) / 1000;
+}
+// Ganze Beutel; alles andere zählt als keine Angabe.
+function sbParseBags(v) {
+  const n = Number(String(v == null ? '' : v).trim());
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+(function wireSbBagChips() {
+  const box = document.getElementById('sb-bagkg-btns');
+  if (!box) return;
+  sbRenderBagChips();
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sb-bagkg]');
+    if (!b) return;
+    sbSetBagKg(parseFloat(b.dataset.sbBagkg));
+    sbRenderBagChips();
+    sbPreview();
+  });
+})();
+
 async function loadSubstrateRecipes(force) {
   if (_sbRecipesLoaded && !force) return;
   const r = await apiGet('/api/recipes');
@@ -10095,7 +10150,9 @@ async function sbPreview() {
   const btn = document.getElementById('sb-go');
   if (!out) return;
   const recipeId = parseInt(document.getElementById('sb-recipe').value, 10);
-  const kg = parseDecimal(document.getElementById('sb-kg').value) || 0;
+  const bags = sbParseBags(document.getElementById('sb-bags').value);
+  const bagKg = sbBagKg();
+  const kg = sbTargetKg(bags, bagKg);
   _sbLast = null;
   if (btn) btn.disabled = true;
   if (!recipeId || kg <= 0) {
@@ -10118,7 +10175,7 @@ async function sbPreview() {
   // sagen, was gleich in der Liste steht.
   const label =
     r.recipeLabel + (r.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
-  _sbLast = { recipeId, kg, mix: m, label: label, blend: blend };
+  _sbLast = { recipeId, kg, bags, bagKg, mix: m, label: label, blend: blend };
   if (btn) btn.disabled = false;
   const stock = (inventory && inventory.stock) || {};
   // Red when the shelf cannot cover the line. The server clamps a deduction to
@@ -10147,6 +10204,7 @@ async function sbPreview() {
   };
   out.innerHTML =
     '<table class="fs-sm" style="border-collapse:collapse">' +
+    row(t('sub.totalKg'), kg, 'kg') +
     row(t('sub.dryMix'), m.dryKg, 'kg') +
     row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
     row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
@@ -10177,14 +10235,26 @@ async function sbPreview() {
   }
 }
 
+// Anzahl, Größe und Kilo für die Texte, die einen Ansatz nennen.
+function sbMengeParams(menge, extra) {
+  return Object.assign(
+    {
+      bags: menge.bags,
+      bagKg: fmtKg(menge.bagKg, menge.bagKg % 1 ? 1 : 0),
+      kg: fmtKg(menge.kg, menge.kg % 1 ? 1 : 0)
+    },
+    extra || {}
+  );
+}
+
 // Der Torbogen vor jedem Substrat-Ansatz: einmal bestätigen, und wenn das
 // Lager nicht reicht, steht die Frage ausdrücklich dabei. Das Formular und der
 // geführte Dialog bauten diesen Text getrennt zusammen — das Formular schrieb
 // die Kilo dabei ohne Tausenderpunkt, weil es toFixed statt fmtKg nahm.
-function sbConfirmMix(subId, kg, label, knapp, dann) {
+function sbConfirmMix(subId, menge, label, knapp, dann) {
   confirm2(
     t('sub.confirmTitle'),
-    t('sub.confirmMsg', { kg: fmtKg(kg, 0), recipe: label, id: subId }) + (knapp ? '\n\n' + t('sub.shortConfirm') : ''),
+    t('sub.confirmMsg', sbMengeParams(menge, { recipe: label, id: subId })) + (knapp ? '\n\n' + t('sub.shortConfirm') : ''),
     t('sub.create'),
     dann
   );
@@ -10199,7 +10269,7 @@ async function createSubstrateBatchUI() {
   const subId = sbGenId();
   sbConfirmMix(
     subId,
-    _sbLast.kg,
+    { bags: _sbLast.bags, bagKg: _sbLast.bagKg, kg: _sbLast.kg },
     _sbLast.label,
     !!(_sbLast.shortfalls && _sbLast.shortfalls.length),
     async () => {
@@ -10217,7 +10287,7 @@ async function createSubstrateBatchUI() {
         setStatus(st, t('sub.failed', { err: (r && r.error) || '?' }), false);
         return;
       }
-      setStatus(st, t('sub.done', { id: r.subId, kg: _sbLast.kg.toFixed(0) }), true);
+      setStatus(st, t('sub.done', sbMengeParams(_sbLast, { id: r.subId })), true);
       document.getElementById('sb-notes').value = '';
       await loadData();
       await refreshSubstrateBatches();
@@ -10426,7 +10496,7 @@ function renderSubstrateTab() {
     box.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
     return;
   }
-  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
+  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thRh', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
     .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
     .join('');
   box.innerHTML =
@@ -10462,6 +10532,16 @@ function _sbRowHtml(s) {
     ) +
     cell(esc(s.recipeLabel), 'color:var(--c-text-sec)') +
     cell(fmtDtShort(s.created), 'white-space:nowrap') +
+    // Direkt in der Zeile eintragbar: die Messung kommt nach dem Mischen, und
+    // der Weg über die Karte des Ansatzes war zu weit, um es zu tun.
+    cell(
+      '<button type="button" class="btn-xs" onclick="event.stopPropagation();measureSubstrateRhById(' +
+        JSON.stringify(s.subId).replace(/"/g, '&quot;') +
+        ')">' +
+        _subRhCell(s) +
+        '</button>',
+      'white-space:nowrap'
+    ) +
     cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
     cell(
       s.remainingKg.toFixed(1) +
@@ -10565,7 +10645,13 @@ function recordBurstBags(s) {
 // Ein leeres Feld löscht die Messung. Das ist der Weg zurück, wenn sie am
 // falschen Ansatz landete, und er braucht keinen zweiten Knopf, der danebensteht
 // und nur an dem einen Tag gebraucht wird, an dem jemand sich vertippt hat.
-function measureSubstrateRh(s) {
+function measureSubstrateRhById(subId) {
+  const s = (_sbList || []).find((x) => x.subId === subId);
+  if (s) measureSubstrateRh(s, { stay: true });
+}
+// stay: nach dem Speichern nicht die Karte des Ansatzes öffnen — wer aus der
+// Liste oder dem Arbeitsgang kommt, will dort bleiben.
+function measureSubstrateRh(s, opts) {
   // Erst die Ansatz-Karte zu, dann den Prompt auf - dieselbe Reihenfolge wie bei
   // Loeschen und Verwerfen nebenan, und hier ist sie nicht Geschmackssache: beide
   // Dialoge sind .modal-bg auf z-index 200, #m-confirm hebt sich per eigener Regel
@@ -10593,7 +10679,7 @@ function measureSubstrateRh(s) {
       }
       toast(raw === '' ? t('sub.rhCleared') : t('sub.rhSaved', { pct: payload.actualRhPct.toFixed(1) }));
       await refreshSubstrateBatches();
-      openSubstrateInfo(s.subId);
+      if (!(opts && opts.stay)) openSubstrateInfo(s.subId);
     },
     { inputmode: 'decimal', value: s.actualRhPct == null ? '' : String(s.actualRhPct) }
   );
@@ -32332,7 +32418,7 @@ async function wkbCreate() {
 // `previewKey` sagt, zu welchem Rezept und welcher Menge die Vorschau gehört —
 // ohne das lässt sich nicht erkennen, ob sie noch gilt. `bucht` sperrt den
 // Knopf für die Dauer der Buchung, nicht für die Dauer der Rechnerei.
-const WKM = { recipeId: null, kg: 200, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+const WKM = { recipeId: null, bags: 50, kg: 0, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
 
 function wkmKey() {
   return String(WKM.recipeId) + '|' + WKM.kg;
@@ -32398,7 +32484,8 @@ async function wkmLoadPreview() {
 async function wkmOpen() {
   await loadSubstrateRecipes();
   WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
-  WKM.kg = 200;
+  WKM.bags = 50;
+  WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
   WKM.notes = '';
   WKM.preview = null;
   WKM.fehler = '';
@@ -32413,7 +32500,8 @@ async function wkmOpen() {
 function wkmRead() {
   const g = (id) => document.getElementById(id);
   if (g('wkm-recipe')) WKM.recipeId = parseInt(g('wkm-recipe').value, 10) || null;
-  if (g('wkm-kg')) WKM.kg = parseDecimal(g('wkm-kg').value) || 0;
+  if (g('wkm-bags')) WKM.bags = sbParseBags(g('wkm-bags').value);
+  WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
   if (g('wkm-notes')) WKM.notes = g('wkm-notes').value;
 }
 
@@ -32484,7 +32572,12 @@ function wkmRender() {
       (d.lines || []).map((l) => `<div><span class="wkf-r-k">${esc(l[0])}</span><span>${esc(l[1])}</span></div>`).join('') +
       '</div></div>';
     wkf('wkf-foot').innerHTML =
-      `<button class="btn btn-p" data-wkm="again">${esc(t('work.mAnother'))}</button>` +
+      // Gemessen wird nach dem Mischen; der Knopf steht hier, weil man in dem
+      // Moment ohnehin am Ansatz ist.
+      (d.subId
+        ? `<button class="btn btn-p" data-wkm="rh" data-sub="${esc(d.subId)}">${esc(t('sub.rhAdd'))}</button>`
+        : '') +
+      `<button class="btn" data-wkm="again">${esc(t('work.mAnother'))}</button>` +
       `<button class="btn" onclick="wkfClose()">${esc(t('work.done'))}</button>`;
     return;
   }
@@ -32494,8 +32587,12 @@ function wkmRender() {
   wkf('wkf-body').innerHTML =
     `<div class="wkf-q">${esc(t('work.mQ'))}</div>
      <div class="wkf-field"><label>${esc(t('sub.recipe'))}</label><select id="wkm-recipe">${list}</select></div>
-     <div class="wkf-field"><label>${esc(t('sub.targetKg'))}</label>
-       <input type="text" inputmode="decimal" id="wkm-kg" value="${esc(String(WKM.kg))}" /></div>` +
+     <div class="wkf-two">
+       <div class="wkf-field"><label>${esc(t('sub.bags'))}</label>
+         <input type="text" inputmode="numeric" id="wkm-bags" value="${WKM.bags || ''}" /></div>
+       <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
+         <div class="wkf-chipsrow">${sbBagChips('data-wkm="bagkg" data-val')}</div></div>
+     </div>` +
     '<div id="wkm-out"></div>' +
     `<div class="wkf-field"><label>${esc(t('work.bNote'))}</label>
        <input type="text" id="wkm-notes" value="${esc(WKM.notes)}" placeholder="${esc(t('work.mNotePh'))}" /></div>`;
@@ -32517,12 +32614,12 @@ async function wkmCreate() {
   if (!WKM.preview) return;
   const kurz = wkmShortfalls();
   const subId = sbGenId();
-  const kg = WKM.kg;
+  const menge = { bags: WKM.bags, bagKg: sbBagKg(), kg: WKM.kg };
   const label = WKM.preview.recipeLabel || '';
-  sbConfirmMix(subId, kg, label, kurz.length > 0, () => wkmSubmit(subId, kg, label));
+  sbConfirmMix(subId, menge, label, kurz.length > 0, () => wkmSubmit(subId, menge, label));
 }
 
-function wkmSubmit(subId, kg, label) {
+function wkmSubmit(subId, menge, label) {
   // Der Knopf bleibt sonst die ganze Runde über anfassbar: POST, loadData und
   // refreshSubstrateBatches dauern, auf dem Bildschirm ändert sich nichts, und
   // ein zweiter Tipp legt einen zweiten Ansatz an.
@@ -32531,7 +32628,7 @@ function wkmSubmit(subId, kg, label) {
   apiPost('/api/substrate-batches', {
     subId,
     recipeId: WKM.recipeId,
-    targetKg: kg,
+    targetKg: menge.kg,
     notes: WKM.notes.trim()
   })
     .then(async (r) => {
@@ -32553,15 +32650,19 @@ function wkmSubmit(subId, kg, label) {
       // sein. Dann gehört WKF nicht mehr uns: die Bestätigung geht ins Fenster,
       // statt den fremden Bildschirm zu überschreiben oder still zu verpuffen.
       if (WKF.kind !== 'mix') {
-        toast(t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }) + ' — ' + (r.subId || subId));
+        toast(t('work.mDone', sbMengeParams(menge, { recipe: label })) + ' — ' + (r.subId || subId));
         return;
       }
       // Die Vorschau kann inzwischen ersetzt worden sein; die Quittung nennt dann
       // nur, was sicher stimmt, statt an einer leeren Referenz abzustürzen.
       const m = (WKM.preview && WKM.preview.mix) || null;
       WKF.receipt = {
-        headline: t('work.mDone', { kg: fmtKg(kg, 0), recipe: label }),
-        lines: [[t('work.mId'), r.subId || subId]]
+        headline: t('work.mDone', sbMengeParams(menge, { recipe: label })),
+        subId: r.subId || subId,
+        lines: [
+          [t('work.mId'), r.subId || subId],
+          [t('sub.totalKg'), fmtKg(menge.kg, 1) + ' kg']
+        ]
           .concat(
             m
               ? [
@@ -32592,11 +32693,24 @@ function wkmSubmit(subId, kg, label) {
     if (!el || el.disabled) return;
     if (el.dataset.wkm === 'create') wkmCreate();
     else if (el.dataset.wkm === 'again') wkmOpen();
+    else if (el.dataset.wkm === 'bagkg') {
+      wkmRead();
+      sbSetBagKg(parseFloat(el.dataset.val));
+      sbRenderBagChips();
+      wkmRead();
+      wkmRender();
+      wkmLoadPreview();
+    } else if (el.dataset.wkm === 'rh') {
+      // Erst den Ablauf zu: der Prompt läge sonst dahinter (siehe measureSubstrateRh).
+      const s = (_sbList || []).find((x) => x.subId === el.dataset.sub);
+      wkfClose();
+      if (s) measureSubstrateRh(s, { stay: true });
+    }
   });
   // Rezept und Menge neu rechnen lassen; die Notiz nicht, sonst springt der Cursor.
   flow.addEventListener('change', (e) => {
     if (WKF.kind !== 'mix') return;
-    if (e.target.closest('#wkm-recipe,#wkm-kg')) {
+    if (e.target.closest('#wkm-recipe,#wkm-bags')) {
       wkmRead();
       wkmLoadPreview();
     } else if (e.target.closest('#wkm-notes')) {
