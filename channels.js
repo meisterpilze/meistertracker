@@ -563,10 +563,13 @@ const ebay = {
 // side — instead of merging the two. So when Billbee is on, the direct connection
 // for every shop it covers belongs off. The shop name still travels in raw_json.
 //
-// It reads and never writes stock. Billbee is the commercial side of this
-// business and owns what may be sold; the lab's job with a Billbee order is to
-// make what it says. The only thing this provider writes back at all is a
-// Sendungsnummer, and only for a label bought in Meistertracker.
+// Stock it leaves alone, with one exception. Billbee is the commercial side of
+// this business and owns what may be sold; the lab's job with a Billbee order is
+// to make what it says. The exception is liquid-culture syringes: there the lab
+// is the only place that knows how many exist, so it reports the count for the
+// SKUs someone has explicitly tied to a species (setStock, driven by
+// syringe-stock.js). Beyond that it writes back a Sendungsnummer for a label
+// bought in Meistertracker, and Wix orders Billbee cannot fetch itself.
 //
 // Credentials reuse the existing columns, so there is no migration: api_key holds
 // the app's X-Billbee-Api-Key, client_id the Billbee login, client_secret the API
@@ -984,6 +987,62 @@ const billbee = {
     );
     const created = (j && j.Data) || j || {};
     return { ok: true, billbeeOrderId: created.BillBeeOrderId != null ? String(created.BillBeeOrderId) : null, shopId };
+  },
+  /**
+   * Set one article's stock to what the lab physically holds.
+   *
+   * Absolute, because that is all Billbee takes: its spec says "You have to send
+   * the absolute value for the current stock", and DeltaQuantity is documented as
+   * "currently ignored". That suits the lab anyway — it counts what is on the
+   * shelf, it does not know which syringe a shop sold.
+   *
+   * AutosubtractReservedAmount is what keeps a sale from being counted twice. A
+   * sold syringe stays on the lab's shelf until it is shipped and scanned out, so
+   * the lab's count still includes it; Billbee takes the unshipped orders off
+   * before storing the number, and the shops see what is actually free.
+   */
+  async setStock(cfg, { sku, count, reason }) {
+    if (!sku) throw new Error('SKU fehlt');
+    const n = Number(count);
+    if (!Number.isInteger(n) || n < 0) throw new Error('Bestand muss eine ganze Zahl ab 0 sein');
+    let j;
+    try {
+      j = await _billbeeFetch(
+        cfg,
+        '/products/updatestock',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            Sku: sku,
+            NewQuantity: n,
+            AutosubtractReservedAmount: true,
+            Reason: reason || 'Meistertracker: Spritzen im Labor'
+          })
+        },
+        'Billbee Bestand'
+      );
+    } catch (e) {
+      // Billbee answers an unknown SKU with a bare 4xx. Said as what it almost
+      // always is, so somebody checks the spelling rather than the API key.
+      if (/HTTP 4(00|04)\b/.test(e.message || '')) {
+        throw new Error('Billbee kennt die SKU ' + sku + ' nicht. Schreibweise in Billbee unter Artikel prüfen.');
+      }
+      throw e;
+    }
+    // A 200 can still carry a refusal in the envelope.
+    if (j && (j.ErrorMessage || (j.ErrorCode && j.ErrorCode !== 0))) {
+      throw new Error(
+        'Billbee hat den Bestand für ' + sku + ' abgelehnt: ' + (j.ErrorMessage || 'Fehler ' + j.ErrorCode)
+      );
+    }
+    const d = (j && j.Data) || {};
+    return {
+      ok: true,
+      sku: d.SKU || sku,
+      oldStock: d.OldStock != null ? Number(d.OldStock) : null,
+      currentStock: d.CurrentStock != null ? Number(d.CurrentStock) : null,
+      unfulfilled: d.UnfulfilledAmount != null ? Number(d.UnfulfilledAmount) : null
+    };
   }
 };
 

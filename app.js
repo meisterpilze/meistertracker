@@ -12739,6 +12739,115 @@ async function loadChannelsSettings() {
   } catch (e) {
     /* not configured yet */
   }
+  loadSyringeStock();
+}
+
+// ── Spritzenbestand → Billbee (Karte unter Billbee) ──
+// Eine Zeile je Art: Name, Zahl im Labor, SKU-Feld, und was Billbee zuletzt
+// gesagt hat. Die SKU speichert beim Verlassen des Feldes, ohne Knopf.
+async function loadSyringeStock() {
+  try {
+    renderSyringeStock(await apiGet('/api/syringe-stock'));
+  } catch (e) {
+    /* not admin, or the server predates the card */
+  }
+}
+function _syrStatusLine(r) {
+  if (!r.sku) return '';
+  if (r.lastError) return '⚠ ' + r.lastError;
+  if (r.pushedAt) {
+    // Billbee's figure is after it took the open orders off, so it can be lower
+    // than the lab's count; showing both is what makes that readable.
+    const frei = r.billbeeStock != null ? r.billbeeStock : r.pushedCount;
+    return '✓ ' + t('syr.reported', { n: frei, time: fmtDt(r.pushedAt) });
+  }
+  return t('syr.notYet');
+}
+function renderSyringeStock(d) {
+  if (!d || !Array.isArray(d.rows)) return;
+  const en = document.getElementById('syr-enabled');
+  if (en) en.checked = !!d.enabled;
+  const box = document.getElementById('syr-rows');
+  if (!box) return;
+  if (!d.rows.length) {
+    box.innerHTML = '<div class="fs-meta" style="color: var(--c-text-muted)">' + esc(t('syr.noSpecies')) + '</div>';
+  } else {
+    box.innerHTML = d.rows
+      .map(
+        (r) =>
+          '<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px">' +
+          '<div style="flex: 1 1 140px; min-width: 0"><b>' +
+          esc(r.name) +
+          '</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
+          esc(t('syr.inLab', { n: r.count })) +
+          '</span></div>' +
+          '<input type="text" class="syr-sku" data-strain="' +
+          r.strainId +
+          '" value="' +
+          esc(r.sku) +
+          '" placeholder="' +
+          esc(t('syr.skuPlaceholder')) +
+          '" autocapitalize="characters" spellcheck="false" style="flex: 0 1 180px; min-width: 0" />' +
+          (r.sku
+            ? '<div class="fs-meta" style="flex-basis: 100%; color: var(--c-text-muted)">' +
+              esc(_syrStatusLine(r)) +
+              '</div>'
+            : '') +
+          '</div>'
+      )
+      .join('');
+    box.querySelectorAll('.syr-sku').forEach((inp) => {
+      inp.dataset.was = inp.value;
+      inp.addEventListener('change', () => saveSyringeSku(inp));
+    });
+  }
+  const st = document.getElementById('syr-status');
+  if (st) {
+    const hint = d.worktree ? t('syr.worktree') : !d.billbeeReady ? t('syr.needBillbee') : '';
+    st.style.display = hint ? 'block' : 'none';
+    st.textContent = hint;
+  }
+}
+async function saveSyringeSku(inp) {
+  const sku = (inp.value || '').trim();
+  if (sku === inp.dataset.was) return;
+  const r = await apiPut('/api/syringe-stock/' + inp.dataset.strain, { sku });
+  if (r && r.error) {
+    setFb('err', r.error);
+    inp.value = inp.dataset.was;
+    return;
+  }
+  setFb('ok', sku ? t('syr.saved') : t('syr.removed'));
+  renderSyringeStock(r);
+}
+async function setSyringeSyncEnabled(on) {
+  const r = await apiPatch('/api/syringe-stock', { enabled: on });
+  if (r && r.error) {
+    setFb('err', r.error);
+    loadSyringeStock();
+    return;
+  }
+  renderSyringeStock(r);
+  // The first report goes out a few seconds after switching on; look again then.
+  if (on) setTimeout(loadSyringeStock, 8000);
+}
+async function pushSyringeStockNow() {
+  const st = document.getElementById('syr-status');
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = t('common.loading');
+  }
+  const r = await apiPost('/api/syringe-stock/push', {});
+  if (r && r.error) {
+    if (st) st.textContent = '⚠ ' + r.error;
+    return;
+  }
+  renderSyringeStock(r);
+  const msg = r.errors && r.errors.length ? '⚠ ' + r.errors[0] : t('syr.pushed', { n: r.pushed || 0 });
+  if (st) {
+    st.style.display = 'block';
+    st.textContent = msg;
+  }
 }
 async function saveChannel(channel) {
   let body;
@@ -30984,6 +31093,8 @@ function initEventListeners() {
   $('billbee-save-btn').addEventListener('click', () => saveChannel('billbee'));
   $('billbee-test-btn').addEventListener('click', () => testChannel('billbee'));
   $('billbee-sync-btn').addEventListener('click', () => syncChannel('billbee'));
+  $('syr-enabled').addEventListener('change', (e) => setSyringeSyncEnabled(e.target.checked));
+  $('syr-push-btn').addEventListener('click', pushSyringeStockNow);
   $('wix-save-btn').addEventListener('click', () => saveChannel('wix'));
   $('wix-test-btn').addEventListener('click', () => testChannel('wix'));
   $('wix-sync-btn').addEventListener('click', () => syncChannel('wix'));

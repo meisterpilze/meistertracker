@@ -2938,6 +2938,24 @@ const MIGRATIONS = [
       // Anteil, der erst nach dem Messen zugegeben wird. Leer = Vorgabe.
       if (!col('inventory', 'water_holdback_pct')) db.exec('ALTER TABLE inventory ADD COLUMN water_holdback_pct REAL');
     }
+  },
+  {
+    version: 100,
+    description: 'Spritzenbestand je Art an Billbee: SKU und was zuletzt gemeldet wurde',
+    fn(db) {
+      // Eine Zeile je Art, die eine Billbee-SKU hat. pushed_count ist die
+      // Laborzahl, die Billbee zuletzt angenommen hat: nur wenn die heutige davon
+      // abweicht, geht etwas hinaus. Leer heisst "noch nie gemeldet".
+      db.exec(`CREATE TABLE IF NOT EXISTS syringe_stock_sku (
+        strain_id     INTEGER PRIMARY KEY REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        sku           TEXT NOT NULL UNIQUE,
+        pushed_count  INTEGER,
+        pushed_at     TEXT,
+        billbee_stock REAL,
+        last_error    TEXT,
+        last_try      TEXT
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -12829,6 +12847,115 @@ function setChannelSyncState(db, channel, s) {
   incrementDataVersion(db);
 }
 
+// ── Spritzenbestand → Billbee ──
+// Eine Spritze ist eine Zeile in cultures (type 'SY'). Auf Lager ist sie, solange
+// sie aktiv oder gelagert ist; 'used' und 'contam' sind weg. Gezaehlt wird je Art,
+// und genau diese Zahl bekommt Billbee — nicht eine Aenderung, siehe
+// syringe-stock.js fuer das Warum.
+const SYRINGE_STOCK_STATUSES = ['active', 'stored'];
+const SYRINGE_SYNC_KEY = 'syringe_stock_sync';
+
+function syringeStockSyncEnabled(db) {
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SYRINGE_SYNC_KEY);
+  return !!(row && row.value === '1');
+}
+function setSyringeStockSyncEnabled(db, on) {
+  db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(
+    SYRINGE_SYNC_KEY,
+    on ? '1' : '0'
+  );
+  incrementDataVersion(db);
+}
+
+/**
+ * Jede Art mit ihrer Spritzenzahl und, falls vergeben, ihrer Billbee-SKU.
+ *
+ * Gezeigt wird eine Art, wenn sie im Programm ist, eine SKU hat oder Spritzen
+ * auf Lager hat — eine Art ausser Programm mit Spritzen im Kuehlschrank darf
+ * nicht unsichtbar werden. Alte Zeilen ohne strain_id zaehlen ueber den Namen.
+ */
+function listSyringeStock(db) {
+  const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
+  return db
+    .prepare(
+      `SELECT ms.id AS strain_id, ms.name, ms.im_programm,
+              (SELECT COUNT(*) FROM cultures c
+                WHERE c.type = 'SY' AND c.status IN (${st})
+                  AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
+              s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try
+         FROM mushroom_strains ms
+         LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id
+        ORDER BY ms.name COLLATE NOCASE`
+    )
+    .all(...SYRINGE_STOCK_STATUSES)
+    .filter((r) => r.im_programm !== 0 || r.sku || r.n > 0)
+    .map((r) => ({
+      strainId: r.strain_id,
+      name: r.name,
+      count: r.n,
+      sku: r.sku || '',
+      pushedCount: r.pushed_count,
+      pushedAt: r.pushed_at || null,
+      billbeeStock: r.billbee_stock,
+      lastError: r.last_error || null,
+      lastTry: r.last_try || null
+    }));
+}
+
+/** SKU einer Art setzen; leer nimmt die Art aus dem Abgleich. */
+function setSyringeSku(db, strainId, sku) {
+  const id = Number(strainId);
+  if (!Number.isInteger(id) || !db.prepare('SELECT 1 FROM mushroom_strains WHERE id = ?').get(id)) {
+    throw new Error('Diese Art gibt es nicht');
+  }
+  const clean = String(sku == null ? '' : sku).trim();
+  if (!clean) {
+    db.prepare('DELETE FROM syringe_stock_sku WHERE strain_id = ?').run(id);
+    incrementDataVersion(db);
+    return;
+  }
+  const other = db.prepare('SELECT strain_id FROM syringe_stock_sku WHERE sku = ? AND strain_id <> ?').get(clean, id);
+  if (other) {
+    // Zwei Arten auf einer SKU wuerden sich gegenseitig ueberschreiben, und der
+    // Shop zeigte immer die Zahl der Art, die zuletzt gemeldet hat.
+    throw new Error('Die SKU ' + clean + ' gehört schon zu einer anderen Art');
+  }
+  // Eine neue SKU ist ein Artikel, dem noch nie etwas gemeldet wurde. Also
+  // vergessen, was dem alten gemeldet wurde, sonst bekaeme der neue nichts.
+  db.prepare(
+    `INSERT INTO syringe_stock_sku(strain_id, sku) VALUES(?, ?)
+     ON CONFLICT(strain_id) DO UPDATE SET
+       sku = excluded.sku,
+       pushed_count = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.pushed_count END,
+       pushed_at = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.pushed_at END,
+       billbee_stock = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.billbee_stock END,
+       last_error = NULL`
+  ).run(id, clean);
+  incrementDataVersion(db);
+}
+
+/**
+ * Ergebnis eines Versuchs festhalten. Ohne incrementDataVersion: das ist
+ * Buchhaltung des Abgleichs, keine Laboraenderung, und sie soll nicht jeden
+ * offenen Bildschirm neu laden lassen.
+ */
+function recordSyringePush(db, strainId, r) {
+  const now = new Date().toISOString();
+  if (r.error) {
+    db.prepare('UPDATE syringe_stock_sku SET last_error = ?, last_try = ? WHERE strain_id = ?').run(
+      r.error,
+      now,
+      strainId
+    );
+    return;
+  }
+  db.prepare(
+    `UPDATE syringe_stock_sku
+        SET pushed_count = ?, pushed_at = ?, billbee_stock = ?, last_error = NULL, last_try = ?
+      WHERE strain_id = ?`
+  ).run(r.count, now, r.billbeeStock != null ? r.billbeeStock : null, now, strainId);
+}
+
 function getOrder(db, id) {
   const o = db
     .prepare(
@@ -13002,6 +13129,11 @@ module.exports = {
   listChannelConfigs,
   updateChannelConfig,
   setChannelSyncState,
+  syringeStockSyncEnabled,
+  setSyringeStockSyncEnabled,
+  listSyringeStock,
+  setSyringeSku,
+  recordSyringePush,
   getOrder,
   setOrderStatus,
   listCustomers,

@@ -11,6 +11,7 @@ const db = require('./db.js');
 const ship = require('./shipping.js');
 const channels = require('./channels.js');
 const harvestFeed = require('./harvest-feed.js');
+const syringeStockModule = require('./syringe-stock.js');
 const duckdns = require('./duckdns.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
@@ -431,7 +432,12 @@ setInterval(
 // ── SSE (Server-Sent Events) for real-time multi-client sync ──
 // Uses a Set for O(1) add/delete instead of array splice.
 const sseClients = new Set();
+// Set further down, once the database and the logger exist. Every write that
+// tells the screens "data changed" also asks for a syringe recount — see
+// syringe-stock.js for why that beats hooking each write path.
+let syringeStock = null;
 function broadcastSSE(excludeRes) {
+  if (syringeStock) syringeStock.schedule();
   const msg = 'data: {"type":"data-changed"}\n\n';
   for (const c of sseClients) {
     if (c === excludeRes) continue;
@@ -1331,6 +1337,17 @@ function startChannelPoll() {
   return true;
 }
 startChannelPoll();
+
+// Liquid-culture syringes → Billbee → shops. Off until switched on in the
+// settings, and a no-op in worktree mode like the poll above.
+syringeStock = syringeStockModule.createSyringeStockSync({
+  getDatabase: () => database,
+  dbApi: db,
+  channels,
+  log,
+  skip: WORKTREE_MODE
+});
+syringeStock.start();
 
 function _oauthResultHtml(channel, ok, msg) {
   const label = channel === 'etsy' ? 'Etsy' : 'eBay';
@@ -11568,6 +11585,77 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       if (r.supersededBy) jsonErr(res, 409, r.error);
       else if (r.error) jsonErr(res, 502, r.error);
       else jsonOk(res, { imported: r.imported });
+    })();
+    return;
+  }
+
+  // -- Syringe stock → Billbee (see syringe-stock.js) --
+  const syringeStockState = () => {
+    const bb = db.listChannelConfigs(database).find((c) => c.channel === 'billbee') || {};
+    return {
+      enabled: db.syringeStockSyncEnabled(database),
+      billbeeReady: !!(bb.enabled && bb.connected),
+      worktree: WORKTREE_MODE,
+      rows: db.listSyringeStock(database)
+    };
+  };
+  if (req.method === 'GET' && req.url === '/api/syringe-stock') {
+    if (requireAdmin(req, res)) return;
+    try {
+      jsonOk(res, syringeStockState());
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'PATCH' && req.url === '/api/syringe-stock') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        if (data.enabled !== undefined) db.setSyringeStockSyncEnabled(database, !!data.enabled);
+        // broadcastSSE also asks for the recount, so switching on reports at once.
+        broadcastSSE(res);
+        jsonOk(res, syringeStockState());
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const syringeSkuMatch = req.url.match(/^\/api\/syringe-stock\/(\d+)$/);
+  if (req.method === 'PUT' && syringeSkuMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.setSyringeSku(database, Number(syringeSkuMatch[1]), data.sku);
+      } catch (err) {
+        // The two refusals setSyringeSku makes are meant for the person typing.
+        jsonErr(res, 400, err.message);
+        return;
+      }
+      broadcastSSE(res);
+      jsonOk(res, syringeStockState());
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/syringe-stock/push') {
+    if (requireAdmin(req, res)) return;
+    (async () => {
+      const r = await syringeStock.run({ force: true });
+      const state = syringeStockState();
+      if (r.skipped === 'off') jsonErr(res, 409, 'Der Abgleich ist aus. Erst oben einschalten.');
+      else if (r.skipped === 'billbee')
+        jsonErr(res, 409, 'Billbee ist nicht verbunden. Erst die Billbee-Karte oben ausfüllen.');
+      else if (r.skipped === 'worktree') jsonErr(res, 409, 'Diese Kopie des Servers meldet nichts an Billbee.');
+      else jsonOk(res, { ...r, ...state });
     })();
     return;
   }
