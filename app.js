@@ -20794,7 +20794,7 @@ const ctBadge = (t) => {
   return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
 const csBadge = (s) => {
-  const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', contam: 'badge-contam' };
+  const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', sold: 'badge-sold', contam: 'badge-contam' };
   return `<span class="badge ${m[s] || ''}">${esc(s)}</span>`;
 };
 // Culture strain display: show only explicit strainText,
@@ -20855,7 +20855,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="sold" ${c.status === 'sold' ? 'selected' : ''}>${t('lab.sold')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -25167,7 +25167,7 @@ function processScan(raw, opts) {
         setFb('err', t('scanFb.cultureNotInSystem', { id: val }));
         return;
       }
-      if (hit.status === 'used' || hit.status === 'contam') {
+      if (cultureGone(hit)) {
         _scanBeep(300, 150);
         setFb('err', cultureRefusal(hit));
         return;
@@ -25196,7 +25196,7 @@ function processScan(raw, opts) {
       return;
     }
     if (c) {
-      if (c.status === 'used' || c.status === 'contam') {
+      if (cultureGone(c)) {
         setFb('err', cultureRefusal(c));
         return;
       }
@@ -25584,9 +25584,15 @@ function scanActionName(a) {
   const s = t('scanAct.' + a);
   return s === 'scanAct.' + a ? a : s;
 }
+// Raus aus dem Bestand: verbraucht, verkauft oder kontaminiert.
+function cultureGone(c) {
+  return c.status === 'used' || c.status === 'sold' || c.status === 'contam';
+}
 // Warum eine Kultur nicht genommen werden kann, in Worten statt "ist contam".
 function cultureRefusal(c) {
-  return c.status === 'contam' ? t('scanFb.cultureContam', { id: c.id }) : t('scanFb.cultureUsed', { id: c.id });
+  if (c.status === 'contam') return t('scanFb.cultureContam', { id: c.id });
+  if (c.status === 'sold') return t('scanFb.cultureSold', { id: c.id });
+  return t('scanFb.cultureUsed', { id: c.id });
 }
 // ── Verbraucht: Körnerbrut aus dem Bestand ──────────────────
 // Ein Körnerbeutel, mit dem Blöcke beimpft wurden, stand weiter im Bestand, bis
@@ -25616,7 +25622,7 @@ function verbrauchtScan(val, batch) {
 // (camUndoLastScan), darum merkt sich _kulturRaus, was vorher war.
 const _kulturRaus = [];
 function kulturRausScan(c) {
-  if (c.status === 'used' || c.status === 'contam') {
+  if (cultureGone(c)) {
     _scanBeep(500, 120);
     setFb('warn', cultureRefusal(c));
     return;
@@ -25639,7 +25645,7 @@ function openCultureSheet(c) {
   biBatchId = null;
   ciCultureId = c.id;
   document.getElementById('bi-title').textContent = c.id;
-  const STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
+  const STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
   const status = STATUS[c.status];
   const kinder = cultures.filter((x) => x.parentId === c.id).length;
   const met = (k, v) =>
@@ -25726,6 +25732,8 @@ function ciHerkunftHtml(c) {
     `<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">${inhalt}</div></div>`
   );
 }
+// Was als Kultur auch im Shop steht.
+const CI_VERKAUFBAR = ['SY', 'PD'];
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
   if (!el) return;
@@ -25738,6 +25746,11 @@ function renderCiActions(c) {
   // Ob aus dieser Kultur überhaupt etwas angesetzt werden kann.
   const alsHerkunft = bmpArten(c.type).length > 0;
   let html = '';
+  // Spritzen und Petrischalen gehen auch in den Versand. Verkauft steht dann
+  // zuoberst: es ist der haeufigste Weg hinaus, und es haelt die Zahl ehrlich,
+  // die Billbee den Shops meldet (syringe-stock.js).
+  if (aktiv && CI_VERKAUFBAR.includes(c.type))
+    html += `<button type="button" data-bi="ci-sold" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-primary);color:#fff">✓ ${esc(t('ci.sold'))}</button>`;
   if (aktiv)
     html += `<button type="button" data-bi="ci-out" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-purple-dark);color:#fff">✓ ${esc(t('ci.out'))}</button>`;
   html += '<div style="display:flex;gap:8px;margin-bottom:8px">';
@@ -25762,6 +25775,7 @@ function ciAction(a) {
   const c = cultures.find((x) => x.id === ciCultureId);
   if (!c) return;
   if (a === 'ci-out') return ciSetStatus('used', 'ci.outDone');
+  if (a === 'ci-sold') return ciSetStatus('sold', 'ci.soldDone');
   if (a === 'ci-contam') return ciSetStatus('contam', 'ci.contamDone');
   document.getElementById('m-baginfo').classList.remove('open');
   if (a === 'ci-lineage') {
@@ -28751,7 +28765,7 @@ const gsSetValue = (ids, v) =>
     const el = document.getElementById(id);
     if (el) el.value = v;
   });
-const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', contam: 'lab.contaminated' };
+const GS_CULTURE_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
 // Seven fits the box without a scrollbar. A list that scrolls is a filtered
 // table, and every page worth having one already has one.
 const GS_CAP = 7;

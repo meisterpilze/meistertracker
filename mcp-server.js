@@ -786,7 +786,7 @@ function createMcpServer(database, onWrite, printer) {
         .optional()
         .describe('Filter by Pilzsorte id (exact match). Use list_mushroom_strains to discover ids.'),
       species: z.string().optional().describe('Filter by species (partial match)'),
-      status: z.string().optional().describe('Filter by status (e.g. active, stored, used, contam)')
+      status: z.string().optional().describe('Filter by status (e.g. active, stored, used, sold, contam)')
     },
     async (params) => {
       let cultures = db.getAllCultures(database);
@@ -1421,7 +1421,10 @@ function createMcpServer(database, onWrite, printer) {
       strain: z.string().optional().describe('Strain kuerzel (free-text fallback)'),
       parentId: z.string().optional().describe('Parent culture ID for lineage'),
       source: z.string().optional().describe('Source note (e.g. clone, spore print, wild)'),
-      status: z.enum(['active', 'stored', 'used', 'contam']).optional().describe('Culture status (default: active)'),
+      status: z
+        .enum(['active', 'stored', 'used', 'sold', 'contam'])
+        .optional()
+        .describe('Culture status (default: active)'),
       notes: z.string().optional(),
       created: z.string().optional().describe('ISO timestamp (default: now)')
     },
