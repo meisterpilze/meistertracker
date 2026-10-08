@@ -313,3 +313,65 @@ describe('Billbee setStock: die Anfrage', () => {
     assert.equal(called, false);
   });
 });
+
+describe('Spritzenbestand: regelmäßig noch einmal an die Shops', () => {
+  let d, dir, a, sent;
+  const fakeChannels = {
+    getChannelProvider: () => ({
+      async setStock(cfg, args) {
+        sent.push(args);
+        return { ok: true, currentStock: args.count };
+      }
+    })
+  };
+  let sync;
+  before(() => {
+    ({ d, dir } = freshDb());
+    a = Number(db.createMushroomStrain(d, { name: 'Testart Epsilon', kuerzel: 'TE' }));
+    db.updateChannelConfig(d, 'billbee', BILLBEE_CFG);
+    db.setSyringeStockSyncEnabled(d, true);
+    db.setSyringeSku(d, a, 'SPRI-TEST-EPSILON');
+    syringe(d, a, 'active');
+    sync = createSyringeStockSync({
+      getDatabase: () => d,
+      dbApi: db,
+      channels: fakeChannels,
+      log: () => {},
+      skip: false
+    });
+  });
+  after(() => {
+    sync.stop();
+    d.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('schickt auch eine unveränderte Zahl und lässt Billbee sie weitergeben', async () => {
+    sent = [];
+    await sync.runOnce();
+    assert.equal(sent.length, 1);
+    sent = [];
+    assert.equal((await sync.runOnce()).pushed, 0, 'nothing changed, so an ordinary run sends nothing');
+    await sync.runOnce({ resend: true });
+    assert.deepEqual(
+      sent.map((s) => [s.sku, s.count, s.resend]),
+      [['SPRI-TEST-EPSILON', 1, true]]
+    );
+  });
+
+  it('hält trotzdem zurück, wenn alle Arten auf einmal auf null fallen', async () => {
+    d.prepare("UPDATE cultures SET status = 'used' WHERE type = 'SY'").run();
+    sent = [];
+    const r = await sync.runOnce({ resend: true });
+    assert.equal(r.held, true, 'a timer must never empty the shops on a reset');
+    assert.equal(sent.length, 0);
+  });
+
+  it('der Takt: alle sechs Stunden, über die Viertelstunden-Schleife', () => {
+    const mod = require('../syringe-stock.js');
+    assert.equal(mod.RESEND_MS, 6 * 60 * 60 * 1000);
+    assert.equal(mod.RESEND_MS % mod.RETRY_MS, 0);
+    const src = fs.readFileSync(path.join(__dirname, '..', 'syringe-stock.js'), 'utf8');
+    assert.match(src, /run\(due \? \{ resend: true \} : undefined\)/);
+  });
+});

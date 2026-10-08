@@ -27,6 +27,12 @@
 
 const DEBOUNCE_MS = 5000;
 const RETRY_MS = 15 * 60 * 1000;
+// How often every figure goes out again, changed or not, with Billbee told to
+// pass it on to the shops. Billbee forwards only changes, so a shop edited by
+// hand stayed wrong until the next sale — nobody should have to press a button
+// to find that out. Six SKUs every six hours is nothing against Billbee's
+// limits. The first run after a start does it too, a quarter of an hour in.
+const RESEND_MS = 6 * 60 * 60 * 1000;
 
 // getDatabase, not the handle: a backup restore reopens the database and the
 // old handle is closed.
@@ -35,6 +41,7 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
   let interval = null;
   let inFlight = false;
   let again = false;
+  let lastResend = 0;
 
   /**
    * Report every species whose count moved. Never throws; the outcome is the
@@ -43,8 +50,12 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
    *
    * `force` reports every mapped species regardless — the "Jetzt melden" button,
    * and the way to confirm a drop the guard below held back.
+   *
+   * `resend` also reports every mapped species and has Billbee pass them on to
+   * the shops, but unlike `force` it does not override that guard: it runs on
+   * its own, and a timer must never empty the shops on a reset.
    */
-  async function runOnce({ force = false } = {}) {
+  async function runOnce({ force = false, resend = false } = {}) {
     if (skip) return { skipped: 'worktree' };
     const database = getDatabase();
     if (!dbApi.syringeStockSyncEnabled(database)) return { skipped: 'off' };
@@ -52,7 +63,7 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
     if (!cfg.enabled || !cfg.apiKey || !cfg.clientId || !cfg.clientSecret) return { skipped: 'billbee' };
 
     const rows = dbApi.listSyringeStock(database).filter((r) => r.sku);
-    const due = rows.filter((r) => force || r.pushedCount !== r.count || r.lastError);
+    const due = rows.filter((r) => force || resend || r.pushedCount !== r.count || r.lastError);
     if (!due.length) return { pushed: 0, errors: [] };
 
     // Every mapped species dropping to zero at once is not a run on syringes, it
@@ -78,9 +89,9 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
           sku: r.sku,
           count: r.count,
           reason: 'Meistertracker: ' + r.count + ' Spritzen ' + r.name + ' im Labor',
-          // Only the button forces it through to the shops; the automatic runs
-          // send changes, and Billbee forwards those anyway.
-          resend: force
+          // A change Billbee forwards on its own; the button and the periodic
+          // resend make it pass unchanged figures on as well.
+          resend: force || resend
         });
         dbApi.recordSyringePush(database, r.strainId, { count: r.count, billbeeStock: res.currentStock });
         pushed++;
@@ -136,7 +147,16 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
   function start() {
     if (skip) return false;
     if (interval) clearInterval(interval);
-    interval = setInterval(() => run(), RETRY_MS);
+    interval = setInterval(() => {
+      const due = Date.now() - lastResend >= RESEND_MS;
+      run(due ? { resend: true } : undefined).then((r) => {
+        // Counted as done only when it went through, so a Billbee that was down
+        // gets the resend on the next tick instead of six hours later.
+        if (due && r && !r.skipped && !r.busy && !r.error && !r.held && !(r.errors && r.errors.length)) {
+          lastResend = Date.now();
+        }
+      });
+    }, RETRY_MS);
     if (interval.unref) interval.unref();
     return true;
   }
@@ -151,4 +171,4 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
   return { run, runOnce, schedule, start, stop };
 }
 
-module.exports = { createSyringeStockSync, DEBOUNCE_MS };
+module.exports = { createSyringeStockSync, DEBOUNCE_MS, RETRY_MS, RESEND_MS };
