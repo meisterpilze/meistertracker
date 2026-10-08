@@ -2579,6 +2579,10 @@ textarea.is-invalid {
   background: var(--c-bg);
   color: var(--c-text-muted);
 }
+.badge-sold {
+  background: #ede9fe;
+  color: #5b21b6;
+}
 .badge-contam {
   background: #fee2e2;
   color: #991b1b;

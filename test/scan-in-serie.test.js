@@ -110,6 +110,7 @@ function werkbank(stand) {
     ${hebe('armMode')}
     ${hebe('armMoveRun')}
     ${hebe('scanActionName')}
+    ${hebe('cultureGone')}
     ${hebe('cultureRefusal')}
     ${hebe('processScan')}
     return {

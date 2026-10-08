@@ -996,7 +996,7 @@ function validateTimeOfDay(value, fieldName) {
 // types mirror VALID_CULTURE_PARENT_TYPES in db.js — GS included, which the MCP
 // tool's shorter enum leaves out.
 const CULTURE_TYPES = ['MC', 'PD', 'LC', 'G2G', 'GS', 'SY'];
-const CULTURE_STATUSES = ['active', 'stored', 'used', 'contam'];
+const CULTURE_STATUSES = ['active', 'stored', 'used', 'sold', 'contam'];
 // The batch kinds the app knows, mirroring the buckets getProductionPipeline
 // seeds. 'block' is the column default, so an omitted batchType is fine.
 const BATCH_TYPES = ['block', 'grain', 'liquid'];
