@@ -42,7 +42,8 @@ function loadThrottle() {
       '\nreturn { loginDelayForUser, afterLoginDelay, recordLoginFailure, recordLoginFailurePerUser,' +
       ' checkLoginAllowed, clearLoginAttempts, clearLoginAttemptsPerUser, loginAttemptsPerUser,' +
       ' LOGIN_DELAY_AFTER, LOGIN_DELAY_MAX_MS, LOGIN_DELAY_STEP_MS, LOGIN_DELAY_MAX_PENDING,' +
-      ' LOGIN_MAX_ATTEMPTS, LOGIN_LOCKOUT_MS };'
+      ' LOGIN_MAX_ATTEMPTS, LOGIN_LOCKOUT_MS, LOGIN_SOURCE_LOCK_MS, loginLockRemainingMs, loginLockMessage,' +
+      ' loginAttempts };'
   )((...a) => logs.push(a));
   return { ...api, logs };
 }
@@ -117,16 +118,77 @@ describe('the per-account tier is a wait, not a lock', () => {
   });
 });
 
-describe('the per-source tier keeps its hard lock', () => {
+describe('the per-source tier locks, briefly at first', () => {
   // An attacker cannot aim this at anyone else: the key contains their own IP.
+  const key = 'admin@203.0.113.9';
+  const failRound = (t) => {
+    for (let i = 0; i < t.LOGIN_MAX_ATTEMPTS; i++) t.recordLoginFailure(key);
+  };
+  // Lets the running lock run out without waiting for it.
+  const expire = (t) => {
+    t.loginAttempts.get(key).lockedUntil = Date.now() - 1;
+  };
+
   it('locks after the threshold and refuses until it expires', () => {
     const t = loadThrottle();
-    const key = 'admin@203.0.113.9';
     assert.equal(t.checkLoginAllowed(key), true);
-    for (let i = 0; i < t.LOGIN_MAX_ATTEMPTS; i++) t.recordLoginFailure(key);
+    failRound(t);
     assert.equal(t.checkLoginAllowed(key), false);
     t.clearLoginAttempts(key);
     assert.equal(t.checkLoginAllowed(key), true);
+  });
+
+  it('the first lock is half a minute, not a quarter of an hour', () => {
+    const t = loadThrottle();
+    failRound(t);
+    const left = t.loginLockRemainingMs(key);
+    assert.ok(left > 25000 && left <= t.LOGIN_SOURCE_LOCK_MS, 'first lock should be about 30 s, was ' + left);
+    assert.match(t.loginLockMessage(key), /In \d+ Sekunden noch einmal versuchen/);
+  });
+
+  it('doubles for a source that keeps getting it wrong, up to fifteen minutes', () => {
+    const t = loadThrottle();
+    const seen = [];
+    for (let round = 0; round < 8; round++) {
+      failRound(t);
+      seen.push(Math.round(t.loginLockRemainingMs(key) / 1000));
+      expire(t);
+      assert.equal(t.checkLoginAllowed(key), true, 'an expired lock lets the next attempt through');
+    }
+    assert.deepEqual(seen.slice(0, 5), [30, 60, 120, 240, 480]);
+    assert.equal(Math.max(...seen), t.LOGIN_LOCKOUT_MS / 1000);
+  });
+
+  it('after a lock runs out, the next round starts with five fresh attempts', () => {
+    const t = loadThrottle();
+    failRound(t);
+    expire(t);
+    t.checkLoginAllowed(key);
+    for (let i = 0; i < t.LOGIN_MAX_ATTEMPTS - 1; i++) t.recordLoginFailure(key);
+    assert.equal(t.checkLoginAllowed(key), true);
+  });
+
+  it('a correct password resets the doubling', () => {
+    const t = loadThrottle();
+    failRound(t);
+    expire(t);
+    t.checkLoginAllowed(key);
+    failRound(t);
+    t.clearLoginAttempts(key);
+    failRound(t);
+    assert.ok(t.loginLockRemainingMs(key) <= t.LOGIN_SOURCE_LOCK_MS);
+  });
+
+  it('a long lock is said in minutes', () => {
+    const t = loadThrottle();
+    for (let round = 0; round < 6; round++) {
+      failRound(t);
+      if (round < 5) {
+        expire(t);
+        t.checkLoginAllowed(key);
+      }
+    }
+    assert.match(t.loginLockMessage(key), /In \d+ Minuten noch einmal versuchen/);
   });
 });
 
