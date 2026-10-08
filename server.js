@@ -5916,14 +5916,28 @@ function afterLoginDelay(username, next) {
   return true;
 }
 
+// The per-source lock is short and grows. Five wrong passwords used to shut
+// the person at the keyboard out for a quarter of an hour — the one who mistyped
+// is far likelier than an attacker to be standing there, and the per-account
+// wait and the hashing budget below already hold off guessing at speed. Now the
+// first lock is half a minute; only a source that keeps getting it wrong right
+// after each lock waits longer, doubling up to the old fifteen minutes.
+const LOGIN_SOURCE_LOCK_MS = 30 * 1000;
+
+function loginLockRemainingMs(key) {
+  const entry = loginAttempts.get(key);
+  if (!entry || !entry.lockedUntil) return 0;
+  return Math.max(0, entry.lockedUntil - Date.now());
+}
+
 function checkLoginAllowed(key) {
   const entry = loginAttempts.get(key);
-  if (!entry) return true;
-  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return false;
-  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) {
-    loginAttempts.delete(key);
-    return true;
-  }
+  if (!entry || !entry.lockedUntil) return true;
+  if (Date.now() < entry.lockedUntil) return false;
+  // Lock over: a fresh round of attempts, but the number of locks so far is
+  // kept, so the next one is longer. A correct password clears both.
+  entry.lockedUntil = null;
+  entry.count = 0;
   return true;
 }
 
@@ -5931,14 +5945,27 @@ function recordLoginFailure(key) {
   const now = Date.now();
   let entry = loginAttempts.get(key);
   if (!entry) {
-    entry = { count: 0, firstAttempt: now, lockedUntil: null };
+    entry = { count: 0, locks: 0, firstAttempt: now, lockedUntil: null };
     loginAttempts.set(key, entry);
   }
   entry.count++;
+  entry.lastAttempt = now;
   if (entry.count >= LOGIN_MAX_ATTEMPTS) {
-    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
-    log('warn', 'Login locked due to too many failed attempts', { key, attempts: entry.count });
+    entry.locks = (entry.locks || 0) + 1;
+    entry.lockedUntil = now + Math.min(LOGIN_SOURCE_LOCK_MS * 2 ** (entry.locks - 1), LOGIN_LOCKOUT_MS);
+    log('warn', 'Login locked due to too many failed attempts', {
+      key,
+      attempts: entry.count,
+      seconds: Math.round((entry.lockedUntil - now) / 1000)
+    });
   }
+}
+
+// What the login page shows instead of "try again in 15 minutes".
+function loginLockMessage(key) {
+  const s = Math.max(1, Math.ceil(loginLockRemainingMs(key) / 1000));
+  const wann = s < 90 ? s + ' Sekunden' : Math.ceil(s / 60) + ' Minuten';
+  return 'Zu oft das falsche Passwort. In ' + wann + ' noch einmal versuchen.';
 }
 
 function recordLoginFailurePerUser(username) {
@@ -6122,9 +6149,12 @@ function finishLogin(req, res, { username, password, userKey, throttleKey, sourc
 
 setInterval(() => {
   const now = Date.now();
+  // A source is forgotten a quarter of an hour after its last attempt, once no
+  // lock is running. Dropping it the moment a lock ran out would also drop the
+  // count of locks, and every lock would be the first, short one.
   for (const [key, entry] of loginAttempts) {
-    if (entry.lockedUntil && now >= entry.lockedUntil) loginAttempts.delete(key);
-    else if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
+    if (entry.lockedUntil && now < entry.lockedUntil) continue;
+    if (now - (entry.lastAttempt || entry.firstAttempt) > LOGIN_LOCKOUT_MS) loginAttempts.delete(key);
   }
   for (const [key, entry] of loginAttemptsPerUser) {
     if (now - entry.firstAttempt > LOGIN_LOCKOUT_MS) loginAttemptsPerUser.delete(key);
@@ -6993,8 +7023,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // Per-source: still a hard lock. An attacker can only point that at
         // their own address, so it is not usable against anyone else.
         if (!checkLoginAllowed(throttleKey)) {
-          res.writeHead(429, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Too many login attempts. Try again in 15 minutes.' }));
+          res.writeHead(429, {
+            'Content-Type': 'application/json',
+            'Retry-After': String(Math.max(1, Math.ceil(loginLockRemainingMs(throttleKey) / 1000)))
+          });
+          res.end(JSON.stringify({ error: loginLockMessage(throttleKey) }));
           return;
         }
         // S-22: a password big enough to be its own denial of service never
