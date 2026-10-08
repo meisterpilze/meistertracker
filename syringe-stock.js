@@ -77,7 +77,10 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
         const res = await prov.setStock(cfg, {
           sku: r.sku,
           count: r.count,
-          reason: 'Meistertracker: ' + r.count + ' Spritzen ' + r.name + ' im Labor'
+          reason: 'Meistertracker: ' + r.count + ' Spritzen ' + r.name + ' im Labor',
+          // Only the button forces it through to the shops; the automatic runs
+          // send changes, and Billbee forwards those anyway.
+          resend: force
         });
         dbApi.recordSyringePush(database, r.strainId, { count: r.count, billbeeStock: res.currentStock });
         pushed++;
