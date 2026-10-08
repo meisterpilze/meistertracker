@@ -155,6 +155,10 @@ describe('Spritzenbestand: was der Abgleich an Billbee schickt', () => {
     assert.equal(row(d, a).billbeeStock, 1);
   });
 
+  it('ein automatischer Lauf zwingt nichts an die Shops', async () => {
+    assert.ok(sent.every((x) => x.resend === false));
+  });
+
   it('meldet nichts, wenn sich nichts geändert hat', async () => {
     sent = [];
     assert.equal((await sync.runOnce()).pushed, 0);
@@ -199,6 +203,10 @@ describe('Spritzenbestand: was der Abgleich an Billbee schickt', () => {
     // "Jetzt melden" confirms it.
     const forced = await sync.runOnce({ force: true });
     assert.equal(forced.pushed, 2);
+    assert.ok(
+      sent.every((x) => x.resend === true),
+      'the button makes Billbee resend to the shops'
+    );
     assert.deepEqual(
       sent.map((s) => s.count),
       [0, 0]
@@ -251,6 +259,7 @@ describe('Billbee setStock: die Anfrage', () => {
     assert.equal(seen.body.NewQuantity, 5);
     assert.equal(seen.body.AutosubtractReservedAmount, true);
     assert.equal('DeltaQuantity' in seen.body, false, 'Billbee ignores it; sending it would only mislead');
+    assert.equal(seen.body.ForceSendStockToShops, false, 'an ordinary change is not forced through');
     assert.equal(r.currentStock, 4);
     assert.equal(r.unfulfilled, 1);
   });
@@ -264,6 +273,18 @@ describe('Billbee setStock: die Anfrage', () => {
           /Billbee kennt die SKU SPRI-TEST-NOPE nicht/
         )
     );
+  });
+
+  it('mit resend schickt Billbee die Zahl auch unverändert an die Shops', async () => {
+    let body;
+    await withFetch(
+      (url, opts) => {
+        body = JSON.parse(opts.body);
+        return new Response(JSON.stringify({ ErrorCode: 0, Data: {} }), { status: 200 });
+      },
+      () => channels.billbee.setStock(BILLBEE_CFG, { sku: 'SPRI-TEST-3', count: 2, resend: true })
+    );
+    assert.equal(body.ForceSendStockToShops, true);
   });
 
   it('nimmt eine Ablehnung im Umschlag ernst, auch bei HTTP 200', async () => {

@@ -1000,8 +1000,13 @@ const billbee = {
    * sold syringe stays on the lab's shelf until it is shipped and scanned out, so
    * the lab's count still includes it; Billbee takes the unshipped orders off
    * before storing the number, and the shops see what is actually free.
+   *
+   * `resend` sets ForceSendStockToShops: Billbee passes a figure on to the shops
+   * only when it changed, so a shop that was edited by hand — or set up after the
+   * last change — keeps its own wrong number until the next sale. The "Jetzt
+   * melden" button resends, and that is what puts it right.
    */
-  async setStock(cfg, { sku, count, reason }) {
+  async setStock(cfg, { sku, count, reason, resend = false }) {
     if (!sku) throw new Error('SKU fehlt');
     const n = Number(count);
     if (!Number.isInteger(n) || n < 0) throw new Error('Bestand muss eine ganze Zahl ab 0 sein');
@@ -1016,6 +1021,7 @@ const billbee = {
             Sku: sku,
             NewQuantity: n,
             AutosubtractReservedAmount: true,
+            ForceSendStockToShops: !!resend,
             Reason: reason || 'Meistertracker: Spritzen im Labor'
           })
         },
