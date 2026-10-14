@@ -902,17 +902,17 @@ body:has(.modal-bg.open) .cam-fab {
   flex-direction: column;
   gap: 6px;
   padding-right: 4px;
+  /* The rows ask the list how wide it is, not the window: see erfolge below. */
+  container-type: inline-size;
+  container-name: erfolge;
 }
+/* Hidden by renderScanSuccesses() once there is a row. */
 .scan-successes-empty {
   padding: 40px 20px;
   text-align: center;
   color: var(--c-text-muted);
   font-size: 0.8125rem;
   font-style: italic;
-}
-.scan-successes-list:not(:empty) + .scan-successes-empty,
-.scan-successes-list:not(:empty) ~ .scan-successes-empty {
-  display: none;
 }
 .scan-success-row {
   display: flex;
@@ -964,6 +964,35 @@ body:has(.modal-bg.open) .cam-fab {
   background: #fee2e2;
   color: #991b1b;
   border-color: #fca5a5;
+}
+/* On one line the bag number got what the time, the action and the undo button
+   left over: about 56px on a phone, so every row read "PI-26…" and the part
+   that tells two bags of a batch apart, the end, was the part cut off. Below
+   30rem the number takes its own line under time and action, whole, and the
+   undo button spans both lines. */
+@container erfolge (max-width: 30rem) {
+  .scan-success-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .scan-success-row .badge {
+    justify-self: start;
+  }
+  .scan-success-body {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* Where the bag went moves to the next line as one piece. */
+  .scan-success-loc {
+    display: inline-block;
+  }
+  .scan-success-undo {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
 }
 
 .scan-modal-chips {
@@ -7759,13 +7788,18 @@ body:has(#m-camscan.open) .update-bar {
   .wk-tiles {
     gap: 10px;
   }
+  /* The title needs about 80px: Chrome does not hyphenate a capitalised English
+     word, and "Substrate" or "Inoculate" is that wide at 17px. Below about
+     384px the drawing gives the room up, down to 28px at 320, rather than the
+     title its last letters. */
   .wk-tile {
-    grid-template-columns: minmax(0, 1fr) 52px;
+    --wk-art: clamp(28px, 50vw - 140px, 52px);
+    grid-template-columns: minmax(0, 1fr) var(--wk-art);
     grid-template-rows: auto;
     align-items: center;
-    column-gap: 8px;
+    column-gap: 6px;
     min-height: 72px;
-    padding: 10px 10px 10px 14px;
+    padding: 10px 8px 10px 12px;
   }
   .wk-tile::after {
     display: none;
@@ -7774,12 +7808,19 @@ body:has(#m-camscan.open) .update-bar {
     position: static;
     grid-column: 2;
     grid-row: 1;
-    width: 52px;
+    width: var(--wk-art);
   }
+  /* A word too long for its line breaks where the language allows it
+     ("contami-nation", "Kontami-nation"), by the lang attribute that
+     translatePage() sets on <html>. overflow-wrap stays as the last resort for
+     a word without a break point; on its own it cut "contamina|tion" at
+     whatever letter came last. */
   .wk-tile-t {
     grid-column: 1;
     grid-row: 1;
     max-width: none;
+    -webkit-hyphens: auto;
+    hyphens: auto;
     overflow-wrap: anywhere;
   }
   .wk-tile-when {

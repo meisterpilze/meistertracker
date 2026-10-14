@@ -168,6 +168,20 @@ describe('translations', () => {
     }
   });
 
+  // The batch page read "BY SORTE" over a tile called "All Sorten" in English:
+  // the sentences had been translated around the German word for the thing
+  // itself. Each word here has its translation in the app already (species,
+  // batch, abbreviation; variedade), so a hit is a string left half done.
+  // Case-sensitive on purpose: "sorte" is Portuguese for luck, and {sorte} and
+  // {charge} are placeholders.
+  it('keeps German words out of the English and Portuguese texts', () => {
+    const deutsch = /\b(?:Pilzsorten?|Sorten?|Chargen?|Kürzel)\b/;
+    for (const s of ['en', 'pt']) {
+      const treffer = Object.keys(dicts[s]).filter((k) => deutsch.test(dicts[s][k]));
+      assert.deepEqual(treffer, [], s + ' still has these in German');
+    }
+  });
+
   it('keeps the same placeholders in every language', () => {
     for (const k of Object.keys(dicts.de)) {
       const wanted = placeholders(dicts.de[k]);

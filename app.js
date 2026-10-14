@@ -79,6 +79,21 @@ function fmtDtShort(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0');
 }
+// Daten auf den Achsen des Dashboards, in der Sprache des Benutzers. Dort
+// standen die Wochentage fest auf Deutsch ("Mo", "Di") und die Monate fest auf
+// Englisch, auch in der jeweils anderen Oberfläche. Den Schlusspunkt, den de-DE
+// anhängt ("28.09."), braucht eine Achse nicht: Deutsch bleibt "Mo 28.09".
+function fmtDayMonth(d) {
+  return d.toLocaleDateString(loc(), { day: '2-digit', month: '2-digit' }).replace(/\.$/, '');
+}
+// "Mo 28.09", "Mon 28/09", "seg. 28/09"
+function fmtWeekdayDayMonth(d) {
+  return d.toLocaleDateString(loc(), { weekday: 'short' }) + ' ' + fmtDayMonth(d);
+}
+// Monat 0–11, kurz: "Okt", "Oct", "out."
+function fmtMonthShort(m) {
+  return new Date(2000, m, 1).toLocaleDateString(loc(), { month: 'short' });
+}
 function isoWeekNumber(d) {
   if (!(d instanceof Date)) d = new Date(d);
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -3739,7 +3754,8 @@ function renderOverviewCharts(periodStart) {
   }
   const nowDate = new Date();
   const periodHarvests = harvests.filter((h) => new Date(h.time) >= periodStart);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // A day key is a local date; new Date('2026-09-28') would read it as UTC.
+  const dayOf = (k) => new Date(k + 'T00:00:00');
 
   // ── Helpers: build time buckets depending on period ──────
   function buildTimeBuckets() {
@@ -3751,8 +3767,7 @@ function renderOverviewCharts(periodStart) {
         days.push(localDateStr(cur));
         cur.setDate(cur.getDate() + 1);
       }
-      const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-      return { keys: days, label: (k, i) => dayNames[i] + ' ' + fmtDtShort(k), groupKey: (d) => localDateStr(d) };
+      return { keys: days, label: (k) => fmtWeekdayDayMonth(dayOf(k)), groupKey: (d) => localDateStr(d) };
     }
     if (ovPeriod === 'month') {
       // Full month 1st to last day
@@ -3763,13 +3778,13 @@ function renderOverviewCharts(periodStart) {
         days.push(localDateStr(cur));
         cur.setDate(cur.getDate() + 1);
       }
-      return { keys: days, label: (k) => fmtDtShort(k), groupKey: (d) => localDateStr(d) };
+      return { keys: days, label: (k) => fmtDayMonth(dayOf(k)), groupKey: (d) => localDateStr(d) };
     }
     // year — monthly buckets Jan–Dec
     const mKeys = Array.from({ length: 12 }, (_, i) => `${nowDate.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
     return {
       keys: mKeys,
-      label: (k) => monthNames[parseInt(k.split('-')[1]) - 1],
+      label: (k) => fmtMonthShort(parseInt(k.split('-')[1]) - 1),
       groupKey: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     };
   }
@@ -3954,7 +3969,7 @@ function renderOverviewCharts(periodStart) {
       subLabels = keys.map((k, i) => label(k, i));
     } else {
       subKeys = [...new Set([...Object.keys(hwMap), ...Object.keys(wbMap), ...Object.keys(grMap)])].sort();
-      subLabels = subKeys.map((k) => 'KW ' + isoWeekNumber(k));
+      subLabels = subKeys.map((k) => t('dash.ov.weekNo', { n: isoWeekNumber(dayOf(k)) }));
     }
     if (ovChartSubstrateInst) {
       ovChartSubstrateInst.destroy();
@@ -4095,7 +4110,6 @@ function renderKpiHistory() {
 
   // Filter snapshots by the selected overview period + build fixed date range
   const nowDate = new Date();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   let periodStart;
   if (ovPeriod === 'week') {
     periodStart = new Date(nowDate);
@@ -4124,11 +4138,10 @@ function renderKpiHistory() {
   const histLabels = []; // display labels
   if (ovPeriod === 'week') {
     // Mon–Sun (7 days)
-    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     const cur = new Date(periodStart);
     for (let i = 0; i < 7; i++) {
       histKeys.push(localDateStr(cur));
-      histLabels.push(dayNames[i] + ' ' + fmtDtShort(cur));
+      histLabels.push(fmtWeekdayDayMonth(cur));
       cur.setDate(cur.getDate() + 1);
     }
   } else if (ovPeriod === 'month') {
@@ -4137,14 +4150,14 @@ function renderKpiHistory() {
     const lastDay = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 0);
     while (cur <= lastDay) {
       histKeys.push(localDateStr(cur));
-      histLabels.push(fmtDtShort(cur));
+      histLabels.push(fmtDayMonth(cur));
       cur.setDate(cur.getDate() + 1);
     }
   } else {
     // Year — Jan to Dec monthly buckets, use last snapshot per month
     for (let m = 0; m < 12; m++) {
       histKeys.push(`${nowDate.getFullYear()}-${String(m + 1).padStart(2, '0')}`);
-      histLabels.push(monthNames[m]);
+      histLabels.push(fmtMonthShort(m));
     }
     // Build monthly lookup: last snapshot of each month
     const monthSnap = {};
@@ -10070,13 +10083,13 @@ async function loadResidualMoisture() {
   const wb = document.getElementById('sb-resid-wb');
   const sum = document.getElementById('sb-resid-sum');
   const pct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
-  if (hw) hw.value = String(r.pelletsPct).replace('.', ',');
+  if (hw) hw.value = fmtKg(r.pelletsPct);
   // Leer heißt: wie die Pellets. Das Feld zeigt es dann auch so, statt leer zu
   // bleiben und nach "nicht berücksichtigt" auszusehen.
   const bran = r.branPct == null ? r.pelletsPct : r.branPct;
-  if (wb) wb.value = String(bran).replace('.', ',');
+  if (wb) wb.value = fmtKg(bran);
   const hold = document.getElementById('sb-resid-hold');
-  if (hold) hold.value = String(r.holdbackPct).replace('.', ',');
+  if (hold) hold.value = fmtKg(r.holdbackPct);
   if (sum)
     sum.textContent = ' · ' + t('sub.pellets') + ' ' + pct(r.pelletsPct) + ', ' + t('sub.bran') + ' ' + pct(bran) + ', ' + t('sub.holdback') + ' ' + pct(r.holdbackPct);
 }
@@ -11631,7 +11644,7 @@ function grainSizeSummary(b) {
   if (!counts.size) return null;
   return [...counts.entries()]
     .sort((x, y) => x[0] - y[0])
-    .map(([kg, n]) => n + ' × ' + String(kg).replace('.', ',') + ' kg');
+    .map(([kg, n]) => n + ' × ' + fmtKg(kg) + ' kg');
 }
 // Die Größe, aus der die meisten Beutel sind. Dieselbe Regel, nach der
 // createGrainBatch das Gewicht der Charge selbst bestimmt.
@@ -11875,7 +11888,7 @@ function toggleBatchBags(batchId) {
         const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
         const showW = bw != null && wVals.size > 1;
         const wTag = showW
-          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(String(bw).replace('.', ','))}kg</span>`
+          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(fmtKg(bw))}kg</span>`
           : '';
         // A button, not a span: this chip is the only way into the bag sheet
         // that does not involve a barcode, and the sheet is where moving,
@@ -11914,7 +11927,7 @@ function openAddBags(batchId) {
   if (kgEl) {
     const sizes = grainSizeSummary(b);
     const main = _dominantBagKg(b);
-    kgEl.value = isGrain && main ? String(main).replace('.', ',') : '';
+    kgEl.value = isGrain && main ? fmtKg(main) : '';
     kgEl.title = sizes ? sizes.join(' · ') : '';
   }
   document.getElementById('ab-preview').style.display = 'none';
@@ -20346,7 +20359,7 @@ function _msqSizeRowHtml(kg, qty) {
   return (
     '<div class="msq-size" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
     '<input type="text" inputmode="decimal" class="msq-size-kg" autocomplete="off" value="' +
-    esc(String(kg).replace('.', ',')) +
+    esc(fmtKg(kg)) +
     '" style="flex:1;min-width:0;text-align:center" />' +
     '<span class="fs-meta" style="flex:none;color:var(--c-text-muted)">kg &times;</span>' +
     '<input type="number" class="msq-size-qty" min="1" max="500" value="' +
@@ -23267,10 +23280,12 @@ function _labelQr(bcVal, absaetze, badge) {
   return { passt: text.unten <= 240, items: [code].concat(text.items) };
 }
 // Was auf dem Beutel steht, wenn man sein Gewicht draufschreibt: 1 → "1kg",
-// 2.5 → "2,5kg". Der Punkt ist eine Programmiersprache, das Etikett liest ein
-// Mensch in einer deutschen Halle.
+// 2.5 → "2,5kg". In der Sprache dessen, der druckt, wie jede Zahl in der App
+// (fmtKg): die deutsche Halle druckt aus der deutschen Oberfläche und behält
+// ihr Komma, ein Labor, das auf Englisch arbeitet, bekommt "2.5kg" statt
+// "2,5kg". Die Vorschau ist dasselbe Etikett.
 function labelKg(kg) {
-  return String(Math.round(kg * 1000) / 1000).replace('.', ',') + 'kg';
+  return fmtKg(Math.round(kg * 1000) / 1000) + 'kg';
 }
 // Das Gewicht EINES Beutels, so wie das Etikett es braucht.
 //
@@ -24109,6 +24124,12 @@ function renderScanSuccesses() {
   });
   const cnt = document.getElementById('scan-tab-succ-count');
   if (cnt) cnt.textContent = String(succ.length);
+  // The empty state stands above the list in the markup, and CSS can only look
+  // at what follows: the sibling rule meant to hide it never matched, so "No
+  // successful scans yet" stood above every list. The render that knows the
+  // count decides.
+  const empty = document.getElementById('scan-successes-empty');
+  if (empty) empty.hidden = succ.length > 0;
   // Newest first
   for (let i = succ.length - 1; i >= 0; i--) {
     const e = succ[i];
@@ -25861,7 +25882,7 @@ function bmpRender() {
       const kg =
         k === 'KB'
           ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
-            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
+            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(fmtKg(_bmp.kg))}" style="width:64px;text-align:center" /> kg</div>`
           : '';
       return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
     })
@@ -25884,7 +25905,7 @@ function bmpPreview() {
   const teile = Object.entries(_bmp.n)
     .filter(([, n]) => n > 0)
     .map(([k, n]) =>
-      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') }) : n + ' ' + t('bmp.' + k)
+      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: fmtKg(_bmp.kg) }) : n + ' ' + t('bmp.' + k)
     );
   const summe = Object.values(_bmp.n).reduce((a, n) => a + n, 0);
   const prev = document.getElementById('bmp-preview');
@@ -32327,7 +32348,7 @@ function wkbRender() {
          <div class="wkf-field"><label>${esc(t('batch.bagWeight'))}</label>
            <div class="wkf-chipsrow">` +
       [3.5, 3.8, 4.3, 5]
-        .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${String(k).replace('.', ',')} kg</button>`)
+        .map((k) => `<button type="button" class="wkf-w${WKB.bagKg === k ? ' on' : ''}" data-wkb="kg" data-val="${k}">${fmtKg(k)} kg</button>`)
         .join('') +
       `</div></div>
        </div>
@@ -32413,7 +32434,7 @@ function wkbRender() {
          <div><span class="wkf-r-k">${esc(t('stamm.label'))}</span>${stammAnzeige('wkb') ? esc(stammAnzeige('wkb')) : '&mdash;'}</div>
          ${wkbInocZeile()}
          <div><span class="wkf-r-k">${esc(t('anlage.label'))}</span>${frueher ? '<b>' + esc(fmtDt(anlageZeitpunkt(anlageState('wkb').datum))) + '</b>' : esc(t('anlage.today'))}</div>
-         <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${String(WKB.bagKg).replace('.', ',')} kg</div>
+         <div><span class="wkf-r-k">${esc(t('batch.qty'))}</span>${WKB.qty} &times; ${fmtKg(WKB.bagKg)} kg</div>
          <div><span class="wkf-r-k">${esc(t('work.stepSubstrate'))}</span>${quelle}</div>
          <div><span class="wkf-r-k">${esc(t('work.bMixLabel'))}</span>${m.hw}/${m.wb} @ ${m.rh} %${
            m.ausAnsatz ? '' : WKB.custom ? esc(t('work.bChanged')) : ''

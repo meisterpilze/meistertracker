@@ -758,6 +758,7 @@ window.LANG['de'] = {
   'dash.ov.periodYear': 'Dieses Jahr',
   'dash.ov.dailyHarvest': 'Tägliche Ernte (diesen Monat)',
   'dash.ov.weeklySubstrate': 'Substrat nach Woche',
+  'dash.ov.weekNo': 'KW {n}',
   'dash.ov.monthlyHarvest': 'Monatliche Ernte',
   'dash.ov.monthlyBags': 'Erstellte Beutel pro Monat',
   'dash.ov.avgYield': 'Ø Ertrag / Beutel',

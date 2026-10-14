@@ -17,7 +17,7 @@
 // laufen. Der Browser steht nicht unter Test, die Zahlen schon.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { hebe } = require('./helpers/quelle');
+const { hebe, quelle } = require('./helpers/quelle');
 
 // Benannt, damit ein Fehlschlag sagt, welche Funktion umgezogen ist, statt
 // "unexpected token".
@@ -363,5 +363,18 @@ describe('Arbeitsgänge — Kilo in der Sprache des Benutzers', () => {
     assert.equal(DE.fmtKg(100, 0), '100');
     assert.equal(DE.fmtKg(56.5, 1), '56,5');
     assert.equal(DE.fmtKg(2, 2), '2,00');
+  });
+
+  it('ohne verlangte Stellen so viele, wie die Zahl hat', () => {
+    assert.equal(DE.fmtKg(3.8), '3,8');
+    assert.equal(EN.fmtKg(3.8), '3.8');
+    assert.equal(EN.fmtKg(5), '5');
+  });
+
+  // Der umgekehrte Fehler: ein von Hand gesetztes Komma ist in jeder Sprache
+  // Deutsch. So standen "3,8 kg" auf den Beutelgrößen der englischen
+  // Arbeitsgänge und "2,5kg" auf den Etiketten.
+  it('setzt nirgends ein Komma von Hand in eine Zahl', () => {
+    assert.doesNotMatch(quelle(), /\.replace\('\.', ','\)/);
   });
 });
