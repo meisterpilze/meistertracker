@@ -2956,6 +2956,31 @@ const MIGRATIONS = [
         last_try      TEXT
       )`);
     }
+  },
+  {
+    version: 101,
+    description: 'Packliste: Gepackt und Hergestellt als eigene Marken der App, mit wer und wann',
+    fn(db) {
+      // Billbee's own state cannot say "packed": its rules buy the label and set
+      // "Versendet" before anybody has packed the parcel. So the packing board
+      // keeps its own marks, keyed on the channel's order id so they survive any
+      // rebuild of the order row. Nothing here is ever written back to Billbee.
+      db.exec(`CREATE TABLE IF NOT EXISTS order_marks (
+        channel          TEXT NOT NULL,
+        channel_order_id TEXT NOT NULL,
+        kind             TEXT NOT NULL CHECK (kind IN ('packed', 'made')),
+        marked_by        TEXT,
+        marked_at        TEXT NOT NULL,
+        PRIMARY KEY (channel, channel_order_id, kind)
+      )`);
+      // When the marks began. An order whose label was bought before this was
+      // packed without anyone being able to tap it, so the board counts it as
+      // done instead of listing a month of history as "heute packen".
+      db.prepare('INSERT OR IGNORE INTO meta(key, value) VALUES(?, ?)').run(
+        'order_marks_since',
+        new Date().toISOString()
+      );
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -12739,6 +12764,9 @@ function listBoardOrders(db, { sinceIso } = {}) {
   const itemStmt = db.prepare(
     'SELECT channel_sku AS sku, title, qty FROM order_items WHERE order_id = ? ORDER BY id ASC'
   );
+  const markStmt = db.prepare(
+    'SELECT kind, marked_by AS "by", marked_at AS "at" FROM order_marks WHERE channel = ? AND channel_order_id = ?'
+  );
   return orders.map((o) => {
     let raw = null;
     try {
@@ -12755,9 +12783,43 @@ function listBoardOrders(db, { sinceIso } = {}) {
       shipBy: o.shipBy,
       shipCountry: o.shipCountry,
       raw,
-      items: itemStmt.all(o.id)
+      items: itemStmt.all(o.id),
+      marks: Object.fromEntries(
+        markStmt.all(o.channel, o.channelOrderId).map((m) => [m.kind, { by: m.by || null, at: m.at }])
+      )
     };
   });
+}
+
+/** When the packing board's marks began (see migration 101), or null. */
+function orderMarksSince(db) {
+  const row = db.prepare("SELECT value FROM meta WHERE key = 'order_marks_since'").get();
+  return row ? row.value : null;
+}
+
+/**
+ * Set or clear one packing-board mark ('packed' or 'made') on an order, by its
+ * row id. Returns false when there is no such order. Local to this app: the
+ * order in Billbee is not touched.
+ */
+function setOrderMark(db, orderId, kind, on, user) {
+  if (kind !== 'packed' && kind !== 'made') throw new Error('setOrderMark: invalid kind');
+  const o = db.prepare('SELECT channel, channel_order_id AS coid FROM orders WHERE id = ?').get(orderId);
+  if (!o) return false;
+  if (on) {
+    db.prepare(
+      `INSERT INTO order_marks(channel, channel_order_id, kind, marked_by, marked_at) VALUES(?,?,?,?,?)
+       ON CONFLICT(channel, channel_order_id, kind) DO UPDATE SET marked_by = excluded.marked_by, marked_at = excluded.marked_at`
+    ).run(o.channel, o.coid, kind, user || null, new Date().toISOString());
+  } else {
+    db.prepare('DELETE FROM order_marks WHERE channel = ? AND channel_order_id = ? AND kind = ?').run(
+      o.channel,
+      o.coid,
+      kind
+    );
+  }
+  incrementDataVersion(db);
+  return true;
 }
 
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
@@ -13166,6 +13228,8 @@ module.exports = {
   markBillbeePushed,
   listOrders,
   listBoardOrders,
+  orderMarksSince,
+  setOrderMark,
   getChannelConfig,
   listChannelConfigs,
   updateChannelConfig,

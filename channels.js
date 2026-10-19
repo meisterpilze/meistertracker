@@ -739,8 +739,22 @@ function _billbeeLabRecord(o) {
     // rules (ZUSAMMENFASSEN marks orders to go out in one parcel).
     PayedAt: o.PayedAt || null,
     Tags: Array.isArray(o.Tags) ? o.Tags.map((x) => String(x == null ? '' : x).trim()).filter(Boolean) : [],
-    CustomerKey: _billbeeCustomerKey(o)
+    CustomerKey: _billbeeCustomerKey(o),
+    // Whether a label has been bought, and when. Billbee's timed rules buy it
+    // and set the order to "Versendet" before anyone has packed it, so this is
+    // information for the packer, not a sign the parcel is gone. Only the count
+    // and the time are kept, not the tracking numbers.
+    LabelCount: Array.isArray(o.ShippingIds) ? o.ShippingIds.length : 0,
+    LabelAt: _billbeeFirstLabelAt(o)
   };
+}
+
+function _billbeeFirstLabelAt(o) {
+  if (!Array.isArray(o.ShippingIds)) return null;
+  const times = o.ShippingIds.map((s) => s && s.Created)
+    .filter((t) => t && !Number.isNaN(new Date(t).getTime()))
+    .sort();
+  return times.length ? times[0] : null;
 }
 
 /**
