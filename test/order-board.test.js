@@ -584,11 +584,14 @@ describe('order board – wiring', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
 
-  it('shows names only to users who may see customer data', () => {
+  it('shows the recipient name to everyone who packs, and nothing more of the person', () => {
     const start = server.indexOf("url === '/api/orders/board'");
     const handler = server.slice(start, server.indexOf("url === '/api/orders/board/mark'"));
-    assert.match(handler, /role === 'admin' \|\| req\.authUser\.can_ship === 1/);
-    assert.match(handler, /showNames/);
+    assert.match(handler, /const showNames = !!req\.authUser;/);
+    // The board itself carries no address or e-mail to anyone (see the import
+    // tests above); the full order stays behind the shipping permission.
+    const detail = server.slice(server.indexOf("if (req.method === 'GET' && orderMatch)"));
+    assert.match(detail.slice(0, 400), /requireShipping\(req, res\)/);
   });
 
   it('serves the board before the /api/orders/:id route can swallow it', () => {
