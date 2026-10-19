@@ -9659,8 +9659,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && url === '/api/orders/board') {
     try {
       const since = new Date(Date.now() - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
-      // Names follow the order list's rule (requireShipping): admin or can_ship.
-      const showNames = !!(req.authUser && (req.authUser.role === 'admin' || req.authUser.can_ship === 1));
+      // Everyone who packs needs to see whose parcel is whose, so the
+      // recipient's name is shown to every signed-in user here. It is the only
+      // personal datum on the board: addresses, e-mails and the customer pages
+      // stay behind requireShipping as before.
+      const showNames = !!req.authUser;
       const board = orderBoard.buildOrderBoard(db.listBoardOrders(database, { sinceIso: since }), {
         marksSince: db.orderMarksSince(database),
         showNames
