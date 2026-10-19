@@ -1525,6 +1525,7 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
   if (page === 'settings' && sub === 'log') renderLog();
+  if (page === 'orders' && sub === 'pack') renderOrderBoard();
   if (page === 'orders' && sub === 'inbox') renderOrders();
   if (page === 'orders' && sub === 'tomake') renderOrdersDemand();
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
@@ -1683,8 +1684,9 @@ function _ohStatus(st) {
 }
 function _refreshOrdersActive() {
   const active = document.querySelector('#p-orders .sp.active');
-  const id = active ? active.id : 'sp-orders-inbox';
-  if (id === 'sp-orders-tomake') renderOrdersDemand();
+  const id = active ? active.id : 'sp-orders-pack';
+  if (id === 'sp-orders-pack') renderOrderBoard();
+  else if (id === 'sp-orders-tomake') renderOrdersDemand();
   else if (id === 'sp-orders-mapping') renderOrdersMapping();
   else if (id === 'sp-orders-customers') renderOrdersCustomers();
   else if (id === 'sp-orders-versand') renderOrdersVersand();
@@ -1808,6 +1810,226 @@ function renderOrdersDemand() {
     .catch(() => {
       body.innerHTML = _ohEmpty(5, t('common.error'));
     });
+}
+
+// ── Packen: what to pack today, what to make first ─────────────────────────
+// The shop orders Billbee holds, as the floor reads them: one card per parcel
+// to pack, and one total per made-to-order product. Built on the server
+// (order-board.js) from what the 15-minute Billbee sync stored; this only draws.
+// Cards rather than a table, because this is read on a phone at the packing
+// table, and a table of five columns is a sideways scroll there.
+let _obBoard = null;
+
+// A day as the floor says it: "heute", "morgen", or a short weekday and date.
+// Parsed at noon so no time zone can push the day over midnight.
+function _obDay(day) {
+  if (!day || !_obBoard) return '';
+  if (day === _obBoard.today) return t('orders.board.today');
+  const d = new Date(day + 'T12:00:00');
+  const tomorrow = new Date(_obBoard.today + 'T12:00:00');
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (d.toDateString() === tomorrow.toDateString()) return t('orders.board.tomorrow');
+  return d.toLocaleDateString(loc(), { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+// The shop an order came from. Billbee orders name it; the direct connections
+// are their own shop. The pill colour follows the shop, the text is its name.
+function _obShop(o) {
+  const name = o.shop || _ohChannelLabel(o.channel);
+  const n = String(name).toLowerCase();
+  const slug = ['ebay', 'etsy', 'wix', 'shopify'].find((s) => n.includes(s)) || 'manual';
+  return `<span class="oh-ch oh-ch-${slug}">${esc(name)}</span>`;
+}
+function _obItems(items) {
+  if (!items || !items.length) return `<div class="muted fs-meta">${esc(t('orders.board.noItems'))}</div>`;
+  return (
+    '<ul class="ob-items">' +
+    items
+      .map(
+        (it) =>
+          `<li><span class="ob-qty">${esc(it.qty)}×</span> <span class="ob-title">${esc(it.title || it.sku || '—')}</span>` +
+          (it.sku ? ` <span class="ob-sku">${esc(it.sku)}</span>` : '') +
+          (it.madeToOrder ? ` <span class="ob-tag ob-tag-make">${esc(t('orders.board.madeTag'))}</span>` : '') +
+          '</li>'
+      )
+      .join('') +
+    '</ul>'
+  );
+}
+function _obOrderCard(o, mode) {
+  const top =
+    `<div class="ob-order-top">${_obShop(o)}` +
+    `<span class="ob-num">${esc(o.number)}</span>` +
+    `<span class="ob-when">${esc(_obDay(o.orderDay))}</span>` +
+    (o.webUrl
+      ? `<a class="ob-link" href="${esc(o.webUrl)}" target="_blank" rel="noopener">${esc(t('orders.board.openBillbee'))}</a>`
+      : '') +
+    '</div>';
+  let foot = '';
+  if (mode === 'pack') {
+    const label =
+      o.readyDay && o.readyDay !== o.orderDay
+        ? `<span class="ob-plan">${esc(t('orders.board.labelOn', { day: _obDay(o.readyDay) }))}</span>`
+        : '';
+    const btn = o.packed
+      ? `<span class="ob-done">✓ ${esc(t('orders.board.packed'))}</span>` +
+        `<button class="btn btn-sm" data-action="ob-unpack" data-id="${o.id}">${esc(t('orders.board.unpack'))}</button>`
+      : `<button class="btn btn-sm btn-p" data-action="ob-packed" data-id="${o.id}" data-status="${esc(o.status)}">${esc(t('orders.board.markPacked'))}</button>`;
+    foot = `<div class="ob-order-foot">${label}${btn}</div>`;
+  } else if (mode === 'later') {
+    foot = `<div class="ob-order-foot"><span class="ob-plan">${esc(t('orders.board.labelOn', { day: _obDay(o.readyDay) }))}</span></div>`;
+  } else if (mode === 'shipped') {
+    foot = `<div class="ob-order-foot"><span class="muted fs-meta">${esc(t('orders.board.shippedOn', { day: _obDay(o.shippedDay) }))}</span></div>`;
+  }
+  const solo =
+    o.combine && o.combine.size === 1
+      ? `<div class="ob-combine-solo">${esc(t('orders.board.combineTagged'))}</div>`
+      : '';
+  return `<div class="ob-order${o.packed ? ' is-packed' : ''}">${top}${solo}${_obItems(o.items)}${foot}</div>`;
+}
+// Orders that go into one parcel sit in one frame, with the reason on top, so
+// nobody tapes up the first box before the second order is in it.
+function _obOrderList(rows, mode) {
+  let html = '';
+  for (let i = 0; i < rows.length; i++) {
+    const o = rows[i];
+    const key = o.combine && o.combine.key;
+    if (key && o.combine.size > 1) {
+      const group = [];
+      while (i < rows.length && rows[i].combine && rows[i].combine.key === key) group.push(rows[i++]);
+      i--;
+      // The other order of the pair is in another list (still being made, say).
+      // Say so on the card instead of framing a group of one.
+      if (group.length === 1) {
+        html += _obOrderCard(o, mode).replace(
+          '<ul class="ob-items">',
+          `<div class="ob-combine-solo">${esc(t('orders.board.combineElsewhere'))}</div><ul class="ob-items">`
+        );
+        continue;
+      }
+      html +=
+        `<div class="ob-group"><div class="ob-group-head">${esc(t('orders.board.combine', { n: group.length }))}</div>` +
+        group.map((g) => _obOrderCard(g, mode)).join('') +
+        '</div>';
+    } else {
+      html += _obOrderCard(o, mode);
+    }
+  }
+  return html;
+}
+function _obEmpty(msg) {
+  return `<div class="ob-empty">${esc(msg)}</div>`;
+}
+function _obSyncLine(b) {
+  const el = $('ob-sync');
+  if (!el) return;
+  const s = b.sync || {};
+  const when = s.lastSync ? fmtDtTime(s.lastSync) : null;
+  const parts = [];
+  if (s.problem) parts.push(`<span>${esc(t('orders.board.sync.' + s.problem, { time: when || '—' }))}</span>`);
+  else if (when) parts.push(`<span class="muted">${esc(t('orders.board.syncedAt', { time: when }))}</span>`);
+  if (b.unpaid)
+    parts.push(`<span class="muted">${esc(t(b.unpaid === 1 ? 'orders.board.unpaid.one' : 'orders.board.unpaid.other', { n: b.unpaid }))}</span>`);
+  if (s.canSync)
+    parts.push(`<button class="btn btn-sm" data-action="ob-sync-now">${esc(t('orders.board.syncNow'))}</button>`);
+  el.innerHTML = parts.join('');
+  el.classList.toggle('is-warn', !!s.problem && s.problem !== 'never');
+  el.style.display = parts.length ? 'flex' : 'none';
+}
+function _obMakeList(make) {
+  if (!make.length) return _obEmpty(t('orders.board.makeNone'));
+  return make
+    .map(
+      (m) =>
+        `<div class="ob-make${m.overdue ? ' is-late' : ''}">` +
+        `<div class="ob-make-top"><span class="ob-make-qty">${esc(m.qty)}×</span>` +
+        `<span class="ob-title">${esc(m.title || m.sku)}</span></div>` +
+        `<div class="ob-make-meta"><span class="ob-sku">${esc(m.sku)}</span> · ` +
+        `${esc(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }))}</div>` +
+        '<div class="ob-make-days">' +
+        m.byDay
+          .map(
+            (d) =>
+              `<span class="ob-day${d.day < _obBoard.today ? ' is-late' : ''}">${esc(t('orders.board.labelOnQty', { qty: d.qty, day: _obDay(d.day) }))}</span>`
+          )
+          .join('') +
+        '</div></div>'
+    )
+    .join('');
+}
+function _renderOrderBoard() {
+  const b = _obBoard;
+  if (!b) return;
+  _obSyncLine(b);
+  const open = b.pack.filter((o) => !o.packed).length;
+  const cnt = $('ob-pack-count');
+  if (cnt) cnt.textContent = b.pack.length ? t('orders.board.packCount', { open, all: b.pack.length }) : '';
+  const pack = $('ob-pack');
+  if (pack) pack.innerHTML = b.pack.length ? _obOrderList(b.pack, 'pack') : _obEmpty(t('orders.board.packNone'));
+  const make = $('ob-make');
+  if (make) make.innerHTML = _obMakeList(b.make);
+  const laterCard = $('ob-later-card');
+  if (laterCard) laterCard.style.display = b.later.length ? '' : 'none';
+  const later = $('ob-later');
+  if (later) later.innerHTML = _obOrderList(b.later, 'later');
+  const lc = $('ob-later-count');
+  if (lc) lc.textContent = b.later.length ? String(b.later.length) : '';
+  const shipped = $('ob-shipped');
+  if (shipped)
+    shipped.innerHTML = b.shipped.length ? _obOrderList(b.shipped, 'shipped') : _obEmpty(t('orders.board.shippedNone'));
+}
+function renderOrderBoard() {
+  const pack = $('ob-pack');
+  if (!pack) return;
+  if (!_obBoard) pack.innerHTML = _obEmpty(t('common.loading'));
+  apiGet('/api/orders/board')
+    .then((b) => {
+      _obBoard = b;
+      _renderOrderBoard();
+    })
+    .catch(() => {
+      // Keep the last list on screen if there is one: a dropped connection on
+      // the floor should not blank what somebody is packing from.
+      const el = $('ob-sync');
+      if (el) {
+        el.innerHTML = `<span>${esc(t('orders.board.loadFailed'))}</span>`;
+        el.classList.add('is-warn');
+        el.style.display = 'flex';
+      }
+      if (!_obBoard) pack.innerHTML = '';
+    });
+}
+// One tap packs, the bar offers the way back. "Gepackt" is the order hub's own
+// "Versandbereit": local to this app, never sent to Billbee, and a later sync
+// leaves it alone (upsertOrder never lowers a local status).
+function _obSetStatus(id, status) {
+  return apiPatch('/api/orders/' + id, { status }).then((r) => {
+    if (r && r.error) {
+      toast(t('orders.board.saveFailed'), 'err');
+      return false;
+    }
+    return true;
+  });
+}
+function obMarkPacked(id, prev) {
+  const before = prev && prev !== 'ready' ? prev : 'new';
+  _obSetStatus(id, 'ready').then((ok) => {
+    if (!ok) return;
+    renderOrderBoard();
+    showUndoBar(t('orders.board.packedMsg'), () => _obSetStatus(id, before).then(() => renderOrderBoard()));
+  });
+}
+function obUnpack(id) {
+  _obSetStatus(id, 'new').then((ok) => {
+    if (ok) renderOrderBoard();
+  });
+}
+function obSyncNow(btn) {
+  if (btn) btn.disabled = true;
+  apiPost('/api/channels/billbee/sync').then((r) => {
+    if (btn) btn.disabled = false;
+    if (r && r.error) toast(t('orders.board.syncFailed'), 'err');
+    renderOrderBoard();
+  });
 }
 
 function renderOrdersMapping() {
@@ -2231,6 +2453,12 @@ function ordersActionHandler(e) {
   const action = btn.dataset.action;
   if (action === 'oh-erase-customer') {
     eraseCustomer(btn.dataset.id, btn.dataset.name);
+  } else if (action === 'ob-packed') {
+    obMarkPacked(btn.dataset.id, btn.dataset.status);
+  } else if (action === 'ob-unpack') {
+    obUnpack(btn.dataset.id);
+  } else if (action === 'ob-sync-now') {
+    obSyncNow(btn);
   } else if (action === 'oh-filter') {
     setOrdersFilter(btn.dataset.filter || '');
   } else if (action === 'oh-goto-mapping') {
@@ -30347,6 +30575,7 @@ function initEventListeners() {
   // entries each naming their own sub-tab was the same wiring written five
   // times, and it is what pushed two of them off a 1366x768 sidebar.
   $('n-orders').addEventListener('click', () => go('orders', 'n-orders'));
+  $('st-orders-pack').addEventListener('click', () => openStab('orders', 'pack'));
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
   $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
   $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));

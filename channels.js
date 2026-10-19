@@ -733,8 +733,42 @@ function _billbeeLabRecord(o) {
     Currency: o.Currency || null,
     // The link back into Billbee, for the human who wants the rest of the order:
     // it lives there, one click away, and does not have to live here.
-    WebUrl: o.WebUrl || null
+    WebUrl: o.WebUrl || null,
+    // What the packing list needs on top. Paid decides whether an order is
+    // packed at all; the tags are the merchant's own words, set by Billbee
+    // rules (ZUSAMMENFASSEN marks orders to go out in one parcel).
+    PayedAt: o.PayedAt || null,
+    Tags: Array.isArray(o.Tags) ? o.Tags.map((x) => String(x == null ? '' : x).trim()).filter(Boolean) : [],
+    CustomerKey: _billbeeCustomerKey(o)
   };
+}
+
+/**
+ * Which orders belong to the same buyer, without saying who the buyer is.
+ *
+ * Two orders from one person go out in one parcel, so the packing list has to
+ * see that they share a buyer. It does not have to see the buyer: a one-way hash
+ * of Billbee's own customer id answers "same or not" and nothing else. The id is
+ * hashed rather than kept because it is a handle into the commercial record, and
+ * this database is not where that record lives (see _billbeeLabRecord).
+ */
+function _billbeeCustomerKey(o) {
+  const c = o.Customer || {};
+  const buyer = o.Buyer || {};
+  const id =
+    c.Id != null && c.Id !== ''
+      ? 'c:' + c.Id
+      : o.CustomerId != null && o.CustomerId !== ''
+        ? 'c:' + o.CustomerId
+        : buyer.Id != null && buyer.Id !== ''
+          ? 'b:' + (buyer.Platform || '') + ':' + buyer.Id
+          : null;
+  if (!id) return null;
+  return crypto
+    .createHash('sha256')
+    .update('mt-billbee-customer|' + id)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function _normalizeBillbee(o) {

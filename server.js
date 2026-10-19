@@ -12,6 +12,7 @@ const ship = require('./shipping.js');
 const channels = require('./channels.js');
 const harvestFeed = require('./harvest-feed.js');
 const syringeStockModule = require('./syringe-stock.js');
+const orderBoard = require('./order-board.js');
 const duckdns = require('./duckdns.js');
 const { createMcpServer } = require('./mcp-server.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
@@ -9644,6 +9645,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         for (const o of items) delete o.customerName;
       }
       jsonOk(res, { items });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
+  // Orders — packing board: what to pack today, what to make first (must
+  // precede /api/orders/:id). Read from what the Billbee sync stored; no
+  // customer data is in it, so any signed-in user may see it.
+  if (req.method === 'GET' && url === '/api/orders/board') {
+    try {
+      const since = new Date(Date.now() - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
+      const board = orderBoard.buildOrderBoard(db.listBoardOrders(database, { sinceIso: since }));
+      const bb = db.listChannelConfigs(database).find((c) => c.channel === 'billbee') || {};
+      board.sync = {
+        lastSync: bb.lastSync || null,
+        problem: orderBoard.syncProblem(bb),
+        canSync: !!(req.authUser && req.authUser.role === 'admin' && bb.enabled && bb.connected)
+      };
+      jsonOk(res, board);
     } catch (err) {
       safeErr(res, err);
     }

@@ -12720,6 +12720,46 @@ function listOrders(db, { status, channel, limit = 200 } = {}) {
     .all(...args);
 }
 
+/**
+ * The orders the packing board looks at: everything ordered since `sinceIso`,
+ * with its lines and its parsed raw record. No customer columns — the board
+ * says what to pack and what to make, never who it is for (order-board.js).
+ */
+function listBoardOrders(db, { sinceIso } = {}) {
+  const orders = db
+    .prepare(
+      `SELECT id, channel, channel_order_id AS channelOrderId, status, order_date AS orderDate,
+              ship_by AS shipBy, ship_country AS shipCountry, raw_json AS rawJson
+         FROM orders
+        WHERE order_date >= ?
+        ORDER BY order_date ASC, id ASC`
+    )
+    .all(sinceIso || '1970-01-01T00:00:00.000Z');
+  if (!orders.length) return [];
+  const itemStmt = db.prepare(
+    'SELECT channel_sku AS sku, title, qty FROM order_items WHERE order_id = ? ORDER BY id ASC'
+  );
+  return orders.map((o) => {
+    let raw = null;
+    try {
+      raw = o.rawJson ? JSON.parse(o.rawJson) : null;
+    } catch {
+      raw = null;
+    }
+    return {
+      id: o.id,
+      channel: o.channel,
+      channelOrderId: o.channelOrderId,
+      status: o.status,
+      orderDate: o.orderDate,
+      shipBy: o.shipBy,
+      shipCountry: o.shipCountry,
+      raw,
+      items: itemStmt.all(o.id)
+    };
+  });
+}
+
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
 const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
@@ -13125,6 +13165,7 @@ module.exports = {
   billbeePushedAt,
   markBillbeePushed,
   listOrders,
+  listBoardOrders,
   getChannelConfig,
   listChannelConfigs,
   updateChannelConfig,
