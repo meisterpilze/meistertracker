@@ -2359,11 +2359,30 @@ summary.fs-meta {
   background: var(--c-red-light);
   color: var(--c-red-dark);
 }
-.ob-shipped > summary {
+.ob-done-list > summary {
   cursor: pointer;
   min-height: var(--tap-sm-min);
-  display: flex;
   align-items: center;
+}
+/* Billbee's state on the card: information, never what takes an order off the
+   list. A bought label is the loud one, because that parcel leaves today. */
+.ob-bb {
+  display: inline-block;
+  font-size: max(0.6875rem, var(--fs-min));
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  background: var(--c-border-light);
+  color: var(--c-text-sec);
+}
+.ob-bb-label,
+.ob-bb-shipped {
+  background: var(--c-blue-light);
+  color: var(--c-blue-dark);
+}
+.ob-plan.is-due {
+  color: var(--c-red-dark);
 }
 .oh-manual {
   background: var(--c-bg);

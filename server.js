@@ -9657,7 +9657,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && url === '/api/orders/board') {
     try {
       const since = new Date(Date.now() - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
-      const board = orderBoard.buildOrderBoard(db.listBoardOrders(database, { sinceIso: since }));
+      const board = orderBoard.buildOrderBoard(db.listBoardOrders(database, { sinceIso: since }), {
+        marksSince: db.orderMarksSince(database)
+      });
       const bb = db.listChannelConfigs(database).find((c) => c.channel === 'billbee') || {};
       board.sync = {
         lastSync: bb.lastSync || null,
@@ -9668,6 +9670,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+
+  // Orders — packing board marks: "Gepackt" / "Hergestellt" ({id, kind, on}).
+  // Local to this app, with who and when; Billbee is never written to.
+  if (req.method === 'POST' && url === '/api/orders/board/mark') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const id = parseInt(data && data.id, 10);
+      if (!Number.isFinite(id) || (data.kind !== 'packed' && data.kind !== 'made')) {
+        jsonErr(res, 400, 'id and kind (packed|made) required');
+        return;
+      }
+      try {
+        const ok = db.setOrderMark(database, id, data.kind, data.on !== false, req.authUser && req.authUser.username);
+        if (!ok) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
 

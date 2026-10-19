@@ -12,14 +12,21 @@
 // (see _billbeeLabRecord in channels.js), and what a packer needs to know about
 // the buyer is only "these two orders go to the same person", which the import
 // carries as an anonymous key.
+//
+// ── Why the board keeps its own marks ──────────────────────────────────────
+//
+// Billbee's state cannot say whether a parcel has been packed. Its timed rules
+// buy the GLS label and set the order to "Versendet" at 07:00 and 12:00, before
+// anybody has packed it — and that label day is exactly when the parcel has to
+// go out. So an order leaves "Heute packen" only when someone taps "Gepackt"
+// here, and a made-to-order one reaches it only when someone taps
+// "Hergestellt". Both marks live in this app's database (order_marks, keyed on
+// the Billbee order id, with who and when). Billbee's state is shown on the
+// card as information, and nothing is ever written back to Billbee.
 
 // How far back the board looks. The same window the Billbee sync pulls, so the
 // board never shows an order whose state the sync has stopped refreshing.
 const BOARD_WINDOW_DAYS = 30;
-// Recently shipped orders stay visible this long, so "did that one go out?" has
-// an answer on the same screen.
-const SHIPPED_SHOW_DAYS = 3;
-const SHIPPED_SHOW_MAX = 30;
 // A sync older than this is reported as stale: the poll runs every 15 minutes,
 // so an hour without one means it has stopped, not that it is slow.
 const SYNC_STALE_MS = 60 * 60 * 1000;
@@ -28,13 +35,19 @@ const SYNC_STALE_MS = 60 * 60 * 1000;
 const BOARD_TZ = 'Europe/Berlin';
 
 // Products made fresh for each order rather than taken from the shelf. Their
-// parcel waits until they are made, and Billbee buys the label by its own rule
-// a fixed number of working days after the order. The figure here has to match
-// that rule; it is what the board shows as the planned label day.
+// parcel waits until somebody marks them made, and Billbee buys the label by its
+// own rule a fixed number of working days after the order. The figure here has
+// to match that rule; the board shows it as the planned label day.
 const MADE_TO_ORDER = [{ skuPrefix: 'SPWN-DUBL-', labelAfterWorkdays: 4 }];
 
 // The Billbee tag its rules set on orders that go out in one parcel.
 const COMBINE_TAG = 'ZUSAMMENFASSEN';
+
+// Billbee states that take an order off the board: Reklamation (5, returns and
+// refunds), gelöscht (6), storniert (8). Billbee's import maps 6 and 8 to the
+// hub's 'cancelled' already; 5 it leaves open, because a return is not a
+// cancellation for the books, but it is nothing to pack.
+const DROPPED_STATES = [5, 6, 8];
 
 const _dayFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: BOARD_TZ,
@@ -88,6 +101,18 @@ function isPaid(order) {
   return !!raw.PayedAt || Number(raw.State) === 3;
 }
 
+/**
+ * What Billbee says about the order, for the card: 'label' once a label has
+ * been bought, 'shipped' once Billbee calls it versendet without one, 'open'
+ * otherwise. Information only — none of the three takes an order off the list.
+ */
+function billbeeState(order) {
+  const raw = order.raw || {};
+  if (raw.LabelAt || Number(raw.LabelCount) > 0) return 'label';
+  if (order.status === 'shipped') return 'shipped';
+  return 'open';
+}
+
 function _shopName(order) {
   const raw = order.raw || {};
   return (order.channel === 'billbee' && raw.ShopName) || null;
@@ -104,26 +129,46 @@ function _webUrl(order) {
   return typeof u === 'string' && /^https:\/\//i.test(u) ? u : null;
 }
 
+function _mark(order, kind) {
+  const m = order.marks && order.marks[kind];
+  return m && m.at ? { by: m.by || null, at: m.at } : null;
+}
+
 /**
  * Turn the stored orders into the board.
  *
  * @param {Array} orders  rows from db.listBoardOrders: {id, channel,
- *   channelOrderId, status, orderDate, raw, items:[{sku, title, qty}]}
+ *   channelOrderId, status, orderDate, raw, items:[{sku, title, qty}],
+ *   marks:{packed?:{by, at}, made?:{by, at}}}
  * @param {object} [opts]
- * @param {Date|string} [opts.now]  for tests; defaults to the current time
- * @param {Array} [opts.rules]      made-to-order rules; defaults to MADE_TO_ORDER
+ * @param {Date|string} [opts.now]         for tests; defaults to the current time
+ * @param {string|null} [opts.marksSince]  when the marks began (db.orderMarksSince)
+ * @param {Array} [opts.rules]             made-to-order rules; defaults to MADE_TO_ORDER
  */
-function buildOrderBoard(orders, { now = new Date(), rules = MADE_TO_ORDER } = {}) {
+function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = MADE_TO_ORDER } = {}) {
   const today = localDay(now);
-  const shippedFloor = addDays(today, -SHIPPED_SHOW_DAYS);
   const open = [];
-  const shipped = [];
+  const done = [];
   let unpaid = 0;
 
   for (const o of orders || []) {
+    const raw = o.raw || {};
+    if (o.status === 'cancelled' || DROPPED_STATES.includes(Number(raw.State))) continue;
+    const packed = _mark(o, 'packed');
+    const made = _mark(o, 'made');
+    const bb = billbeeState(o);
+    // Packed before the board could be tapped: a label bought (or the order
+    // shipped) before the marks began went out without anybody marking it.
+    if (!packed && bb !== 'open' && marksSince) {
+      const when = raw.LabelAt || raw.ShippedAt || o.orderDate;
+      // Compared as instants: Billbee writes its own offset, the app writes UTC.
+      if (when && new Date(when).getTime() < new Date(marksSince).getTime()) continue;
+    }
+    if (!packed && bb === 'open' && !isPaid(o)) {
+      unpaid++;
+      continue;
+    }
     const orderDay = localDay(o.orderDate);
-    // The parcel waits for the slowest product in it: an order with one
-    // made-to-order line goes out with that line, not before.
     let plannedLabelDay = null;
     const items = (o.items || []).map((it) => {
       const rule = madeToOrderRule(it.sku, rules);
@@ -133,36 +178,35 @@ function buildOrderBoard(orders, { now = new Date(), rules = MADE_TO_ORDER } = {
       }
       return { sku: it.sku || null, title: it.title || null, qty: Number(it.qty) || 1, madeToOrder: !!rule };
     });
+    const madeToOrder = items.some((it) => it.madeToOrder);
     const tags = _tags(o);
     const row = {
       id: o.id,
       channel: o.channel,
       shop: _shopName(o),
-      number: (o.raw && o.raw.OrderNumber) || o.channelOrderId,
-      status: o.status,
-      packed: o.status === 'ready',
+      number: raw.OrderNumber || o.channelOrderId,
+      billbee: bb,
       orderDate: o.orderDate || null,
       orderDay,
       items,
-      madeToOrder: items.some((it) => it.madeToOrder),
+      madeToOrder,
       plannedLabelDay,
-      // Ready to pack: a shelf order the day it comes in, a made-to-order one
-      // on its planned label day (or after, if it is running late).
-      readyDay: plannedLabelDay || orderDay,
+      // The label day has come (or gone): Billbee buys it today or already did.
+      labelDue: !!plannedLabelDay && plannedLabelDay <= today,
+      packed,
+      made: madeToOrder ? made : null,
+      // Waiting for something to be made before it can go into a parcel.
+      needsMaking: madeToOrder && !made,
       tags,
-      customerKey: (o.raw && o.raw.CustomerKey) || null,
+      customerKey: raw.CustomerKey || null,
       taggedCombine: tags.some((t) => t.toUpperCase() === COMBINE_TAG),
       webUrl: _webUrl(o),
-      combine: null
+      combine: null,
+      waitsForGroup: false
     };
-    if (o.status === 'cancelled') continue;
-    if (o.status === 'shipped') {
-      const shippedDay = localDay((o.raw && o.raw.ShippedAt) || o.orderDate);
-      if (shippedDay && shippedDay >= shippedFloor) shipped.push({ ...row, shippedDay });
-      continue;
-    }
-    if (!isPaid(o)) {
-      unpaid++;
+    if (packed) {
+      // Erledigt heute: packed today. Packed on an earlier day is simply done.
+      if (localDay(packed.at) === today) done.push(row);
       continue;
     }
     open.push(row);
@@ -178,28 +222,26 @@ function buildOrderBoard(orders, { now = new Date(), rules = MADE_TO_ORDER } = {
   }
   for (const [key, group] of byKey) {
     if (group.length < 2) continue;
-    // One parcel leaves when its last part is ready: a shelf order from the
-    // same buyer as a made-to-order one waits for it rather than going out
-    // alone and costing a second postage.
-    let ready = null;
-    for (const r of group) if (r.readyDay && (!ready || r.readyDay > ready)) ready = r.readyDay;
+    // One parcel is packed when its last part is made: a shelf order from the
+    // same buyer as an unmade made-to-order one waits with it rather than going
+    // out alone and costing a second postage.
+    const waiting = group.some((r) => r.needsMaking);
     for (const r of group) {
       r.combine = { key, size: group.length };
-      if (ready) r.readyDay = ready;
+      if (waiting && !r.needsMaking) r.waitsForGroup = true;
     }
   }
   for (const r of open) {
     if (!r.combine && r.taggedCombine) r.combine = { key: null, size: 1 };
   }
 
-  const pack = open.filter((r) => !r.readyDay || r.readyDay <= today);
-  const later = open.filter((r) => r.readyDay && r.readyDay > today);
-  _sortKeepingGroups(
-    pack,
-    (a, b) => _cmp(a.packed, b.packed) || _cmp(a.readyDay, b.readyDay) || _cmp(a.orderDate, b.orderDate)
-  );
-  _sortKeepingGroups(later, (a, b) => _cmp(a.readyDay, b.readyDay) || _cmp(a.orderDate, b.orderDate));
-  shipped.sort((a, b) => _cmp(b.shippedDay, a.shippedDay) || _cmp(b.orderDate, a.orderDate));
+  const pack = open.filter((r) => !r.needsMaking && !r.waitsForGroup);
+  const later = open.filter((r) => r.needsMaking || r.waitsForGroup);
+  // A bought label first: that parcel has to leave today. Then the oldest.
+  const urgency = (r) => (r.billbee === 'open' ? 1 : 0);
+  _sortKeepingGroups(pack, (a, b) => _cmp(urgency(a), urgency(b)) || _cmp(a.orderDate, b.orderDate));
+  _sortKeepingGroups(later, (a, b) => _cmp(a.plannedLabelDay, b.plannedLabelDay) || _cmp(a.orderDate, b.orderDate));
+  done.sort((a, b) => _cmp(b.packed.at, a.packed.at));
 
   return {
     today,
@@ -207,21 +249,21 @@ function buildOrderBoard(orders, { now = new Date(), rules = MADE_TO_ORDER } = {
     pack,
     later,
     make: buildMakeList(open, today),
-    unpaid,
-    shipped: shipped.slice(0, SHIPPED_SHOW_MAX)
+    done,
+    unpaid
   };
 }
 
 /**
- * What has to be made: the made-to-order lines of every open, paid order that
- * has not been packed yet, totalled per SKU, each with the days its parcels are
- * due to leave. Sorted by the earliest of those days — the next thing to make
- * is the one whose label comes first.
+ * What has to be made: the made-to-order lines of every open order nobody has
+ * marked made yet, totalled per SKU, each with the days their labels are due.
+ * Sorted by the earliest of those days — the next thing to make is the one
+ * whose label comes first.
  */
 function buildMakeList(open, today) {
   const bySku = new Map();
   for (const r of open) {
-    if (r.packed) continue;
+    if (!r.needsMaking) continue;
     for (const it of r.items) {
       if (!it.madeToOrder) continue;
       const key = String(it.sku).toUpperCase();
@@ -243,7 +285,8 @@ function buildMakeList(open, today) {
         qty: m.qty,
         orders: m.orders,
         earliestDay: byDay.length ? byDay[0].day : null,
-        overdue: byDay.length ? byDay[0].day < today : false,
+        // Due today or late: the label is bought, the product is not made.
+        overdue: byDay.length ? byDay[0].day <= today : false,
         byDay
       };
     })
@@ -270,13 +313,6 @@ function syncProblem(cfg, { now = new Date() } = {}) {
   const age = new Date(now).getTime() - new Date(cfg.lastSync).getTime();
   if (Number.isFinite(age) && age > SYNC_STALE_MS) return 'stale';
   return null;
-}
-
-function addDays(day, n) {
-  const [y, m, d] = day.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + n);
-  return dt.toISOString().slice(0, 10);
 }
 
 function _cmp(a, b) {
@@ -312,6 +348,7 @@ module.exports = {
   addWorkdays,
   madeToOrderRule,
   isPaid,
+  billbeeState,
   buildOrderBoard,
   buildMakeList,
   syncProblem

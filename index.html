@@ -3752,7 +3752,8 @@
                 <div class="sec" data-i18n="orders.board.makeTitle">Herstellen</div>
               </div>
               <div class="muted fs-meta ob-hint" data-i18n="orders.board.makeHint">
-                Wird frisch nach Bestellung gemacht. Billbee kauft das Etikett am geplanten Tag.
+                Wird frisch nach Bestellung gemacht. Ist eine Bestellung fertig, unten auf „Hergestellt" tippen, dann
+                steht sie unter Heute packen.
               </div>
               <div id="ob-make"></div>
             </div>
@@ -3763,9 +3764,12 @@
               </div>
               <div id="ob-later"></div>
             </div>
-            <details class="card ob-shipped">
-              <summary class="sec" data-i18n="orders.board.shippedTitle">Zuletzt versendet</summary>
-              <div id="ob-shipped"></div>
+            <details class="card ob-done-list">
+              <summary class="ob-head">
+                <span class="sec" data-i18n="orders.board.doneTitle">Erledigt heute</span>
+                <span id="ob-done-count" class="ob-count"></span>
+              </summary>
+              <div id="ob-done"></div>
             </details>
           </div>
 
