@@ -2107,6 +2107,10 @@ summary.fs-meta {
   background: var(--c-border-light);
   color: var(--c-text-sec);
 }
+.oh-ch-shopify {
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+}
 .oh-st {
   display: inline-block;
   font-size: max(0.6875rem, var(--fs-min));
@@ -2176,6 +2180,190 @@ summary.fs-meta {
   background: var(--c-primary);
   border-color: var(--c-primary);
   color: #fff;
+}
+/* Packen (Bestellungen → Packen): one card per parcel, read on a phone at the
+   packing table. Cards rather than table rows, so nothing scrolls sideways. */
+.ob-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ob-count {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+.ob-hint {
+  margin-bottom: 8px;
+}
+.ob-sync {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: var(--fs-sm);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-light);
+}
+.ob-sync.is-warn {
+  background: var(--c-amber-light);
+  border-color: var(--c-amber-border);
+  color: var(--c-amber-dark);
+}
+.ob-empty {
+  padding: 14px 4px;
+  color: var(--c-text-muted);
+  font-size: var(--fs-sm);
+}
+.ob-order {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.ob-order.is-packed {
+  background: var(--c-bg);
+  border-style: dashed;
+}
+.ob-order.is-packed .ob-items {
+  color: var(--c-text-muted);
+}
+.ob-order-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.ob-num {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
+.ob-when {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.ob-link {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--c-primary);
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-sm-min);
+}
+.ob-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+.ob-items li {
+  padding: 3px 0;
+}
+.ob-qty,
+.ob-make-qty {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ob-sku {
+  font-family: monospace;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.ob-tag {
+  display: inline-block;
+  font-size: max(0.6875rem, var(--fs-min));
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.ob-tag-make {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.ob-order-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+.ob-plan {
+  margin-right: auto;
+  font-size: var(--fs-xs);
+  color: var(--c-amber-dark);
+  font-weight: 600;
+}
+.ob-done {
+  font-size: var(--fs-sm);
+  color: var(--c-green-dark);
+  font-weight: 600;
+}
+.ob-group {
+  border-left: 4px solid var(--c-primary);
+  padding-left: 8px;
+  margin-bottom: 10px;
+}
+.ob-group-head,
+.ob-combine-solo {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--c-primary);
+  margin-bottom: 6px;
+}
+.ob-make {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.ob-make.is-late {
+  border-color: var(--c-red-border);
+}
+.ob-make-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.ob-make-qty {
+  font-size: 1.25rem;
+}
+.ob-make-meta {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  margin-top: 2px;
+}
+.ob-make-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ob-day {
+  font-size: var(--fs-xs);
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.ob-day.is-late {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
+.ob-shipped > summary {
+  cursor: pointer;
+  min-height: var(--tap-sm-min);
+  display: flex;
+  align-items: center;
 }
 .oh-manual {
   background: var(--c-bg);

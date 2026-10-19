@@ -53,6 +53,7 @@ const MODULES = [
   'shipping.js',
   'harvest-feed.js',
   'syringe-stock.js',
+  'order-board.js',
   'mcp-server.js',
   // The backups. A stick backup that fails to load takes the server down with
   // it, at start-up, which is exactly when an update has just changed it.

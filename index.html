@@ -3727,15 +3727,50 @@
                desk, a drill-down index in a hand. It was hidden while the five views were
                top-level sidebar entries, which cost the sidebar more room than it had. -->
           <div class="stabs" data-stab-home="nav.orders">
-            <button class="stab active" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
+            <button class="stab active" id="st-orders-pack" data-i18n="orders.packTab">Packen</button>
+            <button class="stab" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
             <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
             <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
             <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versand</button>
           </div>
 
+          <!-- Packen: the shop orders from Billbee, as what to pack today and what to
+               make first. Filled by renderOrderBoard() from /api/orders/board
+               (order-board.js); no customer data is in it. -->
+          <div class="sp active" id="sp-orders-pack">
+            <div id="ob-sync" class="ob-sync" role="status" style="display: none"></div>
+            <div class="card">
+              <div class="ob-head">
+                <div class="sec" data-i18n="orders.board.packTitle">Heute packen</div>
+                <span id="ob-pack-count" class="ob-count"></span>
+              </div>
+              <div id="ob-pack"></div>
+            </div>
+            <div class="card">
+              <div class="ob-head">
+                <div class="sec" data-i18n="orders.board.makeTitle">Herstellen</div>
+              </div>
+              <div class="muted fs-meta ob-hint" data-i18n="orders.board.makeHint">
+                Wird frisch nach Bestellung gemacht. Billbee kauft das Etikett am geplanten Tag.
+              </div>
+              <div id="ob-make"></div>
+            </div>
+            <div class="card" id="ob-later-card" style="display: none">
+              <div class="ob-head">
+                <div class="sec" data-i18n="orders.board.laterTitle">Wartet auf Herstellung</div>
+                <span id="ob-later-count" class="ob-count"></span>
+              </div>
+              <div id="ob-later"></div>
+            </div>
+            <details class="card ob-shipped">
+              <summary class="sec" data-i18n="orders.board.shippedTitle">Zuletzt versendet</summary>
+              <div id="ob-shipped"></div>
+            </details>
+          </div>
+
           <!-- Inbox -->
-          <div class="sp active" id="sp-orders-inbox">
+          <div class="sp" id="sp-orders-inbox">
             <div id="orders-unmapped-banner" class="oh-banner" style="display: none">
               <span
                 >⚠️ <strong id="orders-unmapped-count">0</strong>
