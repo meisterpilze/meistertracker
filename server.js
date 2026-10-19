@@ -1785,8 +1785,10 @@ function runPeriodicCleanup() {
   try {
     const sessions = db.cleanupExpiredSessions(database);
     const notifications = db.cleanupOldNotifications(database);
-    if (sessions > 0 || notifications > 0) {
-      log('info', 'Periodic cleanup', { sessions, notifications });
+    // Recipient names on Billbee orders are for the packing list only.
+    const billbeeNames = db.clearOldBillbeeNames(database);
+    if (sessions > 0 || notifications > 0 || billbeeNames > 0) {
+      log('info', 'Periodic cleanup', { sessions, notifications, billbeeNames });
     }
   } catch (e) {
     log('warn', 'Periodic cleanup failed', { error: e.message });
@@ -9657,8 +9659,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   if (req.method === 'GET' && url === '/api/orders/board') {
     try {
       const since = new Date(Date.now() - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
+      // Names follow the order list's rule (requireShipping): admin or can_ship.
+      const showNames = !!(req.authUser && (req.authUser.role === 'admin' || req.authUser.can_ship === 1));
       const board = orderBoard.buildOrderBoard(db.listBoardOrders(database, { sinceIso: since }), {
-        marksSince: db.orderMarksSince(database)
+        marksSince: db.orderMarksSince(database),
+        showNames
       });
       const bb = db.listChannelConfigs(database).find((c) => c.channel === 'billbee') || {};
       board.sync = {

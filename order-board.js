@@ -49,6 +49,98 @@ const COMBINE_TAG = 'ZUSAMMENFASSEN';
 // cancellation for the books, but it is nothing to pack.
 const DROPPED_STATES = [5, 6, 8];
 
+// Positions that are not things to pack: Billbee hands discounts over as lines
+// of their own, often without a SKU.
+const NON_ITEM_TITLE = /^\s*(rabatt|gutschein|discount|coupon|versand|shipping)\b/i;
+
+/** The lines of an order that are something to pack, with their quantity. */
+function packLines(items) {
+  const out = [];
+  for (const it of items || []) {
+    const qty = Number(it.qty);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    if (!it.sku && NON_ITEM_TITLE.test(String(it.title || ''))) continue;
+    out.push({ sku: it.sku || null, title: it.title || null, qty });
+  }
+  return out;
+}
+
+/**
+ * A refund, not an order. When a purchase is refunded Billbee keeps a copy of
+ * it with negative quantities, in state "bestellt" for good — it would sit on
+ * the board as an unpaid order for a month. Nothing in it is positive.
+ */
+function isRefundRecord(items) {
+  const qtys = (items || []).map((it) => Number(it.qty)).filter(Number.isFinite);
+  return qtys.some((q) => q < 0) && !qtys.some((q) => q > 0);
+}
+
+/**
+ * A SKU read as product and size. The shop's SKUs are PRODUCT-VARIANT, where
+ * the variant is either "<count>x<grams>" (KOMP-AIOCVG-3x1750: three bags of
+ * 1750 g) or a name (SPWN-DUBL-BLUE). The product is the first two parts.
+ * Anything else counts as one of whatever the rest says.
+ */
+function skuParts(sku) {
+  const parts = String(sku || '')
+    .trim()
+    .split('-');
+  const product = parts.slice(0, 2).join('-');
+  const variant = parts.slice(2).join('-');
+  const m = /^(\d+)x(\d+)$/i.exec(variant);
+  if (m) return { product, variant, perPack: Number(m[1]) || 1, size: m[2], grams: Number(m[2]) };
+  return { product, variant, perPack: 1, size: variant || null, grams: null };
+}
+
+/**
+ * Everything the open orders need, counted once: per product the number of
+ * pieces (bags, plugs, kits), how many of each size, and which SKUs were
+ * ordered. This is the shelf list — pull it all, then pack order by order.
+ */
+function buildTotals(rows) {
+  const byProduct = new Map();
+  for (const r of rows) {
+    for (const it of r.items) {
+      const key = it.sku ? skuParts(it.sku).product.toUpperCase() : 'ohne-sku:' + String(it.title || '?');
+      if (!byProduct.has(key)) {
+        byProduct.set(key, {
+          product: it.sku ? skuParts(it.sku).product : null,
+          title: it.sku ? null : it.title || null,
+          pieces: 0,
+          orders: new Set(),
+          sizes: new Map(),
+          skus: new Map(),
+          madeToOrder: false
+        });
+      }
+      const t = byProduct.get(key);
+      const p = it.sku ? skuParts(it.sku) : { perPack: 1, size: null, grams: null };
+      const pieces = p.perPack * it.qty;
+      t.pieces += pieces;
+      t.orders.add(r.id);
+      if (it.madeToOrder) t.madeToOrder = true;
+      const sizeKey = p.size == null ? '' : String(p.size);
+      const sz = t.sizes.get(sizeKey) || { size: p.size, grams: p.grams, pieces: 0 };
+      sz.pieces += pieces;
+      t.sizes.set(sizeKey, sz);
+      if (it.sku) t.skus.set(it.sku, (t.skus.get(it.sku) || 0) + it.qty);
+    }
+  }
+  return [...byProduct.values()]
+    .map((t) => ({
+      product: t.product,
+      title: t.title,
+      pieces: t.pieces,
+      orders: t.orders.size,
+      madeToOrder: t.madeToOrder,
+      sizes: [...t.sizes.values()].sort(
+        (a, b) => _cmp(a.grams, b.grams) || _cmp(String(a.size || ''), String(b.size || ''))
+      ),
+      skus: [...t.skus.entries()].sort((a, b) => _cmp(a[0], b[0])).map(([sku, qty]) => ({ sku, qty }))
+    }))
+    .sort((a, b) => _cmp(a.product || a.title, b.product || b.title));
+}
+
 const _dayFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: BOARD_TZ,
   year: 'numeric',
@@ -145,7 +237,10 @@ function _mark(order, kind) {
  * @param {string|null} [opts.marksSince]  when the marks began (db.orderMarksSince)
  * @param {Array} [opts.rules]             made-to-order rules; defaults to MADE_TO_ORDER
  */
-function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = MADE_TO_ORDER } = {}) {
+function buildOrderBoard(
+  orders,
+  { now = new Date(), marksSince = null, showNames = false, rules = MADE_TO_ORDER } = {}
+) {
   const today = localDay(now);
   const open = [];
   const done = [];
@@ -154,6 +249,7 @@ function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = 
   for (const o of orders || []) {
     const raw = o.raw || {};
     if (o.status === 'cancelled' || DROPPED_STATES.includes(Number(raw.State))) continue;
+    if (isRefundRecord(o.items)) continue;
     const packed = _mark(o, 'packed');
     const made = _mark(o, 'made');
     const bb = billbeeState(o);
@@ -170,13 +266,13 @@ function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = 
     }
     const orderDay = localDay(o.orderDate);
     let plannedLabelDay = null;
-    const items = (o.items || []).map((it) => {
+    const items = packLines(o.items).map((it) => {
       const rule = madeToOrderRule(it.sku, rules);
       if (rule) {
         const d = addWorkdays(orderDay, rule.labelAfterWorkdays);
         if (d && (!plannedLabelDay || d > plannedLabelDay)) plannedLabelDay = d;
       }
-      return { sku: it.sku || null, title: it.title || null, qty: Number(it.qty) || 1, madeToOrder: !!rule };
+      return { ...it, madeToOrder: !!rule };
     });
     const madeToOrder = items.some((it) => it.madeToOrder);
     const tags = _tags(o);
@@ -184,6 +280,8 @@ function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = 
       id: o.id,
       channel: o.channel,
       shop: _shopName(o),
+      // Who it is for, first on the card — only for users who may see it.
+      customer: showNames ? o.customerName || null : null,
       number: raw.OrderNumber || o.channelOrderId,
       billbee: bb,
       orderDate: o.orderDate || null,
@@ -249,6 +347,7 @@ function buildOrderBoard(orders, { now = new Date(), marksSince = null, rules = 
     pack,
     later,
     make: buildMakeList(open, today),
+    totals: buildTotals(open),
     done,
     unpaid
   };
@@ -348,7 +447,10 @@ module.exports = {
   addWorkdays,
   madeToOrderRule,
   isPaid,
+  isRefundRecord,
+  skuParts,
   billbeeState,
+  buildTotals,
   buildOrderBoard,
   buildMakeList,
   syncProblem

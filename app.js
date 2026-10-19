@@ -1865,8 +1865,12 @@ function _obItems(items) {
     items
       .map(
         (it) =>
-          `<li><span class="ob-qty">${esc(it.qty)}×</span> <span class="ob-title">${esc(it.title || it.sku || '—')}</span>` +
-          (it.sku ? ` <span class="ob-sku">${esc(it.sku)}</span>` : '') +
+          // Quantity and SKU, nothing else: the SKU is what is on the shelf.
+          // A line without one shows its title instead, so it is not lost.
+          `<li${it.title ? ` title="${esc(it.title)}"` : ''}><span class="ob-qty">${esc(it.qty)}×</span> ` +
+          (it.sku
+            ? `<span class="ob-line-sku">${esc(it.sku)}</span>`
+            : `<span class="ob-title">${esc(it.title || '—')}</span>`) +
           (it.madeToOrder ? ` <span class="ob-tag ob-tag-make">${esc(t('orders.board.madeTag'))}</span>` : '') +
           '</li>'
       )
@@ -1888,7 +1892,10 @@ function _obPlan(o) {
   return `<span class="ob-plan${o.labelDue ? ' is-due' : ''}">${esc(t('orders.board.labelOn', { day: _obDay(o.plannedLabelDay) }))}</span>`;
 }
 function _obOrderCard(o, mode) {
+  // The person first, so the parcel can be matched to a label at a glance.
+  const who = o.customer ? `<div class="ob-customer">${esc(o.customer)}</div>` : '';
   const top =
+    who +
     `<div class="ob-order-top">${_obShop(o)}` +
     `<span class="ob-num">${esc(o.number)}</span>` +
     `<span class="ob-when">${esc(_obDay(o.orderDay))}</span>` +
@@ -1969,6 +1976,37 @@ function _obSyncLine(b) {
   el.classList.toggle('is-warn', !!s.problem && s.problem !== 'never');
   el.style.display = parts.length ? 'flex' : 'none';
 }
+// A size as the shelf says it: 1750 → "1,75 kg", 700 → "700 g". Sizes that are
+// not grams (a sort, an old SKU number) are shown as they are.
+function _obSize(sz) {
+  if (sz.grams == null) return sz.size || '';
+  if (sz.grams >= 1000) return (sz.grams / 1000).toLocaleString(loc(), { maximumFractionDigits: 2 }) + ' kg';
+  return sz.grams + ' g';
+}
+// Alles zusammen: every open order counted once, per product — the list to
+// pull from the shelf before packing order by order.
+function _obTotals(totals) {
+  if (!totals || !totals.length) return _obEmpty(t('orders.board.totalsNone'));
+  return totals
+    .map((tt) => {
+      const sizes = tt.sizes
+        .filter((sz) => sz.size != null)
+        .map((sz) => `<span class="ob-size">${esc(sz.pieces)} × ${esc(_obSize(sz))}</span>`)
+        .join('');
+      const skus = tt.skus.map((x) => `${esc(x.qty)}× ${esc(x.sku)}`).join(' · ');
+      return (
+        `<div class="ob-total">` +
+        `<div class="ob-total-top"><span class="ob-total-n">${esc(tt.pieces)}</span>` +
+        `<span class="ob-total-name">${esc(tt.product || tt.title || '—')}</span>` +
+        (tt.madeToOrder ? ` <span class="ob-tag ob-tag-make">${esc(t('orders.board.madeTag'))}</span>` : '') +
+        `<span class="ob-total-orders">${esc(t(tt.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: tt.orders }))}</span></div>` +
+        (sizes ? `<div class="ob-sizes">${sizes}</div>` : '') +
+        (skus ? `<div class="ob-total-skus">${skus}</div>` : '') +
+        '</div>'
+      );
+    })
+    .join('');
+}
 function _obMakeList(make) {
   if (!make.length) return _obEmpty(t('orders.board.makeNone'));
   return make
@@ -1976,9 +2014,8 @@ function _obMakeList(make) {
       (m) =>
         `<div class="ob-make${m.overdue ? ' is-late' : ''}">` +
         `<div class="ob-make-top"><span class="ob-make-qty">${esc(m.qty)}×</span>` +
-        `<span class="ob-title">${esc(m.title || m.sku)}</span></div>` +
-        `<div class="ob-make-meta"><span class="ob-sku">${esc(m.sku)}</span> · ` +
-        `${esc(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }))}</div>` +
+        `<span class="ob-line-sku"${m.title ? ` title="${esc(m.title)}"` : ''}>${esc(m.sku)}</span></div>` +
+        `<div class="ob-make-meta">${esc(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }))}</div>` +
         '<div class="ob-make-days">' +
         m.byDay
           .map(
@@ -1994,6 +2031,8 @@ function _renderOrderBoard() {
   const b = _obBoard;
   if (!b) return;
   _obSyncLine(b);
+  const tot = $('ob-totals');
+  if (tot) tot.innerHTML = _obTotals(b.totals);
   const cnt = $('ob-pack-count');
   if (cnt) cnt.textContent = b.pack.length ? String(b.pack.length) : '';
   const pack = $('ob-pack');

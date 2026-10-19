@@ -12338,6 +12338,10 @@ function upsertCustomerFromOrder(db, o) {
   // per order. An order without a customer is fine: customer_id is nullable and
   // the hub shows a dash.
   if (!handle && !email && !o.customerName) return null;
+  // A channel that brings a name only for display (Billbee, for the packing
+  // list) has nothing to match a customer on, so every sync would mint another
+  // one. The name stays on the order row; no customer is built from it.
+  if (o.noCustomerRecord) return null;
   let customerId = null;
   if (handle) {
     const idn = db
@@ -12754,7 +12758,8 @@ function listBoardOrders(db, { sinceIso } = {}) {
   const orders = db
     .prepare(
       `SELECT id, channel, channel_order_id AS channelOrderId, status, order_date AS orderDate,
-              ship_by AS shipBy, ship_country AS shipCountry, raw_json AS rawJson
+              ship_by AS shipBy, ship_country AS shipCountry, raw_json AS rawJson,
+              customer_name AS customerName
          FROM orders
         WHERE order_date >= ?
         ORDER BY order_date ASC, id ASC`
@@ -12782,6 +12787,9 @@ function listBoardOrders(db, { sinceIso } = {}) {
       orderDate: o.orderDate,
       shipBy: o.shipBy,
       shipCountry: o.shipCountry,
+      // Who the parcel is for. The route strips it for users without the
+      // shipping permission, the same rule as the order list.
+      customerName: o.customerName || null,
       raw,
       items: itemStmt.all(o.id),
       marks: Object.fromEntries(
@@ -12789,6 +12797,20 @@ function listBoardOrders(db, { sinceIso } = {}) {
       )
     };
   });
+}
+
+/**
+ * Forget the recipient's name on Billbee orders older than `days`. The name is
+ * kept only so the packing list can say whose parcel is whose; once an order is
+ * long out of the board's window, nobody packs it any more. Returns the count.
+ */
+function clearOldBillbeeNames(db, days = 45) {
+  const before = new Date(Date.now() - days * 86400000).toISOString();
+  return db
+    .prepare(
+      "UPDATE orders SET customer_name = NULL WHERE channel = 'billbee' AND customer_name IS NOT NULL AND order_date < ?"
+    )
+    .run(before).changes;
 }
 
 /** When the packing board's marks began (see migration 101), or null. */
@@ -13229,6 +13251,7 @@ module.exports = {
   listOrders,
   listBoardOrders,
   orderMarksSince,
+  clearOldBillbeeNames,
   setOrderMark,
   getChannelConfig,
   listChannelConfigs,

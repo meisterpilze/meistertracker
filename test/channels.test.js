@@ -515,14 +515,20 @@ describe('Billbee: orders in', () => {
     assert.equal(o.raw.ShopName, 'Shopify', 'which shop it came from survives');
   });
 
-  it('brings no personal data into the lab, raw_json included', () => {
-    // The lab's job with an order is to make what it says. Billbee is the
-    // commercial record and is built to hold the customer; this server is a
-    // machine on a mushroom farm behind a home line. Filtering only the columns
-    // would have moved the address into raw_json rather than left it behind, so
-    // the whole record is searched here, not the fields one by one.
+  it('brings only the recipient name into the lab, raw_json included', () => {
+    // The lab's job with an order is to make and pack what it says. Billbee is
+    // the commercial record and is built to hold the customer; this server is a
+    // machine on a mushroom farm behind a home line. The packing list needs to
+    // say whose parcel is whose, so the recipient's name comes along, and
+    // nothing else of the person. Filtering only the columns would have moved
+    // the address into raw_json rather than left it behind, so the whole record
+    // is searched here, not the fields one by one.
     const o = channels._normalizeBillbee(order);
-    const asText = JSON.stringify(o);
+    assert.equal(o.customerName, 'Max Mustermann');
+    assert.equal(o.noCustomerRecord, true);
+    const rest = { ...o };
+    delete rest.customerName;
+    const asText = JSON.stringify(rest);
     for (const secret of [
       'Max',
       'Mustermann',
@@ -533,20 +539,22 @@ describe('Billbee: orders in', () => {
       '00000'
     ])
       assert.equal(asText.includes(secret), false, secret + ' must not reach the lab database');
-    assert.equal(o.customerName, undefined);
     assert.equal(o.customerEmail, undefined);
     assert.equal(o.buyerHandle, undefined);
     assert.equal(o.shipStreet, undefined);
   });
 
-  it('leaves a Billbee order without a customer record at all', () => {
+  it('keeps the name on the order and builds no customer record, sync after sync', () => {
     const { db: d, path: p2 } = tmpDb();
     try {
       db.upsertOrder(d, channels._normalizeBillbee(order));
-      const row = d.prepare('SELECT customer_id, customer_name FROM orders').get();
-      assert.equal(row.customer_id, null, 'no identity, no name — so no customer');
-      assert.equal(row.customer_name, null);
-      assert.equal(d.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0, 'and no blank stranger per order');
+      db.upsertOrder(d, channels._normalizeBillbee(order));
+      const row = d.prepare('SELECT customer_id, customer_name, customer_email, ship_street FROM orders').get();
+      assert.equal(row.customer_id, null, 'nothing to match a customer on, so no customer');
+      assert.equal(row.customer_name, 'Max Mustermann');
+      assert.equal(row.customer_email, null);
+      assert.equal(row.ship_street, null);
+      assert.equal(d.prepare('SELECT COUNT(*) AS n FROM customers').get().n, 0, 'and no stranger per sync');
     } finally {
       d.close();
       fs.unlinkSync(p2);
