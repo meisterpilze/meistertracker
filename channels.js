@@ -749,6 +749,23 @@ function _billbeeLabRecord(o) {
   };
 }
 
+/**
+ * Who the parcel is for, as the packing list names it: the delivery address's
+ * first and last name, else its company, else Billbee's customer name, else the
+ * marketplace's buyer name. Trimmed, never more than one line.
+ */
+function _billbeeRecipientName(o) {
+  const ship = o.ShippingAddress || {};
+  const clean = (v) =>
+    String(v == null ? '' : v)
+      .replace(/\s+/g, ' ')
+      .trim();
+  const person = clean([ship.FirstName, ship.LastName].filter(Boolean).join(' '));
+  const name =
+    person || clean(ship.Company) || clean(o.Customer && o.Customer.Name) || clean(o.Buyer && o.Buyer.FullName);
+  return name ? name.slice(0, 80) : null;
+}
+
 function _billbeeFirstLabelAt(o) {
   if (!Array.isArray(o.ShippingIds)) return null;
   const times = o.ShippingIds.map((s) => s && s.Created)
@@ -834,9 +851,13 @@ function _normalizeBillbee(o) {
     channelOrderId: o.BillBeeOrderId != null ? String(o.BillBeeOrderId) : null,
     status: _billbeeStatus(o),
     orderDate: o.CreatedAt || null,
-    // No name, no e-mail, no telephone, no address, and no customer record built
-    // from them — see _billbeeLabRecord. The country stays: it identifies nobody
-    // and it answers "how much of this goes abroad".
+    // The recipient's name, and nothing else of the person: the packing list
+    // leads with it so the team can see which parcel is whose. No e-mail, no
+    // telephone, no address, and no customer record built from the name — see
+    // _billbeeLabRecord and noCustomerRecord below. The country stays: it
+    // identifies nobody and it answers "how much of this goes abroad".
+    customerName: _billbeeRecipientName(o),
+    noCustomerRecord: true,
     shipCountry: ship.CountryISO2 || null,
     totalAmount: total != null && Number.isFinite(total) ? total : null,
     currency: o.Currency || null,

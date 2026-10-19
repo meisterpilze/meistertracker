@@ -340,10 +340,22 @@ describe('order board – Billbee import', () => {
     assert.equal(channels._normalizeBillbee(billbeeOrder({ Customer: null, Buyer: {} })).raw.CustomerKey, null);
   });
 
-  it('still brings no personal data into the lab', () => {
-    const asText = JSON.stringify(channels._normalizeBillbee(billbeeOrder()));
+  it('brings the recipient name and nothing else of the person into the lab', () => {
+    const o = channels._normalizeBillbee(billbeeOrder());
+    assert.equal(o.customerName, 'Erika Musterfrau', 'from the delivery address');
+    const rest = { ...o };
+    delete rest.customerName;
+    const asText = JSON.stringify(rest);
     for (const secret of ['Erika', 'Musterfrau', 'erika@example.de', '+49 170 0000000', 'Musterweg', '00000', '501'])
       assert.equal(asText.includes(secret), false, secret + ' must not reach the lab database');
+  });
+
+  it('names the recipient from the address, else the company, else the customer', () => {
+    const name = (over) => channels._normalizeBillbee(billbeeOrder(over)).customerName;
+    assert.equal(name({ ShippingAddress: { FirstName: '  Max ', LastName: 'Mustermann  ' } }), 'Max Mustermann');
+    assert.equal(name({ ShippingAddress: { Company: 'Beispiel GmbH' } }), 'Beispiel GmbH');
+    assert.equal(name({ ShippingAddress: {}, Customer: { Name: 'Erika Musterfrau' } }), 'Erika Musterfrau');
+    assert.equal(name({ ShippingAddress: {}, Customer: {}, Buyer: {} }), null);
   });
 
   it('builds the board end to end from synced orders, without a customer column', () => {
@@ -364,8 +376,11 @@ describe('order board – Billbee import', () => {
       );
       const rows = db.listBoardOrders(d, { sinceIso: '2026-09-19T00:00:00Z' });
       assert.equal(rows.length, 2);
-      assert.equal('customerName' in rows[0], false);
+      assert.equal(rows[0].customerName, 'Erika Musterfrau');
       const b = board.buildOrderBoard(rows, { now: NOW, marksSince: db.orderMarksSince(d) });
+      assert.equal(b.later[0].customer, null, 'no name unless the caller may see it');
+      const named = board.buildOrderBoard(rows, { now: NOW, marksSince: db.orderMarksSince(d), showNames: true });
+      assert.equal(named.later[0].customer, 'Erika Musterfrau');
       assert.equal(b.pack.length, 0, 'the shelf order goes with the dowels of the same buyer');
       assert.equal(b.later.length, 2);
       assert.equal(b.later[0].combine.size, 2);
@@ -432,6 +447,116 @@ describe('order board – Billbee import', () => {
   });
 });
 
+describe('order board – alles zusammen', () => {
+  it('reads a SKU as product and size', () => {
+    assert.deepEqual(board.skuParts('KOMP-MUSTER-3x1750'), {
+      product: 'KOMP-MUSTER',
+      variant: '3x1750',
+      perPack: 3,
+      size: '1750',
+      grams: 1750
+    });
+    assert.deepEqual(board.skuParts('SPWN-DUBL-MUSTER'), {
+      product: 'SPWN-DUBL',
+      variant: 'MUSTER',
+      perPack: 1,
+      size: 'MUSTER',
+      grams: null
+    });
+    assert.equal(board.skuParts('MUSTER-SET').product, 'MUSTER-SET');
+    assert.equal(board.skuParts('MUSTER-SET').size, null);
+  });
+
+  it('counts the pieces of every open order once, per product and size', () => {
+    const b = board.buildOrderBoard(
+      [
+        row({ id: 1, items: [{ sku: 'KOMP-MUSTER-3x1750', title: 'Muster-Set 3er', qty: 2 }] }),
+        row({
+          id: 2,
+          raw: { OrderNumber: '1002', State: 3 },
+          items: [
+            { sku: 'KOMP-MUSTER-1x2000', title: 'Muster-Set groß', qty: 3 },
+            { sku: 'KOMP-MUSTER-1x1750', title: 'Muster-Set', qty: 1 }
+          ]
+        }),
+        row({ id: 3, raw: { OrderNumber: '1003', State: 3 }, items: [dowel(2)] }),
+        row({ id: 4, raw: { OrderNumber: '1004', State: 3 }, marks: packedAt('2026-10-19T07:00:00Z') })
+      ],
+      { now: NOW }
+    );
+    const set = b.totals.find((t) => t.product === 'KOMP-MUSTER');
+    assert.equal(set.pieces, 10, '2 × 3 + 3 + 1');
+    assert.equal(set.orders, 2);
+    assert.deepEqual(
+      set.sizes.map((x) => [x.grams, x.pieces]),
+      [
+        [1750, 7],
+        [2000, 3]
+      ]
+    );
+    assert.deepEqual(set.skus, [
+      { sku: 'KOMP-MUSTER-1x1750', qty: 1 },
+      { sku: 'KOMP-MUSTER-1x2000', qty: 3 },
+      { sku: 'KOMP-MUSTER-3x1750', qty: 2 }
+    ]);
+    const dowels = b.totals.find((t) => t.product === 'SPWN-DUBL');
+    assert.equal(dowels.pieces, 2, 'still to be made, still counted: it has to be packed too');
+    assert.equal(dowels.madeToOrder, true);
+    assert.equal(
+      b.totals.some((t) => t.product === 'MUSTER-250'),
+      false,
+      'the packed order is not counted again'
+    );
+  });
+
+  it('leaves discount lines and refund records out', () => {
+    const b = board.buildOrderBoard(
+      [
+        row({
+          id: 1,
+          items: [
+            { sku: 'MUSTER-250', title: 'Muster 250 g', qty: 1 },
+            { sku: null, title: 'Rabatt', qty: 1 }
+          ]
+        }),
+        // A refunded purchase, as Billbee keeps it: the same line with -1, and
+        // the order stuck at "bestellt".
+        row({ id: 2, raw: { OrderNumber: '1002', State: 1 }, items: [{ sku: 'MUSTER-250', title: 'Muster', qty: -1 }] })
+      ],
+      { now: NOW }
+    );
+    assert.deepEqual(b.pack[0].items, [{ sku: 'MUSTER-250', title: 'Muster 250 g', qty: 1, madeToOrder: false }]);
+    assert.equal(b.unpaid, 0, 'a refund is not an order waiting for payment');
+    assert.deepEqual(
+      b.totals.map((t) => [t.product, t.pieces]),
+      [['MUSTER-250', 1]]
+    );
+    assert.equal(board.isRefundRecord([{ qty: 1 }, { qty: -1 }]), false, 'a correction inside a real order is not');
+  });
+
+  it('forgets recipient names once an order is long out of the window', () => {
+    const { db: d, path: p } = tmpDb();
+    try {
+      const fresh = billbeeOrder({ CreatedAt: new Date().toISOString() });
+      const old = billbeeOrder({ BillBeeOrderId: 9002, CreatedAt: '2026-01-05T08:00:00Z' });
+      db.upsertOrder(d, channels._normalizeBillbee(fresh));
+      db.upsertOrder(d, channels._normalizeBillbee(old));
+      assert.equal(db.clearOldBillbeeNames(d, 45), 1);
+      const names = d
+        .prepare('SELECT channel_order_id AS id, customer_name AS name FROM orders ORDER BY id')
+        .all()
+        .map((r) => [r.id, r.name]);
+      assert.deepEqual(names, [
+        ['9001', 'Erika Musterfrau'],
+        ['9002', null]
+      ]);
+    } finally {
+      d.close();
+      fs.unlinkSync(p);
+    }
+  });
+});
+
 describe('order board – sync state in plain words', () => {
   const ok = { enabled: true, connected: true, lastSync: '2026-10-19T07:50:00Z', lastError: null };
   it('says nothing when the last sync is fresh', () => {
@@ -458,6 +583,13 @@ describe('order board – wiring', () => {
   const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+  it('shows names only to users who may see customer data', () => {
+    const start = server.indexOf("url === '/api/orders/board'");
+    const handler = server.slice(start, server.indexOf("url === '/api/orders/board/mark'"));
+    assert.match(handler, /role === 'admin' \|\| req\.authUser\.can_ship === 1/);
+    assert.match(handler, /showNames/);
+  });
 
   it('serves the board before the /api/orders/:id route can swallow it', () => {
     const boardAt = server.indexOf("url === '/api/orders/board'");
