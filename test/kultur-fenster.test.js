@@ -67,6 +67,18 @@ describe('Kultur-Fenster: wieviele aus dem Ansatz noch da sind', () => {
     assert.match(h, /"n":1,"total":1/);
     assert.doesNotMatch(h, /monospace/);
   });
+
+  it('zählt bei Spritzen nur die gleicher Größe, eine ohne Angabe als 10er', () => {
+    const tag = [
+      { id: 'SY-CHUT-211026-01', type: 'SY', status: 'active' },
+      { id: 'SY-CHUT-211026-02', type: 'SY', status: 'active', ml: 10 },
+      { id: 'SY-CHUT-211026-03', type: 'SY', status: 'active', ml: 50 },
+      { id: 'SY-CHUT-211026-04', type: 'SY', status: 'stored', ml: 50 },
+      { id: 'SY-CHUT-211026-05', type: 'SY', status: 'active', ml: 50 }
+    ];
+    assert.match(verfuegbar(tag, 'SY-CHUT-211026-01'), /"n":2,"total":2/);
+    assert.match(verfuegbar(tag, 'SY-CHUT-211026-04'), /"n":3,"total":3/);
+  });
 });
 
 describe('Kultur-Fenster: die Herkunft', () => {
