@@ -1384,7 +1384,8 @@ function createMcpServer(database, onWrite, printer) {
       strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
       species: z.string().optional(),
       strain: z.string().optional(),
-      source: z.string().optional()
+      source: z.string().optional(),
+      ml: z.number().optional().describe('SY only: correct the syringe size, 10, 20 or 50 ml')
     },
     async (params) => {
       try {
@@ -1426,7 +1427,8 @@ function createMcpServer(database, onWrite, printer) {
         .optional()
         .describe('Culture status (default: active)'),
       notes: z.string().optional(),
-      created: z.string().optional().describe('ISO timestamp (default: now)')
+      created: z.string().optional().describe('ISO timestamp (default: now)'),
+      ml: z.number().optional().describe('SY only: syringe size in ml, 10, 20 or 50 (default 10)')
     },
     async (params) => {
       try {
@@ -1444,7 +1446,8 @@ function createMcpServer(database, onWrite, printer) {
             source: params.source || null,
             status: params.status || 'active',
             notes: params.notes || '',
-            created: params.created || new Date().toISOString()
+            created: params.created || new Date().toISOString(),
+            ml: params.ml != null ? params.ml : null
           }
         ]);
         notify();

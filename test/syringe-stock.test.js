@@ -32,7 +32,7 @@ function syringe(d, strainId, status, extra = {}) {
     }
   ]);
 }
-const row = (d, strainId) => db.listSyringeStock(d).find((r) => r.strainId === strainId);
+const row = (d, strainId, ml = 10) => db.listSyringeStock(d).find((r) => r.strainId === strainId && r.ml === ml);
 
 describe('Spritzenbestand: Zählung je Art', () => {
   let d, dir, a, b;
@@ -69,27 +69,97 @@ describe('Spritzenbestand: Zählung je Art', () => {
   });
 
   it('SKU setzen, ändern und entfernen', () => {
-    db.setSyringeSku(d, a, ' SPRI-TEST-ALPHA ');
+    db.setSyringeSku(d, a, 10, ' SPRI-TEST-ALPHA ');
     assert.equal(row(d, a).sku, 'SPRI-TEST-ALPHA');
-    db.recordSyringePush(d, a, { count: 3, billbeeStock: 2 });
+    db.recordSyringePush(d, a, 10, { count: 3, billbeeStock: 2 });
     assert.equal(row(d, a).pushedCount, 3);
     // Same SKU again keeps what was reported.
-    db.setSyringeSku(d, a, 'SPRI-TEST-ALPHA');
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-ALPHA');
     assert.equal(row(d, a).pushedCount, 3);
     // A different SKU is an article that has never been told anything.
-    db.setSyringeSku(d, a, 'SPRI-TEST-ALPHA2');
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-ALPHA2');
     assert.equal(row(d, a).pushedCount, null);
-    db.setSyringeSku(d, a, '');
+    db.setSyringeSku(d, a, 10, '');
     assert.equal(row(d, a).sku, '');
   });
 
   it('zwei Arten dürfen sich keine SKU teilen', () => {
-    db.setSyringeSku(d, a, 'SPRI-TEST-SHARED');
-    assert.throws(() => db.setSyringeSku(d, b, 'SPRI-TEST-SHARED'), /gehört schon zu einer anderen Art/);
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-SHARED');
+    assert.throws(() => db.setSyringeSku(d, b, 10, 'SPRI-TEST-SHARED'), /gehört schon zu einer anderen Art/);
   });
 
   it('eine unbekannte Art wird abgelehnt', () => {
-    assert.throws(() => db.setSyringeSku(d, 999999, 'X'), /gibt es nicht/);
+    assert.throws(() => db.setSyringeSku(d, 999999, 10, 'X'), /gibt es nicht/);
+  });
+});
+
+describe('Spritzen in 10, 20 und 50 ml', () => {
+  let d, dir, a;
+  before(() => {
+    ({ d, dir } = freshDb());
+    a = Number(db.createMushroomStrain(d, { name: 'Testart Zeta', kuerzel: 'TZ' }));
+  });
+  after(() => {
+    d.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('eine Spritze ohne Größe ist eine 10er, andere Arten haben keine', () => {
+    syringe(d, a, 'active');
+    db.insertCultures(d, [
+      {
+        id: 'LC-TZ-081026-01',
+        type: 'LC',
+        strainId: a,
+        status: 'active',
+        notes: '',
+        created: '2026-10-08T00:00:00Z',
+        ml: 50
+      }
+    ]);
+    const all = db.getAllCultures(d);
+    assert.equal(all.find((c) => c.type === 'SY').ml, 10);
+    assert.equal(all.find((c) => c.id === 'LC-TZ-081026-01').ml, null);
+  });
+
+  it('zählt jede Größe für sich', () => {
+    syringe(d, a, 'active', { ml: 20 });
+    syringe(d, a, 'stored', { ml: 50 });
+    syringe(d, a, 'active', { ml: 50 });
+    assert.deepEqual(
+      db
+        .listSyringeStock(d)
+        .filter((r) => r.strainId === a)
+        .map((r) => [r.ml, r.count]),
+      [
+        [10, 1],
+        [20, 1],
+        [50, 2]
+      ]
+    );
+  });
+
+  it('eine Größe, die es nicht gibt, wird abgelehnt', () => {
+    assert.throws(() => syringe(d, a, 'active', { ml: 30 }), /10, 20, 50 ml/);
+    assert.throws(() => db.setSyringeSku(d, a, 30, 'SPRI-TEST-30'), /10, 20, 50 ml/);
+  });
+
+  it('jede Größe hat ihre eigene SKU, und keine zwei teilen sich eine', () => {
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-Z10');
+    db.setSyringeSku(d, a, 50, 'SPRI-TEST-Z50');
+    assert.equal(row(d, a, 10).sku, 'SPRI-TEST-Z10');
+    assert.equal(row(d, a, 20).sku, '');
+    assert.equal(row(d, a, 50).sku, 'SPRI-TEST-Z50');
+    assert.throws(() => db.setSyringeSku(d, a, 20, 'SPRI-TEST-Z10'), /anderen Größe/);
+  });
+
+  it('die Größe einer Spritze lässt sich richtigstellen, nur auf eine, die es gibt', () => {
+    const id = db.getAllCultures(d).find((c) => c.type === 'SY' && c.ml === 20).id;
+    db.updateCulture(d, id, { ml: 50 });
+    assert.equal(row(d, a, 20).count, 0);
+    assert.equal(row(d, a, 50).count, 3);
+    assert.throws(() => db.updateCulture(d, id, { ml: 15 }), /10, 20, 50 ml/);
+    assert.throws(() => db.updateCulture(d, 'LC-TZ-081026-01', { ml: 10 }), /nur eine Spritze/);
   });
 });
 
@@ -111,8 +181,8 @@ describe('Spritzenbestand: was der Abgleich an Billbee schickt', () => {
     a = Number(db.createMushroomStrain(d, { name: 'Testart Gamma', kuerzel: 'TG' }));
     b = Number(db.createMushroomStrain(d, { name: 'Testart Delta', kuerzel: 'TD' }));
     db.updateChannelConfig(d, 'billbee', BILLBEE_CFG);
-    db.setSyringeSku(d, a, 'SPRI-TEST-GAMMA');
-    db.setSyringeSku(d, b, 'SPRI-TEST-DELTA');
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-GAMMA');
+    db.setSyringeSku(d, b, 10, 'SPRI-TEST-DELTA');
     syringe(d, a, 'active');
     syringe(d, a, 'active');
     syringe(d, b, 'stored');
@@ -330,7 +400,7 @@ describe('Spritzenbestand: regelmäßig noch einmal an die Shops', () => {
     a = Number(db.createMushroomStrain(d, { name: 'Testart Epsilon', kuerzel: 'TE' }));
     db.updateChannelConfig(d, 'billbee', BILLBEE_CFG);
     db.setSyringeStockSyncEnabled(d, true);
-    db.setSyringeSku(d, a, 'SPRI-TEST-EPSILON');
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-EPSILON');
     syringe(d, a, 'active');
     sync = createSyringeStockSync({
       getDatabase: () => d,

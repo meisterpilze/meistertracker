@@ -371,6 +371,12 @@
             <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
           </select>
         </div>
+        <!-- Spritzen gibt es in 10, 20 und 50 ml. Drei Knöpfe statt einer Liste:
+             ein Tipp, und die Wahl steht sichtbar da (msQuickRender). -->
+        <div id="ms-q-ml-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="sy.size">Größe</label>
+          <div id="ms-q-ml"></div>
+        </div>
         <!-- Körnerbrut is weighed, not counted, and one Ansatz goes into bags of
              more than one size: same Flüssigkultur, same Charge, 1 kg next to 2
              next to 3. So the count does not live in the shared Anzahl stepper
@@ -4431,6 +4437,14 @@
                       placeholder="e.g. Clone from KINGS-250101-01-03"
                     />
                   </div>
+                  <div id="lw-ml-row" style="display: none">
+                    <label for="lw-ml" data-i18n="sy.size">Größe</label>
+                    <select id="lw-ml">
+                      <option value="10">10 ml</option>
+                      <option value="20">20 ml</option>
+                      <option value="50">50 ml</option>
+                    </select>
+                  </div>
                   <div id="lw-qty-row">
                     <label id="lw-qty-lbl" data-i18n="lab.qtyMade">Quantity made</label
                     ><input type="text" inputmode="numeric" enterkeyhint="next" id="lw-qty" value="1" />
@@ -5052,10 +5066,11 @@
                 style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="syr.desc"
               >
-                Meistertracker zählt die Flüssigkultur-Spritzen je Art (aktiv und gelagert) und meldet die Zahl an
-                Billbee, sobald sie sich ändert. Billbee zieht offene Bestellungen ab und gibt den Bestand an die Shops
-                weiter, bei denen dort der Bestandsabgleich an ist. Verschickte Spritzen rausscannen, sonst bietet der
-                Shop sie nach dem Versand wieder an. Gemeldet werden nur Arten mit SKU.
+                Meistertracker zählt die Flüssigkultur-Spritzen je Art und Größe (aktiv und gelagert) und meldet die
+                Zahl an Billbee, sobald sie sich ändert. Billbee zieht offene Bestellungen ab und gibt den Bestand an
+                die Shops weiter, bei denen dort der Bestandsabgleich an ist. Verschickte Spritzen rausscannen, sonst
+                bietet der Shop sie nach dem Versand wieder an. Eine 10-ml- und eine 50-ml-Spritze sind im Shop zwei
+                Artikel, also hat jede Größe ihre eigene SKU. Gemeldet wird nur, was eine SKU hat.
               </p>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0 0 10px">
                 <input type="checkbox" id="syr-enabled" style="width: auto" />

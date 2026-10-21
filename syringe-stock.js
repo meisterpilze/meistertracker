@@ -74,7 +74,7 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
     if (!force && before > 0 && rows.every((r) => r.count === 0)) {
       const msg =
         'Nicht gemeldet: alle Spritzen sind auf einmal weg. Das sieht nach Zurücksetzen oder Import aus. Stimmt es, „Jetzt an Billbee melden" drücken.';
-      for (const r of due) dbApi.recordSyringePush(database, r.strainId, { error: msg });
+      for (const r of due) dbApi.recordSyringePush(database, r.strainId, r.ml, { error: msg });
       log('warn', 'Syringe stock: all species dropped to zero at once, held back', { before });
       return { pushed: 0, errors: [msg], held: true };
     }
@@ -88,17 +88,17 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
         const res = await prov.setStock(cfg, {
           sku: r.sku,
           count: r.count,
-          reason: 'Meistertracker: ' + r.count + ' Spritzen ' + r.name + ' im Labor',
+          reason: 'Meistertracker: ' + r.count + ' Spritzen ' + r.ml + ' ml ' + r.name + ' im Labor',
           // A change Billbee forwards on its own; the button and the periodic
           // resend make it pass unchanged figures on as well.
           resend: force || resend
         });
-        dbApi.recordSyringePush(database, r.strainId, { count: r.count, billbeeStock: res.currentStock });
+        dbApi.recordSyringePush(database, r.strainId, r.ml, { count: r.count, billbeeStock: res.currentStock });
         pushed++;
         inARow = 0;
       } catch (e) {
         const msg = e.message || 'Billbee hat nicht geantwortet';
-        dbApi.recordSyringePush(database, r.strainId, { error: msg });
+        dbApi.recordSyringePush(database, r.strainId, r.ml, { error: msg });
         errors.push(msg);
         log('warn', 'Syringe stock push failed', { sku: r.sku, error: msg });
         // Three in a row is a key or a Billbee that is down, not three bad SKUs.

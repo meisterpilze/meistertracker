@@ -13044,8 +13044,9 @@ async function loadChannelsSettings() {
 }
 
 // ── Spritzenbestand → Billbee (Karte unter Billbee) ──
-// Eine Zeile je Art: Name, Zahl im Labor, SKU-Feld, und was Billbee zuletzt
-// gesagt hat. Die SKU speichert beim Verlassen des Feldes, ohne Knopf.
+// Je Art ein Block, darin eine Zeile je Spritzengröße: Zahl im Labor, SKU-Feld,
+// und was Billbee zuletzt gesagt hat. Die SKU speichert beim Verlassen des
+// Feldes, ohne Knopf.
 async function loadSyringeStock() {
   try {
     renderSyringeStock(await apiGet('/api/syringe-stock'));
@@ -13073,27 +13074,42 @@ function renderSyringeStock(d) {
   if (!d.rows.length) {
     box.innerHTML = '<div class="fs-meta" style="color: var(--c-text-muted)">' + esc(t('syr.noSpecies')) + '</div>';
   } else {
-    box.innerHTML = d.rows
+    // Eine Art, darunter ihre Größen: jede Größe ist im Shop ein eigener Artikel
+    // und hat ihre eigene SKU. Die Zeilen kommen je Art zusammenhängend.
+    const arten = [];
+    for (const r of d.rows) {
+      const letzte = arten[arten.length - 1];
+      if (letzte && letzte.strainId === r.strainId) letzte.rows.push(r);
+      else arten.push({ strainId: r.strainId, name: r.name, rows: [r] });
+    }
+    const zeile = (r) =>
+      '<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px">' +
+      '<div style="flex: 1 1 120px; min-width: 0"><b>' +
+      (r.ml || 10) +
+      ' ml</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
+      esc(t('syr.inLab', { n: r.count })) +
+      '</span></div>' +
+      '<input type="text" class="syr-sku" data-strain="' +
+      r.strainId +
+      '" data-ml="' +
+      (r.ml || 10) +
+      '" value="' +
+      esc(r.sku) +
+      '" placeholder="' +
+      esc(t('syr.skuPlaceholder')) +
+      '" autocapitalize="characters" spellcheck="false" style="flex: 0 1 180px; min-width: 0" />' +
+      (r.sku
+        ? '<div class="fs-meta" style="flex-basis: 100%; color: var(--c-text-muted)">' + esc(_syrStatusLine(r)) + '</div>'
+        : '') +
+      '</div>';
+    box.innerHTML = arten
       .map(
-        (r) =>
-          '<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px">' +
-          '<div style="flex: 1 1 140px; min-width: 0"><b>' +
-          esc(r.name) +
-          '</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
-          esc(t('syr.inLab', { n: r.count })) +
-          '</span></div>' +
-          '<input type="text" class="syr-sku" data-strain="' +
-          r.strainId +
-          '" value="' +
-          esc(r.sku) +
-          '" placeholder="' +
-          esc(t('syr.skuPlaceholder')) +
-          '" autocapitalize="characters" spellcheck="false" style="flex: 0 1 180px; min-width: 0" />' +
-          (r.sku
-            ? '<div class="fs-meta" style="flex-basis: 100%; color: var(--c-text-muted)">' +
-              esc(_syrStatusLine(r)) +
-              '</div>'
-            : '') +
+        (a) =>
+          '<div style="display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--c-border-light)">' +
+          '<div style="font-weight: 600">' +
+          esc(a.name) +
+          '</div>' +
+          a.rows.map(zeile).join('') +
           '</div>'
       )
       .join('');
@@ -13112,7 +13128,7 @@ function renderSyringeStock(d) {
 async function saveSyringeSku(inp) {
   const sku = (inp.value || '').trim();
   if (sku === inp.dataset.was) return;
-  const r = await apiPut('/api/syringe-stock/' + inp.dataset.strain, { sku });
+  const r = await apiPut('/api/syringe-stock/' + inp.dataset.strain + '/' + (inp.dataset.ml || 10), { sku });
   if (r && r.error) {
     setFb('err', r.error);
     inp.value = inp.dataset.was;
@@ -20332,7 +20348,7 @@ function _msRecipeProblem(ms) {
 // Shared opener. ms === null → show the Sorte picker (charge mode lists only Sorten
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
-  _msQuickCtx = { mode, ms: ms || null };
+  _msQuickCtx = { mode, ms: ms || null, ml: _syMlLetzte() };
   // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
   // would otherwise be offered up for the next batch.
   _inoc = [];
@@ -20403,6 +20419,11 @@ function msQuickRender() {
         : t('msq.laborTitle');
   const lt = document.getElementById('ms-q-labtype-wrap');
   if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
+  const artEl = document.getElementById('ms-q-labtype');
+  const mlWrap = document.getElementById('ms-q-ml-wrap');
+  const istSy = mode === 'labor' && !!artEl && artEl.value === 'SY';
+  if (mlWrap) mlWrap.style.display = istSy ? '' : 'none';
+  if (istSy) document.getElementById('ms-q-ml').innerHTML = syMlKnoepfe('msq-ml', _msQuickCtx.ml);
   // Grain spawn is a Charge in everything but name: it is weighed, incubates,
   // and produces barcoded bags. So it wants the days and kg fields that the
   // count-based culture types don't.
@@ -20592,6 +20613,16 @@ function _msqIsGrain() {
   if (_msQuickCtx.mode === 'charge') return !!(_msQuickCtx.ms && _msQuickCtx.ms.recBatchType === 'grain');
   return _msqIsGrainspawn();
 }
+// Die Größe einer Spritze, im Schnelldialog: ein Tipp auf 10, 20 oder 50 ml.
+(function wireMsqMl() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-msq-ml]');
+    if (!b || !_msQuickCtx) return;
+    _msQuickCtx.ml = parseInt(b.dataset.msqMl, 10) || 10;
+    document.getElementById('ms-q-ml').innerHTML = syMlKnoepfe('msq-ml', _msQuickCtx.ml);
+    msQuickPreview();
+  });
+})();
 function msQuickLabTypeChanged() {
   // Full re-render, not just the culture list: switching to Grainspawn shows
   // the days field and the size rows, and switching away hides them again.
@@ -20793,6 +20824,9 @@ function msQuickPreview() {
   } else if (_msQuickCtx.mode === 'charge') {
     const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
     el.textContent = parts.length ? t('msq.needFor', { n: qty }) + ' ' + parts.join(' · ') : '';
+  } else if (document.getElementById('ms-q-labtype').value === 'SY') {
+    // Die Größe steht im Satz, damit vor dem Anlegen noch einmal dasteht, welche.
+    el.textContent = qty > 0 ? t('bmp.preview', { list: t('bmp.previewSy', { n: qty, ml: _msQuickCtx.ml }) }) : '';
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
@@ -20950,6 +20984,8 @@ async function msQuickConfirm() {
     setv('lw-strain-text', strainText);
     setv('lw-created', angesetzt);
     setv('lw-qty', qty);
+    setv('lw-ml', _msQuickCtx.ml);
+    if (labType === 'SY' && !intake) _syMlMerken(_msQuickCtx.ml);
     setv('lw-source', '');
     setv('lw-notes', '');
     msQuickClose();
@@ -21156,7 +21192,7 @@ function renderCultures() {
   body.innerHTML = rows
     .map(
       (c) =>
-        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="sold" ${c.status === 'sold' ? 'selected' : ''}>${t('lab.sold')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
+        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}${c.type === 'SY' ? ' <span class="fs-micro" style="font-weight:600">' + syMl(c) + ' ml</span>' : ''}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="sold" ${c.status === 'sold' ? 'selected' : ''}>${t('lab.sold')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
     )
     .join('');
 }
@@ -21217,6 +21253,39 @@ const LAB_PARENT_TYPES = {
   SY: ['MC', 'PD', 'LC'],
   KB: ['PD', 'LC', 'SY']
 };
+// Spritzen gibt es in drei Größen, wie SYRINGE_SIZES in db.js. Eine Spritze
+// ohne Angabe ist eine 10er: so war jede, bevor es die Wahl gab.
+const SY_ML = [10, 20, 50];
+const syMl = (c) => (c && c.type === 'SY' ? c.ml || 10 : null);
+// Drei Knöpfe, der gewählte gefüllt — dieselbe Form wie die Gewichte der
+// Körnerbrut (gs-wbtn). `attr` ist das data-Attribut, an dem der Klick hängt.
+function syMlKnoepfe(attr, aktiv) {
+  return (
+    '<div role="group" style="display:flex;gap:6px;flex-wrap:wrap">' +
+    SY_ML.map(
+      (ml) =>
+        `<button type="button" class="btn${ml === aktiv ? ' btn-p' : ''}" data-${attr}="${ml}" aria-pressed="${ml === aktiv}" style="min-height:var(--tap);min-width:64px;font-weight:600">${ml} ml</button>`
+    ).join('') +
+    '</div>'
+  );
+}
+// Die zuletzt abgefüllte Größe: wer heute 20er abfüllt, füllt meist weiter 20er.
+function _syMlLetzte() {
+  try {
+    const n = parseInt(localStorage.getItem('mp-sy-ml'), 10);
+    if (SY_ML.includes(n)) return n;
+  } catch (e) {
+    /* storage disabled */
+  }
+  return 10;
+}
+function _syMlMerken(ml) {
+  try {
+    localStorage.setItem('mp-sy-ml', String(ml));
+  } catch (e) {
+    /* storage disabled — next time starts at 10 ml */
+  }
+}
 function lwUpdate() {
   const type = document.getElementById('lw-type').value;
   const pr = document.getElementById('lw-parent-row'),
@@ -21225,6 +21294,8 @@ function lwUpdate() {
   const kbRows = document.getElementById('lw-kb-rows'),
     qtyRow = document.getElementById('lw-qty-row');
   const strainTextRow = document.getElementById('lw-strain-text-row');
+  const mlRow = document.getElementById('lw-ml-row');
+  if (mlRow) mlRow.style.display = type === 'SY' ? 'block' : 'none';
   if (type === 'KB') {
     pr.style.display = 'none';
     sr.style.display = 'none';
@@ -21353,7 +21424,8 @@ function logLabWork(opts) {
     parentId: document.getElementById('lw-parent')?.value || null,
     strainText: (document.getElementById('lw-strain-text')?.value || '').trim(),
     source: document.getElementById('lw-source')?.value.trim() || null,
-    notes: document.getElementById('lw-notes').value.trim()
+    notes: document.getElementById('lw-notes').value.trim(),
+    ml: parseInt(document.getElementById('lw-ml')?.value, 10) || 10
   });
   document.getElementById('lw-notes').value = '';
   document.getElementById('lw-qty').value = '1';
@@ -21378,7 +21450,8 @@ function logLabWork(opts) {
 // Legt qty Kulturen einer Art an, mit Kennung, Speichern und Barcodes — ohne ein
 // Formular zu lesen. logLabWork() und das Beimpfen-Fenster (bmpGo) teilen sich
 // das; jeder Weg zeigt danach sein eigenes Etiketten-Fenster.
-// spec: { type, ms, wann, qty, id?, parentId?, strainText?, source?, notes? }
+// spec: { type, ms, wann, qty, id?, parentId?, strainText?, source?, notes?, ml? }
+// ml zählt nur bei Spritzen; ohne Angabe eine 10er.
 function kulturenAnlegen(spec) {
   const { type, ms, wann } = spec;
   const sp = ms.name,
@@ -21400,7 +21473,8 @@ function kulturenAnlegen(spec) {
     source: spec.source || null,
     status: 'active',
     notes: spec.notes || '',
-    created: wann.toISOString()
+    created: wann.toISOString(),
+    ml: type === 'SY' ? (SY_ML.includes(spec.ml) ? spec.ml : 10) : null
   }));
   cultures.push(...newC);
   const saved = apiPost('/api/cultures', { cultures: newC }).then((r) => {
@@ -23642,6 +23716,8 @@ function labLabelItems(id, c, detail, qr) {
   const rawNotes = (c.notes || '').trim();
   const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
   const spParts = [species];
+  // Die Größe gleich hinter der Sorte: beim Packen ist sie, was man sucht.
+  if (c.type === 'SY') spParts.push(syMl(c) + ' ml');
   if (strainTxt) spParts.push(strainTxt);
   if (notes) spParts.push(notes);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
@@ -25961,6 +26037,7 @@ function openCultureSheet(c) {
     met(t('ci.status'), esc(status ? t(status) : c.status || '')) +
     met(t('ci.created'), esc(c.created ? fmtDt(c.created) : '\u2014')) +
     '</div>' +
+    ciGroesseHtml(c) +
     ciHerkunftHtml(c) +
     (kinder
       ? `<div class="fs-meta muted" style="margin-bottom:10px">${esc(t('ci.children', { n: kinder }))}</div>`
@@ -25975,10 +26052,17 @@ function openCultureSheet(c) {
 // Glas oder eine Spritze in der Hand hat, also steht es zuoberst — die Zahl groß,
 // darunter die Nummern, die gemeinsam angesetzten, die schon raus sind,
 // durchgestrichen und die gescannte hervorgehoben.
+// Spritzen nur gleicher Größe: eine 10er und eine 50er vom selben Tag tragen
+// dieselbe Kennung bis auf die Nummer, sind aber nicht dasselbe Angebot.
 function ciGeschwister(c) {
   const stamm = c.id.slice(0, c.id.lastIndexOf('-') + 1);
   return cultures
-    .filter((x) => x.id.startsWith(stamm) && /^\d+$/.test(x.id.slice(stamm.length)))
+    .filter(
+      (x) =>
+        x.id.startsWith(stamm) &&
+        /^\d+$/.test(x.id.slice(stamm.length)) &&
+        (x.type !== 'SY' || (x.ml || 10) === (c.ml || 10))
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 function ciVerfuegbarHtml(c) {
@@ -26005,6 +26089,45 @@ function ciVerfuegbarHtml(c) {
     '</div>'
   );
 }
+// Die Größe einer Spritze, mit den drei Knöpfen: falsch gewählt beim Abfüllen
+// ist ein Tipp zum Richtigstellen, mit Rückgängig unten. Solange sie da ist —
+// eine verkaufte oder verbrauchte zeigt ihre Größe nur noch an.
+function ciGroesseHtml(c) {
+  if (c.type !== 'SY') return '';
+  const da = c.status === 'active' || c.status === 'stored';
+  const inhalt = da
+    ? `<div style="margin-top:4px">${syMlKnoepfe('ci-ml', syMl(c))}</div>`
+    : `<div class="fs-base" style="font-weight:600">${syMl(c)} ml</div>`;
+  return `<div class="met" style="margin-bottom:12px"><div class="met-l">${esc(t('sy.size'))}</div>${inhalt}</div>`;
+}
+function setCultureMl(id, ml) {
+  const c = cultures.find((x) => x.id === id);
+  if (!c || c.type !== 'SY') return;
+  const prev = syMl(c);
+  c.ml = ml;
+  renderCultures();
+  if (ciCultureId === id) openCultureSheet(c);
+  apiPatch('/api/cultures/' + encodeURIComponent(id), { ml }).then((r) => {
+    if (r && r.error) {
+      c.ml = prev;
+      renderCultures();
+      if (ciCultureId === id) openCultureSheet(c);
+      setFb('err', t('common.error') + ': ' + r.error);
+    }
+  });
+}
+(function wireCiMl() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ci-ml]');
+    if (!b || !ciCultureId) return;
+    const c = cultures.find((x) => x.id === ciCultureId);
+    const ml = parseInt(b.dataset.ciMl, 10);
+    if (!c || !SY_ML.includes(ml) || ml === syMl(c)) return;
+    const prev = syMl(c);
+    setCultureMl(c.id, ml);
+    showUndoBar(t('ci.sizeDone', { id: c.id, ml: ml }), () => setCultureMl(c.id, prev));
+  });
+})();
 // Der Stammbaum nach oben, gleich im Fenster: Slant → Petrischale → … → diese.
 // Wer eine Spritze in der Hand hat, will wissen, woher sie kommt, und dafür
 // musste man sonst auf die Laborseite. Ohne Herkunft steht da, dass es keine gibt.
@@ -26131,7 +26254,8 @@ function bmpOpen(c) {
   _bmp = {
     id: c.id,
     n: Object.fromEntries(bmpArten(c.type).map((k) => [k, parseInt(letzte[k], 10) || 0])),
-    kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1
+    kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1,
+    ml: SY_ML.includes(parseInt(letzte.ml, 10)) ? parseInt(letzte.ml, 10) : _syMlLetzte()
   };
   anlageReset('bmp');
   document.getElementById('bmp-title').textContent = t('bmp.title', { id: c.id });
@@ -26163,7 +26287,9 @@ function bmpRender() {
         k === 'KB'
           ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
             `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
-          : '';
+          : k === 'SY'
+            ? `<div id="bmp-ml" style="margin:6px 0 0 2px">${syMlKnoepfe('bmp-ml', _bmp.ml)}</div>`
+            : '';
       return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
     })
     .join('');
@@ -26185,7 +26311,11 @@ function bmpPreview() {
   const teile = Object.entries(_bmp.n)
     .filter(([, n]) => n > 0)
     .map(([k, n]) =>
-      k === 'KB' ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') }) : n + ' ' + t('bmp.' + k)
+      k === 'KB'
+        ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') })
+        : k === 'SY'
+          ? t('bmp.previewSy', { n: n, ml: _bmp.ml })
+          : n + ' ' + t('bmp.' + k)
     );
   const summe = Object.values(_bmp.n).reduce((a, n) => a + n, 0);
   const prev = document.getElementById('bmp-preview');
@@ -26215,7 +26345,8 @@ function bmpGo() {
   const angesetzt = anlageLesen('bmp');
   if (angesetzt === null) return;
   const wann = anlageZeitpunkt(angesetzt);
-  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg }));
+  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg, ml: _bmp.ml }));
+  if (n.SY > 0) _syMlMerken(_bmp.ml);
   bmpClose();
   // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als Herkunft.
   const ids = [];
@@ -26228,7 +26359,8 @@ function bmpGo() {
       wann,
       qty: n[k],
       parentId: c.id,
-      strainText: (c.strainText || '').trim()
+      strainText: (c.strainText || '').trim(),
+      ml: _bmp.ml
     });
     ids.push(...r.newC.map((x) => x.id));
     saves.push(r.saved);
@@ -26258,6 +26390,13 @@ function bmpGo() {
 }
 (function wireBeimpfen() {
   document.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-bmp-ml]');
+    if (m && _bmp) {
+      _bmp.ml = parseInt(m.dataset.bmpMl, 10) || 10;
+      document.getElementById('bmp-ml').innerHTML = syMlKnoepfe('bmp-ml', _bmp.ml);
+      bmpPreview();
+      return;
+    }
     const b = e.target.closest('[data-bmp]');
     if (!b || !_bmp) return;
     const a = b.dataset.bmp;
