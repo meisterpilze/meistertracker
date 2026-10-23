@@ -409,13 +409,12 @@
           <label data-i18n="sy.size">Größe</label>
           <div id="ms-q-ml"></div>
         </div>
-        <!-- Körnerbrut is weighed, not counted, and one Ansatz goes into bags of
-             more than one size: same Flüssigkultur, same Charge, 1 kg next to 2
-             next to 3. So the count does not live in the shared Anzahl stepper
-             here — it lives per size, one row each, the same shape the long form
-             has (gs-wline). With a single row it reads exactly like the single
-             field this replaced. Shown for Körnerbrut in either mode — as
-             Laborarbeit and as the Charge of a Körner-Sorte (see msQuickRender). -->
+        <!-- Körnerbrut goes into bags of 1, 2 and 5 kg, and one Ansatz often into
+             more than one size: same Flüssigkultur, same Charge. So the count does
+             not live in the shared Anzahl stepper here — it lives per size, one
+             counter each, the same shape as the syringes (kbMengenHtml). Shown for
+             Körnerbrut in either mode — as Laborarbeit and as the Charge of a
+             Körner-Sorte (see msQuickRender). -->
         <div id="ms-q-sizes-wrap" style="display: none; margin-bottom: 8px">
           <div
             id="ms-q-kb-head"
@@ -424,9 +423,8 @@
           >
             Körnerbrut
           </div>
-          <label data-i18n="msq.grainSizes">Größen (kg × Beutel)</label>
+          <label data-i18n="sy.perSize">Anzahl je Größe</label>
           <div id="ms-q-sizes"></div>
-          <button type="button" id="ms-q-add-size" class="btn btn-sm" data-i18n="msq.addSize">+ Größe</button>
         </div>
         <div class="g2" id="ms-q-grid">
           <div id="ms-q-qty-wrap">

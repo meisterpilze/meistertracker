@@ -20351,11 +20351,14 @@ function _msRecipeProblem(ms) {
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
   // ml gilt nur für eine aufgenommene Spritze (genau eine, eine Größe); sonst
-  // zählt der Dialog je Größe, und jede Größe fängt bei 0 an. Jedes Öffnen
-  // beginnt mit einer Art; "Mehrere" ist ein Tipp (msqMehrereUmschalten).
+  // zählen Spritzen und Körnerbrut je Größe, und jede Größe fängt bei 0 an.
+  // Jedes Öffnen beginnt mit einer Art; "Mehrere" ist ein Tipp
+  // (msqMehrereUmschalten).
   _msQuickCtx = { mode, ms: ms || null, ml: 10, mehrere: false, arten: [], n: { PD: 0, LC: 0 } };
   const syBox = document.getElementById('ms-q-sy');
   if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
+  const kbBox = document.getElementById('ms-q-sizes');
+  if (kbBox) kbBox.innerHTML = kbMengenHtml('ms-q', {});
   // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
   // would otherwise be offered up for the next batch.
   _inoc = [];
@@ -20395,10 +20398,6 @@ function msQuickOpen(mode, ms) {
   // persists its qty the same way (nbSaveDefaults).
   const qtyEl = document.getElementById('ms-q-qty');
   if (qtyEl) qtyEl.value = _msqLastQty(mode);
-  // Wie die Anzahl: was zuletzt angesetzt wurde, steht wieder da. msQuickRender
-  // faellt danach nicht mehr darueber her, solange niemand hineingetippt hat.
-  _msqSizesTouched = false;
-  msqSeedSizes();
   // Stamm und Datum gehören zu genau einem Anlegen: jedes Öffnen fängt bei
   // "ohne Stamm" und heute an.
   stammReset('ms-q');
@@ -20462,7 +20461,6 @@ function msQuickRender() {
   if (qw) qw.style.display = grain || intake || syViele || mehrere ? 'none' : '';
   const grid = document.getElementById('ms-q-grid');
   if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
-  if (grain && !_msqSizesTouched) msqSeedSizes();
   // Der Stamm hängt an der Sorte, das Datum an nichts. Beide behalten beim
   // Neuzeichnen, was schon gewählt ist.
   stammRender('ms-q', ms ? ms.id : null);
@@ -20487,8 +20485,7 @@ function msQuickRender() {
     const d = document.getElementById('ms-q-days');
     if (d) d.value = ms.recIncDays || 14;
   } else if (isKb) {
-    // No block recipe carries a spawn-bag weight — msqSeedSizes() gets it from
-    // the inventory average instead, the same figure the grain form uses.
+    // Körnerbrut als Laborarbeit hat kein Rezept mit Inkubationstagen.
     const d = document.getElementById('ms-q-days');
     if (d && !(parseInt(d.value, 10) > 0)) d.value = 14;
   }
@@ -20685,13 +20682,12 @@ function msqMehrereUmschalten() {
     _msQuickCtx.n = { PD: 0, LC: 0 };
     const syBox = document.getElementById('ms-q-sy');
     if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
+    const kbBox = document.getElementById('ms-q-sizes');
+    if (kbBox) kbBox.innerHTML = kbMengenHtml('ms-q', {});
   } else if (sel && _msQuickCtx.arten.length) {
     // Zurück zu einer Art: der ersten angetippten.
     sel.value = _msQuickCtx.arten[0];
   }
-  // Die Körnerbrut-Zeilen neu: bei mehreren ab 0, bei einer wie gewohnt.
-  _msqSizesTouched = false;
-  msqSeedSizes();
   msQuickRender();
 }
 // Die Art als Liste (eine) oder als Knöpfe (mehrere), dazu die Zähler der
@@ -20754,18 +20750,6 @@ function msqMehrereLesen() {
   z.summe = z.PD + z.LC + sySumme(z.sy) + z.kb.reduce((a, l) => a + l.qty, 0);
   return z;
 }
-// Eine Körnerbrut-Zeile mit Anzahl, aber ohne Gewicht: msqReadSizes ließe sie
-// stumm fallen, und die Beutel fehlten hinterher.
-function msqMehrereOhneGewicht() {
-  return (
-    msqArten().includes('KB') &&
-    msqSizeRows().some(
-      (row) =>
-        (parseInt(row.querySelector('.msq-size-qty').value, 10) || 0) > 0 &&
-        !(parseDecimal(row.querySelector('.msq-size-kg').value) > 0)
-    )
-  );
-}
 function msqMehrerePreview(el) {
   const z = msqMehrereLesen();
   const teile = [];
@@ -20816,138 +20800,33 @@ function msQuickClose() {
   const m = document.getElementById('ms-quick-modal');
   if (m) m.style.display = 'none';
 }
-// ── Die Groessen einer Koernerbrut, im Schnelldialog ─────────
+// ── Die Größen einer Körnerbrut, im Schnelldialog ─────────
 //
-// Ein Ansatz geht in Beutel verschiedener Groesse: dieselbe Fluessigkultur,
-// dieselbe Charge, und trotzdem 1 kg neben 2 neben 3. Das lange Formular kann
-// das seit jeher (gs-wline), der Schnelldialog trug eine Zahl -- und seit die
-// Kacheln der Weg zum Anlegen sind, macht niemand mehr das lange Formular auf,
-// um eine zweite Groesse unterzubringen. Also steht hier dieselbe Zeilenliste,
-// schmaler: kg und Anzahl an derselben Zeile, statt einer Anzahl darueber, die
-// fuer alle Groessen zugleich gaelte.
-//
-// Die Anzahl wandert damit aus dem gemeinsamen Zaehler in die Zeile. Fuer alles
-// andere im Dialog -- Petrischalen, Fluessigkultur, Bloecke -- bleibt sie oben,
-// wo sie hingehoert: dort gibt es nur eine Sorte Stueck.
-const MSQ_SIZES_KEY = 'mp-msq-sizes';
-function msqSizeRows() {
-  return Array.from(document.querySelectorAll('#ms-q-sizes .msq-size'));
+// Ein Ansatz geht in Beutel verschiedener Größe: dieselbe Flüssigkultur,
+// dieselbe Charge, und trotzdem 1 kg neben 2 neben 5. Beutel gibt es in diesen
+// drei Größen, also je Größe ein Zähler wie bei den Spritzen: ein Tipp auf +,
+// kein Gewicht zum Eintippen, und jede Zahl fängt bei 0 an. Die Anzahl wandert
+// damit aus dem gemeinsamen Zähler in die Zeile; für alles andere im Dialog —
+// Petrischalen, Flüssigkultur, Blöcke — bleibt sie oben, dort gibt es nur eine
+// Sorte Stück. Das Beimpfen-Fenster zählt Körnerbeutel genauso.
+const KB_KG = [1, 2, 5];
+function kbMengenHtml(pre, n) {
+  return KB_KG.map((kg) => zaehlerZeileHtml(pre + '-kb-' + kg, n && n[kg], kg + ' kg')).join('');
 }
-// [{kg, qty}] — Zeilen ohne Gewicht oder ohne Anzahl zaehlen nicht, genau wie
-// gsReadLines() sie fallenlaesst. Was hier herauskommt, ist was angelegt wird.
+// {1: n, 2: n, 5: n} aus den Feldern, 0 bis 500 wie die anderen Zähler.
+function kbMengenLesen(pre) {
+  const n = {};
+  for (const kg of KB_KG) {
+    const el = document.getElementById(pre + '-kb-' + kg);
+    n[kg] = el ? Math.max(0, Math.min(500, parseInt(el.value, 10) || 0)) : 0;
+  }
+  return n;
+}
+// [{kg, qty}] je Größe mit Anzahl, die Form, die gsSetLines() nimmt. Was hier
+// herauskommt, ist was angelegt wird.
 function msqReadSizes() {
-  const lines = [];
-  for (const row of msqSizeRows()) {
-    const kg = parseDecimal(row.querySelector('.msq-size-kg').value) || 0;
-    const qty = parseInt(row.querySelector('.msq-size-qty').value, 10) || 0;
-    if (kg > 0 && qty > 0) lines.push({ kg, qty });
-  }
-  return lines;
-}
-function _msqSizeRowHtml(kg, qty) {
-  return (
-    '<div class="msq-size" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
-    '<input type="text" inputmode="decimal" class="msq-size-kg" autocomplete="off" value="' +
-    esc(String(kg).replace('.', ',')) +
-    '" style="flex:1;min-width:0;text-align:center" />' +
-    '<span class="fs-meta" style="flex:none;color:var(--c-text-muted)">kg &times;</span>' +
-    '<input type="number" class="msq-size-qty" min="1" max="500" value="' +
-    esc(String(qty)) +
-    '" style="flex:1;min-width:0;text-align:center" />' +
-    '<button type="button" class="btn btn-sm msq-size-rm" aria-label="' +
-    esc(t('msq.removeSize')) +
-    '" title="' +
-    esc(t('msq.removeSize')) +
-    '" style="flex:none;display:none;min-width:var(--tap-sm);min-height:var(--tap-sm);color:var(--c-red)">&times;</button>' +
-    '</div>'
-  );
-}
-function msqRenderSizes(lines) {
-  const box = document.getElementById('ms-q-sizes');
-  if (!box) return;
-  const rows = lines && lines.length ? lines : [{ kg: 1, qty: 10 }];
-  box.innerHTML = rows.map((l) => _msqSizeRowHtml(l.kg, l.qty)).join('');
-  msqUpdateSizeRemove();
-}
-// Das Kreuz erst ab der zweiten Zeile: eine Groesse ist kein Sonderfall, den man
-// wegnehmen koennte, und ein Knopf, der die letzte Zeile loescht, macht den
-// Dialog nur unbrauchbar.
-function msqUpdateSizeRemove() {
-  const rows = msqSizeRows();
-  const multi = rows.length > 1;
-  rows.forEach((r) => {
-    const rm = r.querySelector('.msq-size-rm');
-    if (rm) rm.style.display = multi ? '' : 'none';
-  });
-}
-function msqAddSize() {
-  const box = document.getElementById('ms-q-sizes');
-  if (!box) return;
-  box.insertAdjacentHTML('beforeend', _msqSizeRowHtml(1, msqMehrere() ? 0 : 10));
-  msqUpdateSizeRemove();
-  msQuickPreview();
-  const last = msqSizeRows().pop();
-  if (last) last.querySelector('.msq-size-kg').focus();
-}
-function msqRemoveSize(row) {
-  if (msqSizeRows().length < 2) return;
-  row.remove();
-  msqUpdateSizeRemove();
-  msQuickPreview();
-}
-// Was zuletzt angesetzt wurde, steht beim naechsten Mal wieder da -- aus
-// demselben Grund, aus dem _msqLastQty existiert: die Beutelzahl ist die eine
-// Zahl, die kein Rezept liefert, sie aendert sich zwischen zwei Ansaetzen kaum,
-// und sie auf dem Telefon jedesmal neu zu tippen ist die Reibung, gegen die der
-// Schnelldialog gebaut wurde. Die Groessen gehoeren dazu: wer 10x1 und 5x2
-// ansetzt, setzt das naechste Mal wieder so an.
-function _msqLastSizes(mode) {
-  try {
-    const s = JSON.parse(localStorage.getItem(MSQ_SIZES_KEY) || '{}');
-    const lines = Array.isArray(s[mode]) ? s[mode] : null;
-    const clean = (lines || [])
-      .map((l) => ({ kg: Number(l && l.kg), qty: parseInt(l && l.qty, 10) }))
-      .filter((l) => l.kg > 0 && l.qty > 0);
-    if (clean.length) return clean;
-  } catch (e) {
-    /* storage disabled — fall back to the recipe */
-  }
-  return null;
-}
-// Beruehrt heisst: in der Liste wurde getippt oder geklickt. Bis dahin darf
-// jedes Neuzeichnen -- Sortenwechsel, Art gewechselt -- die Zeilen frisch aus
-// Rezept und Gedaechtnis setzen; danach nicht mehr, sonst raeumt ein Wechsel
-// der Sorte die eben getippten Groessen weg.
-let _msqSizesTouched = false;
-function msqSeedSizes() {
-  const mode = _msQuickCtx ? _msQuickCtx.mode : 'labor';
-  const ms = _msQuickCtx ? _msQuickCtx.ms : null;
-  const remembered = _msqLastSizes(mode);
-  // Mehrere Arten auf einmal: die Beutelgröße wie gewohnt, die Anzahl bei 0.
-  if (msqMehrere()) {
-    const kg =
-      (remembered && remembered[0].kg) || (ms && ms.recGrainKg > 0 ? ms.recGrainKg : getAvgComp().grainBagKg) || 1;
-    msqRenderSizes([{ kg, qty: 0 }]);
-    return;
-  }
-  if (remembered) {
-    msqRenderSizes(remembered);
-    return;
-  }
-  // Das Rezept der Sorte zuerst -- eine Koerner-Sorte traegt ihre Beutelgroesse
-  // in recGrainKg. Sonst der Lagerschnitt, den das lange Formular auch nimmt.
-  const kg = (ms && ms.recGrainKg > 0 ? ms.recGrainKg : getAvgComp().grainBagKg) || 1;
-  msqRenderSizes([{ kg, qty: 10 }]);
-}
-function _msqSaveSizes(mode, lines) {
-  if (!lines || !lines.length) return;
-  try {
-    const s = JSON.parse(localStorage.getItem(MSQ_SIZES_KEY) || '{}');
-    s[mode] = lines;
-    localStorage.setItem(MSQ_SIZES_KEY, JSON.stringify(s));
-  } catch (e) {
-    /* storage disabled — next open starts from the recipe again */
-  }
+  const n = kbMengenLesen('ms-q');
+  return KB_KG.filter((kg) => n[kg] > 0).map((kg) => ({ kg, qty: n[kg] }));
 }
 function msqQtyStep(d) {
   const el = document.getElementById('ms-q-qty');
@@ -21083,10 +20962,9 @@ async function msQuickConfirm() {
   const ms = _msQuickCtx.ms;
   const mode = _msQuickCtx.mode;
   // Körnerbrut bringt ihre Anzahl je Größe mit, alles andere die eine oben.
-  // Geprüft wird HIER, solange der Dialog noch steht: gsReadLines() lässt
-  // Zeilen ohne Gewicht fallen, und eine leere Liste erreichte createGrainBatch
-  // als "keine Zeilen" — dessen Meldung erschien dann gegen einen Dialog, der
-  // längst zu war, und alles Getippte war weg.
+  // Geprüft wird HIER, solange der Dialog noch steht: eine leere Liste
+  // erreichte createGrainBatch als "keine Zeilen" — dessen Meldung erschien dann
+  // gegen einen Dialog, der längst zu war, und alles Getippte war weg.
   // Mehrere Arten zählen je Art (msqMehrereLesen), auch das wird hier geprüft.
   const zahlen = msqMehrere() ? msqMehrereLesen() : null;
   const grain = !zahlen && _msqIsGrain();
@@ -21099,10 +20977,6 @@ async function msQuickConfirm() {
       : null;
   let qty;
   if (zahlen) {
-    if (msqMehrereOhneGewicht()) {
-      fieldError('ms-q-sizes', t('batch.enterWeight'));
-      return;
-    }
     qty = zahlen.summe;
     if (qty < 1) {
       toast(t('bmp.nothing'), 'err');
@@ -21110,11 +20984,10 @@ async function msQuickConfirm() {
     }
   } else if (grain) {
     if (!sizes.length) {
-      toast(t('batch.enterWeight'), 'err');
+      fieldError('ms-q-sizes', t('batch.fillQty'));
       return;
     }
     qty = sizes.reduce((a, l) => a + l.qty, 0);
-    _msqSaveSizes(mode, sizes);
   } else if (syN) {
     qty = sySumme(syN);
     if (qty < 1) {
@@ -26549,40 +26422,20 @@ function ciAction(a) {
 // Hier steht je Art eine Zahl, und ein Tipp legt alles an — jede neue Kultur
 // mit dieser als Herkunft, so dass der Stammbaum zeigt, wohin sie ging.
 let _bmp = null;
-const BMP_KEY = 'mp-bmp';
 // Was aus einer Kultur dieser Art angesetzt werden darf, in der Reihenfolge der
 // Zeilen. KB ist Körnerbrut (eine Charge mit Beuteln), der Rest sind Kulturen.
 function bmpArten(type) {
   return ['KB', 'LC', 'PD', 'SY'].filter((k) => (LAB_PARENT_TYPES[k] || []).includes(type));
 }
-function _bmpLetzte(type) {
-  try {
-    const s = JSON.parse(localStorage.getItem(BMP_KEY) || '{}');
-    return (s && s[type]) || {};
-  } catch (e) {
-    return {};
-  }
-}
-function _bmpMerken(type, werte) {
-  try {
-    const s = JSON.parse(localStorage.getItem(BMP_KEY) || '{}');
-    s[type] = werte;
-    localStorage.setItem(BMP_KEY, JSON.stringify(s));
-  } catch (e) {
-    /* storage disabled — next time the weight comes from the grain dialog */
-  }
-}
 function bmpOpen(c) {
-  const letzte = _bmpLetzte(c.type);
-  const groesse = (_msqLastSizes('labor') || [])[0];
   // Jede Anzahl fängt bei 0 an: was letztes Mal angesetzt wurde, ist nicht, was
   // heute ansteht, und eine stehengebliebene Zahl legt unbemerkt zu viel an.
-  // Gemerkt wird nur das Gewicht je Körnerbeutel, eine Größe und keine Menge.
+  // Körnerbeutel und Spritzen zählen je Größe.
   _bmp = {
     id: c.id,
     n: Object.fromEntries(bmpArten(c.type).map((k) => [k, 0])),
-    kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1,
-    sy: Object.fromEntries(SY_ML.map((ml) => [ml, 0]))
+    sy: Object.fromEntries(SY_ML.map((ml) => [ml, 0])),
+    kb: Object.fromEntries(KB_KG.map((kg) => [kg, 0]))
   };
   anlageReset('bmp');
   document.getElementById('bmp-title').textContent = t('bmp.title', { id: c.id });
@@ -26604,12 +26457,13 @@ function bmpRender() {
     'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
   document.getElementById('bmp-rows').innerHTML = bmpArten(c.type)
     .map((k) => {
-      // Spritzen zählen je Größe: drei Zähler unter einer Überschrift.
-      if (k === 'SY')
+      // Spritzen und Körnerbeutel zählen je Größe: drei Zähler unter einer
+      // Überschrift.
+      if (k === 'SY' || k === 'KB')
         return (
           `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">` +
-          `<div class="fs-base" style="font-weight:600;margin-bottom:6px">${esc(t('bmp.SY'))}</div>` +
-          syMengenHtml('bmp', _bmp.sy) +
+          `<div class="fs-base" style="font-weight:600;margin-bottom:6px">${esc(t('bmp.' + k))}</div>` +
+          (k === 'SY' ? syMengenHtml('bmp', _bmp.sy) : kbMengenHtml('bmp', _bmp.kb)) +
           '</div>'
         );
       const zeile =
@@ -26618,12 +26472,7 @@ function bmpRender() {
         `<input type="number" inputmode="numeric" min="0" max="500" id="bmp-n-${k}" data-bmp-n="${k}" value="${_bmp.n[k]}" style="width:64px;text-align:center;font-weight:600" />` +
         `<button type="button" data-bmp="plus" data-k="${k}" aria-label="${esc(t('bmp.more'))}" style="${knopf}">+</button>` +
         `<span class="fs-base" style="font-weight:600">${esc(t('bmp.' + k))}</span></div>`;
-      const kg =
-        k === 'KB'
-          ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
-            `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
-          : '';
-      return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}</div>`;
     })
     .join('');
   anlageRender('bmp');
@@ -26635,11 +26484,13 @@ function _bmpLesen() {
     const el = document.getElementById('bmp-n-' + k);
     if (el) _bmp.n[k] = Math.max(0, Math.min(500, parseInt(el.value, 10) || 0));
   }
-  const kg = document.getElementById('bmp-kg');
-  if (kg) _bmp.kg = parseDecimal(kg.value) || 0;
   if ('SY' in _bmp.n) {
     _bmp.sy = syMengenLesen('bmp');
     _bmp.n.SY = sySumme(_bmp.sy);
+  }
+  if ('KB' in _bmp.n) {
+    _bmp.kb = kbMengenLesen('bmp');
+    _bmp.n.KB = KB_KG.reduce((a, kg) => a + _bmp.kb[kg], 0);
   }
 }
 function bmpPreview() {
@@ -26649,7 +26500,7 @@ function bmpPreview() {
     .filter(([, n]) => n > 0)
     .flatMap(([k, n]) =>
       k === 'KB'
-        ? [t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') })]
+        ? KB_KG.filter((kg) => _bmp.kb[kg] > 0).map((kg) => t('bmp.previewGrain', { n: _bmp.kb[kg], kg }))
         : k === 'SY'
           ? syTeile(_bmp.sy)
           : [n + ' ' + t('bmp.' + k)]
@@ -26675,18 +26526,13 @@ function bmpGo() {
   }
   const n = _bmp.n;
   if (!Object.values(n).some((x) => x > 0)) return;
-  if (n.KB > 0 && !(_bmp.kg > 0)) {
-    fieldError('bmp-kg', t('batch.enterWeight'));
-    return;
-  }
   const angesetzt = anlageLesen('bmp');
   if (angesetzt === null) return;
   const wann = anlageZeitpunkt(angesetzt);
   // Alles aus dem Fenster jetzt: bmpClose() setzt _bmp auf null, und ein
-  // _bmp.kg danach brach das Anlegen der Körnerbrut mit einem Fehler ab.
+  // Lesen aus _bmp danach brach das Anlegen mit einem Fehler ab.
   const sy = _bmp.sy || {};
-  const kg = _bmp.kg || 1;
-  _bmpMerken(c.type, { kg });
+  const kb = _bmp.kb || {};
   bmpClose();
   // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als
   // Herkunft. Spritzen je Größe, jede Größe ihre eigenen Nummern.
@@ -26721,7 +26567,7 @@ function bmpGo() {
     setv('lw-st', ms.id);
     setv('lw-strain-text', (c.strainText || '').trim());
     setv('lw-created', angesetzt);
-    gsSetLines([{ kg, qty: n.KB }]);
+    gsSetLines(KB_KG.filter((kg) => kb[kg] > 0).map((kg) => ({ kg, qty: kb[kg] })));
     setv('gs-days', 14);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
     setv('lw-notes', '');
@@ -31689,29 +31535,11 @@ function initEventListeners() {
   });
   $('gs-weight-lines').addEventListener('input', gsPreview);
   $('gs-add-line').addEventListener('click', gsAddLine);
-  // Dieselben Zeilen im Schnelldialog. Delegiert, weil msqRenderSizes() den
-  // Inhalt neu schreibt — ein Zuhoerer je Zeile waere nach dem ersten
-  // Neuzeichnen weg.
-  if ($('ms-q-sizes')) {
-    $('ms-q-sizes').addEventListener('click', (e) => {
-      const rm = e.target.closest('.msq-size-rm');
-      if (rm) {
-        _msqSizesTouched = true;
-        msqRemoveSize(rm.closest('.msq-size'));
-      }
-    });
-    $('ms-q-sizes').addEventListener('input', () => {
-      _msqSizesTouched = true;
-      msQuickPreview();
-    });
-  }
+  // Die Zähler im Schnelldialog: getippt zieht die Vorschau nach, wie ein Tipp
+  // auf − oder + (wireZaehler).
+  if ($('ms-q-sizes')) $('ms-q-sizes').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-sy')) $('ms-q-sy').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-multi')) $('ms-q-multi').addEventListener('input', () => msQuickPreview());
-  if ($('ms-q-add-size'))
-    $('ms-q-add-size').addEventListener('click', () => {
-      _msqSizesTouched = true;
-      msqAddSize();
-    });
   if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
   $('cult-type').addEventListener('change', renderCultures);
   $('cult-stat').addEventListener('change', renderCultures);

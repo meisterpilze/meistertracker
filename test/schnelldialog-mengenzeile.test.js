@@ -53,7 +53,8 @@ const CODE = [
   hebeFunktion('_msNeedParts', SRC),
   hebeFunktion('_msqIsGrainspawn', SRC),
   hebeFunktion('_msqIsGrain', SRC),
-  hebeFunktion('msqSizeRows', SRC),
+  hebeKonstante('KB_KG', SRC),
+  hebeFunktion('kbMengenLesen', SRC),
   hebeFunktion('msqReadSizes', SRC),
   // Seit der Inventur hängt die Zeile auch am Datum: früher angesetzt bucht
   // nichts ab, und das steht dann dahinter.
@@ -63,28 +64,18 @@ const CODE = [
   hebeFunktion('msQuickPreview', SRC)
 ].join('\n');
 
-// Eine Größenzeile, wie msqReadSizes sie im DOM vorfindet.
-function zeile(kg, qty) {
-  const felder = {
-    '.msq-size-kg': { value: kg == null ? '' : String(kg) },
-    '.msq-size-qty': { value: qty == null ? '' : String(qty) }
-  };
-  return { querySelector: (sel) => felder[sel] || null };
-}
-
-// Ein Lauf des Dialogs: Felder rein, Vorschauzeile raus. `groessen` ist die
-// Liste, die im Dialog steht — [kg, Anzahl] je Zeile. Die alte Kurzform
-// (qty + grainKg) ist dieselbe Liste mit genau einer Zeile.
+// Ein Lauf des Dialogs: Felder rein, Vorschauzeile raus. `groessen` ist, was in
+// den Zählern je Beutelgröße steht — [kg, Anzahl] je Größe, kg aus 1, 2 und 5.
+// Die alte Kurzform (qty + grainKg) ist dieselbe Liste mit genau einer Größe.
 function vorschau({ ms, mode, qty, grainKg, groessen, labType, lang, angesetzt }) {
-  const zeilen = (groessen || [[grainKg, qty]]).map(([kg, n]) => zeile(kg, n));
   const felder = {
     'ms-q-qty': { value: String(qty == null ? '' : qty) },
     'ms-q-labtype': { value: labType || '' },
     'ms-q-preview': { textContent: '', style: {} }
   };
+  for (const [kg, n] of groessen || [[grainKg, qty]]) felder['ms-q-kb-' + kg] = { value: String(n == null ? '' : n) };
   const doc = {
-    getElementById: (id) => felder[id] || null,
-    querySelectorAll: () => zeilen
+    getElementById: (id) => felder[id] || null
   };
   // `angesetzt` ist das Feld "Angesetzt am", JJJJ-MM-TT; ohne Angabe zu (heute).
   const ANLAGE = { 'ms-q': angesetzt ? { offen: true, datum: angesetzt } : { offen: false, datum: '' } };
@@ -161,15 +152,27 @@ describe('Mengenzeile im Schnelldialog', () => {
     assert.match(s, /9\.6 kg trockenes Korn vom Lager/);
   });
 
-  it('sagt nichts, solange eine der beiden Zahlen fehlt', () => {
+  it('sagt nichts, solange keine Größe eine Anzahl hat', () => {
     assert.equal(vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 0, grainKg: 2 }), '');
-    assert.equal(vorschau({ ms: SORTE(), mode: 'labor', labType: 'KB', qty: 10, grainKg: 0 }), '');
+    assert.equal(
+      vorschau({
+        ms: SORTE(),
+        mode: 'labor',
+        labType: 'KB',
+        groessen: [
+          [1, 0],
+          [2, 0],
+          [5, 0]
+        ]
+      }),
+      ''
+    );
   });
 
   it('nennt jede Größe einzeln und summiert über alle', () => {
-    // Der Fall, für den die Zeilenliste da ist: ein Ansatz, eine Kultur, drei
-    // Größen. 10 + 5 + 2 sind 17 Beutel, 10 + 10 + 6 sind 26 kg nass, und bei
-    // 62 % Wasser bleiben davon 9,88 kg trockenes Korn.
+    // Der Fall, für den die Zähler je Größe da sind: ein Ansatz, eine Kultur,
+    // drei Größen. 10 + 5 + 2 sind 17 Beutel, 10 + 10 + 10 sind 30 kg nass, und
+    // bei 62 % Wasser bleiben davon 11,4 kg trockenes Korn.
     const s = vorschau({
       ms: SORTE(),
       mode: 'labor',
@@ -177,19 +180,18 @@ describe('Mengenzeile im Schnelldialog', () => {
       groessen: [
         [1, 10],
         [2, 5],
-        [3, 2]
+        [5, 2]
       ]
     });
     assert.match(s, /17 Beutel Körnerbrut werden angelegt\./);
-    assert.match(s, /10 × 1 kg \+ 5 × 2 kg \+ 2 × 3 kg/);
-    assert.match(s, /26 kg gesamt/);
-    assert.match(s, /9\.88 kg trockenes Korn vom Lager/);
+    assert.match(s, /10 × 1 kg \+ 5 × 2 kg \+ 2 × 5 kg/);
+    assert.match(s, /30 kg gesamt/);
+    assert.match(s, /11\.4 kg trockenes Korn vom Lager/);
   });
 
-  it('übergeht Zeilen ohne Gewicht oder ohne Anzahl', () => {
-    // Eine halb ausgefüllte Zeile ist keine Größe. Sie darf die Summe nicht
-    // verfälschen — und sie darf die Zeile auch nicht leer machen, solange eine
-    // vollständige danebensteht.
+  it('übergeht Größen ohne Anzahl', () => {
+    // Ein Zähler auf 0 ist keine Größe dieses Ansatzes. Er darf die Summe nicht
+    // verfälschen und nicht in der Aufstellung stehen.
     const s = vorschau({
       ms: SORTE(),
       mode: 'labor',
@@ -197,7 +199,7 @@ describe('Mengenzeile im Schnelldialog', () => {
       groessen: [
         [1, 10],
         [2, 0],
-        [null, 5]
+        [5, 0]
       ]
     });
     assert.match(s, /10 Beutel Körnerbrut werden angelegt\./);

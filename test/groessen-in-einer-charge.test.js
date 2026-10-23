@@ -37,14 +37,18 @@ function tmpDb() {
 // ── Der Schnelldialog ────────────────────────────────────────
 
 describe('Größen im Schnelldialog', () => {
-  it('bietet eine Zeilenliste statt eines einzelnen kg-Feldes an', () => {
-    assert.match(HTML, /id="ms-q-sizes"/, 'die Liste der Größen fehlt');
-    assert.match(HTML, /id="ms-q-add-size"/, 'ohne "+ Größe" bleibt es bei einer');
+  it('zählt je Beutelgröße, 1, 2 und 5 kg, statt ein Gewicht eintippen zu lassen', () => {
+    // Wie die Spritzen: drei feste Größen, je ein Zähler, ein Tipp auf +.
+    assert.match(SRC, /^const KB_KG = \[1, 2, 5\];$/m, 'die drei Beutelgrößen fehlen');
+    assert.match(HTML, /id="ms-q-sizes"/, 'die Zähler der Größen fehlen');
+    assert.doesNotMatch(HTML, /id="ms-q-add-size"/, 'eine Größe zum Eintippen gibt es nicht mehr');
     assert.doesNotMatch(
       HTML,
       /id="ms-q-grainkg"/,
       'das alte Einzelfeld steht noch da — zwei Felder für dieselbe Frage, und nur eines wird gelesen'
     );
+    // Jedes Öffnen fängt bei 0 an.
+    assert.match(hebeFunktion('msQuickOpen', SRC), /kbMengenHtml\('ms-q', \{\}\)/);
   });
 
   it('nimmt die Anzahl aus der Zeile, nicht aus dem gemeinsamen Zähler darüber', () => {
