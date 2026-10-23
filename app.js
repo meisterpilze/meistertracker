@@ -20351,10 +20351,10 @@ function _msRecipeProblem(ms) {
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
   // ml gilt nur für eine aufgenommene Spritze (genau eine, eine Größe); sonst
-  // zählt der Dialog je Größe, ab dem, was zuletzt abgefüllt wurde.
+  // zählt der Dialog je Größe, und jede Größe fängt bei 0 an.
   _msQuickCtx = { mode, ms: ms || null, ml: 10 };
   const syBox = document.getElementById('ms-q-sy');
-  if (syBox) syBox.innerHTML = syMengenHtml('ms-q', _syMengenLetzte());
+  if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
   // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
   // would otherwise be offered up for the next batch.
   _inoc = [];
@@ -20940,7 +20940,6 @@ async function msQuickConfirm() {
       fieldError('ms-q-sy', t('batch.fillQty'));
       return;
     }
-    _syMengenMerken(syN);
   } else {
     qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
     if (qty < 1) {
@@ -21332,26 +21331,6 @@ const syTeile = (n) => SY_ML.filter((ml) => n[ml] > 0).map((ml) => t('bmp.previe
     else msQuickPreview();
   });
 })();
-// Was zuletzt abgefüllt wurde, je Größe, steht beim nächsten Mal wieder da: wer
-// heute 3 × 10 und 5 × 20 abfüllt, füllt das nächste Mal meist wieder so ab.
-const SY_N_KEY = 'mp-sy-n';
-function _syMengenLetzte() {
-  try {
-    const s = JSON.parse(localStorage.getItem(SY_N_KEY) || 'null');
-    const n = Object.fromEntries(SY_ML.map((ml) => [ml, Math.max(0, parseInt(s && s[ml], 10) || 0)]));
-    if (sySumme(n) > 0) return n;
-  } catch (e) {
-    /* storage disabled */
-  }
-  return { 10: 1, 20: 0, 50: 0 };
-}
-function _syMengenMerken(n) {
-  try {
-    localStorage.setItem(SY_N_KEY, JSON.stringify(n));
-  } catch (e) {
-    /* storage disabled — next time starts at one 10 ml */
-  }
-}
 function lwUpdate() {
   const type = document.getElementById('lw-type').value;
   const pr = document.getElementById('lw-parent-row'),
@@ -26321,24 +26300,21 @@ function _bmpMerken(type, werte) {
     s[type] = werte;
     localStorage.setItem(BMP_KEY, JSON.stringify(s));
   } catch (e) {
-    /* storage disabled — next time starts at zero */
+    /* storage disabled — next time the weight comes from the grain dialog */
   }
 }
 function bmpOpen(c) {
   const letzte = _bmpLetzte(c.type);
   const groesse = (_msqLastSizes('labor') || [])[0];
-  // Spritzen je Größe. Gemerkt war früher eine Anzahl und eine Größe.
-  const sy =
-    letzte.sy && typeof letzte.sy === 'object'
-      ? letzte.sy
-      : { [SY_ML.includes(parseInt(letzte.ml, 10)) ? parseInt(letzte.ml, 10) : 10]: letzte.SY };
+  // Jede Anzahl fängt bei 0 an: was letztes Mal angesetzt wurde, ist nicht, was
+  // heute ansteht, und eine stehengebliebene Zahl legt unbemerkt zu viel an.
+  // Gemerkt wird nur das Gewicht je Körnerbeutel, eine Größe und keine Menge.
   _bmp = {
     id: c.id,
-    n: Object.fromEntries(bmpArten(c.type).map((k) => [k, parseInt(letzte[k], 10) || 0])),
+    n: Object.fromEntries(bmpArten(c.type).map((k) => [k, 0])),
     kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1,
-    sy: Object.fromEntries(SY_ML.map((ml) => [ml, Math.max(0, parseInt(sy[ml], 10) || 0)]))
+    sy: Object.fromEntries(SY_ML.map((ml) => [ml, 0]))
   };
-  if ('SY' in _bmp.n) _bmp.n.SY = sySumme(_bmp.sy);
   anlageReset('bmp');
   document.getElementById('bmp-title').textContent = t('bmp.title', { id: c.id });
   const name = c.strainName || c.species || '';
@@ -26438,7 +26414,7 @@ function bmpGo() {
   if (angesetzt === null) return;
   const wann = anlageZeitpunkt(angesetzt);
   const sy = _bmp.sy || {};
-  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg, sy }));
+  _bmpMerken(c.type, { kg: _bmp.kg });
   bmpClose();
   // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als
   // Herkunft. Spritzen je Größe, jede Größe ihre eigenen Nummern.
