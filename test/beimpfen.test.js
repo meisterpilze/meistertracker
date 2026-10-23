@@ -56,7 +56,9 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
       const fieldError = () => {};
       const _bmpLesen = () => {};
       const _bmpMerken = () => {};
-      const bmpClose = () => { _bmp = Object.assign({}, _bmp); };
+      // Wie das echte: das Fenster ist zu, _bmp ist weg. Was danach noch aus _bmp
+      // läse, bräche hier ab wie in der App.
+      const bmpClose = () => { _bmp = null; };
       const anlageLesen = () => '';
       const anlageZeitpunkt = () => new Date(2026, 9, 1, 12);
       const kulturenAnlegen = (spec) => {
@@ -67,8 +69,7 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
       const gsSetLines = (l) => { gesetzt.lines = l; };
       const createGrainBatch = (o) => { korn.push({ o, inoc: _inoc.slice() }); return { batchObj: { batchId: 'G-1' }, bagIds: ['G-1-01'] }; };
       const renderLabLog = () => {};
-      const nbPlaceAndPrint = (b, bags) => fenster.push(['korn', b.batchId, bags.length]);
-      const cprShow = (ids, saved, danach) => fenster.push(['etiketten', ids.length, typeof danach]);
+      const etikettenFuerAlles = (ids, saved, korn) => fenster.push(['etiketten', ids.length, korn ? korn.batchObj.batchId : null]);
       ${hebe('bmpGo')}
       bmpGo();
       return { angelegt, korn, fenster, gesetzt };
@@ -94,20 +95,20 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
     );
     assert.deepEqual(r.gesetzt.lines, [{ kg: 1.5, qty: 4 }]);
     assert.equal(r.gesetzt['lw-st'], 2);
-    // Ein Etiketten-Fenster für alle 13 Kulturen, danach das Einlagern der Körnerbrut.
-    assert.deepEqual(r.fenster, [['etiketten', 13, 'function']]);
+    // Ein Schluss für alles: die 13 Kulturen und die Körnerbrut in einem Fenster.
+    assert.deepEqual(r.fenster, [['etiketten', 13, 'G-1']]);
   });
 
-  it('nur Körnerbrut: gleich das Fenster zum Einlagern', () => {
+  it('nur Körnerbrut: der gemeinsame Schluss bekommt die Charge ohne Kulturen', () => {
     const r = lauf({ KB: 6, LC: 0, PD: 0 }, 1);
     assert.deepEqual(r.angelegt, []);
-    assert.deepEqual(r.fenster, [['korn', 'G-1', 1]]);
+    assert.deepEqual(r.fenster, [['etiketten', 0, 'G-1']]);
   });
 
   it('ohne Körnerbrut keine Charge', () => {
     const r = lauf({ KB: 0, LC: 0, PD: 5 }, 1);
     assert.equal(r.korn.length, 0);
-    assert.deepEqual(r.fenster, [['etiketten', 5, 'object']]);
+    assert.deepEqual(r.fenster, [['etiketten', 5, null]]);
   });
 });
 
@@ -136,7 +137,7 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
         return { newC: Array.from({ length: spec.qty }, (_, i) => ({ id: spec.type + spec.ml + '-' + (i + 1) })), saved: Promise.resolve() };
       };
       const renderLabLog = () => {};
-      const cprShow = (ids) => fenster.push(ids.length);
+      const etikettenFuerAlles = (ids) => fenster.push(ids.length);
       ${hebe('bmpGo')}
       bmpGo();
       return { angelegt, fenster, gemerkt };
@@ -242,9 +243,9 @@ describe('Beimpfen: das Fenster', () => {
     assert.match(hebe('renderCiActions'), /data-bi="ci-beimpfen"/);
     assert.match(hebe('ciAction'), /if \(a === 'ci-beimpfen'\) bmpOpen\(c\);/);
   });
-  it('das Etiketten-Fenster gibt nach dem Schließen an das Einlagern weiter', () => {
-    assert.match(hebe('cprShow'), /_cprDanach = danach \|\| null;/);
-    assert.match(hebe('cprClose'), /const weiter = _cprDanach;[\s\S]*if \(weiter\) weiter\(\);/);
+  it('endet im gemeinsamen Schluss: Kulturen und Körnerbrut in einem Etiketten-Fenster', () => {
+    assert.match(hebe('bmpGo'), /etikettenFuerAlles\(ids, Promise\.all\(saves\), korn\);/);
+    assert.doesNotMatch(APP, /_cprDanach/);
   });
 });
 
