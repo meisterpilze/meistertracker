@@ -357,8 +357,24 @@
           <label data-i18n="msq.pickSorte">Pilzsorte</label>
           <select id="ms-q-sorte" onchange="msQuickSorteChanged()"></select>
         </div>
+        <!-- Eine Art aus der Liste, oder mehrere aus derselben Herkunft: "Mehrere"
+             macht aus der Liste Knöpfe zum Antippen, und jede angetippte Art
+             bekommt ihre Zahlen (msqMehrereUmschalten, msqArtenRender). -->
         <div id="ms-q-labtype-wrap" style="display: none; margin-bottom: 8px">
-          <label data-i18n="msq.labType">Art</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+            <label data-i18n="msq.labType">Art</label>
+            <button
+              type="button"
+              id="ms-q-mehrere"
+              class="btn btn-sm"
+              aria-pressed="false"
+              style="min-height: var(--tap-sm)"
+              data-i18n="msq.mehrere"
+            >
+              Mehrere
+            </button>
+          </div>
+          <div id="ms-q-arten" role="group" style="display: none; flex-wrap: wrap; gap: 6px; margin-top: 4px"></div>
           <select id="ms-q-labtype" onchange="msQuickLabTypeChanged()">
             <!-- Beschriftungen aus derselben Quelle wie im langen Formular:
                  fest eingetragener Text zeigte allen Sprachen dieselbe an.
@@ -371,11 +387,21 @@
             <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
           </select>
         </div>
+        <!-- Bei mehreren Arten: je eine Anzahl für Petrischalen und Flüssigkultur.
+             Spritzen und Körnerbrut bringen ihre eigenen Felder mit (unten). -->
+        <div id="ms-q-multi" style="display: none; margin-bottom: 8px"></div>
         <!-- Spritzen gibt es in 10, 20 und 50 ml, und abgefüllt wird oft mehr als
              eine Größe auf einmal: je Größe eine Anzahl, ein Etiketten-Fenster für
              alle (syMengenHtml). Nur eine aufgenommene Spritze ist genau eine und
              wählt ihre Größe mit drei Knöpfen (msQuickRender). -->
         <div id="ms-q-sy-wrap" style="display: none; margin-bottom: 8px">
+          <div
+            id="ms-q-sy-head"
+            style="display: none; font-weight: 600; padding-top: 8px; border-top: 1px solid var(--c-border-light)"
+            data-i18n="msq.art.SY"
+          >
+            Spritzen
+          </div>
           <label data-i18n="sy.perSize">Anzahl je Größe</label>
           <div id="ms-q-sy"></div>
         </div>
@@ -391,6 +417,13 @@
              field this replaced. Shown for Körnerbrut in either mode — as
              Laborarbeit and as the Charge of a Körner-Sorte (see msQuickRender). -->
         <div id="ms-q-sizes-wrap" style="display: none; margin-bottom: 8px">
+          <div
+            id="ms-q-kb-head"
+            style="display: none; font-weight: 600; padding-top: 8px; border-top: 1px solid var(--c-border-light)"
+            data-i18n="msq.art.KB"
+          >
+            Körnerbrut
+          </div>
           <label data-i18n="msq.grainSizes">Größen (kg × Beutel)</label>
           <div id="ms-q-sizes"></div>
           <button type="button" id="ms-q-add-size" class="btn btn-sm" data-i18n="msq.addSize">+ Größe</button>
@@ -904,7 +937,7 @@
           </button>
         </div>
         <div id="cpr-head" style="font-size: 13px; color: var(--c-text-sec); margin-bottom: 8px"></div>
-        <div class="sec" data-i18n="lab.createdIds">Created culture IDs</div>
+        <div class="sec" id="cpr-ids-title" data-i18n="lab.createdIds">Created culture IDs</div>
         <div
           id="cpr-ids"
           style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 220px; overflow-y: auto"
