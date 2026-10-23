@@ -11718,8 +11718,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
-  // /api/syringe-stock/<Art>/<ml>; ohne Groesse die 10er, wie vor der Wahl.
-  const syringeSkuMatch = req.url.match(/^\/api\/syringe-stock\/(\d+)(?:\/(\d+))?$/);
+  // /api/syringe-stock/<Art>/<ml>, die Petrischale unter /<Art>/pd; ohne
+  // Groesse die 10er, wie vor der Wahl.
+  const syringeSkuMatch = req.url.match(/^\/api\/syringe-stock\/(\d+)(?:\/(\d+|pd))?$/);
   if (req.method === 'PUT' && syringeSkuMatch) {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -11728,7 +11729,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       try {
-        db.setSyringeSku(database, Number(syringeSkuMatch[1]), Number(syringeSkuMatch[2] || 10), data.sku);
+        db.setSyringeSku(database, Number(syringeSkuMatch[1]), syringeSkuMatch[2] || 10, data.sku);
       } catch (err) {
         // The refusals setSyringeSku makes are meant for the person typing.
         jsonErr(res, 400, err.message);

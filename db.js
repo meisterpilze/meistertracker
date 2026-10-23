@@ -3009,6 +3009,31 @@ const MIGRATIONS = [
       db.exec('DROP TABLE syringe_stock_sku');
       db.exec('ALTER TABLE syringe_stock_sku_neu RENAME TO syringe_stock_sku');
     }
+  },
+  {
+    version: 103,
+    description: 'Petrischalen an Billbee: SKU je Art und Kulturtyp, nicht nur je Spritzengroesse',
+    fn(db) {
+      // Petrischalen werden verkauft wie Spritzen und bekommen ihren Bestand
+      // ebenso aus dem Labor. Eine Petrischale hat keine Groesse, also traegt
+      // ihre Zeile ml 0; die vorhandenen Zeilen sind alle Spritzen.
+      db.exec(`CREATE TABLE syringe_stock_sku_neu (
+        strain_id     INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        type          TEXT NOT NULL DEFAULT 'SY' CHECK (type IN ('SY', 'PD')),
+        ml            INTEGER NOT NULL DEFAULT 10,
+        sku           TEXT NOT NULL UNIQUE,
+        pushed_count  INTEGER,
+        pushed_at     TEXT,
+        billbee_stock REAL,
+        last_error    TEXT,
+        last_try      TEXT,
+        PRIMARY KEY (strain_id, type, ml)
+      )`);
+      db.exec(`INSERT INTO syringe_stock_sku_neu(strain_id, type, ml, sku, pushed_count, pushed_at, billbee_stock, last_error, last_try)
+               SELECT strain_id, 'SY', ml, sku, pushed_count, pushed_at, billbee_stock, last_error, last_try FROM syringe_stock_sku`);
+      db.exec('DROP TABLE syringe_stock_sku');
+      db.exec('ALTER TABLE syringe_stock_sku_neu RENAME TO syringe_stock_sku');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13028,13 +13053,28 @@ function setChannelSyncState(db, channel, s) {
   incrementDataVersion(db);
 }
 
-// ── Spritzenbestand → Billbee ──
-// Eine Spritze ist eine Zeile in cultures (type 'SY'). Auf Lager ist sie, solange
-// sie aktiv oder gelagert ist; 'used' und 'contam' sind weg. Gezaehlt wird je Art,
+// ── Spritzen- und Petrischalenbestand → Billbee ──
+// Eine Spritze ist eine Zeile in cultures (type 'SY'), eine Petrischale eine mit
+// type 'PD'. Auf Lager ist sie, solange sie aktiv oder gelagert ist; 'used',
+// 'contam' und 'sold' sind weg. Gezaehlt wird je Art (Spritzen dazu je Groesse),
 // und genau diese Zahl bekommt Billbee — nicht eine Aenderung, siehe
 // syringe-stock.js fuer das Warum.
 const SYRINGE_STOCK_STATUSES = ['active', 'stored'];
 const SYRINGE_SYNC_KEY = 'syringe_stock_sync';
+// Was je Art ein eigener Artikel im Shop ist: jede Spritzengroesse und die
+// Petrischale. Die Petrischale hat keine Groesse; ihre Zeile traegt ml 0.
+const STOCK_SLOTS = [...SYRINGE_SIZES.map((ml) => ({ type: 'SY', ml })), { type: 'PD', ml: 0 }];
+
+// Welcher Artikel gemeint ist: eine Spritzengroesse (10, 20, 50) oder 'pd' fuer
+// die Petrischale. So heisst es auch in der Adresse /api/syringe-stock/<Art>/pd.
+function _stockSlot(slot) {
+  if (String(slot).toLowerCase() === 'pd') return { type: 'PD', ml: 0 };
+  const ml = Number(slot);
+  if (!SYRINGE_SIZES.includes(ml)) {
+    throw new Error('Spritzen gibt es in ' + SYRINGE_SIZES.join(', ') + ' ml, nicht in ' + slot);
+  }
+  return { type: 'SY', ml };
+}
 
 function syringeStockSyncEnabled(db) {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SYRINGE_SYNC_KEY);
@@ -13049,39 +13089,43 @@ function setSyringeStockSyncEnabled(db, on) {
 }
 
 /**
- * Jede Art in jeder Spritzengroesse, mit ihrer Zahl und, falls vergeben, ihrer
- * Billbee-SKU. Eine 10er und eine 50er sind im Shop zwei Artikel, also zwei
- * Zeilen.
+ * Jede Art in jeder Spritzengroesse und als Petrischale, mit ihrer Zahl und,
+ * falls vergeben, ihrer Billbee-SKU. Eine 10er, eine 50er und eine Petrischale
+ * sind im Shop drei Artikel, also drei Zeilen. `slot` sagt, welcher: die
+ * Groesse in ml oder 'pd'.
  *
- * Gezeigt wird eine Art (mit allen Groessen), wenn sie im Programm ist, eine SKU
- * hat oder Spritzen auf Lager hat — eine Art ausser Programm mit Spritzen im
+ * Gezeigt wird eine Art (mit allen Zeilen), wenn sie im Programm ist, eine SKU
+ * hat oder etwas auf Lager hat — eine Art ausser Programm mit Spritzen im
  * Kuehlschrank darf nicht unsichtbar werden. Alte Zeilen ohne strain_id zaehlen
  * ueber den Namen, Spritzen ohne Groesse als 10er.
  */
 function listSyringeStock(db) {
   const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
-  const sizes = SYRINGE_SIZES.map(() => '(?)').join(',');
+  const slots = STOCK_SLOTS.map(() => '(?, ?)').join(',');
   const rows = db
     .prepare(
-      `WITH sz(ml) AS (VALUES ${sizes})
-       SELECT ms.id AS strain_id, ms.name, ms.im_programm, sz.ml,
+      `WITH sz(type, ml) AS (VALUES ${slots})
+       SELECT ms.id AS strain_id, ms.name, ms.im_programm, sz.type, sz.ml,
               (SELECT COUNT(*) FROM cultures c
-                WHERE c.type = 'SY' AND c.status IN (${st}) AND COALESCE(c.ml, 10) = sz.ml
+                WHERE c.type = sz.type AND c.status IN (${st})
+                  AND (sz.type = 'PD' OR COALESCE(c.ml, 10) = sz.ml)
                   AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
               s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try
          FROM mushroom_strains ms
          CROSS JOIN sz
-         LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id AND s.ml = sz.ml
-        ORDER BY ms.name COLLATE NOCASE, sz.ml`
+         LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id AND s.type = sz.type AND s.ml = sz.ml
+        ORDER BY ms.name COLLATE NOCASE, sz.type = 'PD', sz.ml`
     )
-    .all(...SYRINGE_SIZES, ...SYRINGE_STOCK_STATUSES);
+    .all(...STOCK_SLOTS.flatMap((s) => [s.type, s.ml]), ...SYRINGE_STOCK_STATUSES);
   const zeigen = new Set(rows.filter((r) => r.im_programm !== 0 || r.sku || r.n > 0).map((r) => r.strain_id));
   return rows
     .filter((r) => zeigen.has(r.strain_id))
     .map((r) => ({
       strainId: r.strain_id,
       name: r.name,
-      ml: r.ml,
+      type: r.type,
+      ml: r.type === 'PD' ? null : r.ml,
+      slot: r.type === 'PD' ? 'pd' : r.ml,
       count: r.n,
       sku: r.sku || '',
       pushedCount: r.pushed_count,
@@ -13092,69 +13136,71 @@ function listSyringeStock(db) {
     }));
 }
 
-/** SKU einer Art in einer Groesse setzen; leer nimmt sie aus dem Abgleich. */
-function setSyringeSku(db, strainId, ml, sku) {
+/**
+ * SKU einer Art setzen, fuer eine Spritzengroesse oder (slot 'pd') die
+ * Petrischale; leer nimmt sie aus dem Abgleich.
+ */
+function setSyringeSku(db, strainId, slot, sku) {
   const id = Number(strainId);
   if (!Number.isInteger(id) || !db.prepare('SELECT 1 FROM mushroom_strains WHERE id = ?').get(id)) {
     throw new Error('Diese Art gibt es nicht');
   }
-  const groesse = Number(ml);
-  if (!SYRINGE_SIZES.includes(groesse)) {
-    throw new Error('Spritzen gibt es in ' + SYRINGE_SIZES.join(', ') + ' ml, nicht in ' + ml);
-  }
+  const { type, ml } = _stockSlot(slot);
   const clean = String(sku == null ? '' : sku).trim();
   if (!clean) {
-    db.prepare('DELETE FROM syringe_stock_sku WHERE strain_id = ? AND ml = ?').run(id, groesse);
+    db.prepare('DELETE FROM syringe_stock_sku WHERE strain_id = ? AND type = ? AND ml = ?').run(id, type, ml);
     incrementDataVersion(db);
     return;
   }
   const other = db
-    .prepare('SELECT strain_id FROM syringe_stock_sku WHERE sku = ? AND NOT (strain_id = ? AND ml = ?)')
-    .get(clean, id, groesse);
+    .prepare(
+      'SELECT strain_id, type FROM syringe_stock_sku WHERE sku = ? AND NOT (strain_id = ? AND type = ? AND ml = ?)'
+    )
+    .get(clean, id, type, ml);
   if (other) {
     // Zwei Zeilen auf einer SKU wuerden sich gegenseitig ueberschreiben, und der
     // Shop zeigte immer die Zahl der Zeile, die zuletzt gemeldet hat.
-    throw new Error(
-      other.strain_id === id
-        ? 'Die SKU ' + clean + ' gehört schon zu einer anderen Größe'
-        : 'Die SKU ' + clean + ' gehört schon zu einer anderen Art'
-    );
+    let wo = 'einer anderen Art';
+    if (other.strain_id === id) {
+      if (other.type === 'PD') wo = 'den Petrischalen dieser Art';
+      else if (type === 'PD') wo = 'den Spritzen dieser Art';
+      else wo = 'einer anderen Größe';
+    }
+    throw new Error('Die SKU ' + clean + ' gehört schon zu ' + wo);
   }
   // Eine neue SKU ist ein Artikel, dem noch nie etwas gemeldet wurde. Also
   // vergessen, was dem alten gemeldet wurde, sonst bekaeme der neue nichts.
   db.prepare(
-    `INSERT INTO syringe_stock_sku(strain_id, ml, sku) VALUES(?, ?, ?)
-     ON CONFLICT(strain_id, ml) DO UPDATE SET
+    `INSERT INTO syringe_stock_sku(strain_id, type, ml, sku) VALUES(?, ?, ?, ?)
+     ON CONFLICT(strain_id, type, ml) DO UPDATE SET
        sku = excluded.sku,
        pushed_count = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.pushed_count END,
        pushed_at = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.pushed_at END,
        billbee_stock = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.billbee_stock END,
        last_error = NULL`
-  ).run(id, groesse, clean);
+  ).run(id, type, ml, clean);
   incrementDataVersion(db);
 }
 
 /**
- * Ergebnis eines Versuchs festhalten. Ohne incrementDataVersion: das ist
- * Buchhaltung des Abgleichs, keine Laboraenderung, und sie soll nicht jeden
- * offenen Bildschirm neu laden lassen.
+ * Ergebnis eines Versuchs festhalten; `slot` wie bei setSyringeSku. Ohne
+ * incrementDataVersion: das ist Buchhaltung des Abgleichs, keine
+ * Laboraenderung, und sie soll nicht jeden offenen Bildschirm neu laden lassen.
  */
-function recordSyringePush(db, strainId, ml, r) {
+function recordSyringePush(db, strainId, slot, r) {
+  const { type, ml } = _stockSlot(slot);
   const now = new Date().toISOString();
   if (r.error) {
-    db.prepare('UPDATE syringe_stock_sku SET last_error = ?, last_try = ? WHERE strain_id = ? AND ml = ?').run(
-      r.error,
-      now,
-      strainId,
-      ml
-    );
+    db.prepare(
+      'UPDATE syringe_stock_sku SET last_error = ?, last_try = ? WHERE strain_id = ? AND type = ? AND ml = ?'
+    ).run(r.error, now, strainId, type, ml);
     return;
   }
   db.prepare(
     `UPDATE syringe_stock_sku
         SET pushed_count = ?, pushed_at = ?, billbee_stock = ?, last_error = NULL, last_try = ?
-      WHERE strain_id = ? AND ml = ?`
-  ).run(r.count, now, r.billbeeStock != null ? r.billbeeStock : null, now, strainId, ml);
+      WHERE strain_id = ? AND type = ? AND ml = ?`
+  ).run(r.count, now, r.billbeeStock != null ? r.billbeeStock : null, now, strainId, type, ml);
 }
 
 function getOrder(db, id) {
