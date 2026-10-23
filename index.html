@@ -5059,22 +5059,23 @@
                 ></div>
               </div>
             </div>
-            <!-- Syringe stock → Billbee → shops (syringe-stock.js) -->
+            <!-- Syringe and petri dish stock → Billbee → shops (syringe-stock.js) -->
             <div class="card" id="syr-card">
-              <div class="sec" data-i18n="syr.title">Spritzenbestand an Billbee</div>
+              <div class="sec" data-i18n="syr.title">Spritzen- und Petrischalenbestand an Billbee</div>
               <p class="fs-meta"
                 style="color: var(--c-text-muted); margin-bottom: 10px; line-height: 1.6"
                 data-i18n="syr.desc"
               >
-                Meistertracker zählt die Flüssigkultur-Spritzen je Art und Größe (aktiv und gelagert) und meldet die
-                Zahl an Billbee, sobald sie sich ändert. Billbee zieht offene Bestellungen ab und gibt den Bestand an
-                die Shops weiter, bei denen dort der Bestandsabgleich an ist. Verschickte Spritzen rausscannen, sonst
-                bietet der Shop sie nach dem Versand wieder an. Eine 10-ml- und eine 50-ml-Spritze sind im Shop zwei
-                Artikel, also hat jede Größe ihre eigene SKU. Gemeldet wird nur, was eine SKU hat.
+                Meistertracker zählt die Flüssigkultur-Spritzen je Art und Größe und die Petrischalen je Art (aktiv
+                und gelagert) und meldet die Zahl an Billbee, sobald sie sich ändert. Billbee zieht offene Bestellungen
+                ab und gibt den Bestand an die Shops weiter, bei denen dort der Bestandsabgleich an ist. Verschickte
+                Spritzen und Petrischalen als verkauft markieren oder rausscannen, sonst bietet der Shop sie nach dem
+                Versand wieder an. Eine 10-ml- und eine 50-ml-Spritze sind im Shop zwei Artikel, die Petrischale ein
+                dritter, also hat jeder seine eigene SKU. Gemeldet wird nur, was eine SKU hat.
               </p>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0 0 10px">
                 <input type="checkbox" id="syr-enabled" style="width: auto" />
-                <span data-i18n="syr.enable">Spritzenzahl an Billbee melden</span>
+                <span data-i18n="syr.enable">Spritzen und Petrischalen an Billbee melden</span>
               </label>
               <div id="syr-rows" style="display: flex; flex-direction: column; gap: 8px; max-width: 520px"></div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px">

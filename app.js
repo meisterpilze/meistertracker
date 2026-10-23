@@ -13043,8 +13043,9 @@ async function loadChannelsSettings() {
   loadSyringeStock();
 }
 
-// ── Spritzenbestand → Billbee (Karte unter Billbee) ──
-// Je Art ein Block, darin eine Zeile je Spritzengröße: Zahl im Labor, SKU-Feld,
+// ── Spritzen- und Petrischalenbestand → Billbee (Karte unter Billbee) ──
+// Je Art ein Block, darin eine Zeile je Spritzengröße und eine für die
+// Petrischale: Zahl im Labor, SKU-Feld,
 // und was Billbee zuletzt gesagt hat. Die SKU speichert beim Verlassen des
 // Feldes, ohne Knopf.
 async function loadSyringeStock() {
@@ -13074,8 +13075,9 @@ function renderSyringeStock(d) {
   if (!d.rows.length) {
     box.innerHTML = '<div class="fs-meta" style="color: var(--c-text-muted)">' + esc(t('syr.noSpecies')) + '</div>';
   } else {
-    // Eine Art, darunter ihre Größen: jede Größe ist im Shop ein eigener Artikel
-    // und hat ihre eigene SKU. Die Zeilen kommen je Art zusammenhängend.
+    // Eine Art, darunter ihre Größen und die Petrischale: jede ist im Shop ein
+    // eigener Artikel und hat ihre eigene SKU. Die Zeilen kommen je Art
+    // zusammenhängend.
     const arten = [];
     for (const r of d.rows) {
       const letzte = arten[arten.length - 1];
@@ -13085,14 +13087,14 @@ function renderSyringeStock(d) {
     const zeile = (r) =>
       '<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px">' +
       '<div style="flex: 1 1 120px; min-width: 0"><b>' +
-      (r.ml || 10) +
-      ' ml</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
+      (r.type === 'PD' ? esc(t('syr.petri')) : (r.ml || 10) + ' ml') +
+      '</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
       esc(t('syr.inLab', { n: r.count })) +
       '</span></div>' +
       '<input type="text" class="syr-sku" data-strain="' +
       r.strainId +
       '" data-ml="' +
-      (r.ml || 10) +
+      esc(String(r.slot || r.ml || 10)) +
       '" value="' +
       esc(r.sku) +
       '" placeholder="' +

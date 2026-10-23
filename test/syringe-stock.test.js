@@ -130,11 +130,12 @@ describe('Spritzen in 10, 20 und 50 ml', () => {
       db
         .listSyringeStock(d)
         .filter((r) => r.strainId === a)
-        .map((r) => [r.ml, r.count]),
+        .map((r) => [r.slot, r.count]),
       [
         [10, 1],
         [20, 1],
-        [50, 2]
+        [50, 2],
+        ['pd', 0]
       ]
     );
   });
@@ -160,6 +161,119 @@ describe('Spritzen in 10, 20 und 50 ml', () => {
     assert.equal(row(d, a, 50).count, 3);
     assert.throws(() => db.updateCulture(d, id, { ml: 15 }), /10, 20, 50 ml/);
     assert.throws(() => db.updateCulture(d, 'LC-TZ-081026-01', { ml: 10 }), /nur eine Spritze/);
+  });
+});
+
+describe('Petrischalen: ein Artikel je Art, wie eine Spritzengröße', () => {
+  let d, dir, a, b, sent;
+  let pd = 0;
+  const petri = (strainId, status) =>
+    db.insertCultures(d, [
+      {
+        id: 'PD-TST-081026-' + String(++pd).padStart(2, '0'),
+        type: 'PD',
+        strainId,
+        status,
+        notes: '',
+        created: '2026-10-08T00:00:00Z'
+      }
+    ]);
+  const petriRow = (strainId) => db.listSyringeStock(d).find((r) => r.strainId === strainId && r.type === 'PD');
+  before(() => {
+    ({ d, dir } = freshDb());
+    a = Number(db.createMushroomStrain(d, { name: 'Testart Eta', kuerzel: 'TH' }));
+    b = Number(db.createMushroomStrain(d, { name: 'Testart Theta', kuerzel: 'TT' }));
+  });
+  after(() => {
+    d.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('zählt aktive und gelagerte Petrischalen, nicht verkaufte, verbrauchte oder kontaminierte', () => {
+    petri(a, 'active');
+    petri(a, 'stored');
+    petri(a, 'sold');
+    petri(a, 'used');
+    petri(a, 'contam');
+    syringe(d, a, 'active');
+    assert.equal(petriRow(a).count, 2);
+    assert.equal(petriRow(a).ml, null);
+    assert.equal(petriRow(a).slot, 'pd');
+    assert.equal(row(d, a, 10).count, 1, 'a syringe is not a petri dish');
+  });
+
+  it('die Petrischale hat ihre eigene SKU, getrennt von den Spritzen', () => {
+    db.setSyringeSku(d, a, 'pd', ' PETRI-TEST-ETA ');
+    db.setSyringeSku(d, a, 10, 'SPRI-TEST-ETA10');
+    assert.equal(petriRow(a).sku, 'PETRI-TEST-ETA');
+    assert.equal(row(d, a, 10).sku, 'SPRI-TEST-ETA10');
+    assert.throws(() => db.setSyringeSku(d, a, 20, 'PETRI-TEST-ETA'), /Petrischalen dieser Art/);
+    assert.throws(() => db.setSyringeSku(d, a, 'PD', 'SPRI-TEST-ETA10'), /Spritzen dieser Art/);
+    assert.throws(() => db.setSyringeSku(d, b, 'pd', 'PETRI-TEST-ETA'), /anderen Art/);
+    db.setSyringeSku(d, a, 'pd', '');
+    assert.equal(petriRow(a).sku, '');
+    assert.equal(row(d, a, 10).sku, 'SPRI-TEST-ETA10', 'removing the petri SKU leaves the syringe alone');
+  });
+
+  it('der Abgleich meldet die Petrischale unter ihrer SKU und hält das Ergebnis an ihrer Zeile fest', async () => {
+    db.updateChannelConfig(d, 'billbee', BILLBEE_CFG);
+    db.setSyringeStockSyncEnabled(d, true);
+    db.setSyringeSku(d, a, 'pd', 'PETRI-TEST-ETA');
+    const sync = createSyringeStockSync({
+      getDatabase: () => d,
+      dbApi: db,
+      channels: {
+        getChannelProvider: () => ({
+          async setStock(cfg, args) {
+            sent.push(args);
+            return { ok: true, currentStock: args.count };
+          }
+        })
+      },
+      log: () => {},
+      skip: false
+    });
+    sent = [];
+    await sync.runOnce();
+    sync.stop();
+    const p = sent.find((x) => x.sku === 'PETRI-TEST-ETA');
+    assert.equal(p.count, 2);
+    assert.match(p.reason, /2 Petrischalen Testart Eta/);
+    assert.match(sent.find((x) => x.sku === 'SPRI-TEST-ETA10').reason, /1 Spritzen 10 ml/);
+    assert.equal(petriRow(a).pushedCount, 2);
+    assert.equal(row(d, a, 10).pushedCount, 1, 'each row keeps its own result');
+  });
+});
+
+describe('Migration 103: vorhandene SKUs bleiben Spritzen', () => {
+  it('nimmt die Zeilen aus der Tabelle ohne Kulturtyp als Spritzen mit', () => {
+    const { d, dir } = freshDb();
+    const a = Number(db.createMushroomStrain(d, { name: 'Testart Iota', kuerzel: 'TI' }));
+    // Die Tabelle, wie Migration 102 sie hinterliess.
+    d.exec('DROP TABLE syringe_stock_sku');
+    d.exec(`CREATE TABLE syringe_stock_sku (
+      strain_id INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+      ml INTEGER NOT NULL DEFAULT 10, sku TEXT NOT NULL UNIQUE, pushed_count INTEGER, pushed_at TEXT,
+      billbee_stock REAL, last_error TEXT, last_try TEXT, PRIMARY KEY (strain_id, ml))`);
+    d.prepare('INSERT INTO syringe_stock_sku(strain_id, ml, sku, pushed_count) VALUES(?, ?, ?, ?)').run(
+      a,
+      50,
+      'SPRI-TEST-IOTA50',
+      4
+    );
+    d.prepare('DELETE FROM schema_version WHERE version = 103').run();
+    const file = d.location();
+    d.close();
+    const d2 = db.openDb(file);
+    try {
+      const r = db.listSyringeStock(d2).find((x) => x.sku === 'SPRI-TEST-IOTA50');
+      assert.equal(r.type, 'SY');
+      assert.equal(r.ml, 50);
+      assert.equal(r.pushedCount, 4, 'nothing is sent again');
+    } finally {
+      d2.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
