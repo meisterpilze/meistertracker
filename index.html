@@ -371,8 +371,14 @@
             <option value="KB" data-i18n="lab.kb">Körnerbrut</option>
           </select>
         </div>
-        <!-- Spritzen gibt es in 10, 20 und 50 ml. Drei Knöpfe statt einer Liste:
-             ein Tipp, und die Wahl steht sichtbar da (msQuickRender). -->
+        <!-- Spritzen gibt es in 10, 20 und 50 ml, und abgefüllt wird oft mehr als
+             eine Größe auf einmal: je Größe eine Anzahl, ein Etiketten-Fenster für
+             alle (syMengenHtml). Nur eine aufgenommene Spritze ist genau eine und
+             wählt ihre Größe mit drei Knöpfen (msQuickRender). -->
+        <div id="ms-q-sy-wrap" style="display: none; margin-bottom: 8px">
+          <label data-i18n="sy.perSize">Anzahl je Größe</label>
+          <div id="ms-q-sy"></div>
+        </div>
         <div id="ms-q-ml-wrap" style="display: none; margin-bottom: 8px">
           <label data-i18n="sy.size">Größe</label>
           <div id="ms-q-ml"></div>

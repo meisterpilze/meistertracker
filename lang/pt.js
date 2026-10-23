@@ -793,6 +793,7 @@ window.LANG['pt'] = {
   'bmp.noSorte': '{id} não tem variedade. Defina uma na lista de culturas e inocule.',
   'bmp.previewSy': '{n} seringas de {ml} ml',
   'sy.size': 'Tamanho',
+  'sy.perSize': 'Quantidade por tamanho',
   'ci.sizeDone': '{id} é agora uma seringa de {ml} ml.',
   'ci.availableLbl': 'Disponíveis deste lote',
   'ci.available': '{n} de {total} disponíveis',

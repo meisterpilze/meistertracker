@@ -1088,6 +1088,7 @@ window.LANG['en'] = {
   'bmp.noSorte': '{id} has no variety. Set one in the culture list, then inoculate.',
   'bmp.previewSy': '{n} syringes of {ml} ml',
   'sy.size': 'Size',
+  'sy.perSize': 'Count per size',
   'ci.sizeDone': '{id} is now a {ml} ml syringe.',
   'ci.availableLbl': 'Available from this batch',
   'ci.available': '{n} of {total} available',

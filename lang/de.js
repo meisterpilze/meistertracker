@@ -1093,6 +1093,7 @@ window.LANG['de'] = {
   'bmp.noSorte': '{id} hat keine Pilzsorte. In der Kulturliste eine eintragen, dann beimpfen.',
   'bmp.previewSy': '{n} Spritzen à {ml} ml',
   'sy.size': 'Größe',
+  'sy.perSize': 'Anzahl je Größe',
   'ci.sizeDone': '{id} ist jetzt eine {ml}-ml-Spritze.',
   'ci.availableLbl': 'Aus diesem Ansatz verfügbar',
   'ci.available': '{n} von {total} da',
