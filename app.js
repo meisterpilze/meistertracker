@@ -20351,8 +20351,9 @@ function _msRecipeProblem(ms) {
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
   // ml gilt nur für eine aufgenommene Spritze (genau eine, eine Größe); sonst
-  // zählt der Dialog je Größe, und jede Größe fängt bei 0 an.
-  _msQuickCtx = { mode, ms: ms || null, ml: 10 };
+  // zählt der Dialog je Größe, und jede Größe fängt bei 0 an. Jedes Öffnen
+  // beginnt mit einer Art; "Mehrere" ist ein Tipp (msqMehrereUmschalten).
+  _msQuickCtx = { mode, ms: ms || null, ml: 10, mehrere: false, arten: [], n: { PD: 0, LC: 0 } };
   const syBox = document.getElementById('ms-q-sy');
   if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
   // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
@@ -20426,8 +20427,15 @@ function msQuickRender() {
   const lt = document.getElementById('ms-q-labtype-wrap');
   if (lt) lt.style.display = mode === 'labor' ? '' : 'none';
   const artEl = document.getElementById('ms-q-labtype');
+  // Bei mehreren Arten zeigt jede angetippte ihre Felder; die gemeinsame
+  // Anzahl fällt weg, jede Art zählt für sich.
+  const mehrere = msqMehrere();
+  const arten = msqArten();
+  // Auch bei einer Charge: was von "Mehrere" noch dasteht, geht weg.
+  msqArtenRender();
+  if (goEl && !mehrere) goEl.textContent = t('msq.create');
   const mlWrap = document.getElementById('ms-q-ml-wrap');
-  const istSy = mode === 'labor' && !!artEl && artEl.value === 'SY';
+  const istSy = mode === 'labor' && (mehrere ? arten.includes('SY') : !!artEl && artEl.value === 'SY');
   // Eine aufgenommene Spritze ist genau eine: eine Größe zum Wählen. Sonst je
   // Größe eine Anzahl, und die gemeinsame Anzahl fällt weg.
   const syEine = istSy && !!intake;
@@ -20439,19 +20447,19 @@ function msQuickRender() {
   // Grain spawn is a Charge in everything but name: it is weighed, incubates,
   // and produces barcoded bags. So it wants the days and kg fields that the
   // count-based culture types don't.
-  const isKb = _msqIsGrainspawn();
+  const isKb = mehrere ? arten.includes('KB') : _msqIsGrainspawn();
   const dw = document.getElementById('ms-q-days-wrap');
   if (dw) dw.style.display = mode === 'charge' || isKb ? '' : 'none';
   // Koernerbrut zaehlt nach Groesse, alles andere nach Stueck. Die Zeilenliste
   // und der gemeinsame Anzahl-Zaehler sind zwei Antworten auf dieselbe Frage,
   // also steht immer nur eine davon da -- sonst haette ein Ansatz aus 10x1 und
   // 5x2 eine Anzahl darueber, die zu keiner der beiden Zeilen gehoert.
-  const grain = _msqIsGrain();
+  const grain = mehrere ? isKb : _msqIsGrain();
   const sw = document.getElementById('ms-q-sizes-wrap');
   if (sw) sw.style.display = grain ? '' : 'none';
   const qw = document.getElementById('ms-q-qty-wrap');
   // Ein aufgenommenes Etikett ist genau ein Glas.
-  if (qw) qw.style.display = grain || intake || syViele ? 'none' : '';
+  if (qw) qw.style.display = grain || intake || syViele || mehrere ? 'none' : '';
   const grid = document.getElementById('ms-q-grid');
   if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
   if (grain && !_msqSizesTouched) msqSeedSizes();
@@ -20499,6 +20507,12 @@ function msQuickRender() {
 // Dialog keine Laborarbeit ist. [] heißt: diese Art hat keine Herkunft (Slant).
 function msqParentTypes() {
   if (!_msQuickCtx || _msQuickCtx.mode !== 'labor') return null;
+  // Mehrere Arten teilen sich die eine Herkunft: sie muss zu jeder passen.
+  if (msqMehrere())
+    return msqArten().reduce(
+      (passt, a) => passt.filter((x) => (LAB_PARENT_TYPES[a] || []).includes(x)),
+      ['MC', 'PD', 'LC', 'SY']
+    );
   const el = document.getElementById('ms-q-labtype');
   return LAB_PARENT_TYPES[(el && el.value) || 'MC'] || [];
 }
@@ -20515,10 +20529,20 @@ function msqInocAdd(rawId) {
   if (types) {
     const art = document.getElementById('ms-q-labtype');
     const artName = art && art.selectedOptions[0] ? art.selectedOptions[0].textContent : '';
-    const isKb = art && art.value === 'KB';
-    // Körnerbrut darf auch aus einem Körnerbeutel kommen (Körner aus Körnern).
+    const mehrere = msqMehrere();
+    const isKb = !mehrere && art && art.value === 'KB';
+    // Körnerbrut darf auch aus einem Körnerbeutel kommen (Körner aus Körnern) —
+    // aber nur allein: eine Petrischale wächst nicht aus einem Körnerbeutel.
     if (!(isKb && !c) && (!c || !types.includes(c.type)))
-      return t('msq.parentWrongType', { id: id, art: artName, types: types.join(', ') });
+      return mehrere
+        ? t('msq.parentWrongTypeMulti', {
+            id: id,
+            art: msqArten()
+              .map((a) => t('msq.art.' + a))
+              .join(', '),
+            types: types.join(', ')
+          })
+        : t('msq.parentWrongType', { id: id, art: artName, types: types.join(', ') });
     const ms = _msQuickCtx.ms;
     if (c && ms && c.strainId && c.strainId !== ms.id)
       return t('msq.parentOtherSorte', { id: c.id, sorte: c.strainName || c.species || '', ziel: ms.name });
@@ -20635,6 +20659,140 @@ function _msqIsGrain() {
     msQuickPreview();
   });
 })();
+// ── Mehrere Arten auf einmal ─────────────────────────────────
+// Ein Labortag mit einer Sorte: aus demselben Glas gehen Petrischalen,
+// Flüssigkulturen und Körnerbrut. Einzeln hieß das, für jede Art den Dialog zu
+// öffnen, dieselbe Herkunft neu zu scannen und jedes Mal zu drucken. Der Knopf
+// "Mehrere" macht aus der Liste Knöpfe zum Antippen: jede angetippte Art
+// bekommt ihre Zahlen, Sorte, Stamm, Tag und die eine Herkunft gelten für alle,
+// und am Ende steht ein Etiketten-Fenster mit einem Druck (etikettenFuerAlles).
+// Slant steht nicht zur Wahl: er hat keine Herkunft, die er teilen könnte. Jede
+// Zahl fängt bei 0 an.
+const MSQ_MEHRERE = ['PD', 'LC', 'SY', 'KB'];
+function msqMehrere() {
+  return !!(_msQuickCtx && _msQuickCtx.mode === 'labor' && _msQuickCtx.mehrere && !_msQuickCtx.intake);
+}
+function msqArten() {
+  return msqMehrere() ? _msQuickCtx.arten : [];
+}
+function msqMehrereUmschalten() {
+  if (!_msQuickCtx || _msQuickCtx.intake) return;
+  const sel = document.getElementById('ms-q-labtype');
+  _msQuickCtx.mehrere = !_msQuickCtx.mehrere;
+  if (_msQuickCtx.mehrere) {
+    // Die Art, die gerade dasteht, ist die erste angetippte.
+    _msQuickCtx.arten = sel && MSQ_MEHRERE.includes(sel.value) ? [sel.value] : [];
+    _msQuickCtx.n = { PD: 0, LC: 0 };
+    const syBox = document.getElementById('ms-q-sy');
+    if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
+  } else if (sel && _msQuickCtx.arten.length) {
+    // Zurück zu einer Art: der ersten angetippten.
+    sel.value = _msQuickCtx.arten[0];
+  }
+  // Die Körnerbrut-Zeilen neu: bei mehreren ab 0, bei einer wie gewohnt.
+  _msqSizesTouched = false;
+  msqSeedSizes();
+  msQuickRender();
+}
+// Die Art als Liste (eine) oder als Knöpfe (mehrere), dazu die Zähler der
+// Arten ohne eigene Felder. Spritzen und Körnerbrut bringen ihre mit (ms-q-sy,
+// ms-q-sizes). Bei mehreren steht über jeder Art ihr Name, gleich gesetzt wie
+// MSQ_ART_KOPF, so dass jede angetippte Art ein Abschnitt für sich ist.
+const MSQ_ART_KOPF = 'font-weight:600;padding-top:8px;border-top:1px solid var(--c-border-light)';
+function msqArtenRender() {
+  const mehrere = msqMehrere();
+  const arten = msqArten();
+  const sel = document.getElementById('ms-q-labtype');
+  if (sel) sel.style.display = mehrere ? 'none' : '';
+  const knopf = document.getElementById('ms-q-mehrere');
+  if (knopf) {
+    knopf.style.display = _msQuickCtx.intake ? 'none' : '';
+    knopf.classList.toggle('btn-p', mehrere);
+    knopf.setAttribute('aria-pressed', mehrere ? 'true' : 'false');
+  }
+  const box = document.getElementById('ms-q-arten');
+  if (box) {
+    box.style.display = mehrere ? 'flex' : 'none';
+    box.innerHTML = mehrere
+      ? MSQ_MEHRERE.map((a) => {
+          const an = arten.includes(a);
+          return `<button type="button" class="btn${an ? ' btn-p' : ''}" data-msq-art="${a}" aria-pressed="${an}" style="min-height:var(--tap);font-weight:600">${esc(t('msq.art.' + a))}</button>`;
+        }).join('')
+      : '';
+  }
+  const zaehler = document.getElementById('ms-q-multi');
+  if (zaehler) {
+    const gezaehlt = arten.filter((a) => a === 'PD' || a === 'LC');
+    zaehler.style.display = gezaehlt.length ? '' : 'none';
+    zaehler.innerHTML = gezaehlt
+      .map(
+        (a) =>
+          `<div style="${MSQ_ART_KOPF};margin-bottom:6px">${esc(t('msq.art.' + a))}</div>` +
+          zaehlerZeileHtml('ms-q-n-' + a, _msQuickCtx.n[a], '')
+      )
+      .join('');
+  }
+  for (const id of ['ms-q-sy-head', 'ms-q-kb-head']) {
+    const h = document.getElementById(id);
+    if (h) h.style.display = mehrere ? '' : 'none';
+  }
+}
+// Die Zahlen, so wie sie dastehen: je Art, Spritzen je Größe, Körnerbrut je
+// Beutelgröße. Was nicht angetippt ist, zählt nicht mit.
+function msqMehrereLesen() {
+  const arten = msqArten();
+  for (const a of ['PD', 'LC']) {
+    const el = document.getElementById('ms-q-n-' + a);
+    if (el) _msQuickCtx.n[a] = Math.max(0, Math.min(500, parseInt(el.value, 10) || 0));
+  }
+  const z = {
+    PD: arten.includes('PD') ? _msQuickCtx.n.PD : 0,
+    LC: arten.includes('LC') ? _msQuickCtx.n.LC : 0,
+    sy: arten.includes('SY') ? syMengenLesen('ms-q') : {},
+    kb: arten.includes('KB') ? msqReadSizes() : []
+  };
+  z.summe = z.PD + z.LC + sySumme(z.sy) + z.kb.reduce((a, l) => a + l.qty, 0);
+  return z;
+}
+// Eine Körnerbrut-Zeile mit Anzahl, aber ohne Gewicht: msqReadSizes ließe sie
+// stumm fallen, und die Beutel fehlten hinterher.
+function msqMehrereOhneGewicht() {
+  return (
+    msqArten().includes('KB') &&
+    msqSizeRows().some(
+      (row) =>
+        (parseInt(row.querySelector('.msq-size-qty').value, 10) || 0) > 0 &&
+        !(parseDecimal(row.querySelector('.msq-size-kg').value) > 0)
+    )
+  );
+}
+function msqMehrerePreview(el) {
+  const z = msqMehrereLesen();
+  const teile = [];
+  if (z.PD) teile.push(z.PD + ' ' + t('bmp.PD'));
+  if (z.LC) teile.push(z.LC + ' ' + t('bmp.LC'));
+  teile.push(...syTeile(z.sy));
+  for (const l of z.kb) teile.push(t('bmp.previewGrain', { n: l.qty, kg: String(l.kg).replace('.', ',') }));
+  el.textContent = teile.length ? t('bmp.preview', { list: teile.join(' · ') }) : t('bmp.nothing');
+  // Früher angesetzte Körnerbrut bucht kein Korn ab, wie im Dialog für eine Art.
+  if (z.kb.length && anlageFrueher('ms-q')) el.textContent += ' — ' + t('anlage.notBooked');
+  const go = document.getElementById('ms-q-go');
+  if (go) go.textContent = z.summe ? t('msq.createN', { n: z.summe }) : t('msq.create');
+}
+(function wireMsqMehrere() {
+  document.addEventListener('click', (e) => {
+    if (!_msQuickCtx) return;
+    if (e.target.closest('#ms-q-mehrere')) return msqMehrereUmschalten();
+    const b = e.target.closest('[data-msq-art]');
+    if (!b || !msqMehrere()) return;
+    const a = b.dataset.msqArt;
+    const arten = _msQuickCtx.arten.includes(a)
+      ? _msQuickCtx.arten.filter((x) => x !== a)
+      : _msQuickCtx.arten.concat(a);
+    _msQuickCtx.arten = MSQ_MEHRERE.filter((x) => arten.includes(x));
+    msQuickRender();
+  });
+})();
 function msQuickLabTypeChanged() {
   // Full re-render, not just the culture list: switching to Grainspawn shows
   // the days field and the size rows, and switching away hides them again.
@@ -20725,7 +20883,7 @@ function msqUpdateSizeRemove() {
 function msqAddSize() {
   const box = document.getElementById('ms-q-sizes');
   if (!box) return;
-  box.insertAdjacentHTML('beforeend', _msqSizeRowHtml(1, 10));
+  box.insertAdjacentHTML('beforeend', _msqSizeRowHtml(1, msqMehrere() ? 0 : 10));
   msqUpdateSizeRemove();
   msQuickPreview();
   const last = msqSizeRows().pop();
@@ -20765,6 +20923,13 @@ function msqSeedSizes() {
   const mode = _msQuickCtx ? _msQuickCtx.mode : 'labor';
   const ms = _msQuickCtx ? _msQuickCtx.ms : null;
   const remembered = _msqLastSizes(mode);
+  // Mehrere Arten auf einmal: die Beutelgröße wie gewohnt, die Anzahl bei 0.
+  if (msqMehrere()) {
+    const kg =
+      (remembered && remembered[0].kg) || (ms && ms.recGrainKg > 0 ? ms.recGrainKg : getAvgComp().grainBagKg) || 1;
+    msqRenderSizes([{ kg, qty: 0 }]);
+    return;
+  }
   if (remembered) {
     msqRenderSizes(remembered);
     return;
@@ -20798,6 +20963,7 @@ function msQuickPreview() {
     el.textContent = '';
     return;
   }
+  if (_msQuickCtx.mehrere) return msqMehrerePreview(el);
   const qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
   // Körnerbrut zuerst, auch wenn sie als Charge kommt: eine Körner-Sorte fiel
   // vorher in den Charge-Zweig und wurde dort mit der Anzahl oben gerechnet —
@@ -20921,13 +21087,28 @@ async function msQuickConfirm() {
   // Zeilen ohne Gewicht fallen, und eine leere Liste erreichte createGrainBatch
   // als "keine Zeilen" — dessen Meldung erschien dann gegen einen Dialog, der
   // längst zu war, und alles Getippte war weg.
-  const grain = _msqIsGrain();
+  // Mehrere Arten zählen je Art (msqMehrereLesen), auch das wird hier geprüft.
+  const zahlen = msqMehrere() ? msqMehrereLesen() : null;
+  const grain = !zahlen && _msqIsGrain();
   const sizes = grain ? msqReadSizes() : [];
   // Spritzen ebenso je Größe, außer der einen aufgenommenen.
   const artSel = document.getElementById('ms-q-labtype');
-  const syN = mode === 'labor' && !_msQuickCtx.intake && artSel && artSel.value === 'SY' ? syMengenLesen('ms-q') : null;
+  const syN =
+    !zahlen && mode === 'labor' && !_msQuickCtx.intake && artSel && artSel.value === 'SY'
+      ? syMengenLesen('ms-q')
+      : null;
   let qty;
-  if (grain) {
+  if (zahlen) {
+    if (msqMehrereOhneGewicht()) {
+      fieldError('ms-q-sizes', t('batch.enterWeight'));
+      return;
+    }
+    qty = zahlen.summe;
+    if (qty < 1) {
+      toast(t('bmp.nothing'), 'err');
+      return;
+    }
+  } else if (grain) {
     if (!sizes.length) {
       toast(t('batch.enterWeight'), 'err');
       return;
@@ -20972,6 +21153,12 @@ async function msQuickConfirm() {
   // nächste Charge trägt. Wer anlegt, nimmt sie mit hinüber.
   const inocMit = _inoc.slice();
   const intake = _msQuickCtx.intake || null;
+  if (zahlen) {
+    const days = parseInt(document.getElementById('ms-q-days').value) || 14;
+    msQuickClose();
+    msqMehrereAnlegen({ ms, strainText, angesetzt, quelle: sourceCulture, inoc: inocMit, zahlen, days });
+    return;
+  }
   if (mode === 'labor') {
     const labType = document.getElementById('ms-q-labtype').value || 'MC';
     if (!intake) _msqSaveArt(labType);
@@ -21051,6 +21238,45 @@ async function msQuickConfirm() {
   nbEnsureReady();
   nbFillFromStrain(ms, { qty, days, strainText, culture: sourceCulture, inoc: inocMit, created: angesetzt });
   createBatch();
+}
+// Mehrere Arten aus einer Herkunft anlegen: jede Art ihre eigenen Nummern, alle
+// mit derselben Herkunft, Sorte, Stamm und demselben Tag. Erst die Kulturen,
+// dann die Körnerbrut über denselben Weg wie aus dem Dialog für eine Art, und
+// am Ende ein Etiketten-Fenster für alles.
+// spec: { ms, strainText, angesetzt, quelle, inoc, zahlen, days }
+function msqMehrereAnlegen(spec) {
+  const { ms, strainText, angesetzt, zahlen } = spec;
+  const wann = anlageZeitpunkt(angesetzt);
+  const posten = [];
+  if (zahlen.PD > 0) posten.push(['PD', zahlen.PD, null]);
+  if (zahlen.LC > 0) posten.push(['LC', zahlen.LC, null]);
+  for (const ml of SY_ML) if (zahlen.sy[ml] > 0) posten.push(['SY', zahlen.sy[ml], ml]);
+  const ids = [];
+  const saves = [];
+  for (const [type, qty, ml] of posten) {
+    const r = kulturenAnlegen({ type, ms, wann, qty, parentId: spec.quelle || null, strainText, ml });
+    ids.push(...r.newC.map((x) => x.id));
+    saves.push(r.saved);
+  }
+  let korn = null;
+  if (zahlen.kb.length) {
+    const setv = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+    setv('lw-st', ms.id);
+    setv('lw-strain-text', strainText);
+    setv('lw-created', angesetzt);
+    gsSetLines(zahlen.kb);
+    setv('gs-days', spec.days || 14);
+    setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
+    setv('lw-notes', '');
+    // createGrainBatch nimmt die Herkunft aus der Beimpf-Liste.
+    _inoc = spec.inoc.slice();
+    korn = createGrainBatch({ ohneFenster: true }) || null;
+  }
+  renderLabLog();
+  etikettenFuerAlles(ids, Promise.all(saves), korn);
 }
 
 // Das lange Chargenformular aus einem Rezept füllen.
@@ -21290,21 +21516,27 @@ function syMlKnoepfe(attr, aktiv) {
     '</div>'
   );
 }
+// Eine Zeile mit Zähler: − Zahl + und dahinter, was gezählt wird (ohne
+// Beschriftung, wenn eine Überschrift darüber steht). Die Knöpfe hängen an
+// data-zaehler (wireZaehler), das Feld an seiner id.
+const ZAEHLER_KNOPF =
+  'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
+function zaehlerZeileHtml(id, n, label) {
+  return (
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
+    `<button type="button" data-zaehler="-1" data-zaehler-feld="${id}" aria-label="${esc(t('bmp.less'))}" style="${ZAEHLER_KNOPF}">−</button>` +
+    `<input type="number" inputmode="numeric" min="0" max="500" id="${id}" value="${n || 0}" style="width:64px;text-align:center;font-weight:600" />` +
+    `<button type="button" data-zaehler="1" data-zaehler-feld="${id}" aria-label="${esc(t('bmp.more'))}" style="${ZAEHLER_KNOPF}">+</button>` +
+    (label ? `<span class="fs-base" style="font-weight:600">${esc(label)}</span>` : '') +
+    '</div>'
+  );
+}
 // Abgefüllt wird in einem Durchgang oft mehr als eine Größe: 3 × 10, 5 × 20 und
 // 3 × 50 ml. Also je Größe eine Zeile mit Zähler, und ein Tipp legt alle an und
 // bringt alle Etiketten in ein Fenster. `pre` ist das Präfix der Felder
-// (pre-sy-10 …), die Knöpfe hängen an data-sy-step (wireSyMengen).
-const SY_STEP_STYLE =
-  'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
+// (pre-sy-10 …).
 function syMengenHtml(pre, n) {
-  return SY_ML.map(
-    (ml) =>
-      `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
-      `<button type="button" data-sy-step="-1" data-sy-feld="${pre}-sy-${ml}" aria-label="${esc(t('bmp.less'))}" style="${SY_STEP_STYLE}">−</button>` +
-      `<input type="number" inputmode="numeric" min="0" max="500" id="${pre}-sy-${ml}" value="${(n && n[ml]) || 0}" style="width:64px;text-align:center;font-weight:600" />` +
-      `<button type="button" data-sy-step="1" data-sy-feld="${pre}-sy-${ml}" aria-label="${esc(t('bmp.more'))}" style="${SY_STEP_STYLE}">+</button>` +
-      `<span class="fs-base" style="font-weight:600">${ml} ml</span></div>`
-  ).join('');
+  return SY_ML.map((ml) => zaehlerZeileHtml(pre + '-sy-' + ml, n && n[ml], ml + ' ml')).join('');
 }
 // {10: n, 20: n, 50: n} aus den Feldern, 0 bis 500 wie die anderen Zähler.
 function syMengenLesen(pre) {
@@ -21320,13 +21552,13 @@ const sySumme = (n) => SY_ML.reduce((a, ml) => a + ((n && n[ml]) || 0), 0);
 const syTeile = (n) => SY_ML.filter((ml) => n[ml] > 0).map((ml) => t('bmp.previewSy', { n: n[ml], ml }));
 // Ein Tipp auf − oder + ändert das Feld und zieht die Vorschau des Fensters
 // nach, in dem es steht (getippt macht das der input-Listener des Fensters).
-(function wireSyMengen() {
+(function wireZaehler() {
   document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-sy-step]');
+    const b = e.target.closest('[data-zaehler]');
     if (!b) return;
-    const el = document.getElementById(b.dataset.syFeld);
+    const el = document.getElementById(b.dataset.zaehlerFeld);
     if (!el) return;
-    el.value = Math.max(0, Math.min(500, (parseInt(el.value, 10) || 0) + parseInt(b.dataset.syStep, 10)));
+    el.value = Math.max(0, Math.min(500, (parseInt(el.value, 10) || 0) + parseInt(b.dataset.zaehler, 10)));
     if (b.closest('#m-beimpfen')) bmpPreview();
     else msQuickPreview();
   });
@@ -21808,7 +22040,9 @@ function createGrainBatch(opts) {
   // Snapshot the inoculant list: the form is cleared below, before the POST
   // resolves, and nothing is written off until the batch is known to have saved.
   const _inocUsed = _inoc.slice();
-  apiPost('/api/batches', apiPayload)
+  // Festgehalten für das gemeinsame Etiketten-Fenster: die Beutelnummern kommen
+  // mit dieser Antwort, und gedruckt wird erst danach (printCultureLabelsInline).
+  const saved = apiPost('/api/batches', apiPayload)
     .then((r) => {
       if (r && r.error) {
         const i = batches.findIndex((b) => b.batchId === batchObj.batchId);
@@ -21847,14 +22081,14 @@ function createGrainBatch(opts) {
   gsPreview();
   updateTodoBadge();
   renderBatches();
-  if (opts && opts.ohneFenster) return { batchObj, bagIds };
+  if (opts && opts.ohneFenster) return { batchObj, bagIds, saved };
   // Einlagern, dann Etiketten — derselbe Schluss wie bei jeder anderen Charge.
   // Die Körnerbrut hatte ihren eigenen: eine Ergebniskarte im langen Formular
   // und ein Sprung auf die Druckseite. Vom Schnelldialog aus hieß das, auf einer
   // Seite zu landen, die man nie aufgemacht hatte, während die Charge aus dem
   // Assistenten ihr Fenster bekam, wo man stand. Ein Weg, ein Fenster.
   nbPlaceAndPrint(batchObj, bagIds);
-  return { batchObj, bagIds };
+  return { batchObj, bagIds, saved };
 }
 
 // ─── LINEAGE ─────────────────────────────────────────────────
@@ -24157,18 +24391,28 @@ function goToPrintLabCulture() {
 // nbPlaceAndPrint() für Beutel ist, ohne die Zonenwahl davor, weil eine Kultur
 // keinen Standort hat. Kommt von selbst hoch, egal wo man steht; die Seite mit
 // dem langen Formular ist seit dem Schnelldialog nur noch dessen Ablage.
-// danach: läuft, wenn das Fenster zugeht — beim Beimpfen das Einlagern der
-// Körnerbrut, das sonst hinter diesem Fenster aufginge.
-let _cprDanach = null;
-function cprShow(ids, saved, danach) {
+// korn: { batchObj, bagIds, saved } — Körnerbeutel, die mit diesen Kulturen
+// entstanden und schon eingelagert sind. Ihre Etiketten gehen im selben Druck
+// mit (etikettenFuerAlles).
+let _cprKorn = null;
+function cprShow(ids, saved, korn) {
   lastCreatedCultureIds = ids.slice();
   _cprSaved = saved || null;
-  _cprDanach = danach || null;
+  _cprKorn = korn || null;
+  const beutel = korn ? korn.bagIds : [];
   const head = document.getElementById('cpr-head');
-  if (head) head.textContent = t('lab.printFor', { n: ids.length });
+  if (head)
+    head.textContent = beutel.length
+      ? t('lab.printForAll', { n: ids.length + beutel.length, kulturen: ids.length, beutel: beutel.length })
+      : t('lab.printFor', { n: ids.length });
+  const titel = document.getElementById('cpr-ids-title');
+  if (titel) titel.textContent = t(beutel.length ? 'lab.createdIdsAll' : 'lab.createdIds');
+  const knopf = document.getElementById('prt-cpr');
+  if (knopf) knopf.textContent = t(beutel.length ? 'lab.printAllNow' : 'lab.printLabelsNow');
   const list = document.getElementById('cpr-ids');
   if (list)
     list.innerHTML = ids
+      .concat(beutel)
       .map(
         (id) =>
           `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
@@ -24180,9 +24424,18 @@ function cprShow(ids, saved, danach) {
 function cprClose() {
   const m = document.getElementById('m-culture-print');
   if (m) m.classList.remove('open');
-  const weiter = _cprDanach;
-  _cprDanach = null;
-  if (weiter) weiter();
+}
+// Der Schluss, wenn Kulturen und Körnerbrut zusammen entstehen (Mehrere,
+// Beimpfen): erst die Körnerbeutel einlagern — die Zonenwahl ist ein Tor wie
+// bei jeder Charge —, dann ein Etiketten-Fenster für alles und ein Druck.
+// Vorher kamen zwei Fenster nacheinander, jedes mit seinem eigenen Druck.
+function etikettenFuerAlles(ids, saved, korn) {
+  if (korn && !ids.length) return nbPlaceAndPrint(korn.batchObj, korn.bagIds);
+  if (!korn) {
+    if (ids.length) cprShow(ids, saved);
+    return;
+  }
+  openZonePickModal(korn.batchObj, korn.bagIds, () => cprShow(ids, saved, korn));
 }
 async function printCultureLabelsInline() {
   const ids = lastCreatedCultureIds;
@@ -24197,7 +24450,23 @@ async function printCultureLabelsInline() {
   if (_cprSaved && !(await _cprSaved.then(() => true).catch(() => false))) return;
   const modeEl = document.getElementById('lab-mode');
   const qrEl = document.getElementById('lab-qr');
-  const zpl = makeLabZPL(ids, modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
+  let zpl = makeLabZPL(ids, modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
+  // Die Körnerbeutel im selben Druck, mit den Einstellungen der Beutel-Etiketten.
+  // Ihre Nummern kommen mit der Antwort auf die Charge; ist die fehlgeschlagen
+  // (gemeldet hat es createGrainBatch), gibt es die Beutel nicht, und gedruckt
+  // werden nur die Kulturen.
+  const korn = _cprKorn;
+  let n = ids.length;
+  if (korn) {
+    if (korn.saved) await korn.saved.catch(() => {});
+    const b = batches.find((x) => x.batchId === korn.batchObj.batchId);
+    if (b) {
+      const pm = document.getElementById('print-mode');
+      const bq = document.getElementById('bag-qr');
+      zpl += '\n' + makeBagZPL(korn.bagIds, b, pm ? pm.value : 'full', bq ? bq.checked : true);
+      n += korn.bagIds.length;
+    }
+  }
   if (!zpl || !zpl.includes('^XA')) {
     toast(t('print.noLabels'), 'err');
     return;
@@ -24210,7 +24479,7 @@ async function printCultureLabelsInline() {
     a.download = 'lab_labels.zpl';
     a.click();
   } else {
-    printedFb(t('print.printedLab', { n: ids.length }));
+    printedFb(korn ? t('print.printedAll', { n }) : t('print.printedLab', { n: ids.length }));
     cprClose();
   }
 }
@@ -26413,8 +26682,11 @@ function bmpGo() {
   const angesetzt = anlageLesen('bmp');
   if (angesetzt === null) return;
   const wann = anlageZeitpunkt(angesetzt);
+  // Alles aus dem Fenster jetzt: bmpClose() setzt _bmp auf null, und ein
+  // _bmp.kg danach brach das Anlegen der Körnerbrut mit einem Fehler ab.
   const sy = _bmp.sy || {};
-  _bmpMerken(c.type, { kg: _bmp.kg });
+  const kg = _bmp.kg || 1;
+  _bmpMerken(c.type, { kg });
   bmpClose();
   // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als
   // Herkunft. Spritzen je Größe, jede Größe ihre eigenen Nummern.
@@ -26438,7 +26710,8 @@ function bmpGo() {
     }
   }
   // Dann die Körnerbrut, über denselben Weg wie aus dem Schnelldialog — mit der
-  // Kultur als Herkunft und ohne eigenes Fenster: das kommt nach den Etiketten.
+  // Kultur als Herkunft und ohne eigenes Fenster: ihre Etiketten kommen mit
+  // denen der Kulturen in eines (etikettenFuerAlles).
   let korn = null;
   if (n.KB > 0) {
     const setv = (id, val) => {
@@ -26448,17 +26721,15 @@ function bmpGo() {
     setv('lw-st', ms.id);
     setv('lw-strain-text', (c.strainText || '').trim());
     setv('lw-created', angesetzt);
-    gsSetLines([{ kg: _bmp.kg || 1, qty: n.KB }]);
+    gsSetLines([{ kg, qty: n.KB }]);
     setv('gs-days', 14);
     setv('gs-rh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
     setv('lw-notes', '');
     _inoc = [{ kind: 'culture', id: c.id }];
-    korn = createGrainBatch({ ohneFenster: true });
+    korn = createGrainBatch({ ohneFenster: true }) || null;
   }
   renderLabLog();
-  const kornFenster = korn ? () => nbPlaceAndPrint(korn.batchObj, korn.bagIds) : null;
-  if (ids.length) cprShow(ids, Promise.all(saves), kornFenster);
-  else if (kornFenster) kornFenster();
+  etikettenFuerAlles(ids, Promise.all(saves), korn);
 }
 (function wireBeimpfen() {
   document.addEventListener('click', (e) => {
@@ -31435,6 +31706,7 @@ function initEventListeners() {
     });
   }
   if ($('ms-q-sy')) $('ms-q-sy').addEventListener('input', () => msQuickPreview());
+  if ($('ms-q-multi')) $('ms-q-multi').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-add-size'))
     $('ms-q-add-size').addEventListener('click', () => {
       _msqSizesTouched = true;
