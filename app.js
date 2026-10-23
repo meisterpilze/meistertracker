@@ -20350,7 +20350,11 @@ function _msRecipeProblem(ms) {
 // Shared opener. ms === null → show the Sorte picker (charge mode lists only Sorten
 // that have a recipe, since a Charge needs one).
 function msQuickOpen(mode, ms) {
-  _msQuickCtx = { mode, ms: ms || null, ml: _syMlLetzte() };
+  // ml gilt nur für eine aufgenommene Spritze (genau eine, eine Größe); sonst
+  // zählt der Dialog je Größe, ab dem, was zuletzt abgefüllt wurde.
+  _msQuickCtx = { mode, ms: ms || null, ml: 10 };
+  const syBox = document.getElementById('ms-q-sy');
+  if (syBox) syBox.innerHTML = syMengenHtml('ms-q', _syMengenLetzte());
   // Fresh dialog, fresh inoculant list — one left over from an abandoned dialog
   // would otherwise be offered up for the next batch.
   _inoc = [];
@@ -20424,8 +20428,14 @@ function msQuickRender() {
   const artEl = document.getElementById('ms-q-labtype');
   const mlWrap = document.getElementById('ms-q-ml-wrap');
   const istSy = mode === 'labor' && !!artEl && artEl.value === 'SY';
-  if (mlWrap) mlWrap.style.display = istSy ? '' : 'none';
-  if (istSy) document.getElementById('ms-q-ml').innerHTML = syMlKnoepfe('msq-ml', _msQuickCtx.ml);
+  // Eine aufgenommene Spritze ist genau eine: eine Größe zum Wählen. Sonst je
+  // Größe eine Anzahl, und die gemeinsame Anzahl fällt weg.
+  const syEine = istSy && !!intake;
+  const syViele = istSy && !intake;
+  if (mlWrap) mlWrap.style.display = syEine ? '' : 'none';
+  if (syEine) document.getElementById('ms-q-ml').innerHTML = syMlKnoepfe('msq-ml', _msQuickCtx.ml);
+  const syWrap = document.getElementById('ms-q-sy-wrap');
+  if (syWrap) syWrap.style.display = syViele ? '' : 'none';
   // Grain spawn is a Charge in everything but name: it is weighed, incubates,
   // and produces barcoded bags. So it wants the days and kg fields that the
   // count-based culture types don't.
@@ -20441,7 +20451,7 @@ function msQuickRender() {
   if (sw) sw.style.display = grain ? '' : 'none';
   const qw = document.getElementById('ms-q-qty-wrap');
   // Ein aufgenommenes Etikett ist genau ein Glas.
-  if (qw) qw.style.display = grain || intake ? 'none' : '';
+  if (qw) qw.style.display = grain || intake || syViele ? 'none' : '';
   const grid = document.getElementById('ms-q-grid');
   if (grid) grid.style.gridTemplateColumns = grain ? 'minmax(0, 1fr)' : '';
   if (grain && !_msqSizesTouched) msqSeedSizes();
@@ -20827,8 +20837,9 @@ function msQuickPreview() {
     const parts = qty > 0 ? _msNeedParts(_msStrainToRecipe(_msQuickCtx.ms), qty) : [];
     el.textContent = parts.length ? t('msq.needFor', { n: qty }) + ' ' + parts.join(' · ') : '';
   } else if (document.getElementById('ms-q-labtype').value === 'SY') {
-    // Die Größe steht im Satz, damit vor dem Anlegen noch einmal dasteht, welche.
-    el.textContent = qty > 0 ? t('bmp.preview', { list: t('bmp.previewSy', { n: qty, ml: _msQuickCtx.ml }) }) : '';
+    // Die Größen stehen im Satz, damit vor dem Anlegen noch einmal dasteht, welche.
+    const teile = syTeile(_msQuickCtx.intake ? { [_msQuickCtx.ml]: 1 } : syMengenLesen('ms-q'));
+    el.textContent = teile.length ? t('bmp.preview', { list: teile.join(' · ') }) : '';
   } else {
     el.textContent = qty > 0 ? t('msq.laborPreview', { n: qty }) : '';
   }
@@ -20912,6 +20923,9 @@ async function msQuickConfirm() {
   // längst zu war, und alles Getippte war weg.
   const grain = _msqIsGrain();
   const sizes = grain ? msqReadSizes() : [];
+  // Spritzen ebenso je Größe, außer der einen aufgenommenen.
+  const artSel = document.getElementById('ms-q-labtype');
+  const syN = mode === 'labor' && !_msQuickCtx.intake && artSel && artSel.value === 'SY' ? syMengenLesen('ms-q') : null;
   let qty;
   if (grain) {
     if (!sizes.length) {
@@ -20920,6 +20934,13 @@ async function msQuickConfirm() {
     }
     qty = sizes.reduce((a, l) => a + l.qty, 0);
     _msqSaveSizes(mode, sizes);
+  } else if (syN) {
+    qty = sySumme(syN);
+    if (qty < 1) {
+      fieldError('ms-q-sy', t('batch.fillQty'));
+      return;
+    }
+    _syMengenMerken(syN);
   } else {
     qty = parseInt(document.getElementById('ms-q-qty').value) || 0;
     if (qty < 1) {
@@ -20987,7 +21008,6 @@ async function msQuickConfirm() {
     setv('lw-created', angesetzt);
     setv('lw-qty', qty);
     setv('lw-ml', _msQuickCtx.ml);
-    if (labType === 'SY' && !intake) _syMlMerken(_msQuickCtx.ml);
     setv('lw-source', '');
     setv('lw-notes', '');
     msQuickClose();
@@ -20998,7 +21018,7 @@ async function msQuickConfirm() {
     lwUpdate();
     const parent = document.getElementById('lw-parent');
     if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
-    logLabWork(intake ? { id: intake.id } : undefined);
+    logLabWork(intake ? { id: intake.id } : syN ? { sy: syN } : undefined);
     return;
   }
   // Charge: prefill the existing Charge form from the recipe and reuse its
@@ -21271,21 +21291,65 @@ function syMlKnoepfe(attr, aktiv) {
     '</div>'
   );
 }
-// Die zuletzt abgefüllte Größe: wer heute 20er abfüllt, füllt meist weiter 20er.
-function _syMlLetzte() {
+// Abgefüllt wird in einem Durchgang oft mehr als eine Größe: 3 × 10, 5 × 20 und
+// 3 × 50 ml. Also je Größe eine Zeile mit Zähler, und ein Tipp legt alle an und
+// bringt alle Etiketten in ein Fenster. `pre` ist das Präfix der Felder
+// (pre-sy-10 …), die Knöpfe hängen an data-sy-step (wireSyMengen).
+const SY_STEP_STYLE =
+  'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
+function syMengenHtml(pre, n) {
+  return SY_ML.map(
+    (ml) =>
+      `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
+      `<button type="button" data-sy-step="-1" data-sy-feld="${pre}-sy-${ml}" aria-label="${esc(t('bmp.less'))}" style="${SY_STEP_STYLE}">−</button>` +
+      `<input type="number" inputmode="numeric" min="0" max="500" id="${pre}-sy-${ml}" value="${(n && n[ml]) || 0}" style="width:64px;text-align:center;font-weight:600" />` +
+      `<button type="button" data-sy-step="1" data-sy-feld="${pre}-sy-${ml}" aria-label="${esc(t('bmp.more'))}" style="${SY_STEP_STYLE}">+</button>` +
+      `<span class="fs-base" style="font-weight:600">${ml} ml</span></div>`
+  ).join('');
+}
+// {10: n, 20: n, 50: n} aus den Feldern, 0 bis 500 wie die anderen Zähler.
+function syMengenLesen(pre) {
+  const n = {};
+  for (const ml of SY_ML) {
+    const el = document.getElementById(pre + '-sy-' + ml);
+    n[ml] = el ? Math.max(0, Math.min(500, parseInt(el.value, 10) || 0)) : 0;
+  }
+  return n;
+}
+const sySumme = (n) => SY_ML.reduce((a, ml) => a + ((n && n[ml]) || 0), 0);
+// "3 Spritzen à 10 ml", "5 Spritzen à 20 ml" — nur die Größen, die vorkommen.
+const syTeile = (n) => SY_ML.filter((ml) => n[ml] > 0).map((ml) => t('bmp.previewSy', { n: n[ml], ml }));
+// Ein Tipp auf − oder + ändert das Feld und zieht die Vorschau des Fensters
+// nach, in dem es steht (getippt macht das der input-Listener des Fensters).
+(function wireSyMengen() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sy-step]');
+    if (!b) return;
+    const el = document.getElementById(b.dataset.syFeld);
+    if (!el) return;
+    el.value = Math.max(0, Math.min(500, (parseInt(el.value, 10) || 0) + parseInt(b.dataset.syStep, 10)));
+    if (b.closest('#m-beimpfen')) bmpPreview();
+    else msQuickPreview();
+  });
+})();
+// Was zuletzt abgefüllt wurde, je Größe, steht beim nächsten Mal wieder da: wer
+// heute 3 × 10 und 5 × 20 abfüllt, füllt das nächste Mal meist wieder so ab.
+const SY_N_KEY = 'mp-sy-n';
+function _syMengenLetzte() {
   try {
-    const n = parseInt(localStorage.getItem('mp-sy-ml'), 10);
-    if (SY_ML.includes(n)) return n;
+    const s = JSON.parse(localStorage.getItem(SY_N_KEY) || 'null');
+    const n = Object.fromEntries(SY_ML.map((ml) => [ml, Math.max(0, parseInt(s && s[ml], 10) || 0)]));
+    if (sySumme(n) > 0) return n;
   } catch (e) {
     /* storage disabled */
   }
-  return 10;
+  return { 10: 1, 20: 0, 50: 0 };
 }
-function _syMlMerken(ml) {
+function _syMengenMerken(n) {
   try {
-    localStorage.setItem('mp-sy-ml', String(ml));
+    localStorage.setItem(SY_N_KEY, JSON.stringify(n));
   } catch (e) {
-    /* storage disabled — next time starts at 10 ml */
+    /* storage disabled — next time starts at one 10 ml */
   }
 }
 function lwUpdate() {
@@ -21417,18 +21481,28 @@ function logLabWork(opts) {
     fieldError('lw-st', t('lab.selectPilzsorte'));
     return;
   }
-  const { newC, saved } = kulturenAnlegen({
-    type,
-    ms,
-    wann,
-    qty: parseInt(document.getElementById('lw-qty').value) || 1,
-    id: intakeId,
-    parentId: document.getElementById('lw-parent')?.value || null,
-    strainText: (document.getElementById('lw-strain-text')?.value || '').trim(),
-    source: document.getElementById('lw-source')?.value.trim() || null,
-    notes: document.getElementById('lw-notes').value.trim(),
-    ml: parseInt(document.getElementById('lw-ml')?.value, 10) || 10
-  });
+  const parentId = document.getElementById('lw-parent')?.value || null;
+  const strainText = (document.getElementById('lw-strain-text')?.value || '').trim();
+  const source = document.getElementById('lw-source')?.value.trim() || null;
+  const notes = document.getElementById('lw-notes').value.trim();
+  // Spritzen kommen aus dem Schnelldialog in mehreren Größen auf einmal
+  // (opts.sy = {10: 3, 20: 5, 50: 3}): jede Größe ihre eigenen Nummern, alle
+  // Etiketten in einem Fenster. Sonst ein Posten: Anzahl und Größe des Formulars.
+  const posten =
+    opts && opts.sy
+      ? SY_ML.filter((x) => opts.sy[x] > 0).map((x) => [opts.sy[x], x])
+      : [
+          [
+            parseInt(document.getElementById('lw-qty').value) || 1,
+            parseInt(document.getElementById('lw-ml')?.value, 10) || 10
+          ]
+        ];
+  const angelegt = posten.map(([qty, ml]) =>
+    kulturenAnlegen({ type, ms, wann, qty, id: intakeId, parentId, strainText, source, notes, ml })
+  );
+  const newC = angelegt.flatMap((r) => r.newC);
+  const saved = Promise.all(angelegt.map((r) => r.saved));
+  saved.catch(() => {}); // gemeldet in kulturenAnlegen
   document.getElementById('lw-notes').value = '';
   document.getElementById('lw-qty').value = '1';
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
@@ -26253,12 +26327,18 @@ function _bmpMerken(type, werte) {
 function bmpOpen(c) {
   const letzte = _bmpLetzte(c.type);
   const groesse = (_msqLastSizes('labor') || [])[0];
+  // Spritzen je Größe. Gemerkt war früher eine Anzahl und eine Größe.
+  const sy =
+    letzte.sy && typeof letzte.sy === 'object'
+      ? letzte.sy
+      : { [SY_ML.includes(parseInt(letzte.ml, 10)) ? parseInt(letzte.ml, 10) : 10]: letzte.SY };
   _bmp = {
     id: c.id,
     n: Object.fromEntries(bmpArten(c.type).map((k) => [k, parseInt(letzte[k], 10) || 0])),
     kg: parseDecimal(String(letzte.kg || '')) || (groesse && groesse.kg) || 1,
-    ml: SY_ML.includes(parseInt(letzte.ml, 10)) ? parseInt(letzte.ml, 10) : _syMlLetzte()
+    sy: Object.fromEntries(SY_ML.map((ml) => [ml, Math.max(0, parseInt(sy[ml], 10) || 0)]))
   };
+  if ('SY' in _bmp.n) _bmp.n.SY = sySumme(_bmp.sy);
   anlageReset('bmp');
   document.getElementById('bmp-title').textContent = t('bmp.title', { id: c.id });
   const name = c.strainName || c.species || '';
@@ -26279,6 +26359,14 @@ function bmpRender() {
     'width:var(--tap);height:var(--tap);min-width:44px;min-height:44px;flex:none;border-radius:10px;border:1px solid var(--c-border);background:var(--c-surface);font-size:1.25rem;font-weight:600;cursor:pointer';
   document.getElementById('bmp-rows').innerHTML = bmpArten(c.type)
     .map((k) => {
+      // Spritzen zählen je Größe: drei Zähler unter einer Überschrift.
+      if (k === 'SY')
+        return (
+          `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">` +
+          `<div class="fs-base" style="font-weight:600;margin-bottom:6px">${esc(t('bmp.SY'))}</div>` +
+          syMengenHtml('bmp', _bmp.sy) +
+          '</div>'
+        );
       const zeile =
         `<div style="display:flex;align-items:center;gap:8px">` +
         `<button type="button" data-bmp="minus" data-k="${k}" aria-label="${esc(t('bmp.less'))}" style="${knopf}">−</button>` +
@@ -26289,9 +26377,7 @@ function bmpRender() {
         k === 'KB'
           ? `<div class="fs-meta" style="display:flex;align-items:center;gap:6px;margin:4px 0 0 2px;color:var(--c-text-muted)">${esc(t('bmp.kgEach'))}` +
             `<input type="text" inputmode="decimal" id="bmp-kg" value="${esc(String(_bmp.kg).replace('.', ','))}" style="width:64px;text-align:center" /> kg</div>`
-          : k === 'SY'
-            ? `<div id="bmp-ml" style="margin:6px 0 0 2px">${syMlKnoepfe('bmp-ml', _bmp.ml)}</div>`
-            : '';
+          : '';
       return `<div style="padding:8px 0;border-bottom:1px solid var(--c-border-light)">${zeile}${kg}</div>`;
     })
     .join('');
@@ -26306,18 +26392,22 @@ function _bmpLesen() {
   }
   const kg = document.getElementById('bmp-kg');
   if (kg) _bmp.kg = parseDecimal(kg.value) || 0;
+  if ('SY' in _bmp.n) {
+    _bmp.sy = syMengenLesen('bmp');
+    _bmp.n.SY = sySumme(_bmp.sy);
+  }
 }
 function bmpPreview() {
   if (!_bmp) return;
   _bmpLesen();
   const teile = Object.entries(_bmp.n)
     .filter(([, n]) => n > 0)
-    .map(([k, n]) =>
+    .flatMap(([k, n]) =>
       k === 'KB'
-        ? t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') })
+        ? [t('bmp.previewGrain', { n: n, kg: String(_bmp.kg).replace('.', ',') })]
         : k === 'SY'
-          ? t('bmp.previewSy', { n: n, ml: _bmp.ml })
-          : n + ' ' + t('bmp.' + k)
+          ? syTeile(_bmp.sy)
+          : [n + ' ' + t('bmp.' + k)]
     );
   const summe = Object.values(_bmp.n).reduce((a, n) => a + n, 0);
   const prev = document.getElementById('bmp-preview');
@@ -26347,25 +26437,29 @@ function bmpGo() {
   const angesetzt = anlageLesen('bmp');
   if (angesetzt === null) return;
   const wann = anlageZeitpunkt(angesetzt);
-  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg, ml: _bmp.ml }));
-  if (n.SY > 0) _syMlMerken(_bmp.ml);
+  const sy = _bmp.sy || {};
+  _bmpMerken(c.type, Object.assign({}, n, { kg: _bmp.kg, sy }));
   bmpClose();
-  // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als Herkunft.
+  // Erst die Kulturen: jede Art ihre eigenen Kennungen, alle mit dieser als
+  // Herkunft. Spritzen je Größe, jede Größe ihre eigenen Nummern.
   const ids = [];
   const saves = [];
   for (const k of ['LC', 'PD', 'SY']) {
     if (!(n[k] > 0)) continue;
-    const r = kulturenAnlegen({
-      type: k,
-      ms,
-      wann,
-      qty: n[k],
-      parentId: c.id,
-      strainText: (c.strainText || '').trim(),
-      ml: _bmp.ml
-    });
-    ids.push(...r.newC.map((x) => x.id));
-    saves.push(r.saved);
+    const posten = k === 'SY' ? SY_ML.filter((ml) => sy[ml] > 0).map((ml) => [sy[ml], ml]) : [[n[k], null]];
+    for (const [qty, ml] of posten) {
+      const r = kulturenAnlegen({
+        type: k,
+        ms,
+        wann,
+        qty,
+        parentId: c.id,
+        strainText: (c.strainText || '').trim(),
+        ml
+      });
+      ids.push(...r.newC.map((x) => x.id));
+      saves.push(r.saved);
+    }
   }
   // Dann die Körnerbrut, über denselben Weg wie aus dem Schnelldialog — mit der
   // Kultur als Herkunft und ohne eigenes Fenster: das kommt nach den Etiketten.
@@ -26392,13 +26486,6 @@ function bmpGo() {
 }
 (function wireBeimpfen() {
   document.addEventListener('click', (e) => {
-    const m = e.target.closest('[data-bmp-ml]');
-    if (m && _bmp) {
-      _bmp.ml = parseInt(m.dataset.bmpMl, 10) || 10;
-      document.getElementById('bmp-ml').innerHTML = syMlKnoepfe('bmp-ml', _bmp.ml);
-      bmpPreview();
-      return;
-    }
     const b = e.target.closest('[data-bmp]');
     if (!b || !_bmp) return;
     const a = b.dataset.bmp;
@@ -31371,6 +31458,7 @@ function initEventListeners() {
       msQuickPreview();
     });
   }
+  if ($('ms-q-sy')) $('ms-q-sy').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-add-size'))
     $('ms-q-add-size').addEventListener('click', () => {
       _msqSizesTouched = true;

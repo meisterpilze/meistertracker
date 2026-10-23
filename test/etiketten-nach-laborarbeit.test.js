@@ -34,7 +34,9 @@ describe('Etiketten nach Laborarbeit', () => {
     assert.match(k, /const saved = apiPost\('\/api\/cultures'/, 'die Speicherung wird nicht mehr festgehalten');
     assert.match(k, /return \{ newC, saved \}/);
     const f = hebeFunktion('logLabWork', SRC);
-    assert.match(f, /const \{ newC, saved \} = kulturenAnlegen\(/);
+    // Ein Aufruf je Posten (Spritzen je Größe), die Speicherungen zusammen.
+    assert.match(f, /kulturenAnlegen\(\{/);
+    assert.match(f, /const saved = Promise\.all\(angelegt\.map\(\(r\) => r\.saved\)\)/);
     assert.match(f, /cprShow\([\s\S]*?\bsaved\s*\)/, 'cprShow bekommt die Speicherung nicht mit');
     const p = hebeFunktion('printCultureLabelsInline', SRC);
     assert.match(p, /await _cprSaved/, 'der Druck wartet nicht auf die Speicherung');

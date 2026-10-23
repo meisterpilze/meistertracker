@@ -111,6 +111,103 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
   });
 });
 
+describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
+  it('3 × 10, 5 × 20 und 3 × 50 ml: je Größe ein Posten, ein Etiketten-Fenster für alle 11', () => {
+    const r = new Function(
+      `
+      const angelegt = [];
+      const fenster = [];
+      const SY_ML = [10, 20, 50];
+      const LC = { id: 'LC-KO-011026-01', type: 'LC', strainId: 2, strainText: '', status: 'active' };
+      const cultures = [LC];
+      const mushroomStrains = [{ id: 2, name: 'King Oyster', kuerzel: 'KO' }];
+      let _bmp = { id: LC.id, n: { KB: 0, LC: 0, PD: 0, SY: 11 }, kg: 1, sy: { 10: 3, 20: 5, 50: 3 } };
+      let gemerkt = null;
+      const t = (k) => k;
+      const toast = () => {};
+      const fieldError = () => {};
+      const _bmpLesen = () => {};
+      const _bmpMerken = (type, w) => { gemerkt = w; };
+      const bmpClose = () => { _bmp = null; };
+      const anlageLesen = () => '';
+      const anlageZeitpunkt = () => new Date(2026, 9, 1, 12);
+      const kulturenAnlegen = (spec) => {
+        angelegt.push(spec);
+        return { newC: Array.from({ length: spec.qty }, (_, i) => ({ id: spec.type + spec.ml + '-' + (i + 1) })), saved: Promise.resolve() };
+      };
+      const renderLabLog = () => {};
+      const cprShow = (ids) => fenster.push(ids.length);
+      ${hebe('bmpGo')}
+      bmpGo();
+      return { angelegt, fenster, gemerkt };
+    `
+    )();
+    assert.deepEqual(
+      r.angelegt.map((s) => [s.type, s.qty, s.ml, s.parentId]),
+      [
+        ['SY', 3, 10, 'LC-KO-011026-01'],
+        ['SY', 5, 20, 'LC-KO-011026-01'],
+        ['SY', 3, 50, 'LC-KO-011026-01']
+      ]
+    );
+    assert.deepEqual(r.fenster, [11], 'ein Fenster, ein Klick druckt alle');
+    assert.deepEqual(r.gemerkt.sy, { 10: 3, 20: 5, 50: 3 }, 'die Mengen je Größe bleiben fürs nächste Mal');
+  });
+
+  it('die Spritzen-Zeile zählt je Größe statt einer Größenwahl', () => {
+    const f = hebe('bmpRender');
+    assert.match(f, /syMengenHtml\('bmp', _bmp\.sy\)/);
+    assert.doesNotMatch(APP, /data-bmp-ml/);
+  });
+});
+
+describe('Schnelldialog: Spritzen je Größe', () => {
+  it('logLabWork legt je Größe einen Posten an und zeigt ein Fenster für alle', () => {
+    const r = new Function(
+      `
+      const angelegt = [];
+      const fenster = [];
+      const SY_ML = [10, 20, 50];
+      const cultures = [];
+      const mushroomStrains = [{ id: 2, name: 'King Oyster', kuerzel: 'KO' }];
+      const felder = { 'lw-type': 'SY', 'lw-st': '2', 'lw-qty': '11', 'lw-ml': '10', 'lw-notes': '', 'lw-parent': '', 'lw-strain-text': '', 'lw-source': '' };
+      const document = { getElementById: (id) => (id in felder ? { get value() { return felder[id]; }, set value(v) { felder[id] = v; } } : null) };
+      const t = (k) => k;
+      const toast = () => {};
+      const fieldError = () => {};
+      const anlageNehmen = () => '';
+      const anlageZeitpunkt = () => new Date(2026, 9, 1, 12);
+      const lwPreview = () => {};
+      const kulturenAnlegen = (spec) => {
+        angelegt.push(spec);
+        return { newC: Array.from({ length: spec.qty }, (_, i) => ({ id: 'SY' + spec.ml + '-' + (i + 1) })), saved: Promise.resolve() };
+      };
+      const cprShow = (ids) => fenster.push(ids);
+      ${hebe('logLabWork')}
+      logLabWork({ sy: { 10: 3, 20: 0, 50: 2 } });
+      return { angelegt, fenster };
+    `
+    )();
+    assert.deepEqual(
+      r.angelegt.map((s) => [s.type, s.qty, s.ml]),
+      [
+        ['SY', 3, 10],
+        ['SY', 2, 50]
+      ]
+    );
+    assert.equal(r.fenster.length, 1);
+    assert.equal(r.fenster[0].length, 5);
+  });
+
+  it('der Schnelldialog reicht die Mengen je Größe weiter und merkt sie', () => {
+    const f = hebe('msQuickConfirm');
+    assert.match(f, /syMengenLesen\('ms-q'\)/);
+    assert.match(f, /_syMengenMerken\(syN\)/);
+    assert.match(f, /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : undefined\);/);
+    assert.match(HTML, /id="ms-q-sy"/);
+  });
+});
+
 describe('Beimpfen: das Fenster', () => {
   it('steht in index.html und der Knopf im Kultur-Fenster öffnet es', () => {
     assert.match(HTML, /id="m-beimpfen"/);
