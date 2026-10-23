@@ -151,7 +151,32 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
       ]
     );
     assert.deepEqual(r.fenster, [11], 'ein Fenster, ein Klick druckt alle');
-    assert.deepEqual(r.gemerkt.sy, { 10: 3, 20: 5, 50: 3 }, 'die Mengen je Größe bleiben fürs nächste Mal');
+    assert.deepEqual(r.gemerkt, { kg: 1 }, 'gemerkt wird nur das Gewicht je Beutel, keine Anzahl');
+  });
+
+  it('jede Anzahl fängt bei 0 an, auch wenn vom letzten Mal etwas gemerkt ist; nur das Gewicht bleibt', () => {
+    const b = new Function(
+      `
+      ${LAB}
+      const SY_ML = [10, 20, 50];
+      let _bmp = null;
+      const _bmpLetzte = () => ({ KB: 4, LC: 3, PD: 10, SY: 2, ml: 20, sy: { 10: 3, 20: 5, 50: 3 }, kg: 1.5 });
+      const _msqLastSizes = () => null;
+      const parseDecimal = (s) => parseFloat(String(s).replace(',', '.'));
+      const anlageReset = () => {};
+      const bmpRender = () => {};
+      const t = (k) => k;
+      const el = { style: {} };
+      const document = { getElementById: () => el };
+      ${hebe('bmpArten')}
+      ${hebe('bmpOpen')}
+      bmpOpen({ id: 'LC-KO-011026-01', type: 'LC', strainName: 'King Oyster', strainText: '' });
+      return _bmp;
+    `
+    )();
+    assert.deepEqual(b.n, { KB: 0, LC: 0, PD: 0, SY: 0 });
+    assert.deepEqual(b.sy, { 10: 0, 20: 0, 50: 0 });
+    assert.equal(b.kg, 1.5);
   });
 
   it('die Spritzen-Zeile zählt je Größe statt einer Größenwahl', () => {
@@ -199,12 +224,14 @@ describe('Schnelldialog: Spritzen je Größe', () => {
     assert.equal(r.fenster[0].length, 5);
   });
 
-  it('der Schnelldialog reicht die Mengen je Größe weiter und merkt sie', () => {
+  it('der Schnelldialog reicht die Mengen je Größe weiter, ohne sie zu merken', () => {
     const f = hebe('msQuickConfirm');
     assert.match(f, /syMengenLesen\('ms-q'\)/);
-    assert.match(f, /_syMengenMerken\(syN\)/);
     assert.match(f, /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : undefined\);/);
     assert.match(HTML, /id="ms-q-sy"/);
+    // Jedes Öffnen fängt bei 0 an.
+    assert.match(hebe('msQuickOpen'), /syMengenHtml\('ms-q', \{\}\)/);
+    assert.doesNotMatch(APP, /_syMengenMerken|_syMengenLetzte/);
   });
 });
 
