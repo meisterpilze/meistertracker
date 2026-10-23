@@ -37,25 +37,27 @@ describe('Beimpfen: was woraus', () => {
 });
 
 describe('Beimpfen: ein Tipp legt alles an', () => {
-  function lauf(n, kg) {
+  // `kb` ist, was in den Zählern je Beutelgröße steht; n.KB ihre Summe, wie
+  // _bmpLesen sie bildet.
+  function lauf(n, kb) {
     return new Function(
       'n',
-      'kg',
+      'kb',
       `
       const angelegt = [];
       const korn = [];
       const fenster = [];
       const gesetzt = {};
+      const KB_KG = [1, 2, 5];
       const SY = { id: 'SY-KO-KOKQ07-011026-01', type: 'SY', strainId: 2, strainText: 'KOKQ07', status: 'active' };
       const cultures = [SY];
       const mushroomStrains = [{ id: 2, name: 'King Oyster', kuerzel: 'KO', recGrainRhPct: 52 }];
-      let _bmp = { id: SY.id, n: n, kg: kg };
+      let _bmp = { id: SY.id, n: n, kb: kb };
       let _inoc = [];
       const t = (k) => k;
       const toast = () => {};
       const fieldError = () => {};
       const _bmpLesen = () => {};
-      const _bmpMerken = () => {};
       // Wie das echte: das Fenster ist zu, _bmp ist weg. Was danach noch aus _bmp
       // läse, bräche hier ab wie in der App.
       const bmpClose = () => { _bmp = null; };
@@ -74,11 +76,11 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
       bmpGo();
       return { angelegt, korn, fenster, gesetzt };
     `
-    )(n, kg);
+    )(n, kb);
   }
 
   it('4 Körnerbeutel, 3 Flüssigkulturen, 10 Petrischalen aus einer Spritze', () => {
-    const r = lauf({ KB: 4, LC: 3, PD: 10 }, 1.5);
+    const r = lauf({ KB: 4, LC: 3, PD: 10 }, { 1: 1, 2: 3, 5: 0 });
     assert.deepEqual(
       r.angelegt.map((s) => [s.type, s.qty, s.parentId, s.strainText]),
       [
@@ -93,20 +95,24 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
       [{ kind: 'culture', id: 'SY-KO-KOKQ07-011026-01' }],
       'die Spritze ist die Herkunft'
     );
-    assert.deepEqual(r.gesetzt.lines, [{ kg: 1.5, qty: 4 }]);
+    // Je Beutelgröße eine Zeile, Größen ohne Anzahl fehlen.
+    assert.deepEqual(r.gesetzt.lines, [
+      { kg: 1, qty: 1 },
+      { kg: 2, qty: 3 }
+    ]);
     assert.equal(r.gesetzt['lw-st'], 2);
     // Ein Schluss für alles: die 13 Kulturen und die Körnerbrut in einem Fenster.
     assert.deepEqual(r.fenster, [['etiketten', 13, 'G-1']]);
   });
 
   it('nur Körnerbrut: der gemeinsame Schluss bekommt die Charge ohne Kulturen', () => {
-    const r = lauf({ KB: 6, LC: 0, PD: 0 }, 1);
+    const r = lauf({ KB: 6, LC: 0, PD: 0 }, { 1: 0, 2: 0, 5: 6 });
     assert.deepEqual(r.angelegt, []);
     assert.deepEqual(r.fenster, [['etiketten', 0, 'G-1']]);
   });
 
   it('ohne Körnerbrut keine Charge', () => {
-    const r = lauf({ KB: 0, LC: 0, PD: 5 }, 1);
+    const r = lauf({ KB: 0, LC: 0, PD: 5 }, { 1: 0, 2: 0, 5: 0 });
     assert.equal(r.korn.length, 0);
     assert.deepEqual(r.fenster, [['etiketten', 5, null]]);
   });
@@ -122,13 +128,11 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
       const LC = { id: 'LC-KO-011026-01', type: 'LC', strainId: 2, strainText: '', status: 'active' };
       const cultures = [LC];
       const mushroomStrains = [{ id: 2, name: 'King Oyster', kuerzel: 'KO' }];
-      let _bmp = { id: LC.id, n: { KB: 0, LC: 0, PD: 0, SY: 11 }, kg: 1, sy: { 10: 3, 20: 5, 50: 3 } };
-      let gemerkt = null;
+      let _bmp = { id: LC.id, n: { KB: 0, LC: 0, PD: 0, SY: 11 }, sy: { 10: 3, 20: 5, 50: 3 }, kb: { 1: 0, 2: 0, 5: 0 } };
       const t = (k) => k;
       const toast = () => {};
       const fieldError = () => {};
       const _bmpLesen = () => {};
-      const _bmpMerken = (type, w) => { gemerkt = w; };
       const bmpClose = () => { _bmp = null; };
       const anlageLesen = () => '';
       const anlageZeitpunkt = () => new Date(2026, 9, 1, 12);
@@ -140,7 +144,7 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
       const etikettenFuerAlles = (ids) => fenster.push(ids.length);
       ${hebe('bmpGo')}
       bmpGo();
-      return { angelegt, fenster, gemerkt };
+      return { angelegt, fenster };
     `
     )();
     assert.deepEqual(
@@ -152,18 +156,15 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
       ]
     );
     assert.deepEqual(r.fenster, [11], 'ein Fenster, ein Klick druckt alle');
-    assert.deepEqual(r.gemerkt, { kg: 1 }, 'gemerkt wird nur das Gewicht je Beutel, keine Anzahl');
   });
 
-  it('jede Anzahl fängt bei 0 an, auch wenn vom letzten Mal etwas gemerkt ist; nur das Gewicht bleibt', () => {
+  it('jede Anzahl fängt bei 0 an, Spritzen und Körnerbeutel je Größe, und nichts wird gemerkt', () => {
     const b = new Function(
       `
       ${LAB}
       const SY_ML = [10, 20, 50];
+      const KB_KG = [1, 2, 5];
       let _bmp = null;
-      const _bmpLetzte = () => ({ KB: 4, LC: 3, PD: 10, SY: 2, ml: 20, sy: { 10: 3, 20: 5, 50: 3 }, kg: 1.5 });
-      const _msqLastSizes = () => null;
-      const parseDecimal = (s) => parseFloat(String(s).replace(',', '.'));
       const anlageReset = () => {};
       const bmpRender = () => {};
       const t = (k) => k;
@@ -177,13 +178,16 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
     )();
     assert.deepEqual(b.n, { KB: 0, LC: 0, PD: 0, SY: 0 });
     assert.deepEqual(b.sy, { 10: 0, 20: 0, 50: 0 });
-    assert.equal(b.kg, 1.5);
+    assert.deepEqual(b.kb, { 1: 0, 2: 0, 5: 0 });
+    assert.equal(b.kg, undefined, 'ein Gewicht zum Eintippen gibt es nicht mehr');
+    assert.doesNotMatch(APP, /_bmpMerken|_bmpLetzte|mp-bmp/);
   });
 
-  it('die Spritzen-Zeile zählt je Größe statt einer Größenwahl', () => {
+  it('die Spritzen- und die Körnerbeutel-Zeile zählen je Größe', () => {
     const f = hebe('bmpRender');
     assert.match(f, /syMengenHtml\('bmp', _bmp\.sy\)/);
-    assert.doesNotMatch(APP, /data-bmp-ml/);
+    assert.match(f, /kbMengenHtml\('bmp', _bmp\.kb\)/);
+    assert.doesNotMatch(APP, /data-bmp-ml|id="bmp-kg"/);
   });
 });
 

@@ -117,43 +117,53 @@ describe('Mehrere Arten: die Zahlen', () => {
     assert.equal(z.summe, 21);
   });
 
-  it('Körnerbrut fängt bei 0 Beuteln an, mit der gewohnten Beutelgröße', () => {
-    const zeilen = new Function(`
-      let gerendert = null;
-      const _msQuickCtx = { mode: 'labor', mehrere: true, arten: ['LC', 'KB'], ms: { recGrainKg: 0 } };
-      const _msqLastSizes = () => [{ kg: 2, qty: 15 }];
-      const msqRenderSizes = (l) => { gerendert = l; };
-      const getAvgComp = () => ({ grainBagKg: 1 });
-      ${MEHRERE}
-      ${hebe('msqSeedSizes')}
-      msqSeedSizes();
-      return gerendert;
+  it('Körnerbrut zählt je Beutelgröße, 1, 2 und 5 kg, und fängt bei 0 an', () => {
+    const r = new Function(`
+      ${APP.match(/^const KB_KG = .*$/m)[0]}
+      ${APP.match(/^const ZAEHLER_KNOPF =\r?\n.*;$/m)[0]}
+      const felder = { 'ms-q-kb-1': { value: '6' }, 'ms-q-kb-2': { value: '0' }, 'ms-q-kb-5': { value: '2' } };
+      const document = { getElementById: (id) => felder[id] || null };
+      const t = (k) => k;
+      const esc = (s) => String(s);
+      ${hebe('zaehlerZeileHtml')}
+      ${hebe('kbMengenHtml')}
+      ${hebe('kbMengenLesen')}
+      ${hebe('msqReadSizes')}
+      return { html: kbMengenHtml('ms-q', {}), zeilen: msqReadSizes() };
     `)();
-    assert.deepEqual(zeilen, [{ kg: 2, qty: 0 }]);
+    assert.deepEqual(r.html.match(/id="ms-q-kb-\d+" value="\d+"/g), [
+      'id="ms-q-kb-1" value="0"',
+      'id="ms-q-kb-2" value="0"',
+      'id="ms-q-kb-5" value="0"'
+    ]);
+    assert.match(r.html, />5 kg</);
+    // Nur Größen mit Anzahl, in der Form, die gsSetLines nimmt.
+    assert.deepEqual(r.zeilen, [
+      { kg: 1, qty: 6 },
+      { kg: 5, qty: 2 }
+    ]);
   });
 
   it('der Knopf "Mehrere" setzt jede Zahl auf 0 und nimmt die gewählte Art als erste', () => {
     const r = new Function(`
       const sel = { value: 'LC' };
       const syBox = { innerHTML: 'alt' };
-      const document = { getElementById: (id) => (id === 'ms-q-labtype' ? sel : id === 'ms-q-sy' ? syBox : null) };
+      const kbBox = { innerHTML: 'alt' };
+      const document = { getElementById: (id) => (id === 'ms-q-labtype' ? sel : id === 'ms-q-sy' ? syBox : id === 'ms-q-sizes' ? kbBox : null) };
       const _msQuickCtx = { mode: 'labor', mehrere: false, arten: [], n: { PD: 7, LC: 9 } };
-      let _msqSizesTouched = true;
-      let gesaet = 0;
-      const msqSeedSizes = () => { gesaet++; };
       const msQuickRender = () => {};
-      const syMengenHtml = (pre, n) => pre + JSON.stringify(n);
+      const syMengenHtml = (pre, n) => 'sy:' + pre + JSON.stringify(n);
+      const kbMengenHtml = (pre, n) => 'kb:' + pre + JSON.stringify(n);
       ${MEHRERE}
       ${hebe('msqMehrereUmschalten')}
       msqMehrereUmschalten();
-      return { ctx: _msQuickCtx, sy: syBox.innerHTML, gesaet, touched: _msqSizesTouched };
+      return { ctx: _msQuickCtx, sy: syBox.innerHTML, kb: kbBox.innerHTML };
     `)();
     assert.equal(r.ctx.mehrere, true);
     assert.deepEqual(r.ctx.arten, ['LC']);
     assert.deepEqual(r.ctx.n, { PD: 0, LC: 0 });
-    assert.equal(r.sy, 'ms-q{}');
-    assert.equal(r.gesaet, 1);
-    assert.equal(r.touched, false);
+    assert.equal(r.sy, 'sy:ms-q{}');
+    assert.equal(r.kb, 'kb:ms-q{}');
   });
 });
 
@@ -229,7 +239,7 @@ describe('Mehrere Arten: anlegen', () => {
 
   it('der Dialog prüft die Zahlen, solange er steht, und merkt sich nichts davon', () => {
     const f = hebe('msQuickConfirm');
-    const pruefen = f.indexOf('msqMehrereOhneGewicht()');
+    const pruefen = f.indexOf("toast(t('bmp.nothing'), 'err')");
     const warten = f.indexOf("await stammFertig('ms-q')");
     const anlegen = f.indexOf('msqMehrereAnlegen(');
     assert.ok(pruefen > 0 && pruefen < warten, 'geprüft wird erst, wenn der Dialog schon zu ist');
