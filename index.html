@@ -1037,6 +1037,12 @@
       <div class="modal" style="max-width: 540px">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
           <h3 id="bi-title" data-i18n="bagInfo.title">Bag info</h3>
+          <!-- Ein Tipp, und der Block steht im Blockbuch, mit seiner Herkunft.
+               Im Kopf, damit er beim Scannen in der Fruchtung nicht unter den
+               großen Knöpfen liegt. Nur für Blöcke, nicht für Körnerbrut. -->
+          <button type="button" id="bi-good" class="btn btn-sm block-good" aria-pressed="false" hidden>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg><span data-i18n="block.good">Good block</span>
+          </button>
           <button id="cls-11" class="modal-close-icon" data-i18n-aria-label="common.close" aria-label="Close">
             <svg
               width="20"
@@ -1055,6 +1061,7 @@
         </div>
         <div id="bi-body"></div>
         <div id="bi-actions" style="margin-top: 14px"></div>
+        <div id="bi-notes"></div>
       </div>
     </div>
 
@@ -2517,6 +2524,22 @@
               placeholder="grams"
             />
           </div>
+          <div id="hp-note-wrap">
+            <label class="fs-xs" style="color: var(--c-amber-dark)" data-i18n="block.noteLabel">Note on block</label
+            ><input
+              type="text"
+              enterkeyhint="done"
+              id="hp-note"
+              maxlength="2000"
+              autocomplete="off"
+              style="width: 220px"
+              data-i18n-placeholder="block.notePlaceholder"
+              placeholder="What stands out about this block …"
+            />
+          </div>
+          <button type="button" id="hp-good" class="btn btn-sm block-good" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg><span data-i18n="block.good">Good block</span>
+          </button>
           <button id="act-21" class="btn btn-p btn-sm" data-i18n="harvest.logHarvest">Log harvest</button>
           <button id="hp-next" class="btn btn-sm" data-i18n="harvest.logNext">Save &amp; scan next</button>
           <button id="btn-22" class="btn btn-sm" data-i18n="harvest.cancel">Cancel</button>
@@ -2916,6 +2939,7 @@
             <button class="stab" id="st-batch-locations" data-i18n="batch.locationsTab">Standorte</button>
             <button class="stab" id="st-batch-substrate" data-i18n="sub.tab">Substrat-Ansätze</button>
             <button class="stab" id="st-batch-harvest" data-i18n="batch.harvests">Harvests</button>
+            <button class="stab" id="st-batch-blocks" data-i18n="batch.blocksTab">Good blocks</button>
           </div>
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
@@ -3466,6 +3490,27 @@
                   <tbody id="harvest-body" role="rowgroup"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          <!-- Blockbuch: die als gut vermerkten Blöcke mit dem, woraus sie gemacht
+               waren, und darunter jeder Block mit einer Notiz. Gefüllt von
+               loadBlockBook(), erst beim Öffnen und dann bei jeder Synchronisierung. -->
+          <div class="sp" id="sp-batch-blocks">
+            <div class="card">
+              <div class="sec" data-i18n="block.summary">What the good blocks have in common</div>
+              <div class="fs-meta" style="color: var(--c-text-sec); margin-bottom: 8px" data-i18n="block.goodListHint">
+                What the good blocks were made of.
+              </div>
+              <div id="bb-summary"></div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="block.goodList">Good blocks</div>
+              <div id="bb-good"></div>
+            </div>
+            <div class="card">
+              <div class="sec" data-i18n="block.notesList">Notes on blocks</div>
+              <div id="bb-notes"></div>
             </div>
           </div>
         </div>

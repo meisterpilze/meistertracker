@@ -620,6 +620,79 @@ paths:
         '200':
           description: Harvest logged
 
+  /api/block-book:
+    get:
+      summary: Blocks marked good or commented, each with its lineage
+      description: >-
+        Lineage (substrate mix with target and measured moisture, grain spawn
+        with its hydration) is read live while the batch exists, otherwise the
+        snapshot taken when the block was first marked is returned (`live: false`).
+      responses:
+        '200':
+          description: '{ entries: [...] }'
+
+  /api/block-notes/good:
+    post:
+      summary: Mark a block good, or clear the mark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bag]
+              properties:
+                bag:
+                  type: string
+                on:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Saved
+        '404':
+          description: Unknown bag
+
+  /api/block-notes/comments:
+    post:
+      summary: Add a comment to a block
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bag, text]
+              properties:
+                bag:
+                  type: string
+                text:
+                  type: string
+                  maxLength: 2000
+                flush:
+                  type: integer
+                  description: Set when the comment was written while harvesting
+      responses:
+        '200':
+          description: '{ ok, id }'
+        '404':
+          description: Unknown bag
+
+  /api/block-notes/comments/{id}:
+    delete:
+      summary: Delete a comment (its author or an admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Deleted
+        '403':
+          description: Not the author and not an admin
+
   /api/cultures:
     post:
       summary: Create cultures

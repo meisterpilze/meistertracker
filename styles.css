@@ -1632,6 +1632,111 @@ body:has(.modal-bg.open) .cam-fab {
   flex-wrap: wrap;
 }
 
+/* -- Blockbuch: Gut-Knopf, Notizen, Liste -- */
+.block-good {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.block-good[hidden] {
+  display: none;
+}
+.block-good[aria-pressed='true'] {
+  background: var(--c-amber-light);
+  border-color: var(--c-amber-dark);
+  color: var(--c-amber-dark);
+  font-weight: 600;
+}
+.block-good[aria-pressed='true'] svg {
+  fill: currentColor;
+}
+#bi-good {
+  margin-left: auto;
+  margin-right: 8px;
+}
+.bb-bi-notes {
+  margin-top: 4px;
+}
+.bb-bi-notes textarea {
+  width: 100%;
+  margin-top: 6px;
+  resize: vertical;
+}
+.bb-bi-save {
+  margin-top: 6px;
+}
+.bb-note {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.bb-note:last-child {
+  border-bottom: 0;
+}
+.bb-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bb-note-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--c-text-muted);
+  margin-top: 2px;
+}
+.bb-note-del {
+  margin-left: auto;
+  min-width: var(--tap);
+  border: 0;
+  background: transparent;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+.bb-entry,
+.bb-sum {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.bb-entry:last-child,
+.bb-sum:last-child {
+  border-bottom: 0;
+}
+.bb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+.bb-harvest {
+  margin-left: auto;
+  color: var(--c-amber-dark);
+}
+.bb-star {
+  fill: var(--c-amber-dark);
+}
+.bb-line {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.bb-mono {
+  font-family: monospace;
+}
+.bb-muted {
+  color: var(--c-text-muted);
+}
+.bb-notes {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--c-amber-border);
+}
+.bb-sum-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
 /* ═══ LAYOUT ════════════════════════════════════════════════════ */
 .main {
   padding: var(--pad-page);
