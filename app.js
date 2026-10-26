@@ -359,6 +359,7 @@ let mushroomStrains = [],
   projectDocs = null, // Vorhaben-Texte, erst beim Öffnen eines Reiters geladen
   projectDocsStamp = null,
   harvests = [],
+  blockNotes = [], // gute Blöcke und Notizen je Block, siehe BLOCKBUCH
   cultures = [],
   inventory = {},
   teamMembers = [],
@@ -600,6 +601,11 @@ async function loadData() {
     lastSyncTime = Date.now();
     setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
     refresh();
+    // Gut-Knöpfe und Notizliste folgen dem neuen Stand; das Notizfeld nicht,
+    // in dem tippt vielleicht gerade jemand.
+    renderBlockGoodButtons();
+    renderBiNotesList();
+    if (_bbOpen()) loadBlockBook();
     // The remaining-kilogram figures are what the next Charge gets planned
     // against, so they have to move with every sync — but they come down inside
     // /api/data now rather than costing a second round-trip on every SSE event.
@@ -660,6 +666,7 @@ function applyData(d) {
     projectDocsStamp = d.projectDocsStamp || '';
   }
   harvests = d.harvests || [];
+  blockNotes = d.blockNotes || [];
   cultures = d.cultures || [];
   inventory = d.inventory || defaultInventory();
   teamMembers = d.teamMembers || [];
@@ -1491,6 +1498,10 @@ function openStab(page, sub) {
   if (page === 'batch' && sub === 'new') nbEnsureReady();
   if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
   if (page === 'batch' && sub === 'harvest') renderHarvests();
+  if (page === 'batch' && sub === 'blocks') {
+    renderBlockBook();
+    loadBlockBook();
+  }
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
     lwUpdate();
@@ -12376,6 +12387,9 @@ function showHarvestPanel(bagId, batchId) {
   // a release that looks already-filled gets confirmed by reflex — and that sets
   // the same produce aside twice.
   document.getElementById('hp-release').value = '';
+  // Die Notiz gehört zu diesem Block, nie zum vorigen.
+  document.getElementById('hp-note').value = '';
+  renderBlockGoodButtons();
   // Hidden unless the feed actually reports releases. A field that takes a number
   // and does nothing with it is worse than no field: the crate gets packed and
   // nothing publishes it.
@@ -12416,6 +12430,12 @@ function confirmHarvest(keepScanning) {
     flush: f
   };
   harvests.push(hEntry);
+  // Die Notiz geht als eigener Eintrag ins Blockbuch, mit der Welle, in der sie
+  // geschrieben wurde. Schlägt sie fehl, sagt setFb das; die Ernte bleibt.
+  const noteEl = document.getElementById('hp-note');
+  const note = noteEl ? noteEl.value.trim() : '';
+  if (noteEl) noteEl.value = '';
+  if (note) addBlockComment(p.bagId, p.batchId, note, f);
   // `release` travels in the request but not in `hEntry`: the local array mirrors
   // the harvests table, and a field that exists on the client's copy and not in
   // the database is how the two quietly drift apart.
@@ -22112,6 +22132,8 @@ function openBagInfo(bagId, batchId, batch) {
   if (!b) {
     el.innerHTML = '<p style="color:var(--c-red-dark)">' + t('batch.notFound') + ': ' + esc(batchId) + '</p>';
     document.getElementById('bi-actions').innerHTML = '';
+    renderBlockGoodButtons();
+    renderBiNotes();
     document.getElementById('m-baginfo').classList.add('open');
     return;
   }
@@ -22158,6 +22180,8 @@ function openBagInfo(bagId, batchId, batch) {
   closeScanModal();
   biWholeBatch = false;
   renderBiActions();
+  renderBlockGoodButtons();
+  renderBiNotes();
   document.getElementById('m-baginfo').classList.add('open');
   setFb('info', t('scanFb.bagInfo', { bag: bagId }), { noModal: true });
 }
@@ -22433,6 +22457,324 @@ function biConfirmRemove() {
 }
 document.getElementById('m-baginfo').addEventListener('click', (e) => {
   if (e.target.id === 'm-baginfo') document.getElementById('m-baginfo').classList.remove('open');
+});
+
+// ─── BLOCKBUCH ───────────────────────────────────────────────
+// Gute Blöcke und Notizen je Block. Wer in der Fruchtung einen Block scannt, der
+// besonders gut läuft, vermerkt ihn mit einem Tipp; das Blockbuch hält fest,
+// woraus er gemacht war — Ansatz mit Soll- und Ist-Feuchte, Körnerbrut mit ihrer
+// Feuchte — und legt die guten Blöcke je Sorte nebeneinander, bis sich zeigt,
+// welches Rezept trägt. Notizen kommen aus dem Beutel-Fenster und beim Ernten.
+//
+// blockNotes reist in /api/data mit, damit das Beutel-Fenster beim Scannen nicht
+// wartet. Herkunft und Ernte je Block holt erst der Reiter (/api/block-book).
+let _bbEntries = null;
+function blockNoteOf(bagId) {
+  const k = String(bagId || '').toUpperCase();
+  return blockNotes.find((n) => n.bagId.toUpperCase() === k) || null;
+}
+function _bbNoteFor(bagId, batchId) {
+  let n = blockNoteOf(bagId);
+  if (!n) {
+    n = { bagId, batchId, good: false, goodAt: null, goodBy: null, comments: [] };
+    blockNotes.push(n);
+  }
+  return n;
+}
+function _bbCanDelete(c) {
+  return !!currentUser && (currentUser.role === 'admin' || (!!c.by && c.by === currentUser.username));
+}
+function _bbOpen() {
+  const el = document.getElementById('sp-batch-blocks');
+  return !!(el && el.classList.contains('active'));
+}
+// Körnerbrut ist kein Block: sie wird verbraucht, nicht geerntet.
+function biIsBlock() {
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  return !!b && b.batchType !== 'grain';
+}
+// Beide Gut-Knöpfe, im Beutel-Fenster und in der Ernte-Leiste, zeigen den Stand
+// des Beutels, um den es dort gerade geht.
+function renderBlockGoodButtons() {
+  const set = (id, bagId, show) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.hidden = !show;
+    const on = !!(bagId && blockNoteOf(bagId)?.good);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  };
+  set('bi-good', biBagId, !!biBagId && biIsBlock());
+  set('hp-good', scan.harvestBag && scan.harvestBag.bagId, !!scan.harvestBag);
+}
+async function setBlockGoodFor(bagId, batchId, on, withUndo) {
+  const n = _bbNoteFor(bagId, batchId);
+  const vorher = { good: n.good, goodAt: n.goodAt, goodBy: n.goodBy };
+  Object.assign(n, {
+    good: on,
+    goodAt: on ? new Date().toISOString() : null,
+    goodBy: on ? currentUser?.username || null : null
+  });
+  renderBlockGoodButtons();
+  const r = await apiPost('/api/block-notes/good', { bag: bagId, on });
+  if (!r || r.error) {
+    Object.assign(n, vorher);
+    renderBlockGoodButtons();
+    setFb('err', t('block.saveFailed', { msg: (r && r.error) || 'Network error' }), { noModal: true });
+    return;
+  }
+  const msg = on ? t('block.markedGood', { bag: bagId }) : t('block.unmarkedGood', { bag: bagId });
+  setFb('ok', msg, { noModal: true });
+  if (withUndo) showUndoBar(msg, () => setBlockGoodFor(bagId, batchId, !on, false));
+  if (_bbOpen()) loadBlockBook();
+}
+function toggleBlockGood(bagId, batchId) {
+  if (!bagId) return;
+  setBlockGoodFor(bagId, batchId, !blockNoteOf(bagId)?.good, true);
+}
+async function addBlockComment(bagId, batchId, text, flush) {
+  const n = _bbNoteFor(bagId, batchId);
+  const c = { id: null, text, flush: flush || null, at: new Date().toISOString(), by: currentUser?.username || null };
+  n.comments.push(c);
+  renderBiNotesList();
+  const r = await apiPost('/api/block-notes/comments', { bag: bagId, text, flush: flush || undefined });
+  if (!r || r.error) {
+    n.comments.splice(n.comments.indexOf(c), 1);
+    renderBiNotesList();
+    setFb('err', t('block.saveFailed', { msg: (r && r.error) || 'Network error' }), { noModal: true });
+    return false;
+  }
+  c.id = r.id;
+  renderBiNotesList();
+  if (_bbOpen()) loadBlockBook();
+  return true;
+}
+// Ein Tipp löscht, Rückgängig schreibt dieselbe Notiz neu.
+async function deleteBlockComment(id) {
+  let n = null,
+    c = null;
+  for (const x of blockNotes) {
+    const y = x.comments.find((k) => k.id === id);
+    if (y) {
+      n = x;
+      c = y;
+      break;
+    }
+  }
+  if (!c) return;
+  n.comments.splice(n.comments.indexOf(c), 1);
+  renderBiNotesList();
+  if (_bbEntries) {
+    for (const e of _bbEntries) e.comments = e.comments.filter((k) => k.id !== id);
+    renderBlockBook();
+  }
+  const r = await apiDelete('/api/block-notes/comments/' + id);
+  if (!r || r.error) {
+    n.comments.push(c);
+    renderBiNotesList();
+    if (_bbOpen()) loadBlockBook();
+    setFb('err', t('block.saveFailed', { msg: (r && r.error) || 'Network error' }), { noModal: true });
+    return;
+  }
+  showUndoBar(t('block.noteDeleted'), () => addBlockComment(n.bagId, n.batchId, c.text, c.flush));
+}
+function _bbCommentsHtml(comments) {
+  return comments
+    .map((c) => {
+      const meta = [fmtDtTime(c.at), c.by ? esc(c.by) : '', c.flush ? esc(t('block.atFlush', { n: c.flush })) : '']
+        .filter(Boolean)
+        .join(' · ');
+      const del =
+        c.id && _bbCanDelete(c)
+          ? `<button type="button" class="bb-note-del" data-bb-del="${c.id}" aria-label="${esc(t('block.deleteNote'))}" title="${esc(t('block.deleteNote'))}">×</button>`
+          : '';
+      return `<div class="bb-note"><div class="bb-note-text fs-meta">${esc(c.text)}</div><div class="bb-note-meta fs-micro">${meta}${del}</div></div>`;
+    })
+    .join('');
+}
+// Das Notizfeld wird einmal gebaut, wenn das Fenster aufgeht; danach ändert sich
+// nur die Liste darüber. Sonst wischte jede Synchronisierung weg, was gerade
+// getippt wird.
+function renderBiNotes() {
+  const el = document.getElementById('bi-notes');
+  if (!el) return;
+  if (!biBagId || !biIsBlock()) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML =
+    `<div class="met bb-bi-notes"><div class="met-l" style="font-weight:700">${esc(t('block.notes'))}</div>` +
+    '<div id="bi-notes-list"></div>' +
+    `<textarea id="bi-note-text" rows="2" maxlength="2000" placeholder="${esc(t('block.notePlaceholder'))}"></textarea>` +
+    `<div class="bb-bi-save"><button type="button" class="btn btn-sm" id="bi-note-save">${esc(t('block.saveNote'))}</button></div></div>`;
+  renderBiNotesList();
+}
+function renderBiNotesList() {
+  const el = document.getElementById('bi-notes-list');
+  if (!el || !biBagId) return;
+  const n = blockNoteOf(biBagId);
+  el.innerHTML = n && n.comments.length ? _bbCommentsHtml(n.comments) : '';
+}
+function biSaveNote() {
+  const ta = document.getElementById('bi-note-text');
+  const text = ta ? ta.value.trim() : '';
+  if (!text || !biBagId) return;
+  const bag = biBagId;
+  ta.value = '';
+  addBlockComment(bag, biBatchId, text, null).then((ok) => {
+    if (ok) setFb('ok', t('block.noteSaved', { bag }), { noModal: true });
+    else if (ta.isConnected && !ta.value) ta.value = text;
+  });
+}
+
+async function loadBlockBook() {
+  try {
+    const r = await apiGet('/api/block-book');
+    _bbEntries = (r && r.entries) || [];
+    renderBlockBook();
+  } catch (e) {
+    const el = document.getElementById('bb-good');
+    if (el) el.innerHTML = `<div class="empty">${esc(t('block.loadFailed', { msg: e.message }))}</div>`;
+  }
+}
+const _bbPct = (v) => fmtKg(v, v % 1 ? 1 : 0) + ' %';
+const _bbAvg = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+function _bbLineageHtml(l) {
+  const muted = (txt) => `<span class="bb-muted">${esc(txt)}</span>`;
+  const mono = (txt) => `<span class="bb-mono">${esc(txt)}</span>`;
+  const zeile = (label, teile) =>
+    `<div class="bb-line"><span class="met-l">${esc(label)}</span> ${teile.filter(Boolean).join(muted(' · '))}</div>`;
+  let html = '';
+  const s = l.substrate;
+  if (s) {
+    const ist =
+      s.actualRh == null
+        ? muted(t('bagInfo.rhActual') + ' ' + t('sub.rhNotMeasured'))
+        : `<strong>${esc(t('bagInfo.rhActual') + ' ' + _bbPct(s.actualRh))}</strong>`;
+    const mix = s.subId
+      ? ''
+      : muted(
+          'HW ' + _bbPct(s.hardwoodPct) + ' · WB ' + _bbPct(s.wheatbranPct)
+        );
+    html += zeile(t('bagInfo.substrate'), [
+      s.subId ? mono(s.subId) : '',
+      s.recipe ? muted(s.recipe) : '',
+      mix,
+      s.targetRh ? muted(t('bagInfo.rhTarget') + ' ' + _bbPct(s.targetRh)) : '',
+      ist
+    ]);
+  }
+  for (const g of l.grain || []) {
+    html += zeile(t('bagInfo.grain'), [
+      g.batchId ? mono(g.batchId) : '',
+      g.rh ? `<strong>${esc('RH ' + _bbPct(g.rh))}</strong>` : '',
+      muted(t('bagInfo.nBags', { n: g.bags }))
+    ]);
+  }
+  if (l.culture) html += zeile(t('bagInfo.culture'), [mono(l.culture)]);
+  return html;
+}
+function _bbEntryHtml(e, withComments) {
+  const l = e.lineage || {};
+  const ernte =
+    e.harvestG > 0
+      ? `${fmtKg(e.harvestG, 0)} g (${e.harvestCount}×)`
+      : `<span class="bb-muted">${esc(t('block.noHarvest'))}</span>`;
+  const star = e.good ? '<svg class="bb-star" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" /></svg>' : '';
+  const head =
+    `<div class="bb-head"><span class="bb-mono"><strong>${esc(e.bagId)}</strong></span>${star}` +
+    `<span class="fs-meta">${l.species ? spDot(l.species) + esc(l.species) : ''}${l.strain ? ' / ' + esc(l.strain) : ''}</span>` +
+    `<span class="fs-meta bb-harvest">${ernte}</span></div>`;
+  const gone = e.live ? '' : `<div class="bb-line bb-muted fs-micro">${esc(t('block.batchGone'))}</div>`;
+  const comments = withComments && e.comments.length ? `<div class="bb-notes">${_bbCommentsHtml(e.comments)}</div>` : '';
+  return `<div class="bb-entry">${head}<div class="fs-meta">${_bbLineageHtml(l)}</div>${gone}${comments}</div>`;
+}
+// Je Sorte: wie viele gute Blöcke, aus welchem Rezept, mit welcher Feuchte im
+// Substrat (gemessen, wo jemand gemessen hat) und in der Körnerbrut, und was sie
+// im Schnitt getragen haben. Das ist die Zeile, die mit der Zeit zum Rezept wird.
+function _bbSummaryHtml(good) {
+  const bySp = new Map();
+  for (const e of good) {
+    const l = e.lineage || {};
+    const k = l.species || '?';
+    if (!bySp.has(k)) bySp.set(k, { n: 0, recipes: new Map(), ist: [], soll: [], grain: [], harvest: [] });
+    const a = bySp.get(k);
+    a.n++;
+    const s = l.substrate;
+    if (s) {
+      const r = s.recipe || (s.subId ? s.subId : 'HW ' + _bbPct(s.hardwoodPct) + ' · WB ' + _bbPct(s.wheatbranPct));
+      a.recipes.set(r, (a.recipes.get(r) || 0) + 1);
+      if (s.actualRh != null) a.ist.push(s.actualRh);
+      if (s.targetRh) a.soll.push(s.targetRh);
+    }
+    for (const g of l.grain || []) if (g.rh) a.grain.push(g.rh);
+    if (e.harvestG > 0) a.harvest.push(e.harvestG);
+  }
+  return [...bySp.entries()]
+    .sort((x, y) => y[1].n - x[1].n)
+    .map(([sp, a]) => {
+      const box = (label, wert) =>
+        `<div class="met"><div class="met-l">${esc(label)}</div><div class="fs-meta" style="font-weight:600">${wert}</div></div>`;
+      const dash = '<span class="bb-muted">—</span>';
+      const recipes = [...a.recipes.entries()]
+        .sort((x, y) => y[1] - x[1])
+        .map(([r, c]) => esc(r) + (a.n > 1 ? ' <span class="bb-muted">×' + c + '</span>' : ''))
+        .join('<br>');
+      const sub = [
+        a.ist.length
+          ? esc(t('bagInfo.rhActual') + ' Ø ' + _bbPct(Math.round(_bbAvg(a.ist) * 10) / 10)) +
+            ` <span class="bb-muted">(${esc(t('block.nMeasured', { n: a.ist.length }))})</span>`
+          : '',
+        a.soll.length
+          ? `<span class="bb-muted">${esc(t('bagInfo.rhTarget') + ' Ø ' + _bbPct(Math.round(_bbAvg(a.soll) * 10) / 10))}</span>`
+          : ''
+      ]
+        .filter(Boolean)
+        .join('<br>');
+      return (
+        `<div class="bb-sum"><div class="bb-head"><span class="fs-base" style="font-weight:600">${spDot(sp)}${esc(sp)}</span>` +
+        `<span class="fs-meta bb-muted">${esc(a.n === 1 ? t('block.oneBlock') : t('block.nBlocks', { n: a.n }))}</span></div>` +
+        '<div class="bb-sum-grid">' +
+        box(t('block.recipes'), recipes || dash) +
+        box(t('block.substrateRh'), sub || dash) +
+        box(t('block.grainRh'), a.grain.length ? esc('Ø ' + _bbPct(Math.round(_bbAvg(a.grain) * 10) / 10)) : dash) +
+        box(t('block.avgHarvest'), a.harvest.length ? esc(fmtKg(Math.round(_bbAvg(a.harvest)), 0) + ' g') : dash) +
+        '</div></div>'
+      );
+    })
+    .join('');
+}
+function renderBlockBook() {
+  const sumEl = document.getElementById('bb-summary'),
+    goodEl = document.getElementById('bb-good'),
+    notesEl = document.getElementById('bb-notes');
+  if (!sumEl || !goodEl || !notesEl || !_bbEntries) return;
+  const good = _bbEntries.filter((e) => e.good).sort((a, b) => (b.goodAt || '').localeCompare(a.goodAt || ''));
+  const lastAt = (e) => (e.comments.length ? e.comments[e.comments.length - 1].at : '');
+  const noted = _bbEntries.filter((e) => e.comments.length).sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
+  sumEl.innerHTML = good.length ? _bbSummaryHtml(good) : '';
+  goodEl.innerHTML = good.length
+    ? good.map((e) => _bbEntryHtml(e, false)).join('')
+    : `<div class="empty">${esc(t('block.goodEmpty'))}</div>`;
+  notesEl.innerHTML = noted.length
+    ? noted.map((e) => _bbEntryHtml(e, true)).join('')
+    : `<div class="empty">${esc(t('block.notesEmpty'))}</div>`;
+}
+
+document.getElementById('bi-good').addEventListener('click', () => toggleBlockGood(biBagId, biBatchId));
+document.getElementById('hp-good').addEventListener('click', () => {
+  if (scan.harvestBag) toggleBlockGood(scan.harvestBag.bagId, scan.harvestBag.batchId);
+});
+document.getElementById('hp-note').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmHarvest();
+});
+document.getElementById('bi-notes').addEventListener('click', (e) => {
+  if (e.target.closest('#bi-note-save')) return biSaveNote();
+  const del = e.target.closest('[data-bb-del]');
+  if (del) deleteBlockComment(parseInt(del.dataset.bbDel, 10));
+});
+document.getElementById('sp-batch-blocks').addEventListener('click', (e) => {
+  const del = e.target.closest('[data-bb-del]');
+  if (del) deleteBlockComment(parseInt(del.dataset.bbDel, 10));
 });
 
 // ─── CONTAMINATION REPORT MODAL ──────────────────────────────
@@ -31307,6 +31649,7 @@ function initEventListeners() {
   $('st-batch-harvest').addEventListener('click', () => {
     openStab('batch', 'harvest');
   });
+  $('st-batch-blocks').addEventListener('click', () => openStab('batch', 'blocks'));
   $('batch-q').addEventListener('input', renderBatches);
   $('batch-archive-filter').addEventListener('change', renderBatches);
   // The stored choice belongs on the control too, or a reload shows "Nicht

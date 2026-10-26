@@ -8034,6 +8034,97 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // Blockbuch: gute Blöcke und Notizen je Block, mit der Herkunft jedes Blocks.
+  // Offen für jeden angemeldeten Benutzer wie das Ernten selbst; eine Notiz
+  // löschen darf, wer sie geschrieben hat, oder ein Admin.
+  if (req.method === 'GET' && url === '/api/block-book') {
+    try {
+      jsonOk(res, { entries: db.getBlockBook(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/block-notes/good') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data || typeof data.bag !== 'string' || !data.bag.trim()) {
+        jsonErr(res, 400, 'bag required');
+        return;
+      }
+      try {
+        if (!db.setBlockGood(database, data.bag, data.on !== false, req.authUser && req.authUser.username)) {
+          jsonErr(res, 404, 'bag not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/block-notes/comments') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const text = data && typeof data.text === 'string' ? data.text.trim() : '';
+      if (!data || typeof data.bag !== 'string' || !data.bag.trim() || !text) {
+        jsonErr(res, 400, 'bag and text required');
+        return;
+      }
+      if (text.length > 2000) {
+        jsonErr(res, 400, 'text too long (max 2000)');
+        return;
+      }
+      const flush = data.flush == null ? null : parseInt(data.flush, 10);
+      if (flush !== null && !(flush >= 1 && flush <= 100)) {
+        jsonErr(res, 400, 'flush must be 1-100');
+        return;
+      }
+      try {
+        const id = db.addBlockComment(database, data.bag, text, req.authUser && req.authUser.username, flush);
+        if (!id) {
+          jsonErr(res, 404, 'bag not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  const blockCommentMatch = url.match(/^\/api\/block-notes\/comments\/(\d+)$/);
+  if (req.method === 'DELETE' && blockCommentMatch) {
+    try {
+      const c = db.getBlockComment(database, parseInt(blockCommentMatch[1], 10));
+      if (!c) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      const isAdmin = req.authUser && req.authUser.role === 'admin';
+      const isOwner = !!(c.by && req.authUser && req.authUser.username === c.by);
+      if (!isAdmin && !isOwner) {
+        jsonErr(res, 403, 'forbidden');
+        return;
+      }
+      db.deleteBlockComment(database, c.id);
+      broadcastSSE(res);
+      jsonOk(res, { ok: true });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+
   // GET /api/harvests — paginated harvest history
   if (req.method === 'GET' && url === '/api/harvests') {
     const params = new URL(req.url, 'http://x').searchParams;

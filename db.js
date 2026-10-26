@@ -3034,6 +3034,36 @@ const MIGRATIONS = [
       db.exec('DROP TABLE syringe_stock_sku');
       db.exec('ALTER TABLE syringe_stock_sku_neu RENAME TO syringe_stock_sku');
     }
+  },
+  {
+    version: 104,
+    description: 'Blockbuch: gute Bloecke markieren und Notizen je Block, mit Herkunft zum Zeitpunkt',
+    fn(db) {
+      // Ein Block, den jemand für gut befunden oder kommentiert hat. lineage ist
+      // die Herkunft so, wie sie beim Markieren war (Ansatz, Feuchte, Körnerbrut),
+      // als JSON: eine Charge kann später gelöscht werden, und dann wäre ohne sie
+      // nicht mehr zu sagen, woraus der gute Block gemacht war.
+      db.exec(`CREATE TABLE IF NOT EXISTS block_notes (
+        bag_id    TEXT PRIMARY KEY,
+        batch_id  TEXT NOT NULL,
+        good      INTEGER NOT NULL DEFAULT 0,
+        good_at   TEXT,
+        good_by   TEXT,
+        lineage   TEXT NOT NULL DEFAULT '{}',
+        created   TEXT NOT NULL
+      )`);
+      // Notizen zu einem Block, beliebig viele. flush ist gesetzt, wenn die Notiz
+      // beim Ernten geschrieben wurde, sonst leer.
+      db.exec(`CREATE TABLE IF NOT EXISTS block_comments (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        bag_id     TEXT NOT NULL REFERENCES block_notes(bag_id) ON DELETE CASCADE,
+        text       TEXT NOT NULL,
+        flush      INTEGER,
+        created    TEXT NOT NULL,
+        created_by TEXT
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_block_comments_bag ON block_comments(bag_id, created)');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3636,6 +3666,9 @@ function readAll(db, opts = {}) {
     workPackages: listWorkPackages(db),
     projectNotes: listProjectNotes(db),
     projectDocsStamp: getProjectDocsStamp(db),
+    // Ob ein Block gut ist und was zu ihm notiert wurde: das Beutel-Fenster
+    // braucht es beim Scannen sofort.
+    blockNotes: listBlockNotes(db),
     version
   };
 }
@@ -13355,7 +13388,221 @@ function computeProductionDemand(db) {
     .sort((a, b) => (a.startBy || '9999-99-99').localeCompare(b.startBy || '9999-99-99'));
 }
 
+// ── Blockbuch: gute Blöcke und Notizen je Block ──────────────
+// Woraus ein Block gemacht ist: Charge, Substrat-Ansatz mit Soll- und Ist-
+// Feuchte, und die Körnerbrut, die für die Charge verbraucht wurde, mit ihrer
+// Feuchte. Dieselben Quellen wie biHerkunftHtml() im Client. null, wenn es die
+// Charge nicht mehr gibt.
+function blockLineage(db, batchId) {
+  const b = db.prepare('SELECT * FROM batches WHERE batch_id = ?').get(batchId);
+  if (!b) return null;
+  let substrate = null;
+  if (b.substrate_batch_id) {
+    const s = db.prepare('SELECT * FROM substrate_batches WHERE id = ?').get(b.substrate_batch_id);
+    if (s) {
+      substrate = {
+        subId: s.sub_id,
+        recipe: s.recipe_label || '',
+        hardwoodPct: s.hardwood_pct || 0,
+        wheatbranPct: s.wheatbran_pct || 0,
+        cornPct: s.corn_pct || 0,
+        gypsumPct: s.gypsum_pct || 0,
+        targetRh: s.rh_pct || s.moisture_pct || null,
+        actualRh: s.actual_rh_pct == null ? null : s.actual_rh_pct
+      };
+    }
+  } else if (b.sub_rh) {
+    // Vor den Ansätzen trug die Charge ihr Substrat selbst.
+    substrate = {
+      subId: null,
+      recipe: '',
+      hardwoodPct: b.sub_hardwood || 0,
+      wheatbranPct: b.sub_wheatbran || 0,
+      cornPct: b.sub_corn || 0,
+      gypsumPct: 0,
+      targetRh: b.sub_rh,
+      actualRh: null
+    };
+  }
+  const grainBags = db
+    .prepare("SELECT bag FROM scan_log WHERE action = 'REMOVE' AND reason = ? AND bag IS NOT NULL")
+    .all('spawn:' + b.batch_id)
+    .map((r) => r.bag);
+  const grainByBatch = new Map();
+  const bagStmt = db.prepare(
+    `SELECT g.batch_id, g.grain_rh, g.source_id FROM bags x JOIN batches g ON g.batch_id = x.batch_id
+      WHERE x.bag_id = ? COLLATE NOCASE`
+  );
+  for (const bag of grainBags) {
+    const g = bagStmt.get(bag);
+    const key = g ? g.batch_id : '?';
+    if (!grainByBatch.has(key))
+      grainByBatch.set(key, {
+        batchId: g ? g.batch_id : null,
+        rh: g ? g.grain_rh || null : null,
+        culture: g ? g.source_id || null : null,
+        bags: 0
+      });
+    grainByBatch.get(key).bags++;
+  }
+  return {
+    batchId: b.batch_id,
+    species: b.species,
+    strain: (b.strain_text || '').trim() || b.strain || '',
+    culture: b.source_id || null,
+    made: b.created,
+    substrate,
+    grain: [...grainByBatch.values()]
+  };
+}
+
+// node:sqlite hat kein transaction(); dasselbe BEGIN/COMMIT wie überall hier.
+function _blockTx(db, fn) {
+  db.exec('BEGIN');
+  try {
+    const r = fn();
+    db.exec('COMMIT');
+    return r;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+function _blockBag(db, bagId) {
+  return db
+    .prepare('SELECT bag_id, batch_id FROM bags WHERE bag_id = ? COLLATE NOCASE')
+    .get(String(bagId || '').trim());
+}
+
+// Legt die Zeile an, wenn es sie noch nicht gibt, und frischt die Herkunft auf.
+function _ensureBlockNote(db, bag) {
+  const lineage = JSON.stringify(blockLineage(db, bag.batch_id) || {});
+  db.prepare(
+    `INSERT INTO block_notes(bag_id, batch_id, lineage, created) VALUES(?,?,?,?)
+     ON CONFLICT(bag_id) DO UPDATE SET batch_id = excluded.batch_id, lineage = excluded.lineage`
+  ).run(bag.bag_id, bag.batch_id, lineage, new Date().toISOString());
+}
+
+// Eine Zeile, die weder gut noch kommentiert ist, sagt nichts mehr.
+function _pruneBlockNote(db, bagId) {
+  db.prepare(
+    'DELETE FROM block_notes WHERE bag_id = ? AND good = 0 AND NOT EXISTS (SELECT 1 FROM block_comments c WHERE c.bag_id = block_notes.bag_id)'
+  ).run(bagId);
+}
+
+// Gut an oder aus. false, wenn es den Beutel nicht gibt.
+function setBlockGood(db, bagId, on, user) {
+  const bag = _blockBag(db, bagId);
+  if (!bag) return false;
+  _blockTx(db, () => {
+    _ensureBlockNote(db, bag);
+    if (on)
+      db.prepare('UPDATE block_notes SET good = 1, good_at = ?, good_by = ? WHERE bag_id = ?').run(
+        new Date().toISOString(),
+        user || null,
+        bag.bag_id
+      );
+    else {
+      db.prepare('UPDATE block_notes SET good = 0, good_at = NULL, good_by = NULL WHERE bag_id = ?').run(bag.bag_id);
+      _pruneBlockNote(db, bag.bag_id);
+    }
+  });
+  incrementDataVersion(db);
+  return true;
+}
+
+// Neue Notiz zu einem Block. Gibt die id zurück, oder null ohne Beutel.
+function addBlockComment(db, bagId, text, user, flush) {
+  const bag = _blockBag(db, bagId);
+  if (!bag) return null;
+  const id = _blockTx(db, () => {
+    _ensureBlockNote(db, bag);
+    return db
+      .prepare('INSERT INTO block_comments(bag_id, text, flush, created, created_by) VALUES(?,?,?,?,?)')
+      .run(bag.bag_id, text, flush || null, new Date().toISOString(), user || null).lastInsertRowid;
+  });
+  incrementDataVersion(db);
+  return Number(id);
+}
+
+function getBlockComment(db, id) {
+  const c = db.prepare('SELECT id, bag_id, text, created_by FROM block_comments WHERE id = ?').get(id);
+  return c ? { id: c.id, bagId: c.bag_id, text: c.text, by: c.created_by || null } : null;
+}
+
+function deleteBlockComment(db, id) {
+  const row = db.prepare('SELECT bag_id FROM block_comments WHERE id = ?').get(id);
+  if (!row) return false;
+  _blockTx(db, () => {
+    db.prepare('DELETE FROM block_comments WHERE id = ?').run(id);
+    _pruneBlockNote(db, row.bag_id);
+  });
+  incrementDataVersion(db);
+  return true;
+}
+
+// Klein genug für jede Synchronisierung: das Beutel-Fenster muss beim Scannen
+// wissen, ob der Block gut ist und was zu ihm notiert wurde, ohne zu warten.
+function listBlockNotes(db) {
+  const comments = new Map();
+  for (const c of db
+    .prepare('SELECT id, bag_id, text, flush, created, created_by FROM block_comments ORDER BY created, id')
+    .all()) {
+    if (!comments.has(c.bag_id)) comments.set(c.bag_id, []);
+    comments
+      .get(c.bag_id)
+      .push({ id: c.id, text: c.text, flush: c.flush || null, at: c.created, by: c.created_by || null });
+  }
+  return db
+    .prepare('SELECT bag_id, batch_id, good, good_at, good_by FROM block_notes ORDER BY created')
+    .all()
+    .map((r) => ({
+      bagId: r.bag_id,
+      batchId: r.batch_id,
+      good: r.good === 1,
+      goodAt: r.good_at || null,
+      goodBy: r.good_by || null,
+      comments: comments.get(r.bag_id) || []
+    }));
+}
+
+// Das ganze Blockbuch: jeder Eintrag mit Herkunft (heute gelesen, solange es die
+// Charge gibt, sonst so wie beim Markieren) und dem, was der Block geerntet hat.
+function getBlockBook(db) {
+  const stored = new Map(
+    db
+      .prepare('SELECT bag_id, lineage FROM block_notes')
+      .all()
+      .map((r) => [r.bag_id, r.lineage])
+  );
+  const harvestStmt = db.prepare(
+    'SELECT COALESCE(SUM(grams), 0) AS g, COUNT(*) AS n FROM harvests WHERE bag = ? COLLATE NOCASE'
+  );
+  return listBlockNotes(db).map((e) => {
+    let lineage = blockLineage(db, e.batchId);
+    let live = true;
+    if (!lineage) {
+      live = false;
+      try {
+        lineage = JSON.parse(stored.get(e.bagId) || '{}');
+      } catch {
+        lineage = {};
+      }
+    }
+    const h = harvestStmt.get(e.bagId);
+    return { ...e, lineage, live, harvestG: h.g, harvestCount: h.n };
+  });
+}
+
 module.exports = {
+  blockLineage,
+  setBlockGood,
+  addBlockComment,
+  getBlockComment,
+  deleteBlockComment,
+  listBlockNotes,
+  getBlockBook,
   ZONE_SEED_COLOR,
   ZONE_LEGACY_COLOR,
   // ── Order hub (Phase 0) ──
