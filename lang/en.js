@@ -2496,6 +2496,7 @@ window.LANG['en'] = {
   // ─── Arbeitsgänge (work steps) ───
   'nav.work': 'Work',
   'nav.workSteps': 'Work steps',
+  'nav.ordersBar': 'Orders',
   'nav.lookup': 'Look up',
   'work.title': 'What did you do?',
   'work.sub': 'Pick the work step — the app asks for the rest.',

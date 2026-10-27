@@ -31371,7 +31371,7 @@ function initEventListeners() {
   // bnId.slice(3)` is already how the two navigations are paired. Marking from
   // inside it cannot drift, because a bottom-nav entry that is added or removed
   // changes both halves in the same edit.
-  ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-cal'].forEach((bnId) => {
+  ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-orders'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());

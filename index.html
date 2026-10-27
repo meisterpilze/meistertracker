@@ -2310,7 +2310,12 @@
         </svg>
         <span data-i18n="nav.lab">Lab</span>
       </button>
-      <button class="bottom-nav-btn" id="bn-cal" type="button" data-page="cal">
+      <!-- Bestellungen, not Kalender: orders are looked at many times a day, the
+           calendar rarely, and the drawer was the only way in. Kalender stays in
+           the drawer. Its own short label, like Arbeitsgänge: at the 13px phone
+           floor "Bestellungen" is 24px wider than "Kalender", and the bar had 7px
+           to spare at 320px (see .bottom-nav-btn). -->
+      <button class="bottom-nav-btn" id="bn-orders" type="button" data-page="orders">
         <svg
           width="22"
           height="22"
@@ -2321,12 +2326,12 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
+          <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+          <path
+            d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
+          />
         </svg>
-        <span data-i18n="nav.calendar">Kalender</span>
+        <span data-i18n="nav.ordersBar">Aufträge</span>
       </button>
     </nav>
 
