@@ -843,13 +843,18 @@ function _normalizeBillbee(o) {
   const paid = o.PayedAt && o.PaidAmount != null ? Number(o.PaidAmount) : null;
   const chosen = paid != null && paid > 0 ? paid : summed;
   const total = chosen != null && Number.isFinite(chosen) ? Math.round(chosen * 100) / 100 : null;
+  // A credit note (Billbee files it as a second order, number suffixed "-GS")
+  // carries only negative positions and stays in state "ordered" for ever.
+  // Nothing in it goes out, so it is closed on arrival; left open it would sit
+  // in Eingang and the mapping screen with nobody able to clear it.
+  const creditNote = items.length > 0 && items.every((i) => i.qty < 0);
   return {
     channel: 'billbee',
     // The *internal* Billbee id — not Id or OrderNumber, which belong to the
     // marketplace the order came from. It is the only key that is unique across
     // channels, and it is the one /orders/{id}/shipment takes.
     channelOrderId: o.BillBeeOrderId != null ? String(o.BillBeeOrderId) : null,
-    status: _billbeeStatus(o),
+    status: creditNote ? 'cancelled' : _billbeeStatus(o),
     orderDate: o.CreatedAt || null,
     // The recipient's name, and nothing else of the person: the packing list
     // leads with it so the team can see which parcel is whose. No e-mail, no
