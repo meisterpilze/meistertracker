@@ -3103,6 +3103,19 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE syringe_stock_sku ADD COLUMN soll INTEGER');
     }
+  },
+  {
+    version: 107,
+    description: 'Nachproduzieren: gemeldete Bestellungen je Artikel merken',
+    fn(db) {
+      // Wie viel bestellt war, als zuletzt "bestellt, aber nicht da" gemeldet
+      // wurde. Damit meldet sich jede neue Bestellung einmal, und nicht jeder
+      // Lauf dieselbe noch einmal (saleAlerts).
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('syringe_stock_sku') WHERE name = 'alert_ordered'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE syringe_stock_sku ADD COLUMN alert_ordered INTEGER');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13355,6 +13368,57 @@ function setSyringeSku(db, strainId, slot, sku) {
   incrementDataVersion(db);
 }
 
+// "Spritze 10 ml", "Petrischale", "Körnerbrut 1 kg": was ein Artikel ist, ohne
+// die Art. Dieselben Worte wie _vbArtikel in app.js, hier fuer die Glocke.
+function _saleArticleName(r) {
+  if (r.type === 'PD') return 'Petrischale';
+  if (r.type === 'GS') return 'Körnerbrut ' + r.kg + ' kg';
+  return 'Spritze ' + r.ml + ' ml';
+}
+
+/**
+ * Bestellungen, die das Labor gerade nicht decken kann, und die noch niemand
+ * gemeldet hat: je Artikel, wenn mehr bestellt ist, als im Labor ist, und mehr
+ * als beim letzten Melden. Merkt sich, was es gemeldet hat; ist die Bestellung
+ * gedeckt (verschickt, storniert, oder es ist genug da), vergisst es das
+ * wieder, und die naechste nicht gedeckte meldet sich neu.
+ *
+ * Nur das, kein "unter Soll": ein Soll zu unterschreiten ist Planung und steht
+ * unter Nachproduzieren; eine Bestellung, die nicht rausgehen kann, wartet auf
+ * jemanden. Gibt die neuen zurueck, mit Titel und Text fuer die Glocke.
+ */
+function saleAlerts(db, now = new Date()) {
+  const rows = listSyringeStock(db, now).filter((r) => r.sku);
+  const vorher = new Map(
+    db
+      .prepare('SELECT strain_id, type, ml, alert_ordered FROM syringe_stock_sku')
+      .all()
+      .map((x) => [x.strain_id + ':' + x.type + ':' + x.ml, x.alert_ordered])
+  );
+  const setze = db.prepare(
+    'UPDATE syringe_stock_sku SET alert_ordered = ? WHERE strain_id = ? AND type = ? AND ml = ?'
+  );
+  const neu = [];
+  for (const r of rows) {
+    const { type, ml } = _stockSlot(r.slot);
+    const alt = vorher.get(r.strainId + ':' + type + ':' + ml);
+    const offen = r.ordered > r.count;
+    const soll = offen ? r.ordered : null;
+    if (offen && r.ordered > (alt || 0)) {
+      const teile = [r.ordered + ' bestellt', r.count + ' im Labor'];
+      if (r.growing) teile.push(r.growing + ' wachsen noch');
+      neu.push({
+        strainId: r.strainId,
+        slot: r.slot,
+        title: 'Bestellt, aber nicht da: ' + r.name + ' · ' + _saleArticleName(r),
+        body: teile.join(', ') + '. Auf der Laborseite unter Nachproduzieren ansetzen.'
+      });
+    }
+    if ((alt == null ? null : alt) !== soll) setze.run(soll, r.strainId, type, ml);
+  }
+  return neu;
+}
+
 /**
  * Soll eines Artikels setzen; `slot` wie bei setSyringeSku. 0 oder leer heisst
  * kein Soll (auf Bestellung). Nur ein Artikel mit SKU hat eins: ohne SKU
@@ -13796,6 +13860,7 @@ module.exports = {
   GRAIN_SALE_KG,
   saleNeed,
   setSaleTarget,
+  saleAlerts,
   getOrder,
   setOrderStatus,
   listCustomers,

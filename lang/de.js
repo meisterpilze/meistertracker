@@ -2557,6 +2557,8 @@ window.LANG['de'] = {
   'work.tileSubstrate': 'Substrat',
   'work.todayNone': 'heute nichts fällig',
   'work.alertFull': '{zone} voll ({n}/{cap})',
+  'work.np': 'Nachproduzieren: {n}',
+  'work.npMore': '{n} weitere',
   'work.tentSince': 'seit {date}',
   'work.tentToday': 'heute',
   'work.tentDays.one': '{n} Tag',

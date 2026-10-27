@@ -437,8 +437,13 @@ const sseClients = new Set();
 // tells the screens "data changed" also asks for a syringe recount — see
 // syringe-stock.js for why that beats hooking each write path.
 let syringeStock = null;
+// Same moment for "bestellt, aber nicht da" (checkSaleAlerts below): an order
+// sync ends here, so a new order is checked a few seconds after it arrives.
+let saleAlertTimer = null;
+const SALE_ALERT_DEBOUNCE_MS = 5000;
 function broadcastSSE(excludeRes) {
   if (syringeStock) syringeStock.schedule();
+  scheduleSaleAlerts();
   const msg = 'data: {"type":"data-changed"}\n\n';
   for (const c of sseClients) {
     if (c === excludeRes) continue;
@@ -1349,6 +1354,51 @@ syringeStock = syringeStockModule.createSyringeStockSync({
   skip: WORKTREE_MODE
 });
 syringeStock.start();
+
+// ── Nachproduzieren: an order the lab cannot cover ──
+// Every signed-in user gets it in the bell, once per new order of that article
+// (db.saleAlerts remembers what it announced). Only that, not "under target":
+// a target is planning and lives on the Labor page; an order that cannot ship
+// is waiting for someone. Checked shortly after any data change, and every
+// quarter of an hour for what changed without one (a bag that finished, an
+// order shipped elsewhere). A worktree copy stays quiet, like the sync above.
+const SALE_ALERT_EVERY_MS = 15 * 60 * 1000;
+function checkSaleAlerts() {
+  if (WORKTREE_MODE) return;
+  try {
+    const neu = db.saleAlerts(database);
+    if (!neu.length) return;
+    const users = db.listUsers(database);
+    for (const a of neu) {
+      for (const u of users) {
+        db.createNotificationOnce(database, {
+          userId: u.id,
+          type: 'sale_uncovered',
+          title: a.title,
+          body: a.body,
+          linkType: 'sale',
+          linkId: a.strainId + '/' + a.slot
+        });
+      }
+    }
+    log('info', 'Sale alerts raised', { articles: neu.length });
+  } catch (e) {
+    log('warn', 'Sale alert check failed', { error: e.message });
+  }
+}
+function scheduleSaleAlerts() {
+  if (WORKTREE_MODE) return;
+  if (saleAlertTimer) clearTimeout(saleAlertTimer);
+  saleAlertTimer = setTimeout(() => {
+    saleAlertTimer = null;
+    checkSaleAlerts();
+  }, SALE_ALERT_DEBOUNCE_MS);
+  if (saleAlertTimer.unref) saleAlertTimer.unref();
+}
+if (!WORKTREE_MODE) {
+  const t = setInterval(checkSaleAlerts, SALE_ALERT_EVERY_MS);
+  if (t.unref) t.unref();
+}
 
 function _oauthResultHtml(channel, ok, msg) {
   const label = channel === 'etsy' ? 'Etsy' : 'eBay';
