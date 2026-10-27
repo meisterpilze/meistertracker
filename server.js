@@ -11831,6 +11831,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // The same count for the Labor page, readable by anyone signed in: the lab
+  // decides what to make next from it, and most of the lab is not admin. Only
+  // what a shop sells (a row with a SKU); setting SKUs stays with the admin
+  // routes above.
+  if (req.method === 'GET' && req.url === '/api/sale-stock') {
+    try {
+      jsonOk(res, {
+        enabled: db.syringeStockSyncEnabled(database),
+        rows: db
+          .listSyringeStock(database)
+          .filter((r) => r.sku)
+          .map((r) => ({
+            strainId: r.strainId,
+            name: r.name,
+            type: r.type,
+            slot: r.slot,
+            count: r.count,
+            pushedCount: r.pushedCount,
+            pushedAt: r.pushedAt,
+            billbeeStock: r.billbeeStock,
+            lastError: r.lastError
+          }))
+      });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   if (req.method === 'POST' && req.url === '/api/syringe-stock/push') {
     if (requireAdmin(req, res)) return;
     (async () => {

@@ -4828,6 +4828,139 @@ tr:hover td {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Verkaufsbestand (renderSaleStock): one table per kind of article, every
+   species with a SKU and every zero, so what is missing stands there instead
+   of falling off the list like it does on the lab tiles above. */
+.vb-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: var(--c-border-light);
+}
+.vb-seg[hidden] {
+  display: none;
+}
+.vb-seg-btn {
+  min-height: var(--tap-sm);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text-sec);
+  font-family: inherit;
+  font-size: max(0.8125rem, var(--fs-min));
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vb-seg-btn[aria-pressed='true'] {
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.vb-t {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.vb-t thead th {
+  padding: 4px 0 6px;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 600;
+  text-align: center;
+}
+.vb-t thead th:first-child {
+  width: 40%;
+  text-align: left;
+}
+.vb-t tbody th,
+.vb-t td {
+  padding: 6px 2px;
+  border-top: 1px solid var(--c-border-light);
+  border-bottom: 0;
+  vertical-align: middle;
+}
+/* The global zebra paints cells only, which left the species column white on
+   every grey row. The whole row takes it here. */
+.vb-t tbody tr:nth-child(even) > * {
+  background: var(--c-bg);
+}
+/* The species is the row's header for screen readers, not a column heading,
+   so none of the global th look: no capitals, no sticky, normal text colour.
+   It wraps rather than truncates: "Phoenix Oyster mushroom" on two lines is
+   still read, cut to "Phoenix Oys…" it is a guess. */
+.vb-t tbody th {
+  position: static;
+  padding-right: 6px;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: 1.25;
+  text-align: left;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.vb-t td {
+  text-align: center;
+}
+.vb-c {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 40px;
+  font-variant-numeric: tabular-nums;
+}
+.vb-c b {
+  font-size: 1.125rem;
+  line-height: 1.1;
+}
+.vb-c i {
+  color: var(--c-text-muted);
+  font-size: max(0.6875rem, var(--fs-min));
+  font-style: normal;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.vb-c i.vb-err {
+  color: var(--c-red-dark);
+  font-weight: 600;
+}
+.vb-zero b {
+  color: var(--c-text-muted);
+  font-weight: 500;
+}
+.vb-na b {
+  color: var(--c-text-muted);
+  font-weight: 400;
+  opacity: 0.6;
+}
+.vb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.vb-bb {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--c-primary-light);
+  color: var(--c-text-sec);
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.4;
+}
+.vb-bb.vb-bb-warn {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
 /* Under its floor: the number goes red, not the whole row. The Sorte's name is
    not the problem, the count is. */
 .lab-row.under .lab-row-n {

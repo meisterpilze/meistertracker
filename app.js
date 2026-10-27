@@ -1413,6 +1413,7 @@ function go(page, btnId) {
   }
   if (page === 'lab') {
     renderDashLabStock();
+    loadSaleStock();
     renderCultures();
     renderGrainBatches();
   }
@@ -1650,6 +1651,7 @@ function refresh() {
   }
   if (id === 'lab') {
     renderDashLabStock();
+    loadSaleStock();
     renderCultures();
     renderGrainBatches();
   }
@@ -8939,6 +8941,108 @@ function _saveStrainMins(sorten, field, wert) {
       renderDashBatchTasks();
     });
   }
+}
+
+// ── Verkaufsbestand: was die Shops verkaufen, je Art und Größe ──
+// Dieselbe Zählung, die Billbee bekommt (syringe-stock.js), aber nur die
+// Artikel mit SKU, und mit allen Nullen: ob etwas fehlt, sieht man nur, wenn
+// das Fehlen dasteht. Die Labor-Kachel darüber zeigt nur Sorten, von denen
+// etwas da ist, und zählt alle Spritzengrößen zusammen.
+//
+// Ein Reiter je Warenart, weil eine Art bei Spritzen mehrere Größen hat und bei
+// Petrischalen eine. Die Spalten kommen aus den Zeilen, nicht aus einer Liste
+// hier: eine Größe, die kein Shop führt, hat keine SKU und keine Spalte.
+const VB_KINDS = [
+  { type: 'SY', label: 'vb.syringes' },
+  { type: 'PD', label: 'vb.petri' }
+];
+let _vbKind = 'SY';
+let _vbData = null;
+async function loadSaleStock() {
+  try {
+    _vbData = await apiGet('/api/sale-stock');
+  } catch (e) {
+    return; // offline, or a server without the route: the card keeps what it had
+  }
+  renderSaleStock();
+}
+// Die kleine Zeile unter einer Zahl, nur wenn es etwas zu sagen gibt. Billbee
+// zieht offene Bestellungen ab, also ist eine kleinere Billbee-Zahl kein Fehler,
+// sondern das, was der Shop anbieten darf.
+function _vbNote(r, enabled) {
+  if (!enabled) return '';
+  if (r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
+  if (!r.pushedAt || r.pushedCount !== r.count) return `<i>${esc(t('vb.waiting'))}</i>`;
+  if (r.billbeeStock != null && r.billbeeStock !== r.count) return `<i>${esc(t('vb.billbee', { n: r.billbeeStock }))}</i>`;
+  return '';
+}
+function _vbCell(r, enabled) {
+  if (!r) return `<td><span class="vb-c vb-na" title="${esc(t('vb.legendNa'))}"><b>·</b></span></td>`;
+  const tip = r.pushedAt
+    ? t('vb.tip', { lab: r.count, bb: r.billbeeStock != null ? r.billbeeStock : r.pushedCount, time: fmtDtTime(r.pushedAt) })
+    : t('vb.tipNotYet', { lab: r.count });
+  return (
+    `<td><span class="vb-c${r.count === 0 ? ' vb-zero' : ''}" title="${esc(r.lastError || tip)}">` +
+    `<b>${r.count}</b>${_vbNote(r, enabled)}</span></td>`
+  );
+}
+function _vbSlotLabel(slot) {
+  return slot === 'pd' ? t('vb.pieces') : slot + ' ml';
+}
+function renderSaleStock() {
+  const card = document.getElementById('vb-card');
+  if (!card || !_vbData) return;
+  const rows = _vbData.rows || [];
+  const enabled = !!_vbData.enabled;
+  const kinds = VB_KINDS.filter((k) => rows.some((r) => r.type === k.type));
+  // Ohne SKU verkauft kein Shop etwas aus dem Labor; dann gibt es nichts zu zeigen.
+  card.hidden = !kinds.length;
+  if (!kinds.length) return;
+  if (!kinds.some((k) => k.type === _vbKind)) _vbKind = kinds[0].type;
+
+  const seg = document.getElementById('vb-seg');
+  seg.hidden = kinds.length < 2;
+  seg.innerHTML = kinds
+    .map(
+      (k) =>
+        `<button type="button" class="vb-seg-btn" data-vb-kind="${esc(k.type)}" aria-pressed="${k.type === _vbKind}">${esc(t(k.label))}</button>`
+    )
+    .join('');
+
+  const mine = rows.filter((r) => r.type === _vbKind);
+  const slots = [...new Set(mine.map((r) => r.slot))].sort((a, b) => Number(a) - Number(b));
+  // Die Zeilen kommen je Art zusammen und nach Namen sortiert (listSyringeStock).
+  const arten = [];
+  for (const r of mine) {
+    const letzte = arten[arten.length - 1];
+    if (letzte && letzte.strainId === r.strainId) letzte.bySlot[r.slot] = r;
+    else arten.push({ strainId: r.strainId, name: r.name, bySlot: { [r.slot]: r } });
+  }
+  document.getElementById('vb-table').innerHTML =
+    '<table class="vb-t"><thead><tr>' +
+    `<th scope="col">${esc(t('vb.species'))}</th>` +
+    slots.map((s) => `<th scope="col">${esc(_vbSlotLabel(s))}</th>`).join('') +
+    '</tr></thead><tbody>' +
+    arten
+      .map(
+        (a) =>
+          `<tr><th scope="row">${esc(a.name)}</th>` + slots.map((s) => _vbCell(a.bySlot[s], enabled)).join('') + '</tr>'
+      )
+      .join('') +
+    '</tbody></table>';
+
+  // Eine Zeile für alle Warenarten: Billbee bekommt sie in einem Lauf.
+  const bb = document.getElementById('vb-bb');
+  const fehler = rows.filter((r) => r.lastError).length;
+  const wartet = rows.filter((r) => !r.lastError && (!r.pushedAt || r.pushedCount !== r.count)).length;
+  const zuletzt = rows.reduce((m, r) => (r.pushedAt && r.pushedAt > m ? r.pushedAt : m), '');
+  let text;
+  if (!enabled) text = t('vb.off');
+  else if (fehler) text = t('vb.errors', { n: fehler });
+  else if (wartet) text = t('vb.waitingAll', { n: wartet });
+  else text = t('vb.allSent', { n: rows.length, time: zuletzt ? fmtDtTime(zuletzt) : '–' });
+  bb.textContent = text;
+  bb.classList.toggle('vb-bb-warn', !enabled || fehler > 0);
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -31665,6 +31769,12 @@ function initEventListeners() {
     }
     const btn = e.target.closest('[data-action="lab-set-min"]');
     if (btn) setLabMin(btn.dataset.labtype);
+  });
+  $('vb-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vb-kind]');
+    if (!b) return;
+    _vbKind = b.dataset.vbKind;
+    renderSaleStock();
   });
   // Which Sorten are in this season's programme. Delegated: the table is
   // rebuilt on every sync, so a listener on the row would not survive.

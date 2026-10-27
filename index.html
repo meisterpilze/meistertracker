@@ -4370,6 +4370,17 @@
             <span>Lab</span>
             <div id="dash-lab-stock"></div>
           </div>
+          <!-- What the shops sell, per species and size, and what Billbee got (renderSaleStock) -->
+          <div class="card" id="vb-card" hidden>
+            <div class="sec" data-i18n="vb.title">Verkaufsbestand</div>
+            <div class="vb-seg" id="vb-seg" role="group"></div>
+            <div id="vb-table"></div>
+            <div class="vb-legend">
+              <span data-i18n="vb.legendZero">0 = nicht da</span>
+              <span data-i18n="vb.legendNa">· = in keinem Shop</span>
+            </div>
+            <div class="vb-bb" id="vb-bb"></div>
+          </div>
           <div class="stabs" data-stab-home="nav.lab">
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
             <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
