@@ -2513,6 +2513,7 @@ window.LANG['pt'] = {
   // ─── Arbeitsgänge (work steps) ───
   'nav.work': 'Trabalho',
   'nav.workSteps': 'Etapas de trabalho',
+  'nav.ordersBar': 'Pedidos',
   'nav.lookup': 'Consultar',
   'work.title': 'O que você fez?',
   'work.sub': 'Escolha a etapa — o app pergunta o resto.',

@@ -243,6 +243,18 @@ describe('the drawer and the bottom bar', () => {
     );
   });
 
+  it('puts Bestellungen in the bar, where Kalender was', () => {
+    // Orders are opened many times a day and the drawer was the only way in;
+    // the calendar is barely used and stays in the drawer.
+    const bar = HTML.match(/<nav class="bottom-nav[\s\S]*?<\/nav>/)[0];
+    const pages = [...bar.matchAll(/data-page="([a-z]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(pages, ['work', 'dash', 'batch', 'lab', 'orders']);
+    assert.match(WIRING[0], /'bn-orders'/, 'the orders button is not wired to the drawer entry');
+    assert.match(HTML, /id="n-orders" data-page="orders"/, 'the drawer entry the bar clicks is gone');
+    // Its own short label, like Arbeitsgänge: "Bestellungen" does not fit at 320px.
+    assert.match(bar, /data-i18n="nav\.ordersBar"/);
+  });
+
   it('marks a group heading whose entries have all gone', () => {
     // "Arbeiten" holds exactly the three the bar shows. Without this it stays,
     // a heading over nothing.
