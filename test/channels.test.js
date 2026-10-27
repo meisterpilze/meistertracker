@@ -578,6 +578,47 @@ describe('Billbee: orders in', () => {
     assert.equal(o.items[1].qty, 1, 'Number(null) is 0 — a position without a quantity is one, not none');
   });
 
+  it('closes a credit note on arrival, and only a credit note', () => {
+    // Billbee files a refund as a second order with only negative positions, and
+    // leaves it in state "ordered" (1) for ever.
+    const credit = {
+      BillBeeOrderId: 5,
+      OrderNumber: '1001-GS',
+      State: 1,
+      OrderItems: [
+        { Quantity: -1, TotalPrice: -24.9, Product: { SKU: 'MUSTER-250', Title: 'Storno für Muster 250 g' } }
+      ]
+    };
+    const mixed = {
+      BillBeeOrderId: 6,
+      State: 1,
+      OrderItems: [
+        { Quantity: 2, TotalPrice: 49.8, Product: { SKU: 'MUSTER-250' } },
+        { Quantity: -1, TotalPrice: -24.9, Product: { SKU: 'MUSTER-250' } }
+      ]
+    };
+    assert.equal(channels._normalizeBillbee(credit).status, 'cancelled', 'nothing in it goes out');
+    assert.equal(channels._normalizeBillbee(mixed).status, 'new', 'a correction inside a real order is still an order');
+    assert.equal(
+      channels._normalizeBillbee({ BillBeeOrderId: 7, State: 1 }).status,
+      'new',
+      'no positions is not a credit'
+    );
+
+    // One already imported as open is closed by the next sync, and leaves the mapping screen.
+    const { db: d, path: p2 } = tmpDb();
+    try {
+      db.upsertOrder(d, { ...channels._normalizeBillbee(credit), status: 'new' });
+      assert.equal(db.listUnmappedItems(d).length, 1);
+      db.upsertOrder(d, channels._normalizeBillbee(credit));
+      assert.equal(d.prepare('SELECT status FROM orders').get().status, 'cancelled');
+      assert.equal(db.listUnmappedItems(d).length, 0);
+    } finally {
+      d.close();
+      fs.unlinkSync(p2);
+    }
+  });
+
   it('believes a paid order over the arithmetic', () => {
     // TotalCost is documented as excluding shipping, and that reading cannot be
     // checked from here. What the buyer actually paid can be.
