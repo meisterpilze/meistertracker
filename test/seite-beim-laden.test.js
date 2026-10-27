@@ -97,11 +97,16 @@ describe('Die offene Seite zeichnet sich, wenn Daten kommen', () => {
       }
       zweige[m[1]] = (zweige[m[1]] || '') + rumpfText;
     }
-    const ziele = { renderDashBatchTasks: 'dash-batch-tasks', renderDashLabStock: 'dash-lab-stock' };
+    const ziele = { renderDashBatchTasks: 'dash-batch-tasks' };
     for (const [fn, id] of Object.entries(ziele)) {
       const seite = Object.keys(zweige).find((k) => zweige[k].includes(fn + '()'));
       assert.ok(seite, fn + '() wird von refresh() gar nicht gerufen');
       assert.equal(seite, seiteVon(id), fn + '() wird auf der falschen Seite gerufen');
     }
+    // Der Laborbestand lädt auf zwei Seiten: auf der Laborseite für seine
+    // Karten, in Arbeitsgänge für die Tagesliste. Die Karten stehen im Labor.
+    assert.match(zweige.lab || '', /loadLabStock\(\)/, 'die Laborseite lädt ihren Bestand nicht');
+    assert.equal(seiteVon('lb-card'), 'lab');
+    assert.match(zweige.work || '', /loadLabStock\(\)/, 'Arbeitsgänge lädt die Zahlen der Tagesliste nicht');
   });
 });

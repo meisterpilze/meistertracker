@@ -34,9 +34,6 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     hebeKonstante('LAB_TYPES'),
     hebeKonstante('MIN_TYPES'),
     hebeKonstante('STRAIN_MIN_FIELD'),
-    // buildLabMinTasks schließt geparkte Sorten jetzt über den Schlüssel aus,
-    // nicht über den Namen — strainsInProduction() allein reichte nicht: es
-    // ergänzt nur fehlende Nullzeilen, bestehende Kulturzeilen überlebten es.
     hebeKonstante('ARCHIVED_STATUSES'),
     hebeFunktion('_spKey'),
     hebeFunktion('sorteKey'),
@@ -48,7 +45,6 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
     hebeFunktion('strainsInProduction'),
     hebeFunktion('_strainOfEntry'),
     hebeFunktion('getLabStrainBreakdown'),
-    hebeFunktion('buildLabMinTasks'),
     'return ' + ausdruck + ';'
   ].join('\n');
   return new Function(
@@ -81,77 +77,9 @@ function lauf(ausdruck, { kulturen = [], sorten = [], chargen = [] } = {}) {
 }
 
 const SH = { name: 'Shiitake', kuerzel: 'SH', imProgramm: true };
-const platte = () => ({ typ: 'PD', sorte: 'Shiitake', kz: 'SH' });
-const slant = () => ({ typ: 'MC', sorte: 'Shiitake', kz: 'SH' });
-const glas = () => ({ typ: 'LC', sorte: 'Shiitake', kz: 'SH' });
 
-describe('Untergrenzen je Kulturtyp', () => {
-  it('hält Slants, Platten und Flüssigkultur an je eigene Zahlen', () => {
-    const tasks = lauf('buildLabMinTasks()', {
-      sorten: [{ ...SH, minMc: 3, minPd: 5, minLc: 2 }],
-      kulturen: [slant(), platte(), platte(), glas(), glas()]
-    });
-    const nach = (typ) => tasks.find((x) => x.type === typ);
-    assert.ok(nach('MC'), 'ein Slant von drei — muss melden');
-    assert.equal(nach('MC').short, 2);
-    assert.ok(nach('PD'), 'zwei Platten von fünf — muss melden');
-    assert.equal(nach('PD').short, 3);
-    assert.equal(nach('LC'), undefined, 'zwei Gläser von zwei — nichts zu melden');
-  });
-
-  it('schweigt, wo gar keine Untergrenze gesetzt ist', () => {
-    // Keine Zahl heißt nicht "null Stück reichen", sondern "niemand hat gesagt,
-    // was diese Sorte braucht". Daraus Arbeit zu erfinden wäre geraten.
-    assert.deepEqual(lauf('buildLabMinTasks()', { sorten: [SH], kulturen: [] }), []);
-  });
-
-  it('meldet eine Sorte, von der gar nichts da ist', () => {
-    const tasks = lauf('buildLabMinTasks()', { sorten: [{ ...SH, minPd: 4 }], kulturen: [] });
-    assert.equal(tasks.length, 1);
-    assert.equal(tasks[0].type, 'PD');
-    assert.equal(tasks[0].have, 0);
-    assert.equal(tasks[0].empty, true, 'gar nichts ist ein anderes Problem als ein bisschen zu wenig');
-  });
-
-  it('stellt "gar nichts da" vor "knapp"', () => {
-    const tasks = lauf('buildLabMinTasks()', {
-      sorten: [{ ...SH, minMc: 4, minPd: 4 }],
-      kulturen: [slant(), slant(), slant()]
-    });
-    assert.equal(tasks[0].type, 'PD', 'null Platten wiegt schwerer als drei von vier Slants');
-  });
-
-  it('verschwindet, sobald genug da ist', () => {
-    const genug = lauf('buildLabMinTasks()', {
-      sorten: [{ ...SH, minPd: 2 }],
-      kulturen: [platte(), platte()]
-    });
-    assert.deepEqual(genug, [], 'abgeleitet — kein Häkchen nötig');
-  });
-
-  it('schweigt über Sorten, die gerade nicht angebaut werden', () => {
-    const tasks = lauf('buildLabMinTasks()', {
-      sorten: [{ ...SH, imProgramm: false, minPd: 4 }],
-      kulturen: []
-    });
-    assert.deepEqual(tasks, [], 'sonst verlangt der Sommer Slants für den Herbst');
-  });
-
-  it('schweigt auch dann, wenn von der geparkten Sorte noch Kulturen dastehen', () => {
-    // Der Fall, den die Zeile darüber NICHT prüft, und deshalb der eigentliche.
-    // getLabStrainBreakdown() baut seine Zeilen aus `cultures`;
-    // strainsInProduction() ergänzt nur FEHLENDE Nullzeilen und entfernt nie
-    // etwas. Eine geparkte Sorte mit einem Restbestand behielt ihre Zeile,
-    // bekam ihre Untergrenze und meldete sich jeden Tag aufs Neue — genau die
-    // Dauerwarnung, gegen die das Programm-Kennzeichen eingeführt wurde.
-    const tasks = lauf('buildLabMinTasks()', {
-      sorten: [{ ...SH, imProgramm: false, minMc: 5 }],
-      kulturen: [slant()]
-    });
-    assert.deepEqual(tasks, [], 'ein Restbestand ist kein Grund, wieder Vorrat zu verlangen');
-  });
-});
-
+// Die Untergrenzen selbst rechnet jetzt db.labStock, für Laborseite und
+// Tagesliste zugleich; ihre Regeln prüft laborbestand.test.js.
 describe('Welche Sorten das Labor bevorraten muss', () => {
   it('fragt das Programm, nicht die vorhandenen Chargen', () => {
     // Der zirkuläre Fall: keine lebende Charge, weil die Sorte ausgegangen ist.

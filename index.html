@@ -125,31 +125,23 @@
       </div>
     </div>
 
-    <!-- One article of the Verkaufsbestand: its figures and its target (vbSheetRender) -->
-    <div class="modal-bg" id="m-vb" role="dialog" aria-modal="true" aria-labelledby="m-vb-title" hidden>
+    <!-- One species of the Laborbestand: every field with its target (lbSheetRender) -->
+    <div class="modal-bg" id="m-lb" role="dialog" aria-modal="true" aria-labelledby="m-lb-title" hidden>
       <div class="modal">
-        <h3 id="m-vb-title"></h3>
-        <div class="vb-kv" id="m-vb-kv"></div>
-        <div class="vb-soll">
-          <div class="vb-soll-lbl">
-            <b data-i18n="vb.sollLabel">Soll</b>
-            <small data-i18n="vb.sollHelp"
-              >So viele sollen immer da sein. Darunter steht der Artikel unter Nachproduzieren. 0 = auf Bestellung.</small
+        <h3 id="m-lb-title"></h3>
+        <label class="lb-prog">
+          <input type="checkbox" id="m-lb-prog" />
+          <span>
+            <b data-i18n="lb.programm">Im Programm</b>
+            <small data-i18n="lb.programmHelp"
+              >Aus: die Sorte fehlt nirgends und steht nicht in der Tagesliste. Nur offene Bestellungen zählen noch.</small
             >
-          </div>
-          <div class="vb-step">
-            <button type="button" class="btn" data-vb-act="minus" data-i18n-aria-label="vb.sollLess" aria-label="Weniger">
-              −
-            </button>
-            <b id="m-vb-soll" aria-live="polite">0</b>
-            <button type="button" class="btn" data-vb-act="plus" data-i18n-aria-label="vb.sollMore" aria-label="Mehr">
-              +
-            </button>
-          </div>
-        </div>
+          </span>
+        </label>
+        <div id="m-lb-items"></div>
         <div class="modal-btns">
-          <button type="button" class="btn" data-vb-act="close" data-i18n="vb.close">Schließen</button>
-          <button type="button" class="btn btn-p" id="m-vb-make" data-vb-act="make" hidden></button>
+          <button type="button" class="btn" data-lb-act="close" data-i18n="vb.close">Schließen</button>
+          <button type="button" class="btn btn-p" id="m-lb-make" data-lb-act="make" hidden></button>
         </div>
       </div>
     </div>
@@ -4384,44 +4376,27 @@
             </svg>
             <span data-i18n="lab.logWork">Log work</span>
           </button>
-          <!-- Lab stock — the state of the section, above its tabs -->
-          <div class="card" style="padding: 10px 14px; margin-bottom: 10px">
-            <!-- ── LAB section ── collapsible -->
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M9 3h6v7l4 9H5l4-9V3z" />
-              <line x1="9" y1="3" x2="15" y2="3" />
-            </svg>
-            <span>Lab</span>
-            <div id="dash-lab-stock"></div>
-          </div>
-          <!-- What is missing, first: shown only while something is (renderNachproduzieren) -->
+          <!-- What is missing, per species, first; shown only while something is
+               (renderNachproduzieren). Same figures as the list below. -->
           <div class="card" id="np-card" hidden>
             <div class="sec" data-i18n="np.title">Nachproduzieren</div>
             <div id="np-rows"></div>
             <div class="np-foot" data-i18n="np.foot">
-              Alles andere ist da oder wird auf Bestellung gemacht. Ein Soll setzt man mit einem Tipp auf die Zahl unten.
+              Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
+              einem Tipp auf sie unten.
             </div>
           </div>
-          <!-- What the shops sell, per species and size, and what Billbee got (renderSaleStock) -->
-          <div class="card" id="vb-card" hidden>
-            <div class="sec" data-i18n="vb.title">Verkaufsbestand</div>
-            <div class="vb-seg" id="vb-seg" role="group"></div>
-            <div id="vb-table"></div>
+          <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
+               grain spawn. Replaces the tiles per culture type and the sales stock
+               card (renderLabStock). -->
+          <div class="card" id="lb-card" hidden>
+            <div class="sec" data-i18n="lb.title">Laborbestand</div>
+            <div id="lb-list"></div>
             <div class="vb-legend">
-              <span data-i18n="vb.legendZero">0 = nicht da</span>
-              <span data-i18n="vb.legendUnder">rot = fehlt</span>
-              <span data-i18n="vb.legendNa">· = in keinem Shop</span>
+              <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
+              <span data-i18n="lb.legendShop">Punkt = im Shop</span>
             </div>
-            <div class="vb-bb" id="vb-bb"></div>
+            <div class="vb-bb" id="lb-bb" hidden></div>
           </div>
           <div class="stabs" data-stab-home="nav.lab">
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
