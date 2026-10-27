@@ -8954,7 +8954,8 @@ function _saveStrainMins(sorten, field, wert) {
 // hier: eine Größe, die kein Shop führt, hat keine SKU und keine Spalte.
 const VB_KINDS = [
   { type: 'SY', label: 'vb.syringes' },
-  { type: 'PD', label: 'vb.petri' }
+  { type: 'PD', label: 'vb.petri' },
+  { type: 'GS', label: 'vb.grain' }
 ];
 let _vbKind = 'SY';
 let _vbData = null;
@@ -8968,12 +8969,17 @@ async function loadSaleStock() {
 }
 // Die kleine Zeile unter einer Zahl, nur wenn es etwas zu sagen gibt. Billbee
 // zieht offene Bestellungen ab, also ist eine kleinere Billbee-Zahl kein Fehler,
-// sondern das, was der Shop anbieten darf.
+// sondern das, was der Shop anbieten darf. Körnerbrut, die noch wächst, zählt
+// erst ab ihrem Fälligkeitstag; bis dahin steht sie hier, mit dem Tag.
 function _vbNote(r, enabled) {
-  if (!enabled) return '';
-  if (r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
-  if (!r.pushedAt || r.pushedCount !== r.count) return `<i>${esc(t('vb.waiting'))}</i>`;
-  if (r.billbeeStock != null && r.billbeeStock !== r.count) return `<i>${esc(t('vb.billbee', { n: r.billbeeStock }))}</i>`;
+  if (enabled) {
+    if (r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
+    if (!r.pushedAt || r.pushedCount !== r.count) return `<i>${esc(t('vb.waiting'))}</i>`;
+    if (r.billbeeStock != null && r.billbeeStock !== r.count)
+      return `<i>${esc(t('vb.billbee', { n: r.billbeeStock }))}</i>`;
+  }
+  if (r.growing > 0 && r.readyAt)
+    return `<i class="vb-grow">${esc(t('vb.growing', { n: r.growing, date: fmtDtShort(r.readyAt) }))}</i>`;
   return '';
 }
 function _vbCell(r, enabled) {
@@ -8986,9 +8992,13 @@ function _vbCell(r, enabled) {
     `<b>${r.count}</b>${_vbNote(r, enabled)}</span></td>`
   );
 }
+// Eine Spritzengröße (10), die Petrischale ('pd') oder ein Beutel ('kb2').
 function _vbSlotLabel(slot) {
-  return slot === 'pd' ? t('vb.pieces') : slot + ' ml';
+  if (slot === 'pd') return t('vb.pieces');
+  if (String(slot).startsWith('kb')) return String(slot).slice(2) + ' kg';
+  return slot + ' ml';
 }
+const _vbSlotOrder = (slot) => Number(String(slot).replace(/\D/g, '')) || 0;
 function renderSaleStock() {
   const card = document.getElementById('vb-card');
   if (!card || !_vbData) return;
@@ -9010,7 +9020,7 @@ function renderSaleStock() {
     .join('');
 
   const mine = rows.filter((r) => r.type === _vbKind);
-  const slots = [...new Set(mine.map((r) => r.slot))].sort((a, b) => Number(a) - Number(b));
+  const slots = [...new Set(mine.map((r) => r.slot))].sort((a, b) => _vbSlotOrder(a) - _vbSlotOrder(b));
   // Die Zeilen kommen je Art zusammen und nach Namen sortiert (listSyringeStock).
   const arten = [];
   for (const r of mine) {
@@ -13167,9 +13177,9 @@ async function loadChannelsSettings() {
   loadSyringeStock();
 }
 
-// ── Spritzen- und Petrischalenbestand → Billbee (Karte unter Billbee) ──
-// Je Art ein Block, darin eine Zeile je Spritzengröße und eine für die
-// Petrischale: Zahl im Labor, SKU-Feld,
+// ── Spritzen-, Petrischalen- und Körnerbrutbestand → Billbee (Karte unter Billbee) ──
+// Je Art ein Block, darin eine Zeile je Spritzengröße, eine für die
+// Petrischale und eine je Beutelgröße Körnerbrut: Zahl im Labor, SKU-Feld,
 // und was Billbee zuletzt gesagt hat. Die SKU speichert beim Verlassen des
 // Feldes, ohne Knopf.
 async function loadSyringeStock() {
@@ -13211,7 +13221,7 @@ function renderSyringeStock(d) {
     const zeile = (r) =>
       '<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px">' +
       '<div style="flex: 1 1 120px; min-width: 0"><b>' +
-      (r.type === 'PD' ? esc(t('syr.petri')) : (r.ml || 10) + ' ml') +
+      esc(r.type === 'PD' ? t('syr.petri') : r.type === 'GS' ? t('syr.grain', { kg: r.kg }) : (r.ml || 10) + ' ml') +
       '</b> <span class="fs-meta" style="color: var(--c-text-muted)">' +
       esc(t('syr.inLab', { n: r.count })) +
       '</span></div>' +

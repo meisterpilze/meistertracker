@@ -11809,9 +11809,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
-  // /api/syringe-stock/<Art>/<ml>, die Petrischale unter /<Art>/pd; ohne
-  // Groesse die 10er, wie vor der Wahl.
-  const syringeSkuMatch = req.url.match(/^\/api\/syringe-stock\/(\d+)(?:\/(\d+|pd))?$/);
+  // /api/syringe-stock/<Art>/<ml>, die Petrischale unter /<Art>/pd, ein Beutel
+  // Koernerbrut unter /<Art>/kb<kg>; ohne Groesse die 10er, wie vor der Wahl.
+  const syringeSkuMatch = req.url.match(/^\/api\/syringe-stock\/(\d+)(?:\/(\d+|pd|kb\d+))?$/);
   if (req.method === 'PUT' && syringeSkuMatch) {
     if (requireAdmin(req, res)) return;
     jsonBody(req, res, (e, data) => {
@@ -11848,6 +11848,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             type: r.type,
             slot: r.slot,
             count: r.count,
+            // Koernerbrut, die noch waechst, und wann der erste Beutel fertig ist.
+            growing: r.growing || 0,
+            readyAt: r.readyAt || null,
             pushedCount: r.pushedCount,
             pushedAt: r.pushedAt,
             billbeeStock: r.billbeeStock,
