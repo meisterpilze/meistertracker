@@ -1,8 +1,12 @@
 'use strict';
-// Liquid-culture syringes and petri dishes: the lab's count, reported to Billbee,
-// which passes it on to every shop it runs (Shopify, Etsy, eBay — whichever have
-// Billbee's stock sync switched on at Billbee's end). A petri dish is counted and
-// reported exactly like a syringe, as one more article per species.
+// Liquid-culture syringes, petri dishes and colonised grain spawn: the lab's
+// count, reported to Billbee, which passes it on to every shop it runs (Shopify,
+// Etsy, eBay — whichever have Billbee's stock sync switched on at Billbee's end).
+// A petri dish and each bag size of grain spawn are counted and reported exactly
+// like a syringe size, as one more article per species. Grain spawn counts the
+// finished bags still on the shelf (db.js, _grainSaleStock); a bag that finishes
+// growing changes no data, so the retry loop below is what reports it, within a
+// quarter of an hour.
 //
 // ── Why a count and not "+3 / −1" ───────────────────────────────────────────
 // Billbee only takes an absolute stock figure; its change field is documented as
@@ -34,6 +38,13 @@ const RETRY_MS = 15 * 60 * 1000;
 // to find that out. Six SKUs every six hours is nothing against Billbee's
 // limits. The first run after a start does it too, a quarter of an hour in.
 const RESEND_MS = 6 * 60 * 60 * 1000;
+
+// What Billbee's stock history says was counted, in front of the species name.
+function _what(r) {
+  if (r.type === 'PD') return 'Petrischalen';
+  if (r.type === 'GS') return 'Beutel Körnerbrut ' + r.kg + ' kg';
+  return 'Spritzen ' + r.ml + ' ml';
+}
 
 // getDatabase, not the handle: a backup restore reopens the database and the
 // old handle is closed.
@@ -89,12 +100,7 @@ function createSyringeStockSync({ getDatabase, dbApi, channels, log, skip }) {
         const res = await prov.setStock(cfg, {
           sku: r.sku,
           count: r.count,
-          reason:
-            'Meistertracker: ' +
-            r.count +
-            (r.type === 'PD' ? ' Petrischalen ' : ' Spritzen ' + r.ml + ' ml ') +
-            r.name +
-            ' im Labor',
+          reason: 'Meistertracker: ' + r.count + ' ' + _what(r) + ' ' + r.name + ' im Labor',
           // A change Billbee forwards on its own; the button and the periodic
           // resend make it pass unchanged figures on as well.
           resend: force || resend

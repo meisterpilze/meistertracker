@@ -3064,6 +3064,32 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_block_comments_bag ON block_comments(bag_id, created)');
     }
+  },
+  {
+    version: 105,
+    description: 'Koernerbrut an Billbee: SKU je Art und Beutelgroesse',
+    fn(db) {
+      // Bewachsene Koernerbrut wird verkauft wie Spritzen, je Art und Beutel-
+      // groesse ein Artikel. Ihre Zeile traegt den Typ 'GS' und in ml die
+      // Beutelgroesse in kg; die Spalte heisst nach dem ersten Artikel, der sie
+      // brauchte, und ist der Schluessel, keine Einheit.
+      db.exec(`CREATE TABLE syringe_stock_sku_neu (
+        strain_id     INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        type          TEXT NOT NULL DEFAULT 'SY' CHECK (type IN ('SY', 'PD', 'GS')),
+        ml            INTEGER NOT NULL DEFAULT 10,
+        sku           TEXT NOT NULL UNIQUE,
+        pushed_count  INTEGER,
+        pushed_at     TEXT,
+        billbee_stock REAL,
+        last_error    TEXT,
+        last_try      TEXT,
+        PRIMARY KEY (strain_id, type, ml)
+      )`);
+      db.exec(`INSERT INTO syringe_stock_sku_neu(strain_id, type, ml, sku, pushed_count, pushed_at, billbee_stock, last_error, last_try)
+               SELECT strain_id, type, ml, sku, pushed_count, pushed_at, billbee_stock, last_error, last_try FROM syringe_stock_sku`);
+      db.exec('DROP TABLE syringe_stock_sku');
+      db.exec('ALTER TABLE syringe_stock_sku_neu RENAME TO syringe_stock_sku');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13094,14 +13120,33 @@ function setChannelSyncState(db, channel, s) {
 // syringe-stock.js fuer das Warum.
 const SYRINGE_STOCK_STATUSES = ['active', 'stored'];
 const SYRINGE_SYNC_KEY = 'syringe_stock_sync';
-// Was je Art ein eigener Artikel im Shop ist: jede Spritzengroesse und die
-// Petrischale. Die Petrischale hat keine Groesse; ihre Zeile traegt ml 0.
-const STOCK_SLOTS = [...SYRINGE_SIZES.map((ml) => ({ type: 'SY', ml })), { type: 'PD', ml: 0 }];
+// Bewachsene Koernerbrut geht in Beuteln dieser Groessen in kg, wie KB_KG in
+// app.js. Ein Beutel anderer Groesse (aeltere Chargen mit 2,5 oder 3 kg) ist
+// kein Artikel im Shop und zaehlt nicht.
+const GRAIN_SALE_KG = [1, 2, 5];
+// Was je Art ein eigener Artikel im Shop ist: jede Spritzengroesse, die
+// Petrischale und jede Beutelgroesse Koernerbrut. Die Petrischale hat keine
+// Groesse; ihre Zeile traegt ml 0. Bei der Koernerbrut steht in ml die
+// Beutelgroesse in kg (Migration 105).
+const STOCK_SLOTS = [
+  ...SYRINGE_SIZES.map((ml) => ({ type: 'SY', ml })),
+  { type: 'PD', ml: 0 },
+  ...GRAIN_SALE_KG.map((kg) => ({ type: 'GS', ml: kg }))
+];
 
-// Welcher Artikel gemeint ist: eine Spritzengroesse (10, 20, 50) oder 'pd' fuer
-// die Petrischale. So heisst es auch in der Adresse /api/syringe-stock/<Art>/pd.
+// Welcher Artikel gemeint ist: eine Spritzengroesse (10, 20, 50), 'pd' fuer
+// die Petrischale oder 'kb1', 'kb2', 'kb5' fuer einen Beutel Koernerbrut. So
+// heisst es auch in der Adresse /api/syringe-stock/<Art>/<slot>.
 function _stockSlot(slot) {
-  if (String(slot).toLowerCase() === 'pd') return { type: 'PD', ml: 0 };
+  const s = String(slot).toLowerCase();
+  if (s === 'pd') return { type: 'PD', ml: 0 };
+  if (s.startsWith('kb')) {
+    const kg = Number(s.slice(2));
+    if (!GRAIN_SALE_KG.includes(kg)) {
+      throw new Error('Körnerbrut gibt es in Beuteln mit ' + GRAIN_SALE_KG.join(', ') + ' kg, nicht mit ' + s.slice(2));
+    }
+    return { type: 'GS', ml: kg };
+  }
   const ml = Number(slot);
   if (!SYRINGE_SIZES.includes(ml)) {
     throw new Error('Spritzen gibt es in ' + SYRINGE_SIZES.join(', ') + ' ml, nicht in ' + slot);
@@ -13132,7 +13177,37 @@ function setSyringeStockSyncEnabled(db, on) {
  * Kuehlschrank darf nicht unsichtbar werden. Alte Zeilen ohne strain_id zaehlen
  * ueber den Namen, Spritzen ohne Groesse als 10er.
  */
-function listSyringeStock(db) {
+// Koernerbrut, die verkauft werden kann: Beutel einer Verkaufsgroesse, die
+// noch im Regal stehen (zuletzt hinein- oder umgescannt, nicht heraus), je Art
+// und Groesse. Fertig ist ein Beutel ab dem Faelligkeitstag seiner Charge;
+// davor waechst er, und das steht daneben, mit dem Tag, an dem der erste
+// fertig wird. Eine Charge ohne Art zaehlt nicht: sie gehoert zu keinem Artikel.
+function _grainSaleStock(db, nowIso) {
+  const imRegal = getBagZoneMap(db);
+  const out = new Map();
+  const rows = db
+    .prepare(
+      `SELECT b.bag_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.strain_id, ba.due
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all();
+  for (const r of rows) {
+    if (!imRegal.has(r.bag_id) || !GRAIN_SALE_KG.includes(Number(r.kg))) continue;
+    const key = r.strain_id + ':' + Number(r.kg);
+    const z = out.get(key) || { ready: 0, growing: 0, readyAt: null };
+    if (!r.due || r.due <= nowIso) z.ready++;
+    else {
+      z.growing++;
+      if (!z.readyAt || r.due < z.readyAt) z.readyAt = r.due;
+    }
+    out.set(key, z);
+  }
+  return out;
+}
+
+function listSyringeStock(db, now = new Date()) {
+  const grain = _grainSaleStock(db, now.toISOString());
   const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
   const slots = STOCK_SLOTS.map(() => '(?, ?)').join(',');
   const rows = db
@@ -13140,16 +13215,23 @@ function listSyringeStock(db) {
       `WITH sz(type, ml) AS (VALUES ${slots})
        SELECT ms.id AS strain_id, ms.name, ms.im_programm, sz.type, sz.ml,
               (SELECT COUNT(*) FROM cultures c
-                WHERE c.type = sz.type AND c.status IN (${st})
+                WHERE sz.type <> 'GS' AND c.type = sz.type AND c.status IN (${st})
                   AND (sz.type = 'PD' OR COALESCE(c.ml, 10) = sz.ml)
                   AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
               s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try
          FROM mushroom_strains ms
          CROSS JOIN sz
          LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id AND s.type = sz.type AND s.ml = sz.ml
-        ORDER BY ms.name COLLATE NOCASE, sz.type = 'PD', sz.ml`
+        ORDER BY ms.name COLLATE NOCASE, CASE sz.type WHEN 'SY' THEN 0 WHEN 'PD' THEN 1 ELSE 2 END, sz.ml`
     )
     .all(...STOCK_SLOTS.flatMap((s) => [s.type, s.ml]), ...SYRINGE_STOCK_STATUSES);
+  for (const r of rows) {
+    if (r.type !== 'GS') continue;
+    const z = grain.get(r.strain_id + ':' + r.ml);
+    r.n = z ? z.ready : 0;
+    r.growing = z ? z.growing : 0;
+    r.ready_at = z ? z.readyAt : null;
+  }
   const zeigen = new Set(rows.filter((r) => r.im_programm !== 0 || r.sku || r.n > 0).map((r) => r.strain_id));
   return rows
     .filter((r) => zeigen.has(r.strain_id))
@@ -13157,9 +13239,11 @@ function listSyringeStock(db) {
       strainId: r.strain_id,
       name: r.name,
       type: r.type,
-      ml: r.type === 'PD' ? null : r.ml,
-      slot: r.type === 'PD' ? 'pd' : r.ml,
+      ml: r.type === 'SY' ? r.ml : null,
+      kg: r.type === 'GS' ? r.ml : null,
+      slot: r.type === 'PD' ? 'pd' : r.type === 'GS' ? 'kb' + r.ml : r.ml,
       count: r.n,
+      ...(r.type === 'GS' ? { growing: r.growing, readyAt: r.ready_at } : {}),
       sku: r.sku || '',
       pushedCount: r.pushed_count,
       pushedAt: r.pushed_at || null,
@@ -13195,8 +13279,8 @@ function setSyringeSku(db, strainId, slot, sku) {
     // Shop zeigte immer die Zahl der Zeile, die zuletzt gemeldet hat.
     let wo = 'einer anderen Art';
     if (other.strain_id === id) {
-      if (other.type === 'PD') wo = 'den Petrischalen dieser Art';
-      else if (type === 'PD') wo = 'den Spritzen dieser Art';
+      const name = { SY: 'den Spritzen', PD: 'den Petrischalen', GS: 'der Körnerbrut' };
+      if (other.type !== type) wo = name[other.type] + ' dieser Art';
       else wo = 'einer anderen Größe';
     }
     throw new Error('Die SKU ' + clean + ' gehört schon zu ' + wo);
@@ -13633,6 +13717,7 @@ module.exports = {
   setSyringeSku,
   recordSyringePush,
   SYRINGE_SIZES,
+  GRAIN_SALE_KG,
   getOrder,
   setOrderStatus,
   listCustomers,

@@ -4931,6 +4931,11 @@ tr:hover td {
   color: var(--c-red-dark);
   font-weight: 600;
 }
+/* Grain spawn still growing, in the incubation colour the Chargen bar uses. */
+.vb-c i.vb-grow {
+  color: var(--st-inc);
+  font-weight: 600;
+}
 .vb-zero b {
   color: var(--c-text-muted);
   font-weight: 500;

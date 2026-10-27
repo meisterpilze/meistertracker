@@ -115,19 +115,22 @@ function zeichne(daten, art) {
     't',
     'esc',
     'fmtDtTime',
+    'fmtDtShort',
     `${_hk('VB_KINDS', APP)}
     let _vbKind = ${JSON.stringify(art || 'SY')};
     let _vbData = ${JSON.stringify(daten)};
     ${_hf('_vbNote', APP)}
     ${_hf('_vbCell', APP)}
     ${_hf('_vbSlotLabel', APP)}
+    ${APP.match(/^const _vbSlotOrder = .*;$/m)[0]}
     ${_hf('renderSaleStock', APP)}
     renderSaleStock();`
   )(
     { getElementById: el },
     (k, p) => (p ? k + JSON.stringify(p) : k),
     (s) => String(s),
-    () => '26.10.26 12:31'
+    () => '26.10.26 12:31',
+    () => '04.11'
   );
   return { card: el('vb-card'), seg: el('vb-seg'), table: el('vb-table').innerHTML, bb: el('vb-bb') };
 }
@@ -218,6 +221,55 @@ describe('Verkaufsbestand: die Karte', () => {
     const eine = zeichne({ enabled: true, rows: [zeile({ type: 'PD', slot: 'pd' })] }, 'SY');
     assert.equal(eine.seg.hidden, true);
     assert.match(eine.table, /vb.pieces/, 'ohne Spritzen fällt der Reiter auf die Petrischalen');
+  });
+});
+
+describe('Verkaufsbestand: Körnerbrut', () => {
+  const kb = (o) => zeile({ type: 'GS', slot: 'kb1', count: 0, growing: 0, readyAt: null, ...o });
+
+  it('ein Reiter für Körnerbrut, die Spalten nach Beutelgröße in kg, aufsteigend', () => {
+    const { seg, table } = zeichne(
+      {
+        enabled: true,
+        rows: [
+          zeile({}),
+          kb({ slot: 'kb5' }),
+          kb({ slot: 'kb1', count: 4, pushedCount: 4, billbeeStock: 4 }),
+          kb({ slot: 'kb2' })
+        ]
+      },
+      'GS'
+    );
+    assert.match(seg.innerHTML, /data-vb-kind="GS" aria-pressed="true">vb.grain/);
+    assert.match(table, /<th scope="col">1 kg<\/th><th scope="col">2 kg<\/th><th scope="col">5 kg<\/th>/);
+  });
+
+  it('was noch wächst, steht unter der Zahl, mit dem Tag, an dem es fertig ist', () => {
+    const { table } = zeichne(
+      { enabled: true, rows: [kb({ count: 0, growing: 3, readyAt: '2026-11-04T08:00:00Z' })] },
+      'GS'
+    );
+    assert.match(table, /class="vb-grow">vb.growing\{"n":3,"date":"04.11"\}/);
+  });
+
+  it('auch bei ausgeschaltetem Abgleich: das Wachsen ist Laborwissen, kein Billbee-Stand', () => {
+    const { table } = zeichne(
+      { enabled: false, rows: [kb({ count: 1, pushedAt: null, growing: 2, readyAt: '2026-11-04T08:00:00Z' })] },
+      'GS'
+    );
+    assert.match(table, /vb-grow/);
+  });
+
+  it('ein Fehler geht dem Wachsen vor', () => {
+    const { table } = zeichne(
+      {
+        enabled: true,
+        rows: [kb({ count: 1, lastError: 'Billbee kennt die SKU nicht.', growing: 2, readyAt: '2026-11-04T08:00:00Z' })]
+      },
+      'GS'
+    );
+    assert.match(table, /vb-err/);
+    assert.doesNotMatch(table, /vb-grow/);
   });
 });
 
