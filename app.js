@@ -8967,13 +8967,17 @@ async function loadSaleStock() {
   }
   renderSaleStock();
 }
-// Die kleine Zeile unter einer Zahl, nur wenn es etwas zu sagen gibt. Billbee
-// zieht offene Bestellungen ab, also ist eine kleinere Billbee-Zahl kein Fehler,
-// sondern das, was der Shop anbieten darf. Körnerbrut, die noch wächst, zählt
-// erst ab ihrem Fälligkeitstag; bis dahin steht sie hier, mit dem Tag.
+// Die kleine Zeile unter einer Zahl, nur wenn es etwas zu sagen gibt, und
+// davon das Wichtigste: ein Fehler beim Melden, dann was bestellt und nicht
+// verschickt ist, dann ein Soll, unter dem der Artikel liegt, dann was Billbee
+// noch nicht hat. Billbee zieht offene Bestellungen ab, also ist eine kleinere
+// Billbee-Zahl kein Fehler, sondern das, was der Shop anbieten darf. Körnerbrut,
+// die noch wächst, zählt erst ab ihrem Fälligkeitstag; bis dahin steht sie hier.
 function _vbNote(r, enabled) {
+  if (enabled && r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
+  if (r.ordered > 0) return `<i class="vb-ord">${esc(t('vb.ordered', { n: r.ordered }))}</i>`;
+  if (r.make > 0 && r.soll) return `<i>${esc(t('vb.soll', { n: r.soll }))}</i>`;
   if (enabled) {
-    if (r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
     if (!r.pushedAt || r.pushedCount !== r.count) return `<i>${esc(t('vb.waiting'))}</i>`;
     if (r.billbeeStock != null && r.billbeeStock !== r.count)
       return `<i>${esc(t('vb.billbee', { n: r.billbeeStock }))}</i>`;
@@ -8982,15 +8986,156 @@ function _vbNote(r, enabled) {
     return `<i class="vb-grow">${esc(t('vb.growing', { n: r.growing, date: fmtDtShort(r.readyAt) }))}</i>`;
   return '';
 }
+// Jede Zahl ist ein Knopf: sie öffnet alles zu diesem Artikel, und dort wird
+// das Soll gesetzt (vbSheetOpen). Rot, wenn etwas fehlt (db.saleNeed).
 function _vbCell(r, enabled) {
   if (!r) return `<td><span class="vb-c vb-na" title="${esc(t('vb.legendNa'))}"><b>·</b></span></td>`;
   const tip = r.pushedAt
     ? t('vb.tip', { lab: r.count, bb: r.billbeeStock != null ? r.billbeeStock : r.pushedCount, time: fmtDtTime(r.pushedAt) })
     : t('vb.tipNotYet', { lab: r.count });
+  const cls = 'vb-c' + (r.count === 0 ? ' vb-zero' : '') + (r.make > 0 ? ' vb-under' : '');
   return (
-    `<td><span class="vb-c${r.count === 0 ? ' vb-zero' : ''}" title="${esc(r.lastError || tip)}">` +
-    `<b>${r.count}</b>${_vbNote(r, enabled)}</span></td>`
+    `<td><button type="button" class="${cls}" data-vb-strain="${r.strainId}" data-vb-slot="${esc(String(r.slot))}"` +
+    ` title="${esc(r.lastError || tip)}"><b>${r.count}</b>${_vbNote(r, enabled)}</button></td>`
   );
+}
+// "Spritze 10 ml", "Petrischale", "Körnerbrut 1 kg": was ein Artikel ist, ohne die Art.
+function _vbArtikel(r) {
+  if (r.type === 'PD') return t('np.kindPD');
+  if (r.type === 'GS') return t('np.kindGS', { kg: r.kg });
+  return t('np.kindSY', { ml: r.ml });
+}
+function _vbRow(strainId, slot) {
+  return ((_vbData && _vbData.rows) || []).find((r) => r.strainId === strainId && String(r.slot) === String(slot));
+}
+
+// ── Nachproduzieren: was fehlt, oben auf der Laborseite ──
+// Ein Artikel steht hier, wenn verfügbar (da + wächst − bestellt) unter seinem
+// Soll liegt, oder, ohne Soll, wenn eine Bestellung nicht gedeckt ist; die
+// Rechnung steht in db.saleNeed. Dringendes zuerst. Die Karte gibt es nur,
+// solange etwas fehlt: eine leere Liste hätte nichts zu sagen.
+function renderNachproduzieren(rows) {
+  const card = document.getElementById('np-card');
+  if (!card) return;
+  const rang = (r) => (r.urgency === 'now' ? 0 : 1);
+  // Innerhalb einer Art in der Reihenfolge der Reiter: Spritzen, Petrischalen, Körnerbrut.
+  const reiter = (r) => VB_KINDS.findIndex((k) => k.type === r.type);
+  const offen = rows
+    .filter((r) => r.make > 0)
+    .sort(
+      (a, b) =>
+        rang(a) - rang(b) ||
+        a.name.localeCompare(b.name) ||
+        reiter(a) - reiter(b) ||
+        _vbSlotOrder(a.slot) - _vbSlotOrder(b.slot)
+    );
+  card.hidden = !offen.length;
+  if (!offen.length) return;
+  document.getElementById('np-rows').innerHTML = offen
+    .map((r) => {
+      const warum = [t('np.have', { n: r.count })];
+      if (r.growing) warum.push(t('np.growing', { n: r.growing }));
+      if (r.ordered) warum.push(t('np.ordered', { n: r.ordered }));
+      if (r.soll) warum.push(t('np.soll', { n: r.soll }));
+      return (
+        '<div class="np-row">' +
+        `<i class="np-dot np-${esc(r.urgency)}" role="img" aria-label="${esc(t(r.urgency === 'now' ? 'np.now' : 'np.low'))}"></i>` +
+        `<div class="np-main"><div class="np-what">${esc(r.name)} · ${esc(_vbArtikel(r))}</div>` +
+        `<div class="np-why">${esc(warum.join(' · '))}</div></div>` +
+        `<button type="button" class="btn btn-sm btn-p np-go" data-np-strain="${r.strainId}" data-np-slot="${esc(String(r.slot))}">` +
+        `${esc(t('np.make', { n: r.make }))}</button></div>`
+      );
+    })
+    .join('');
+}
+// "Ansetzen": die Laborarbeit, mit Art, Größe und Anzahl schon ausgefüllt. Die
+// Anzahl ist, was fehlt, keine gemerkte Zahl; geändert wird sie im Dialog wie
+// sonst, und der endet wie immer im Etikettendialog.
+function npAnsetzen(strainId, slot) {
+  const r = _vbRow(strainId, slot);
+  const ms = (mushroomStrains || []).find((x) => x.id === strainId);
+  if (!r || !ms) return;
+  vbSheetClose();
+  msQuickOpen('labor', ms);
+  const art = document.getElementById('ms-q-labtype');
+  if (art) art.value = r.type === 'GS' ? 'KB' : r.type;
+  msQuickRender();
+  if (r.type === 'SY') document.getElementById('ms-q-sy').innerHTML = syMengenHtml('ms-q', { [r.ml]: r.make });
+  else if (r.type === 'GS') document.getElementById('ms-q-sizes').innerHTML = kbMengenHtml('ms-q', { [r.kg]: r.make });
+  else {
+    const q = document.getElementById('ms-q-qty');
+    if (q) q.value = r.make;
+  }
+  // Die Vorschau unter den Zählern rechnet aus ihnen; sonst zeigte sie bis zum
+  // ersten Tipp die Zahl von vorher.
+  msQuickPreview();
+}
+
+// ── Ein Artikel im Einzelnen, und sein Soll ──
+// Ein Tipp auf + oder − gilt sofort, ohne Speichern-Knopf und ohne Rückfrage:
+// das Soll ist eine Zahl, die man genauso schnell zurückstellt, wie man sie
+// verstellt hat. Gespeichert wird kurz nach dem letzten Tipp, nicht bei jedem.
+let _vbSheet = null;
+let _vbSollTimer = null;
+function vbSheetOpen(strainId, slot) {
+  _vbSheet = { strainId, slot: String(slot) };
+  vbSheetRender();
+  if (_vbSheet) document.getElementById('m-vb').classList.add('open');
+}
+function vbSheetClose() {
+  const m = document.getElementById('m-vb');
+  if (m) m.classList.remove('open');
+  _vbSheet = null;
+}
+function vbSheetRender() {
+  const r = _vbSheet && _vbRow(_vbSheet.strainId, _vbSheet.slot);
+  if (!r) {
+    vbSheetClose();
+    return;
+  }
+  document.getElementById('m-vb-title').textContent = r.name + ' · ' + _vbArtikel(r);
+  const zeilen = [[t('vb.sheetLab'), r.count]];
+  if (r.type === 'GS')
+    zeilen.push([
+      t('vb.sheetGrowing'),
+      r.growing ? t('vb.sheetGrowingAt', { n: r.growing, date: fmtDtShort(r.readyAt) }) : 0
+    ]);
+  zeilen.push([t('vb.sheetOrdered'), r.ordered || 0]);
+  zeilen.push([
+    t('vb.sheetBillbee'),
+    r.lastError
+      ? r.lastError
+      : r.pushedAt
+        ? (r.billbeeStock != null ? r.billbeeStock : r.pushedCount) + ' · ' + fmtDtTime(r.pushedAt)
+        : t('vb.sheetNotYet')
+  ]);
+  document.getElementById('m-vb-kv').innerHTML = zeilen
+    .map(([k, v]) => `<span>${esc(k)}</span><b>${esc(String(v))}</b>`)
+    .join('');
+  document.getElementById('m-vb-soll').textContent = String(r.soll || 0);
+  const go = document.getElementById('m-vb-make');
+  go.hidden = !(r.make > 0);
+  go.textContent = r.make > 0 ? t('np.make', { n: r.make }) : '';
+}
+function vbSollStep(d) {
+  const r = _vbSheet && _vbRow(_vbSheet.strainId, _vbSheet.slot);
+  if (!r) return;
+  const neu = Math.max(0, Math.min(500, (r.soll || 0) + d));
+  r.soll = neu || null;
+  document.getElementById('m-vb-soll').textContent = String(neu);
+  clearTimeout(_vbSollTimer);
+  _vbSollTimer = setTimeout(() => vbSollSave(r.strainId, r.slot, neu), 500);
+}
+async function vbSollSave(strainId, slot, soll) {
+  const r = await apiPut('/api/sale-stock/' + strainId + '/' + slot, { soll });
+  if (!r || r.error || !Array.isArray(r.rows)) {
+    setFb('err', (r && r.error) || t('common.error'));
+    loadSaleStock();
+    return;
+  }
+  _vbData = r;
+  renderSaleStock();
+  if (_vbSheet) vbSheetRender();
 }
 // Eine Spritzengröße (10), die Petrischale ('pd') oder ein Beutel ('kb2').
 function _vbSlotLabel(slot) {
@@ -9004,6 +9149,7 @@ function renderSaleStock() {
   if (!card || !_vbData) return;
   const rows = _vbData.rows || [];
   const enabled = !!_vbData.enabled;
+  renderNachproduzieren(rows);
   const kinds = VB_KINDS.filter((k) => rows.some((r) => r.type === k.type));
   // Ohne SKU verkauft kein Shop etwas aus dem Labor; dann gibt es nichts zu zeigen.
   card.hidden = !kinds.length;
@@ -31785,6 +31931,24 @@ function initEventListeners() {
     if (!b) return;
     _vbKind = b.dataset.vbKind;
     renderSaleStock();
+  });
+  $('vb-table').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vb-strain]');
+    if (b) vbSheetOpen(parseInt(b.dataset.vbStrain, 10), b.dataset.vbSlot);
+  });
+  $('np-rows').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-np-strain]');
+    if (b) npAnsetzen(parseInt(b.dataset.npStrain, 10), b.dataset.npSlot);
+  });
+  $('m-vb').addEventListener('click', (e) => {
+    if (e.target.id === 'm-vb') return vbSheetClose();
+    const b = e.target.closest('[data-vb-act]');
+    if (!b) return;
+    const act = b.dataset.vbAct;
+    if (act === 'minus') vbSollStep(-1);
+    else if (act === 'plus') vbSollStep(1);
+    else if (act === 'close') vbSheetClose();
+    else if (act === 'make' && _vbSheet) npAnsetzen(_vbSheet.strainId, _vbSheet.slot);
   });
   // Which Sorten are in this season's programme. Delegated: the table is
   // rebuilt on every sync, so a listener on the row would not survive.

@@ -11835,31 +11835,61 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // decides what to make next from it, and most of the lab is not admin. Only
   // what a shop sells (a row with a SKU); setting SKUs stays with the admin
   // routes above.
+  const saleStockState = () => ({
+    enabled: db.syringeStockSyncEnabled(database),
+    rows: db
+      .listSyringeStock(database)
+      .filter((r) => r.sku)
+      .map((r) => ({
+        strainId: r.strainId,
+        name: r.name,
+        type: r.type,
+        slot: r.slot,
+        ml: r.ml,
+        kg: r.kg,
+        count: r.count,
+        // Koernerbrut, die noch waechst, und wann der erste Beutel fertig ist.
+        growing: r.growing || 0,
+        readyAt: r.readyAt || null,
+        // Offen bestellt, das Soll und was daraus fehlt (db.saleNeed).
+        ordered: r.ordered,
+        soll: r.soll,
+        make: r.make,
+        urgency: r.urgency,
+        pushedCount: r.pushedCount,
+        pushedAt: r.pushedAt,
+        billbeeStock: r.billbeeStock,
+        lastError: r.lastError
+      }))
+  });
   if (req.method === 'GET' && req.url === '/api/sale-stock') {
     try {
-      jsonOk(res, {
-        enabled: db.syringeStockSyncEnabled(database),
-        rows: db
-          .listSyringeStock(database)
-          .filter((r) => r.sku)
-          .map((r) => ({
-            strainId: r.strainId,
-            name: r.name,
-            type: r.type,
-            slot: r.slot,
-            count: r.count,
-            // Koernerbrut, die noch waechst, und wann der erste Beutel fertig ist.
-            growing: r.growing || 0,
-            readyAt: r.readyAt || null,
-            pushedCount: r.pushedCount,
-            pushedAt: r.pushedAt,
-            billbeeStock: r.billbeeStock,
-            lastError: r.lastError
-          }))
-      });
+      jsonOk(res, saleStockState());
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+  // Das Soll eines Artikels: /api/sale-stock/<Art>/<slot>, slot wie bei der
+  // SKU (10, 20, 50, pd, kb1, kb2, kb5). Wie viele da sein sollen, entscheidet
+  // das Labor, also darf jeder Angemeldete es setzen.
+  const saleTargetMatch = req.url.match(/^\/api\/sale-stock\/(\d+)\/(\d+|pd|kb\d+)$/);
+  if (req.method === 'PUT' && saleTargetMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.setSaleTarget(database, Number(saleTargetMatch[1]), saleTargetMatch[2], data.soll);
+      } catch (err) {
+        // The refusals setSaleTarget makes are meant for the person tapping.
+        jsonErr(res, 400, err.message);
+        return;
+      }
+      broadcastSSE(res);
+      jsonOk(res, saleStockState());
+    });
     return;
   }
   if (req.method === 'POST' && req.url === '/api/syringe-stock/push') {

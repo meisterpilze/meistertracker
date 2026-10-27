@@ -3090,6 +3090,19 @@ const MIGRATIONS = [
       db.exec('DROP TABLE syringe_stock_sku');
       db.exec('ALTER TABLE syringe_stock_sku_neu RENAME TO syringe_stock_sku');
     }
+  },
+  {
+    version: 106,
+    description: 'Verkaufsbestand: Soll je Artikel',
+    fn(db) {
+      // Wie viele von einem Artikel immer da sein sollen. NULL heisst: kein
+      // Soll, der Artikel wird auf Bestellung gemacht. Es haengt an der Zeile
+      // mit der SKU, weil nur ein Artikel, den ein Shop verkauft, eins braucht.
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('syringe_stock_sku') WHERE name = 'soll'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE syringe_stock_sku ADD COLUMN soll INTEGER');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13206,8 +13219,43 @@ function _grainSaleStock(db, nowIso) {
   return out;
 }
 
+// Offen bestellt je SKU: Bestellzeilen aus dem Bestellungen-Hub, deren
+// Bestellung noch nicht verschickt und nicht storniert ist. Eine Zeile mit
+// negativer Menge (Rabatt, Korrektur) ist kein Artikel, der das Regal verlaesst.
+function _openOrderedBySku(db) {
+  const out = new Map();
+  const rows = db
+    .prepare(
+      `SELECT i.channel_sku AS sku, SUM(i.qty) AS n
+         FROM order_items i JOIN orders o ON o.id = i.order_id
+        WHERE o.status = 'new' AND i.qty > 0 AND i.channel_sku IS NOT NULL AND i.channel_sku <> ''
+        GROUP BY i.channel_sku`
+    )
+    .all();
+  for (const r of rows) out.set(r.sku, r.n);
+  return out;
+}
+
+// Was von einem Artikel angesetzt werden muss, und wie dringend.
+//
+// Verfuegbar ist, was im Labor ist, plus was noch waechst, minus was schon
+// bestellt und nicht verschickt ist. Liegt das unter dem Soll, fehlt die
+// Differenz. Ohne Soll (auf Bestellung) fehlt nur, was bestellt und nicht
+// gedeckt ist. Dringend ('now') ist es, wenn eine offene Bestellung gerade
+// nicht aus dem Regal gehen kann oder gar nichts da ist; sonst nur knapp ('low').
+//
+// Billbee bekommt weiter die Laborzahl, nicht "frei": Billbee zieht offene
+// Bestellungen selbst ab (syringe-stock.js), zweimal abgezogen waere falsch.
+function saleNeed({ count, growing = 0, ordered = 0, soll = null }) {
+  const verfuegbar = count + growing - ordered;
+  const make = Math.max(0, (soll || 0) - verfuegbar);
+  if (!make) return { make: 0, urgency: null };
+  return { make, urgency: ordered > count || count === 0 ? 'now' : 'low' };
+}
+
 function listSyringeStock(db, now = new Date()) {
   const grain = _grainSaleStock(db, now.toISOString());
+  const ordered = _openOrderedBySku(db);
   const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
   const slots = STOCK_SLOTS.map(() => '(?, ?)').join(',');
   const rows = db
@@ -13218,7 +13266,7 @@ function listSyringeStock(db, now = new Date()) {
                 WHERE sz.type <> 'GS' AND c.type = sz.type AND c.status IN (${st})
                   AND (sz.type = 'PD' OR COALESCE(c.ml, 10) = sz.ml)
                   AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
-              s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try
+              s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try, s.soll
          FROM mushroom_strains ms
          CROSS JOIN sz
          LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id AND s.type = sz.type AND s.ml = sz.ml
@@ -13244,6 +13292,14 @@ function listSyringeStock(db, now = new Date()) {
       slot: r.type === 'PD' ? 'pd' : r.type === 'GS' ? 'kb' + r.ml : r.ml,
       count: r.n,
       ...(r.type === 'GS' ? { growing: r.growing, readyAt: r.ready_at } : {}),
+      // Nur ein Artikel mit SKU wird verkauft; nur er hat Bestellungen und ein Soll.
+      ...(r.sku
+        ? (() => {
+            const auf = ordered.get(r.sku) || 0;
+            const soll = r.soll == null ? null : r.soll;
+            return { ordered: auf, soll, ...saleNeed({ count: r.n, growing: r.growing || 0, ordered: auf, soll }) };
+          })()
+        : {}),
       sku: r.sku || '',
       pushedCount: r.pushed_count,
       pushedAt: r.pushed_at || null,
@@ -13296,6 +13352,26 @@ function setSyringeSku(db, strainId, slot, sku) {
        billbee_stock = CASE WHEN syringe_stock_sku.sku = excluded.sku THEN syringe_stock_sku.billbee_stock END,
        last_error = NULL`
   ).run(id, type, ml, clean);
+  incrementDataVersion(db);
+}
+
+/**
+ * Soll eines Artikels setzen; `slot` wie bei setSyringeSku. 0 oder leer heisst
+ * kein Soll (auf Bestellung). Nur ein Artikel mit SKU hat eins: ohne SKU
+ * verkauft ihn kein Shop, und ein Soll wuerde zu nichts fuehren.
+ */
+function setSaleTarget(db, strainId, slot, soll) {
+  const { type, ml } = _stockSlot(slot);
+  const n = soll == null || soll === '' ? 0 : Number(soll);
+  if (!Number.isInteger(n) || n < 0 || n > 500) {
+    throw new Error('Das Soll ist eine ganze Zahl von 0 bis 500');
+  }
+  const r = db
+    .prepare('UPDATE syringe_stock_sku SET soll = ? WHERE strain_id = ? AND type = ? AND ml = ?')
+    .run(n || null, Number(strainId), type, ml);
+  if (!r.changes) {
+    throw new Error('Dieser Artikel hat keine SKU. Erst unter Admin → Kanäle → Billbee eine SKU eintragen.');
+  }
   incrementDataVersion(db);
 }
 
@@ -13718,6 +13794,8 @@ module.exports = {
   recordSyringePush,
   SYRINGE_SIZES,
   GRAIN_SALE_KG,
+  saleNeed,
+  setSaleTarget,
   getOrder,
   setOrderStatus,
   listCustomers,

@@ -123,6 +123,8 @@ function zeichne(daten, art) {
     ${_hf('_vbCell', APP)}
     ${_hf('_vbSlotLabel', APP)}
     ${APP.match(/^const _vbSlotOrder = .*;$/m)[0]}
+    ${_hf('_vbArtikel', APP)}
+    ${_hf('renderNachproduzieren', APP)}
     ${_hf('renderSaleStock', APP)}
     renderSaleStock();`
   )(
@@ -132,7 +134,14 @@ function zeichne(daten, art) {
     () => '26.10.26 12:31',
     () => '04.11'
   );
-  return { card: el('vb-card'), seg: el('vb-seg'), table: el('vb-table').innerHTML, bb: el('vb-bb') };
+  return {
+    card: el('vb-card'),
+    seg: el('vb-seg'),
+    table: el('vb-table').innerHTML,
+    bb: el('vb-bb'),
+    np: el('np-card'),
+    npRows: el('np-rows').innerHTML
+  };
 }
 const zeile = (o) => ({
   strainId: 1,
