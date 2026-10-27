@@ -11,11 +11,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const db = require('../db.js');
-const { quelle, hebeFunktion: _hf, hebeKonstante: _hk } = require('./helpers/quelle');
+const { quelle } = require('./helpers/quelle');
 
-const APP = quelle();
 const SERVER = quelle('server.js');
-const HTML = quelle('index.html');
 
 describe('Bestellt, aber nicht da: wann es sich meldet', () => {
   let d, dir, a, n;
@@ -130,63 +128,5 @@ describe('Bestellt, aber nicht da: der Server', () => {
     // Die Verzögerung steht vor broadcastSSE: ein Aufruf beim Start darf nicht
     // an einer noch nicht angelegten Konstante scheitern.
     assert.ok(SERVER.indexOf('const SALE_ALERT_DEBOUNCE_MS') < SERVER.indexOf('function broadcastSSE'));
-  });
-});
-
-// renderWorkNachproduzieren gegen einen Platzhalter.
-function zeile(rows) {
-  const el = { hidden: false, textContent: '', klassen: new Set() };
-  el.classList = { toggle: (k, an) => (an ? el.klassen.add(k) : el.klassen.delete(k)) };
-  new Function(
-    'document',
-    't',
-    `${_hk('VB_KINDS', APP)}
-    ${_hf('_vbArtikel', APP)}
-    ${_hf('renderWorkNachproduzieren', APP)}
-    renderWorkNachproduzieren(${JSON.stringify(rows)});`
-  )({ getElementById: () => el }, (k, p) => (p ? k + JSON.stringify(p) : k));
-  return el;
-}
-const art = (o) => ({ strainId: 1, name: 'Testart Alpha', type: 'SY', slot: 10, ml: 10, make: 0, urgency: null, ...o });
-
-describe('Nachproduzieren in Arbeitsgänge', () => {
-  it('ist weg, solange nichts fehlt', () => {
-    assert.equal(zeile([art({})]).hidden, true);
-  });
-
-  it('nennt die Anzahl und die ersten zwei, dringende zuerst, und ist dann rot', () => {
-    const el = zeile([
-      art({ name: 'Testart Beta', make: 1, urgency: 'low' }),
-      art({ type: 'PD', slot: 'pd', make: 2, urgency: 'now' }),
-      art({ name: 'Testart Gamma', make: 1, urgency: 'low' })
-    ]);
-    assert.equal(el.hidden, false);
-    assert.equal(
-      el.textContent,
-      'work.np{"n":3} · Testart Alpha np.kindPD, Testart Beta np.kindSY{"ml":10}, work.npMore{"n":1}'
-    );
-    assert.ok(el.klassen.has('wk-np-now'));
-  });
-
-  it('nur Knappes ist gelb, nicht rot', () => {
-    assert.ok(!zeile([art({ make: 1, urgency: 'low' })]).klassen.has('wk-np-now'));
-  });
-
-  it('steht über den Kacheln, gleich unter der Warnzeile', () => {
-    const np = HTML.indexOf('id="wk-np"');
-    assert.ok(np > HTML.indexOf('id="wk-alert"'));
-    assert.ok(np < HTML.indexOf('id="wk-tiles"'));
-  });
-
-  it('die Seite lädt den Verkaufsbestand, wenn sie aufgeht und wenn sie neu zeichnet', () => {
-    assert.match(APP, /if \(page === 'work'\) \{\s*renderDashBatchTasks\(\);\s*loadSaleStock\(\);/);
-    assert.match(APP, /if \(id === 'work'\) \{\s*renderDashBatchTasks\(\);\s*loadSaleStock\(\);/);
-  });
-
-  it('ein Tipp in der Glocke öffnet den Artikel auf der Laborseite', () => {
-    const i = APP.indexOf("linkType === 'sale'");
-    const zweig = APP.slice(i, i + 400);
-    assert.match(zweig, /go\('lab', 'n-lab'\)/);
-    assert.match(zweig, /vbSheetOpen\(parseInt\(sid, 10\), slot\)/);
   });
 });

@@ -11912,6 +11912,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         lastError: r.lastError
       }))
   });
+  // Der ganze Laborbestand je Art (db.labStock): was da ist, was fehlt, und für
+  // die Artikel eines Shops, was Billbee zuletzt bekam. Die Laborseite und
+  // Arbeitsgänge lesen nur das; gesetzt wird über die Sorte
+  // (PATCH /api/mushroom-strains/<id>) und für eine Verkaufsgröße hierunter.
+  if (req.method === 'GET' && req.url === '/api/lab-stock') {
+    try {
+      jsonOk(res, { enabled: db.syringeStockSyncEnabled(database), species: db.labStock(database) });
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   if (req.method === 'GET' && req.url === '/api/sale-stock') {
     try {
       jsonOk(res, saleStockState());

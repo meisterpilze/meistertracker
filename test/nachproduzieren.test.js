@@ -12,10 +12,6 @@ const os = require('os');
 const path = require('path');
 const db = require('../db.js');
 const { routen } = require('./helpers/routen');
-const { quelle, hebeFunktion: _hf, hebeKonstante: _hk } = require('./helpers/quelle');
-
-const APP = quelle();
-const HTML = quelle('index.html');
 
 describe('Nachproduzieren: die Rechnung', () => {
   const fall = (r) => db.saleNeed(r);
@@ -24,8 +20,8 @@ describe('Nachproduzieren: die Rechnung', () => {
     assert.deepEqual(fall({ count: 0 }), { make: 0, urgency: null });
   });
 
-  it('unter dem Soll fehlt die Differenz; nichts da ist dringend', () => {
-    assert.deepEqual(fall({ count: 0, soll: 2 }), { make: 2, urgency: 'now' });
+  it('unter dem Soll fehlt die Differenz, auch bei null nur gelb', () => {
+    assert.deepEqual(fall({ count: 0, soll: 2 }), { make: 2, urgency: 'low' });
     assert.deepEqual(fall({ count: 1, soll: 3 }), { make: 2, urgency: 'low' });
     assert.deepEqual(fall({ count: 3, soll: 3 }), { make: 0, urgency: null });
   });
@@ -138,7 +134,7 @@ describe('Nachproduzieren: die Route', () => {
     const z = res.json.rows.find((x) => x.slot === 'kb1');
     assert.equal(z.soll, 2);
     assert.equal(z.make, 2);
-    assert.equal(z.urgency, 'now');
+    assert.equal(z.urgency, 'low');
     assert.equal(z.kg, 1);
     assert.equal(r.sendungen(), 1, 'andere Bildschirme erfahren davon');
   });
@@ -147,114 +143,5 @@ describe('Nachproduzieren: die Route', () => {
     const res = await r.anfrage('PUT', '/api/sale-stock/' + a + '/kb2', { soll: 2 });
     assert.equal(res.status, 400);
     assert.match(res.json.error, /keine SKU/);
-  });
-});
-
-// Die Karte und die Zellen gegen eine Seite aus Platzhaltern, wie in
-// verkaufsbestand.test.js.
-function zeichne(rows) {
-  const els = {};
-  const el = (id) =>
-    (els[id] = els[id] || {
-      hidden: false,
-      innerHTML: '',
-      textContent: '',
-      classList: { toggle() {} }
-    });
-  new Function(
-    'document',
-    't',
-    'esc',
-    'fmtDtTime',
-    'fmtDtShort',
-    `${_hk('VB_KINDS', APP)}
-    let _vbKind = 'SY';
-    let _vbData = ${JSON.stringify({ enabled: true, rows })};
-    ${_hf('_vbNote', APP)}
-    ${_hf('_vbCell', APP)}
-    ${_hf('_vbSlotLabel', APP)}
-    ${APP.match(/^const _vbSlotOrder = .*;$/m)[0]}
-    ${_hf('_vbArtikel', APP)}
-    ${_hf('renderNachproduzieren', APP)}
-    ${_hf('renderWorkNachproduzieren', APP)}
-    ${_hf('renderSaleStock', APP)}
-    renderSaleStock();`
-  )(
-    { getElementById: el },
-    (k, p) => (p ? k + JSON.stringify(p) : k),
-    (s) => String(s),
-    () => '27.10.26 12:00',
-    () => '04.11'
-  );
-  return { np: el('np-card'), npRows: el('np-rows').innerHTML, table: el('vb-table').innerHTML };
-}
-const art = (o) => ({
-  strainId: 1,
-  name: 'Testart Alpha',
-  type: 'SY',
-  slot: 10,
-  ml: 10,
-  count: 0,
-  growing: 0,
-  ordered: 0,
-  soll: null,
-  make: 0,
-  urgency: null,
-  pushedCount: 0,
-  pushedAt: '2026-10-27T10:00:00Z',
-  billbeeStock: 0,
-  lastError: null,
-  ...o
-});
-
-describe('Nachproduzieren: die Karte', () => {
-  it('ist weg, solange nichts fehlt', () => {
-    assert.equal(zeichne([art({ count: 3 })]).np.hidden, true);
-  });
-
-  it('Dringendes zuerst, mit Art, Artikel, Grund und einem Knopf mit der Anzahl', () => {
-    const { np, npRows } = zeichne([
-      art({ strainId: 2, name: 'Testart Beta', count: 1, soll: 3, make: 2, urgency: 'low' }),
-      art({ type: 'GS', slot: 'kb1', ml: null, kg: 1, count: 0, ordered: 1, make: 1, urgency: 'now' })
-    ]);
-    assert.equal(np.hidden, false);
-    assert.ok(npRows.indexOf('np-now') < npRows.indexOf('np-low'), 'dringend steht oben');
-    assert.match(npRows, /Testart Alpha · np.kindGS\{"kg":1\}/);
-    assert.match(npRows, /np.have\{"n":0\} · np.ordered\{"n":1\}/);
-    assert.match(npRows, /data-np-strain="1" data-np-slot="kb1">np.make\{"n":1\}/);
-    assert.match(npRows, /aria-label="np.now"/, 'die Farbe allein sagt es einem Screenreader nicht');
-  });
-
-  it('eine Zahl ist ein Knopf für ihren Artikel, rot, wenn etwas fehlt, mit dem Grund darunter', () => {
-    const { table } = zeichne([
-      art({ count: 0, soll: 2, make: 2, urgency: 'now' }),
-      art({ strainId: 2, name: 'Testart Beta', count: 3, ordered: 1, pushedCount: 3, billbeeStock: 2 })
-    ]);
-    assert.match(table, /<button type="button" class="vb-c vb-zero vb-under" data-vb-strain="1" data-vb-slot="10"/);
-    assert.match(table, /vb.soll\{"n":2\}/);
-    assert.match(table, /class="vb-ord">vb.ordered\{"n":1\}/, 'bestellt geht vor der Billbee-Zahl');
-  });
-});
-
-describe('Nachproduzieren: Ansetzen und das Soll', () => {
-  it('Ansetzen öffnet die Laborarbeit für diese Art, mit Typ, Größe und Anzahl', () => {
-    const f = _hf('npAnsetzen', APP);
-    assert.match(f, /msQuickOpen\('labor', ms\)/);
-    assert.match(f, /r\.type === 'GS' \? 'KB' : r\.type/);
-    assert.match(f, /syMengenHtml\('ms-q', \{ \[r\.ml\]: r\.make \}\)/);
-    assert.match(f, /kbMengenHtml\('ms-q', \{ \[r\.kg\]: r\.make \}\)/);
-  });
-
-  it('ein Tipp auf + oder − gilt sofort und wird kurz danach gespeichert, ohne Rückfrage', () => {
-    const f = _hf('vbSollStep', APP);
-    assert.match(f, /setTimeout\(\(\) => vbSollSave/);
-    assert.doesNotMatch(f, /confirm/);
-  });
-
-  it('die Karte steht über dem Verkaufsbestand, außerhalb der Reiter', () => {
-    const np = HTML.indexOf('id="np-card"');
-    assert.ok(np > HTML.indexOf('id="dash-lab-stock"'));
-    assert.ok(np < HTML.indexOf('id="vb-card"'));
-    assert.ok(np < HTML.indexOf('<div class="stabs" data-stab-home="nav.lab">'));
   });
 });

@@ -3116,6 +3116,21 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE syringe_stock_sku ADD COLUMN alert_ordered INTEGER');
     }
+  },
+  {
+    version: 108,
+    description: 'Laborbestand je Sorte: das Soll der Petrischale ist die Untergrenze der Sorte',
+    fn(db) {
+      // Eine Zahl je Feld. Fuer Petrischalen gab es zwei: min_pd an der Sorte
+      // (Laborvorrat) und soll an der SKU-Zeile (Shop). Die groessere bleibt,
+      // an der Sorte, wo sie auch ohne SKU gilt.
+      db.exec(`UPDATE mushroom_strains
+                  SET min_pd = (SELECT MAX(COALESCE(mushroom_strains.min_pd, 0), s.soll)
+                                  FROM syringe_stock_sku s
+                                 WHERE s.strain_id = mushroom_strains.id AND s.type = 'PD' AND s.soll IS NOT NULL)
+                WHERE id IN (SELECT strain_id FROM syringe_stock_sku WHERE type = 'PD' AND soll IS NOT NULL)`);
+      db.exec("UPDATE syringe_stock_sku SET soll = NULL WHERE type = 'PD'");
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13254,16 +13269,20 @@ function _openOrderedBySku(db) {
 // Verfuegbar ist, was im Labor ist, plus was noch waechst, minus was schon
 // bestellt und nicht verschickt ist. Liegt das unter dem Soll, fehlt die
 // Differenz. Ohne Soll (auf Bestellung) fehlt nur, was bestellt und nicht
-// gedeckt ist. Dringend ('now') ist es, wenn eine offene Bestellung gerade
-// nicht aus dem Regal gehen kann oder gar nichts da ist; sonst nur knapp ('low').
+// gedeckt ist. Dringend ('now') ist nur eine offene Bestellung, die gerade
+// nicht aus dem Regal gehen kann: sie wartet auf jemanden. Alles andere unter
+// dem Soll ist knapp ('low'), auch bei null; sonst waere bei vierzig Luecken
+// fast alles rot, und Rot hiesse nichts mehr.
 //
 // Billbee bekommt weiter die Laborzahl, nicht "frei": Billbee zieht offene
 // Bestellungen selbst ab (syringe-stock.js), zweimal abgezogen waere falsch.
+// Gewichte (Koernerbrut in kg) auf ein Zehntel, damit 3 x 1,2 kg gegen 3,6
+// nicht als 0,0000001 fehlend stehen bleibt.
 function saleNeed({ count, growing = 0, ordered = 0, soll = null }) {
   const verfuegbar = count + growing - ordered;
-  const make = Math.max(0, (soll || 0) - verfuegbar);
+  const make = Math.max(0, Math.round(((soll || 0) - verfuegbar) * 10) / 10);
   if (!make) return { make: 0, urgency: null };
-  return { make, urgency: ordered > count || count === 0 ? 'now' : 'low' };
+  return { make, urgency: ordered > count ? 'now' : 'low' };
 }
 
 function listSyringeStock(db, now = new Date()) {
@@ -13279,7 +13298,7 @@ function listSyringeStock(db, now = new Date()) {
                 WHERE sz.type <> 'GS' AND c.type = sz.type AND c.status IN (${st})
                   AND (sz.type = 'PD' OR COALESCE(c.ml, 10) = sz.ml)
                   AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
-              s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try, s.soll
+              s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try, s.soll, ms.min_pd
          FROM mushroom_strains ms
          CROSS JOIN sz
          LEFT JOIN syringe_stock_sku s ON s.strain_id = ms.id AND s.type = sz.type AND s.ml = sz.ml
@@ -13309,8 +13328,15 @@ function listSyringeStock(db, now = new Date()) {
       ...(r.sku
         ? (() => {
             const auf = ordered.get(r.sku) || 0;
-            const soll = r.soll == null ? null : r.soll;
-            return { ordered: auf, soll, ...saleNeed({ count: r.n, growing: r.growing || 0, ordered: auf, soll }) };
+            // Die Petrischale hat ihr Soll an der Sorte (Migration 108); eine
+            // Sorte ausser Programm hat keins, nur ihre Bestellungen zaehlen.
+            const roh = r.type === 'PD' ? r.min_pd || null : r.soll == null ? null : r.soll;
+            const soll = r.im_programm === 0 ? null : roh;
+            return {
+              ordered: auf,
+              soll: roh,
+              ...saleNeed({ count: r.n, growing: r.growing || 0, ordered: auf, soll })
+            };
           })()
         : {}),
       sku: r.sku || '',
@@ -13419,6 +13445,121 @@ function saleAlerts(db, now = new Date()) {
   return neu;
 }
 
+// Koernerbrut im Regal je Art in kg, alle Beutelgroessen: was fertig ist und
+// was noch waechst. Der Vorrat fuer die Bloecke, gegen min_spawn_kg; die
+// Beutel, die ein Shop verkauft, zaehlt _grainSaleStock je Groesse.
+function _grainKgOnShelf(db, nowIso) {
+  const imRegal = getBagZoneMap(db);
+  const out = new Map();
+  const rows = db
+    .prepare(
+      `SELECT b.bag_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.strain_id, ba.due
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all();
+  for (const r of rows) {
+    if (!imRegal.has(r.bag_id)) continue;
+    const z = out.get(r.strain_id) || { ready: 0, growing: 0, readyAt: null };
+    if (!r.due || r.due <= nowIso) z.ready += Number(r.kg);
+    else {
+      z.growing += Number(r.kg);
+      if (!z.readyAt || r.due < z.readyAt) z.readyAt = r.due;
+    }
+    out.set(r.strain_id, z);
+  }
+  return out;
+}
+
+/**
+ * Der Laborbestand je Art, alles an einer Stelle: Slants, Fluessigkultur,
+ * Petrischalen, Spritzen je Groesse, der Koernerbrut-Vorrat in kg und die
+ * Beutel, die ein Shop verkauft. Je Feld eine Zahl (have), was waechst, was
+ * bestellt ist, ein Soll und was daraus fehlt (make, urgency wie saleNeed).
+ *
+ * Das Soll steht dort, wo es schon immer stand: Slants, Fluessigkultur,
+ * Petrischale und der kg-Vorrat an der Sorte (min_mc, min_lc, min_pd,
+ * min_spawn_kg), eine Spritzengroesse und ein Verkaufsbeutel an ihrer SKU.
+ * Eine Art ausser Programm hat kein Soll; nur ihre offenen Bestellungen
+ * zaehlen noch, denn die wartet jemand.
+ *
+ * Gezeigt wird eine Art, wenn sie im Programm ist, etwas da ist oder ein Shop
+ * etwas von ihr verkauft. Gezaehlt wird ueberall gleich: Kulturen aktiv und
+ * gelagert, Koernerbrut was im Regal steht.
+ */
+function labStock(db, now = new Date()) {
+  const nowIso = now.toISOString();
+  const sale = listSyringeStock(db, now);
+  const kg = _grainKgOnShelf(db, nowIso);
+  const kulturen = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT ms.id AS strain_id, c.type, COUNT(*) AS n
+         FROM cultures c JOIN mushroom_strains ms
+           ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
+        WHERE c.type IN ('MC', 'LC') AND c.status IN ('active', 'stored')
+        GROUP BY ms.id, c.type`
+    )
+    .all())
+    kulturen.set(r.strain_id + ':' + r.type, r.n);
+  const strains = db
+    .prepare(
+      `SELECT id, name, kuerzel, im_programm, min_mc, min_lc, min_pd, min_spawn_kg
+         FROM mushroom_strains ORDER BY name COLLATE NOCASE`
+    )
+    .all();
+  const out = [];
+  for (const ms of strains) {
+    const imProgramm = ms.im_programm !== 0;
+    const feld = (key, have, soll, extra = {}) => {
+      const growing = extra.growing || 0;
+      const ordered = extra.ordered || 0;
+      const need = saleNeed({ count: have, growing, ordered, soll: imProgramm ? soll : null });
+      return { key, have, growing, ordered, soll: soll || null, ...need, ...extra };
+    };
+    const shop = (r) =>
+      r && r.sku
+        ? {
+            sku: r.sku,
+            pushedCount: r.pushedCount,
+            pushedAt: r.pushedAt,
+            billbeeStock: r.billbeeStock,
+            lastError: r.lastError
+          }
+        : null;
+    const mine = sale.filter((r) => r.strainId === ms.id);
+    const pd = mine.find((r) => r.type === 'PD');
+    const items = [
+      feld('MC', kulturen.get(ms.id + ':MC') || 0, ms.min_mc),
+      feld('LC', kulturen.get(ms.id + ':LC') || 0, ms.min_lc),
+      feld('PD', pd ? pd.count : 0, ms.min_pd, { ordered: (pd && pd.ordered) || 0, shop: shop(pd) })
+    ];
+    for (const r of mine.filter((x) => x.type === 'SY' && (x.sku || x.count > 0)))
+      items.push(feld('SY' + r.ml, r.count, r.soll, { ml: r.ml, ordered: r.ordered || 0, shop: shop(r) }));
+    const g = kg.get(ms.id) || { ready: 0, growing: 0, readyAt: null };
+    items.push(
+      feld('GSKG', Math.round(g.ready * 10) / 10, ms.min_spawn_kg, {
+        growing: Math.round(g.growing * 10) / 10,
+        readyAt: g.readyAt
+      })
+    );
+    for (const r of mine.filter((x) => x.type === 'GS' && x.sku))
+      items.push(
+        feld('kb' + r.kg, r.count, r.soll, {
+          kg: r.kg,
+          growing: r.growing || 0,
+          readyAt: r.readyAt,
+          ordered: r.ordered || 0,
+          shop: shop(r)
+        })
+      );
+    const hatWas = items.some((i) => i.have > 0 || i.growing > 0 || i.shop || i.ordered > 0);
+    if (!imProgramm && !hatWas) continue;
+    out.push({ strainId: ms.id, name: ms.name, kuerzel: ms.kuerzel || '', imProgramm, items });
+  }
+  return out;
+}
+
 /**
  * Soll eines Artikels setzen; `slot` wie bei setSyringeSku. 0 oder leer heisst
  * kein Soll (auf Bestellung). Nur ein Artikel mit SKU hat eins: ohne SKU
@@ -13429,6 +13570,13 @@ function setSaleTarget(db, strainId, slot, soll) {
   const n = soll == null || soll === '' ? 0 : Number(soll);
   if (!Number.isInteger(n) || n < 0 || n > 500) {
     throw new Error('Das Soll ist eine ganze Zahl von 0 bis 500');
+  }
+  if (type === 'PD') {
+    // Eine Zahl je Feld: das Soll der Petrischale ist die Untergrenze der Sorte.
+    const r = db.prepare('UPDATE mushroom_strains SET min_pd = ? WHERE id = ?').run(n, Number(strainId));
+    if (!r.changes) throw new Error('Diese Art gibt es nicht');
+    incrementDataVersion(db);
+    return;
   }
   const r = db
     .prepare('UPDATE syringe_stock_sku SET soll = ? WHERE strain_id = ? AND type = ? AND ml = ?')
@@ -13861,6 +14009,7 @@ module.exports = {
   saleNeed,
   setSaleTarget,
   saleAlerts,
+  labStock,
   getOrder,
   setOrderStatus,
   listCustomers,

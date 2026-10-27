@@ -537,9 +537,6 @@ async function saveInvConfig() {
     avgComposition: inventory.avgComposition
   });
 }
-async function saveLabThresholds() {
-  return apiPost('/api/lab-thresholds', { labThresholds: inventory.labThresholds });
-}
 async function loadCurrentUser() {
   try {
     const r = await authFetch('/api/auth/me');
@@ -876,11 +873,11 @@ function onNotifItemClick(e) {
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
   } else if (linkType === 'sale' && linkId) {
-    // "Bestellt, aber nicht da" (checkSaleAlerts): the article, on the Labor
+    // "Bestellt, aber nicht da" (checkSaleAlerts): the species on the Labor
     // page, with its sheet open. linkId is "<species>/<slot>".
-    const [sid, slot] = linkId.split('/');
+    const sid = parseInt(linkId.split('/')[0], 10);
     go('lab', 'n-lab');
-    loadSaleStock().then(() => vbSheetOpen(parseInt(sid, 10), slot));
+    loadLabStock().then(() => lbSheetOpen(sid));
   } else if (linkType === 'customer' && linkId) {
     // An eBay account-closure request. The server records it and raises this
     // notification but deliberately never erases on its own, so this alert is the
@@ -1412,15 +1409,14 @@ function go(page, btnId) {
   // it — it was the Dashboard's Farm mode, which was two buttons and this row.
   if (page === 'work') {
     renderDashBatchTasks();
-    loadSaleStock();
+    loadLabStock();
   }
   if (page === 'batch') {
     renderStatus();
     renderBatches();
   }
   if (page === 'lab') {
-    renderDashLabStock();
-    loadSaleStock();
+    loadLabStock();
     renderCultures();
     renderGrainBatches();
   }
@@ -1652,7 +1648,7 @@ function refresh() {
   // Karte, die auf der offenen Seite gar nicht vorkommt.
   if (id === 'work') {
     renderDashBatchTasks();
-    loadSaleStock();
+    loadLabStock();
   }
   if (id === 'dash') renderOverviewKPIs();
   if (id === 'batch') {
@@ -1660,8 +1656,7 @@ function refresh() {
     renderBatches();
   }
   if (id === 'lab') {
-    renderDashLabStock();
-    loadSaleStock();
+    loadLabStock();
     renderCultures();
     renderGrainBatches();
   }
@@ -6338,75 +6333,33 @@ function buildSupplyTasks() {
   return out.sort((a, b) => SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.name.localeCompare(b.name));
 }
 
-// Lab stock that has fallen under the floor somebody set for it.
+// Laborarbeit, die ansteht: je Art, was ihr fehlt.
 //
-// The floors already existed and were already drawn on the Labor card, which
-// meant they could only be seen by going and looking — and the whole point of a
-// floor is that it tells you without being asked. Same shape as the Sorten
-// supply rows: derived, so plating three more dishes makes the row go away, and
-// nothing has to be ticked off.
+// Dieselben Zahlen wie Nachproduzieren auf der Laborseite (db.labStock), nicht
+// eine zweite Rechnung aus den Kulturen hier: zwei Rechnungen über dasselbe
+// Regal sind genau das, was Kacheln und Verkaufsbestand auseinanderlaufen
+// ließ. Eine Zeile je Art, denn aus einer Quelle setzt man alles an, was ihr
+// fehlt (lbAnsetzen). Eine Art außer Programm fehlt nirgends, nur eine offene
+// Bestellung zählt noch; das entscheidet der Server.
 //
-// Only types with a minimum, and only Sorten in this season's programme —
-// strainsInProduction() is what enforces the second half, and it is why a Sorte
-// parked for the summer stops asking for slants it will not need until autumn.
+// Leer, bis die Zahlen da sind: loadLabStock() zeichnet die Tagesliste neu,
+// sobald sie ankommen.
 function buildLabMinTasks() {
-  const breakdown = getLabStrainBreakdown();
-  // strainsInProduction() only ADDS missing zero rows; rows already built from
-  // the cultures loop survive it untouched. So a Sorte parked for the summer
-  // with one slant left kept raising a task every day forever — the exact
-  // always-on warning the programme flag exists to prevent. The exclusion has
-  // to be applied here, where every row is in hand.
-  const parked = new Set();
-  for (const m of mushroomStrains || []) {
-    if (m.imProgramm === false) for (const k of _strainKeys(m)) parked.add(k);
-  }
-  const out = [];
-  for (const type of MIN_TYPES) {
-    for (const entry of Object.values(breakdown[type] || {})) {
-      // One identity for the Sorte, worked out once: the parked check needs it
-      // and so does the button this row draws. Deriving it twice from a display
-      // name is how the two halves came apart in the first place.
-      const key = sorteKey({ strainName: entry.name, species: entry.name });
-      if (parked.has(key)) continue;
-      const min = entry.min || 0;
-      // No minimum set is not the same as a minimum of zero: it means nobody
-      // has said what this Sorte needs, and guessing would invent work.
-      if (min <= 0) continue;
-      const have = entry.count || 0;
-      // Auf ein Tausendstel genau, denn beide Seiten sind Gleitkomma: drei
-      // Gläser zu 1,2 kg ergeben 3.5999999999999996, und gegen eine Untergrenze
-      // von 3,6 blieb eine Aufgabe stehen, die "3,6 von 3,6" las und sich nie
-      // schließen ließ.
-      if (have >= min - 0.001) continue;
-      out.push({
-        type,
-        key,
-        name: entry.name,
-        kz: entry.kz,
-        have,
-        min,
-        short: min - have,
-        empty: have === 0,
-        // Grain is kept in kilograms; the three culture types are counted in
-        // pieces. Rounding a weight would report "make 0 more" for a gap that is
-        // real but under half a kilo.
-        detail: t('todo.labShort', {
-          type: getLabLabel(type),
-          have: type === 'GS' ? fmtKg(have, 1) : have,
-          min: type === 'GS' ? fmtKg(min, 1) : min
-        })
-      });
-    }
-  }
-  // Empty first — nothing at all of something is a different problem from a
-  // little short of it — then by how far under, then by name so it holds still.
-  return out.sort(
-    (a, b) =>
-      Number(b.empty) - Number(a.empty) ||
-      b.short / b.min - a.short / a.min ||
-      a.name.localeCompare(b.name) ||
-      MIN_TYPES.indexOf(a.type) - MIN_TYPES.indexOf(b.type)
-  );
+  return _lbSpecies()
+    .map((sp) => ({ sp, fehlt: _lbFehlt(sp) }))
+    .filter((x) => x.fehlt.length)
+    .map(({ sp, fehlt }) => ({
+      strainId: sp.strainId,
+      key: 'id:' + sp.strainId,
+      name: sp.name,
+      kz: sp.kuerzel,
+      // "empty" heißt in der Tagesliste "überfällig": nur eine Bestellung, die
+      // nicht rausgehen kann. Alles andere ist knapp, auch bei null.
+      empty: _lbDringend(sp),
+      detail: fehlt.map(_lbChip).join(' · '),
+      gaps: fehlt.length
+    }))
+    .sort((a, b) => Number(b.empty) - Number(a.empty) || b.gaps - a.gaps || a.name.localeCompare(b.name));
 }
 
 function buildWeekPlan() {
@@ -6488,10 +6441,13 @@ function buildWeekPlan() {
       kind: 'labgroup',
       species: '',
       label: t('todo.labGroup', { n: laborMin.length }),
-      // Welche Typen fehlen, nicht welche Sorten: die Sorten stehen in den
-      // Zeilen darunter, sobald man sie aufklappt, und die Frage vorher ist,
-      // ob heute Laborarbeit ansteht und welcher Art.
-      detail: [...new Set(laborMin.map((l) => getLabLabel(l.type)))].join(', '),
+      // Die ersten Arten mit Namen, der Rest steht in den Zeilen darunter,
+      // sobald man aufklappt.
+      detail:
+        laborMin
+          .slice(0, 3)
+          .map((l) => l.name)
+          .join(', ') + (laborMin.length > 3 ? ' …' : ''),
       bags: 0,
       zone: '',
       overdue: laborMin.some((l) => l.empty),
@@ -6507,7 +6463,7 @@ function buildWeekPlan() {
     put(0, {
       kind: 'labmin',
       species: l.name,
-      label: l.name + ' · ' + getLabLabel(l.type),
+      label: l.name,
       detail: l.detail,
       bags: 0,
       zone: '',
@@ -8271,12 +8227,10 @@ const PLAN_BTNS = {
     esc(t(dashLabGroupOpen ? 'todo.labGroupClose' : 'todo.labGroupOpen')) +
     '</button>',
   labmin: (it) =>
-    '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-sorte="' +
-    esc((it.task && it.task.key) || '') +
-    '" data-labtype="' +
-    esc((it.task && it.task.type) || '') +
+    '<button class="btn btn-sm btn-p fs-xs" data-action="labmin-make" data-strain="' +
+    esc(String((it.task && it.task.strainId) || '')) +
     '" style="padding:3px 10px;flex-shrink:0">' +
-    esc(t('todo.labMake', { type: getLabLabel((it.task && it.task.type) || '') })) +
+    esc(t('np.go')) +
     '</button>',
   // Koerner zuerst, wenn keine da sind -- aus nichts lassen sich keine Bloecke
   // machen. Beide Knoepfe tragen den SCHLUESSEL der Sorte, nie ihren Namen:
@@ -8771,464 +8725,322 @@ function getLabStrainBreakdown() {
   }
   return breakdown;
 }
-// Culture types in Labor. Muted the same way the zone colours were, and for the
-// same two reasons: six full-saturation hues on one card is a lot of shouting,
-// and four of the six could not be read.
+// ── Laborbestand je Sorte ──
+// Ein Bild für das ganze Labor: je Art, was da ist, was fehlt, und was ein Shop
+// davon verkauft. Es ersetzt die Kacheln je Ansatz und die Karte
+// Verkaufsbestand, die vorher übereinander standen und dieselben Petrischalen
+// und dieselbe Körnerbrut verschieden zählten, mit zwei Untergrenzen für ein
+// Regal. Gezählt wird einmal, auf dem Server (db.labStock), für die Laborseite,
+// die Zeile in Arbeitsgänge und die Laboraufgaben der Tagesliste.
 //
-// `accent` is a 3px bar, a graphical object carrying meaning, so WCAG 1.4.11
-// asks 3:1 of it. #22c55e measured 2.28:1, #f59e0b 2.15 and #06b6d4 2.43 —
-// three of six invisible against the card. All six now land on 4.18–4.22:1,
-// matched deliberately: a set where one member measures twice its neighbours
-// reads as one type shouting. The `bg`/`fg` chips are the same hues as tints,
-// matched again at ~6:1.
-//
-// The hues themselves are unchanged, so a type stays recognisably violet, blue,
-// green, amber, pink, cyan. MC/LC deliberately share their hue with the spawn
-// and fruiting zone colours — a slant and an incubation rack are not the same
-// thing, but they are the same colour language.
-const LAB_TYPE_COLORS = {
-  MC: { bg: '#f0ebf4', fg: '#7241a0', accent: '#926bb6' },
-  PD: { bg: '#ebeff4', fg: '#3a598d', accent: '#5e7daf' },
-  LC: { bg: '#ebf4ee', fg: '#2a6741', accent: '#43895d' },
-  GS: { bg: '#f4ebee', fg: '#913b58', accent: '#b2647e' },
-  SY: { bg: '#ebf3f4', fg: '#2c626c', accent: '#478590' }
-};
-// The lab's stock, one tile per culture type.
-//
-// Same card as the Chargen tab now — .stile, the stacked bar, the supply light,
-// the labelled figures — because it answers the same shape of question about a
-// different shelf: how much is there, of which Sorte, and is anything short. It
-// used to be its own arrangement of inline styles, so the two pages taught the
-// reader two vocabularies for one idea.
-//
-// Four of the six types carry a per-SORTE minimum (MIN_TYPES); the other two
-// are judged against the farm-wide threshold, because G2G and syringes are made
-// to order and nobody stocks them per Sorte.
-function renderDashLabStock() {
-  const el = document.getElementById('dash-lab-stock');
-  if (!el) return;
-  if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
-  const counts = getLabStockCounts();
-  const breakdown = getLabStrainBreakdown();
-  // Grain is weighed, everything else is counted. One decimal on a weight, none
-  // on a tally — "3,0 Platten" reads like a measurement error.
-  const num = (type, v) => (type === 'GS' ? fmtKg(v, 1) : String(Math.round(v)));
-
-  el.innerHTML =
-    '<div class="sorten-grid">' +
-    LAB_TYPES.map((type) => {
-      const count = counts[type] || 0;
-      const farmMin = inventory.labThresholds[type] || 0;
-      const tc = LAB_TYPE_COLORS[type];
-      const perStrain = MIN_TYPES.includes(type);
-      const strains = Object.values(breakdown[type] || {}).sort((a, b) => b.count - a.count);
-      const total = strains.reduce((s, x) => s + x.count, 0);
-      const short = perStrain ? strains.filter((x) => x.min > 0 && x.count < x.min) : [];
-      // Both floors, the same way getLabAlerts() reads them, so the tile and the
-      // dashboard cannot disagree about one shelf. The card used to answer to
-      // whichever floor its type had, which left labThresholds.MC set, shown on
-      // the button, warned about on the dashboard — and ignored here.
-      const low = short.length > 0 || (farmMin > 0 && count < farmMin);
-      // Nothing at all of something is a different problem from a little short
-      // of it, and the light says so — the same three words the Chargen tiles
-      // use, so a red dot means the same thing on both pages.
-      const state = !low ? 'ok' : short.some((x) => x.count === 0) || count === 0 ? 'now' : 'low';
-
-      const seg = strains
-        .filter((x) => x.count > 0)
-        .map(
-          (x) =>
-            `<i style="width:${(x.count / Math.max(total, 1)) * 100}%;background:${esc(safeColor(x.color))}" title="${esc(x.kz || x.name)}"></i>`
-        )
-        .join('');
-
-      // Jede Zeile ist der Knopf für ihre eigene Untergrenze. Das ist die Stelle,
-      // an der man ohnehin hinsieht, wenn man sich fragt, ob genug da ist — und
-      // eine Sorte, zu der keine Pilzsorten-Zeile gehört, hat nichts zu setzen und
-      // bleibt darum stumm statt einen Knopf anzubieten, der nichts tut.
-      const rows = strains
-        .map((x) => {
-          const under = perStrain && x.min > 0 && x.count < x.min;
-          const against = x.min > 0 ? `<span class="lab-row-min">/${num(type, x.min)}</span>` : '';
-          const inner =
-            `<i class="lab-row-dot" style="background:${esc(safeColor(x.color))}"></i>` +
-            `<span class="lab-row-name" title="${esc(x.kz || x.name)}${x.desc ? ' ' + esc(x.desc) : ''}">${esc(x.kz || x.name)}</span>` +
-            `<b class="lab-row-n">${num(type, x.count)}${against}</b>`;
-          if (!perStrain || !x.msId) return `<span class="lab-row${under ? ' under' : ''}">${inner}</span>`;
-          return (
-            `<button type="button" class="lab-row lab-row-btn${under ? ' under' : ''}"` +
-            ` data-action="lab-set-strain-min" data-labtype="${esc(type)}" data-strain="${esc(String(x.msId))}"` +
-            ` title="${esc(t('lab.setMinOneHint', { sorte: x.name }))}">${inner}</button>`
-          );
-        })
-        .join('');
-
-      return (
-        `<div class="stile stile-static${state === 'now' ? ' urgent' : ''}">` +
-        `<span class="stile-top"><span class="stile-name">` +
-        `<span class="lab-chip" style="color:${tc.fg};background:${tc.bg}">${esc(type)}</span>${esc(getLabLabel(type))}` +
-        `</span></span>` +
-        `<span class="stile-big"><b>${num(type, count)}</b><span>${esc(type === 'GS' ? t('lab.kgUnit') : t('lab.piecesUnit'))}${farmMin > 0 ? ' · min ' + num(type, farmMin) : ''}</span></span>` +
-        (seg ? `<span class="sbar">${seg}</span>` : '') +
-        (rows ? `<span class="lab-rows">${rows}</span>` : `<span class="stile-fs lab-empty">—</span>`) +
-        `<span class="stile-foot">` +
-        `<span class="sup sup-${state}">${esc(low ? t(state === 'now' ? 'lab.noneLeft' : 'lab.lowStock') : t('lab.stockOk'))}</span>` +
-        `<button type="button" class="btn btn-sm fs-micro" data-action="lab-set-min" data-labtype="${esc(type)}">${esc(t('lab.setMinimum'))}</button>` +
-        `</span></div>`
-      );
-    }).join('') +
-    '</div>';
-}
-// Die Untergrenze eines ganzen Typs auf einmal setzen.
-//
-// Vorher schrieb dieser Knopf inventory.labThresholds[type] — eine betriebs-
-// weite Zahl, die den Dashboard-Hinweis speist und sonst nichts. Die Tages-
-// aufgaben lesen die Spalten je Sorte, also setzte der einzige sichtbare Knopf
-// eine Zahl, aus der nie eine Aufgabe entstehen konnte, während die Zahlen, aus
-// denen eine entsteht, alle Sorten mal vier Typen weit im Pilzsorten-
-// Formular lagen: Dutzende Wege für eine Angabe, die meist für alle
-// dieselbe ist.
-//
-// G2G und Spritzen behalten die betriebsweite Zahl: sie werden auf Bestellung
-// gemacht, eine Untergrenze je Sorte verlangte Vorrat, den niemand hält.
-function setLabMin(type) {
-  const field = STRAIN_MIN_FIELD[type];
-  if (!field) {
-    if (!inventory.labThresholds) inventory.labThresholds = { MC: 0, PD: 0, LC: 0, G2G: 0, GS: 0, SY: 0 };
-    const val = prompt(t('lab.setMinFarm', { type: getLabLabel(type) }), inventory.labThresholds[type] || 0);
-    if (val === null) return;
-    inventory.labThresholds[type] = parseDecimal(val) || 0;
-    saveLabThresholds();
-    renderDashLabStock();
-    renderDashBatchTasks();
-    return;
-  }
-  const ziel = (mushroomStrains || []).filter((m) => m.imProgramm !== false);
-  if (!ziel.length) {
-    setFb('err', t('lab.setMinNoStrains'));
-    return;
-  }
-  const val = prompt(t('lab.setMinAll', { type: getLabLabel(type), n: ziel.length }), 0);
-  if (val === null) return;
-  _saveStrainMins(ziel, field, Math.max(0, parseDecimal(val) || 0));
-}
-// Dieselbe Angabe für eine einzelne Sorte, von ihrer Zeile auf der Kachel aus.
-function setStrainLabMin(id, type) {
-  const field = STRAIN_MIN_FIELD[type];
-  const ms = (mushroomStrains || []).find((m) => m.id === id);
-  if (!field || !ms) return;
-  const val = prompt(t('lab.setMinOne', { sorte: ms.name, type: getLabLabel(type) }), ms[field] || 0);
-  if (val === null) return;
-  _saveStrainMins([ms], field, Math.max(0, parseDecimal(val) || 0));
-}
-// Optimistisch schreiben, neu zeichnen, bei Fehler zurückrollen.
-//
-// Der Rückrollwert wird je Sorte gemerkt, nicht global: ein Teil der Aufrufe kann
-// durchgehen und ein anderer scheitern, und die Sorten wieder auf eine gemein-
-// same Zahl zu setzen wäre dann selbst der Datenverlust. Nachgeschlagen wird in
-// der Liste, wie sie beim Antworten dasteht, weil applyData() sie zwischen-
-// durch komplett ersetzt haben kann.
-function _saveStrainMins(sorten, field, wert) {
-  const vorher = sorten.map((m) => [m.id, m[field] || 0]);
-  for (const m of sorten) m[field] = wert;
-  renderStrains();
-  renderDashLabStock();
-  renderDashBatchTasks();
-  let offen = sorten.length;
-  let schlecht = 0;
-  for (const [id, alt] of vorher) {
-    apiPatch('/api/mushroom-strains/' + id, { [field]: wert }).then((r) => {
-      if (r && r.error) {
-        schlecht++;
-        const jetzt = (mushroomStrains || []).find((m) => m.id === id);
-        if (jetzt) jetzt[field] = alt;
-      }
-      if (--offen) return;
-      if (schlecht) setFb('err', t('common.error'));
-      else setFb('ok', t('lab.setMinDone', { n: sorten.length }));
-      renderStrains();
-      renderDashLabStock();
-      renderDashBatchTasks();
-    });
-  }
-}
-
-// ── Verkaufsbestand: was die Shops verkaufen, je Art und Größe ──
-// Dieselbe Zählung, die Billbee bekommt (syringe-stock.js), aber nur die
-// Artikel mit SKU, und mit allen Nullen: ob etwas fehlt, sieht man nur, wenn
-// das Fehlen dasteht. Die Labor-Kachel darüber zeigt nur Sorten, von denen
-// etwas da ist, und zählt alle Spritzengrößen zusammen.
-//
-// Ein Reiter je Warenart, weil eine Art bei Spritzen mehrere Größen hat und bei
-// Petrischalen eine. Die Spalten kommen aus den Zeilen, nicht aus einer Liste
-// hier: eine Größe, die kein Shop führt, hat keine SKU und keine Spalte.
-const VB_KINDS = [
-  { type: 'SY', label: 'vb.syringes' },
-  { type: 'PD', label: 'vb.petri' },
-  { type: 'GS', label: 'vb.grain' }
-];
-let _vbKind = 'SY';
-let _vbData = null;
-async function loadSaleStock() {
+// Nach Art sortiert, nicht nach Ansatz: aus einer Quelle setzt man vieles an
+// (Laborarbeit → Mehrere), und genau das fragt eine Zeile ab.
+let _lbData = null;
+async function loadLabStock() {
   try {
-    _vbData = await apiGet('/api/sale-stock');
+    _lbData = await apiGet('/api/lab-stock');
   } catch (e) {
-    return; // offline, or a server without the route: the card keeps what it had
+    return; // offline, or a server without the route: the cards keep what they had
   }
-  renderSaleStock();
+  renderLabStock();
+  if (_lbSheet) lbSheetRender();
+  // Die Tagesliste nimmt ihre Laboraufgaben aus denselben Zahlen
+  // (buildLabMinTasks); sie kamen gerade erst an.
+  const work = document.getElementById('p-work');
+  if (work && work.classList.contains('active')) renderDashBatchTasks();
 }
-// Die kleine Zeile unter einer Zahl, nur wenn es etwas zu sagen gibt, und
-// davon das Wichtigste: ein Fehler beim Melden, dann was bestellt und nicht
-// verschickt ist, dann ein Soll, unter dem der Artikel liegt, dann was Billbee
-// noch nicht hat. Billbee zieht offene Bestellungen ab, also ist eine kleinere
-// Billbee-Zahl kein Fehler, sondern das, was der Shop anbieten darf. Körnerbrut,
-// die noch wächst, zählt erst ab ihrem Fälligkeitstag; bis dahin steht sie hier.
-function _vbNote(r, enabled) {
-  if (enabled && r.lastError) return `<i class="vb-err">${esc(t('vb.notSent'))}</i>`;
-  if (r.ordered > 0) return `<i class="vb-ord">${esc(t('vb.ordered', { n: r.ordered }))}</i>`;
-  if (r.make > 0 && r.soll) return `<i>${esc(t('vb.soll', { n: r.soll }))}</i>`;
-  if (enabled) {
-    if (!r.pushedAt || r.pushedCount !== r.count) return `<i>${esc(t('vb.waiting'))}</i>`;
-    if (r.billbeeStock != null && r.billbeeStock !== r.count)
-      return `<i>${esc(t('vb.billbee', { n: r.billbeeStock }))}</i>`;
-  }
-  if (r.growing > 0 && r.readyAt)
-    return `<i class="vb-grow">${esc(t('vb.growing', { n: r.growing, date: fmtDtShort(r.readyAt) }))}</i>`;
-  return '';
+const _lbSpecies = () => (_lbData && _lbData.species) || [];
+const _lbFehlt = (sp) => sp.items.filter((i) => i.make > 0);
+const _lbDringend = (sp) => sp.items.some((i) => i.urgency === 'now');
+const _lbIstShop = (i) => !!i.shop;
+// Ein Feld kurz, wie es in einer Zeile steht, und lang, wie im Blatt.
+function _lbKurz(i) {
+  if (i.key === 'MC' || i.key === 'LC' || i.key === 'PD' || i.key === 'GSKG') return t('lb.short.' + i.key);
+  if (i.key.startsWith('SY')) return t('lb.short.SY', { ml: i.ml });
+  return t('lb.short.kb', { kg: i.kg });
 }
-// Jede Zahl ist ein Knopf: sie öffnet alles zu diesem Artikel, und dort wird
-// das Soll gesetzt (vbSheetOpen). Rot, wenn etwas fehlt (db.saleNeed).
-function _vbCell(r, enabled) {
-  if (!r) return `<td><span class="vb-c vb-na" title="${esc(t('vb.legendNa'))}"><b>·</b></span></td>`;
-  const tip = r.pushedAt
-    ? t('vb.tip', { lab: r.count, bb: r.billbeeStock != null ? r.billbeeStock : r.pushedCount, time: fmtDtTime(r.pushedAt) })
-    : t('vb.tipNotYet', { lab: r.count });
-  const cls = 'vb-c' + (r.count === 0 ? ' vb-zero' : '') + (r.make > 0 ? ' vb-under' : '');
-  return (
-    `<td><button type="button" class="${cls}" data-vb-strain="${r.strainId}" data-vb-slot="${esc(String(r.slot))}"` +
-    ` title="${esc(r.lastError || tip)}"><b>${r.count}</b>${_vbNote(r, enabled)}</button></td>`
-  );
+function _lbLang(i) {
+  if (i.key === 'MC' || i.key === 'LC' || i.key === 'PD' || i.key === 'GSKG') return t('lb.long.' + i.key);
+  if (i.key.startsWith('SY')) return t('lb.long.SY', { ml: i.ml });
+  return t('lb.long.kb', { kg: i.kg });
 }
-// "Spritze 10 ml", "Petrischale", "Körnerbrut 1 kg": was ein Artikel ist, ohne die Art.
-function _vbArtikel(r) {
-  if (r.type === 'PD') return t('np.kindPD');
-  if (r.type === 'GS') return t('np.kindGS', { kg: r.kg });
-  return t('np.kindSY', { ml: r.ml });
-}
-function _vbRow(strainId, slot) {
-  return ((_vbData && _vbData.rows) || []).find((r) => r.strainId === strainId && String(r.slot) === String(slot));
+// Körnerbrut-Vorrat wiegt, alles andere zählt.
+const _lbZahl = (i, n) => (i.key === 'GSKG' ? fmtKg(n, n % 1 ? 1 : 0) : String(n));
+// Was fehlt, als Stichwort: "3 Petri", "2 × 10 ml", "10 kg KB".
+function _lbChip(i) {
+  if (i.key.startsWith('SY')) return t('lb.chip.SY', { n: i.make, ml: i.ml });
+  if (i.key.startsWith('kb')) return t('lb.chip.kb', { n: i.make, kg: i.kg });
+  return t('lb.chip.' + i.key, { n: _lbZahl(i, i.make) });
 }
 
-// ── Nachproduzieren: was fehlt, oben auf der Laborseite ──
-// Ein Artikel steht hier, wenn verfügbar (da + wächst − bestellt) unter seinem
-// Soll liegt, oder, ohne Soll, wenn eine Bestellung nicht gedeckt ist; die
-// Rechnung steht in db.saleNeed. Dringendes zuerst. Die Karte gibt es nur,
-// solange etwas fehlt: eine leere Liste hätte nichts zu sagen.
-function renderNachproduzieren(rows) {
+// ── Nachproduzieren: je Art, was ihr fehlt ──
+// Rot ist nur eine Bestellung, die gerade nicht aus dem Regal gehen kann; alles
+// unter dem Soll ist gelb (db.saleNeed). Die Arten mit Rot zuerst, dann die mit
+// den meisten Lücken. Sechs stehen da, der Rest auf einen Tipp: bei vierzig
+// Lücken wäre die Laborseite sonst nur diese Liste.
+const NP_ZEIGEN = 6;
+let _npAlle = false;
+function renderNachproduzieren(species) {
   const card = document.getElementById('np-card');
   if (!card) return;
-  const rang = (r) => (r.urgency === 'now' ? 0 : 1);
-  // Innerhalb einer Art in der Reihenfolge der Reiter: Spritzen, Petrischalen, Körnerbrut.
-  const reiter = (r) => VB_KINDS.findIndex((k) => k.type === r.type);
-  const offen = rows
-    .filter((r) => r.make > 0)
+  const offen = species
+    .map((sp) => ({ sp, fehlt: _lbFehlt(sp) }))
+    .filter((x) => x.fehlt.length)
     .sort(
       (a, b) =>
-        rang(a) - rang(b) ||
-        a.name.localeCompare(b.name) ||
-        reiter(a) - reiter(b) ||
-        _vbSlotOrder(a.slot) - _vbSlotOrder(b.slot)
+        Number(_lbDringend(b.sp)) - Number(_lbDringend(a.sp)) ||
+        b.fehlt.length - a.fehlt.length ||
+        a.sp.name.localeCompare(b.sp.name)
     );
   card.hidden = !offen.length;
   if (!offen.length) return;
-  document.getElementById('np-rows').innerHTML = offen
-    .map((r) => {
-      const warum = [t('np.have', { n: r.count })];
-      if (r.growing) warum.push(t('np.growing', { n: r.growing }));
-      if (r.ordered) warum.push(t('np.ordered', { n: r.ordered }));
-      if (r.soll) warum.push(t('np.soll', { n: r.soll }));
-      return (
-        '<div class="np-row">' +
-        `<i class="np-dot np-${esc(r.urgency)}" role="img" aria-label="${esc(t(r.urgency === 'now' ? 'np.now' : 'np.low'))}"></i>` +
-        `<div class="np-main"><div class="np-what">${esc(r.name)} · ${esc(_vbArtikel(r))}</div>` +
-        `<div class="np-why">${esc(warum.join(' · '))}</div></div>` +
-        `<button type="button" class="btn btn-sm btn-p np-go" data-np-strain="${r.strainId}" data-np-slot="${esc(String(r.slot))}">` +
-        `${esc(t('np.make', { n: r.make }))}</button></div>`
-      );
-    })
-    .join('');
+  const zeigen = _npAlle ? offen : offen.slice(0, NP_ZEIGEN);
+  document.getElementById('np-rows').innerHTML =
+    zeigen
+      .map(({ sp, fehlt }) => {
+        const rot = _lbDringend(sp);
+        return (
+          '<div class="np-row">' +
+          `<i class="np-dot np-${rot ? 'now' : 'low'}" role="img" aria-label="${esc(t(rot ? 'np.now' : 'np.low'))}"></i>` +
+          `<div class="np-main"><div class="np-what">${esc(sp.name)}</div><div class="np-chips">` +
+          fehlt.map((i) => `<span class="np-chip np-${esc(i.urgency)}">${esc(_lbChip(i))}</span>`).join('') +
+          '</div></div>' +
+          `<button type="button" class="btn btn-sm btn-p np-go" data-np-strain="${sp.strainId}">${esc(t('np.go'))}</button></div>`
+        );
+      })
+      .join('') +
+    (offen.length > NP_ZEIGEN
+      ? `<button type="button" class="btn btn-sm np-more" data-np-more>${esc(t(_npAlle ? 'np.less' : 'np.more', { n: offen.length - NP_ZEIGEN }))}</button>`
+      : '');
 }
-// Dieselbe Liste als eine Zeile oben in Arbeitsgänge, wo die App aufgeht: wer
-// nicht auf die Laborseite schaut, sieht trotzdem, dass etwas fehlt. Dieselbe
-// Form wie die Warnzeile darüber (wk-alert), rot, sobald etwas dringend ist.
-// Ein Tipp führt zur Karte auf der Laborseite.
-function renderWorkNachproduzieren(rows) {
+// Oben in Arbeitsgänge, wo die App aufgeht: nur was rot ist, eine Bestellung,
+// die nicht rausgehen kann. Das Gelbe steht in der Tagesliste darunter
+// (buildLabMinTasks); hier ein zweites Mal wäre dieselbe Liste doppelt.
+function renderWorkNachproduzieren(species) {
   const el = document.getElementById('wk-np');
   if (!el) return;
-  const offen = rows.filter((r) => r.make > 0);
-  el.hidden = !offen.length;
-  if (!offen.length) return;
-  const dringend = offen.some((r) => r.urgency === 'now');
-  el.classList.toggle('wk-np-now', dringend);
-  // Die dringenden zuerst, höchstens zwei mit Namen; der Rest als Zahl.
-  const sortiert = offen.slice().sort((a, b) => (a.urgency === 'now' ? 0 : 1) - (b.urgency === 'now' ? 0 : 1));
-  const namen = sortiert.slice(0, 2).map((r) => r.name + ' ' + _vbArtikel(r));
-  if (sortiert.length > 2) namen.push(t('work.npMore', { n: sortiert.length - 2 }));
-  el.textContent = t('work.np', { n: offen.length }) + ' · ' + namen.join(', ');
+  const rot = [];
+  for (const sp of species) for (const i of sp.items) if (i.urgency === 'now') rot.push(sp.name + ' ' + _lbKurz(i));
+  el.hidden = !rot.length;
+  if (!rot.length) return;
+  el.classList.add('wk-np-now');
+  const namen = rot.slice(0, 2);
+  if (rot.length > 2) namen.push(t('work.npMore', { n: rot.length - 2 }));
+  el.textContent = t('work.npOrders', { n: rot.length }) + ' · ' + namen.join(', ');
 }
 
-// "Ansetzen": die Laborarbeit, mit Art, Größe und Anzahl schon ausgefüllt. Die
-// Anzahl ist, was fehlt, keine gemerkte Zahl; geändert wird sie im Dialog wie
-// sonst, und der endet wie immer im Etikettendialog.
-function npAnsetzen(strainId, slot) {
-  const r = _vbRow(strainId, slot);
+// ── Die Liste je Art ──
+// Fünf Felder je Zeile, immer dieselben an derselben Stelle: Slant, FK, Petri,
+// Spritzen (die Größen, die es gibt), Körnerbrut in kg. Gelb unter dem Soll,
+// rot bei einer Bestellung, die nicht gedeckt ist. Ein Tipp öffnet die Art.
+function _lbStat(label, have, soll, cls, shop) {
+  return (
+    `<span class="lb-st${cls ? ' ' + cls : ''}"><small>${esc(label)}${shop ? '<i class="lb-shopdot" aria-hidden="true"></i>' : ''}</small>` +
+    `<b>${esc(have)}${soll ? '<em>/' + esc(soll) + '</em>' : ''}</b></span>`
+  );
+}
+function _lbStatCls(items) {
+  if (items.some((i) => i.urgency === 'now')) return 'lb-now';
+  if (items.some((i) => i.make > 0)) return 'lb-under';
+  return items.every((i) => !i.have) ? 'lb-zero' : '';
+}
+function _lbZeile(sp) {
+  const by = (k) => sp.items.find((i) => i.key === k);
+  const one = (k) => {
+    const i = by(k);
+    return _lbStat(_lbKurz(i), _lbZahl(i, i.have), i.soll ? _lbZahl(i, i.soll) : '', _lbStatCls([i]), _lbIstShop(i));
+  };
+  const sy = sp.items.filter((i) => i.key.startsWith('SY'));
+  const kb = sp.items.filter((i) => i.key === 'GSKG' || i.key.startsWith('kb'));
+  const gskg = by('GSKG');
+  return (
+    `<button type="button" class="lb-sp" data-lb-strain="${sp.strainId}">` +
+    `<span class="lb-sp-h"><b>${esc(sp.name)}</b>` +
+    (sp.imProgramm ? '' : `<small class="lb-paused">${esc(t('lb.paused'))}</small>`) +
+    '<span class="lb-chev" aria-hidden="true">›</span></span><span class="lb-row">' +
+    one('MC') +
+    one('LC') +
+    one('PD') +
+    _lbStat(t('lb.short.SYall'), sy.length ? sy.map((i) => i.have).join('·') : '–', '', sy.length ? _lbStatCls(sy) : 'lb-zero', sy.some(_lbIstShop)) +
+    _lbStat(
+      t('lb.short.GSKG'),
+      _lbZahl(gskg, gskg.have),
+      gskg.soll ? _lbZahl(gskg, gskg.soll) : '',
+      _lbStatCls(kb),
+      kb.some(_lbIstShop)
+    ) +
+    '</span></button>'
+  );
+}
+function renderLabStock() {
+  const d = _lbData;
+  if (!d) return;
+  const species = _lbSpecies();
+  renderNachproduzieren(species);
+  renderWorkNachproduzieren(species);
+  const card = document.getElementById('lb-card');
+  if (!card) return;
+  card.hidden = !species.length;
+  if (!species.length) return;
+  document.getElementById('lb-list').innerHTML = species.map(_lbZeile).join('');
+  // Was ein Shop verkauft, geht an Billbee; eine Zeile sagt, wie es darum steht.
+  const shop = [];
+  for (const sp of species) for (const i of sp.items) if (i.shop) shop.push(i);
+  const bb = document.getElementById('lb-bb');
+  bb.hidden = !shop.length;
+  if (!shop.length) return;
+  const fehler = shop.filter((i) => i.shop.lastError).length;
+  const wartet = shop.filter((i) => !i.shop.lastError && (!i.shop.pushedAt || i.shop.pushedCount !== i.have)).length;
+  const zuletzt = shop.reduce((m, i) => (i.shop.pushedAt && i.shop.pushedAt > m ? i.shop.pushedAt : m), '');
+  let text;
+  if (!d.enabled) text = t('vb.off');
+  else if (fehler) text = t('vb.errors', { n: fehler });
+  else if (wartet) text = t('vb.waitingAll', { n: wartet });
+  else text = t('vb.allSent', { n: shop.length, time: zuletzt ? fmtDtTime(zuletzt) : '–' });
+  bb.textContent = text;
+  bb.classList.toggle('vb-bb-warn', !d.enabled || fehler > 0);
+}
+
+// ── Ansetzen: Laborarbeit → Mehrere, mit allem, was der Art fehlt ──
+// Petri und Flüssigkultur mit ihrer Anzahl, Spritzen und Verkaufsbeutel je
+// Größe. Der Körnerbrut-Vorrat steht in kg, und welche Beutel ihn füllen, weiß
+// die Zahl nicht: Körnerbrut ist dann angetippt, die Größen trägt man ein.
+// Slants sind die Quelle und nicht Teil von Mehrere; fehlen nur sie, geht der
+// Dialog für eine Art auf, mit Slant gewählt. Die Anzahl ist, was fehlt, keine
+// gemerkte Zahl, und alles endet wie immer im Etikettendialog.
+function lbAnsetzen(strainId) {
+  const sp = _lbSpecies().find((x) => x.strainId === strainId);
   const ms = (mushroomStrains || []).find((x) => x.id === strainId);
-  if (!r || !ms) return;
-  vbSheetClose();
-  msQuickOpen('labor', ms);
-  const art = document.getElementById('ms-q-labtype');
-  if (art) art.value = r.type === 'GS' ? 'KB' : r.type;
-  msQuickRender();
-  if (r.type === 'SY') document.getElementById('ms-q-sy').innerHTML = syMengenHtml('ms-q', { [r.ml]: r.make });
-  else if (r.type === 'GS') document.getElementById('ms-q-sizes').innerHTML = kbMengenHtml('ms-q', { [r.kg]: r.make });
-  else {
-    const q = document.getElementById('ms-q-qty');
-    if (q) q.value = r.make;
+  if (!sp || !ms) return;
+  lbSheetClose();
+  const n = { PD: 0, LC: 0 };
+  const sy = {};
+  const kb = {};
+  const arten = new Set();
+  for (const i of _lbFehlt(sp)) {
+    if (i.key === 'PD' || i.key === 'LC') {
+      n[i.key] = Math.ceil(i.make);
+      arten.add(i.key);
+    } else if (i.key.startsWith('SY')) {
+      sy[i.ml] = i.make;
+      arten.add('SY');
+    } else if (i.key.startsWith('kb')) {
+      kb[i.kg] = i.make;
+      arten.add('KB');
+    } else if (i.key === 'GSKG') arten.add('KB');
   }
-  // Die Vorschau unter den Zählern rechnet aus ihnen; sonst zeigte sie bis zum
-  // ersten Tipp die Zahl von vorher.
+  msQuickOpen('labor', ms);
+  if (!arten.size) {
+    _msqPickType('MC');
+    return;
+  }
+  msqMehrereUmschalten();
+  _msQuickCtx.arten = MSQ_MEHRERE.filter((a) => arten.has(a));
+  _msQuickCtx.n = n;
+  document.getElementById('ms-q-sy').innerHTML = syMengenHtml('ms-q', sy);
+  document.getElementById('ms-q-sizes').innerHTML = kbMengenHtml('ms-q', kb);
+  msQuickRender();
   msQuickPreview();
 }
 
-// ── Ein Artikel im Einzelnen, und sein Soll ──
-// Ein Tipp auf + oder − gilt sofort, ohne Speichern-Knopf und ohne Rückfrage:
-// das Soll ist eine Zahl, die man genauso schnell zurückstellt, wie man sie
-// verstellt hat. Gespeichert wird kurz nach dem letzten Tipp, nicht bei jedem.
-let _vbSheet = null;
-let _vbSollTimer = null;
-function vbSheetOpen(strainId, slot) {
-  _vbSheet = { strainId, slot: String(slot) };
-  vbSheetRender();
-  if (_vbSheet) document.getElementById('m-vb').classList.add('open');
+// ── Eine Art im Einzelnen ──
+// Jedes Feld mit seiner Zahl und seinem Soll. Ein Tipp auf + oder − gilt
+// sofort, ohne Speichern und ohne Rückfrage, und wird kurz nach dem letzten
+// gespeichert. Das Soll steht, wo es immer stand: an der Sorte für Slants,
+// Flüssigkultur, Petrischale und den kg-Vorrat (dieselben Felder wie auf der
+// Pilzsorten-Seite), an der SKU für eine Verkaufsgröße. "Im Programm" aus
+// heißt: die Art fehlt nirgends, nur ihre offenen Bestellungen zählen noch.
+const LB_SORTE_FELD = { MC: 'minMc', LC: 'minLc', PD: 'minPd', GSKG: 'minSpawnKg' };
+let _lbSheet = null;
+const _lbTimer = {};
+function lbSheetOpen(strainId) {
+  _lbSheet = { strainId };
+  lbSheetRender();
+  if (_lbSheet) document.getElementById('m-lb').classList.add('open');
 }
-function vbSheetClose() {
-  const m = document.getElementById('m-vb');
+function lbSheetClose() {
+  const m = document.getElementById('m-lb');
   if (m) m.classList.remove('open');
-  _vbSheet = null;
+  _lbSheet = null;
 }
-function vbSheetRender() {
-  const r = _vbSheet && _vbRow(_vbSheet.strainId, _vbSheet.slot);
-  if (!r) {
-    vbSheetClose();
+function _lbSub(i) {
+  const teile = [t('lb.have', { n: _lbZahl(i, i.have) })];
+  if (i.growing) teile.push(t('lb.growing', { n: _lbZahl(i, i.growing), date: i.readyAt ? fmtDtShort(i.readyAt) : '–' }));
+  if (i.ordered) teile.push(t('vb.ordered', { n: i.ordered }));
+  if (i.shop) {
+    if (i.shop.lastError) teile.push(t('vb.notSent'));
+    else if (i.shop.pushedAt)
+      teile.push(
+        t('lb.billbee', {
+          n: i.shop.billbeeStock != null ? i.shop.billbeeStock : i.shop.pushedCount,
+          time: fmtDtTime(i.shop.pushedAt)
+        })
+      );
+  }
+  return teile.join(' · ');
+}
+function lbSheetRender() {
+  const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
+  if (!sp) {
+    lbSheetClose();
     return;
   }
-  document.getElementById('m-vb-title').textContent = r.name + ' · ' + _vbArtikel(r);
-  const zeilen = [[t('vb.sheetLab'), r.count]];
-  if (r.type === 'GS')
-    zeilen.push([
-      t('vb.sheetGrowing'),
-      r.growing ? t('vb.sheetGrowingAt', { n: r.growing, date: fmtDtShort(r.readyAt) }) : 0
-    ]);
-  zeilen.push([t('vb.sheetOrdered'), r.ordered || 0]);
-  zeilen.push([
-    t('vb.sheetBillbee'),
-    r.lastError
-      ? r.lastError
-      : r.pushedAt
-        ? (r.billbeeStock != null ? r.billbeeStock : r.pushedCount) + ' · ' + fmtDtTime(r.pushedAt)
-        : t('vb.sheetNotYet')
-  ]);
-  document.getElementById('m-vb-kv').innerHTML = zeilen
-    .map(([k, v]) => `<span>${esc(k)}</span><b>${esc(String(v))}</b>`)
-    .join('');
-  document.getElementById('m-vb-soll').textContent = String(r.soll || 0);
-  const go = document.getElementById('m-vb-make');
-  go.hidden = !(r.make > 0);
-  go.textContent = r.make > 0 ? t('np.make', { n: r.make }) : '';
-}
-function vbSollStep(d) {
-  const r = _vbSheet && _vbRow(_vbSheet.strainId, _vbSheet.slot);
-  if (!r) return;
-  const neu = Math.max(0, Math.min(500, (r.soll || 0) + d));
-  r.soll = neu || null;
-  document.getElementById('m-vb-soll').textContent = String(neu);
-  clearTimeout(_vbSollTimer);
-  _vbSollTimer = setTimeout(() => vbSollSave(r.strainId, r.slot, neu), 500);
-}
-async function vbSollSave(strainId, slot, soll) {
-  const r = await apiPut('/api/sale-stock/' + strainId + '/' + slot, { soll });
-  if (!r || r.error || !Array.isArray(r.rows)) {
-    setFb('err', (r && r.error) || t('common.error'));
-    loadSaleStock();
-    return;
-  }
-  _vbData = r;
-  renderSaleStock();
-  if (_vbSheet) vbSheetRender();
-}
-// Eine Spritzengröße (10), die Petrischale ('pd') oder ein Beutel ('kb2').
-function _vbSlotLabel(slot) {
-  if (slot === 'pd') return t('vb.pieces');
-  if (String(slot).startsWith('kb')) return String(slot).slice(2) + ' kg';
-  return slot + ' ml';
-}
-const _vbSlotOrder = (slot) => Number(String(slot).replace(/\D/g, '')) || 0;
-function renderSaleStock() {
-  const card = document.getElementById('vb-card');
-  if (!card || !_vbData) return;
-  const rows = _vbData.rows || [];
-  const enabled = !!_vbData.enabled;
-  renderNachproduzieren(rows);
-  renderWorkNachproduzieren(rows);
-  const kinds = VB_KINDS.filter((k) => rows.some((r) => r.type === k.type));
-  // Ohne SKU verkauft kein Shop etwas aus dem Labor; dann gibt es nichts zu zeigen.
-  card.hidden = !kinds.length;
-  if (!kinds.length) return;
-  if (!kinds.some((k) => k.type === _vbKind)) _vbKind = kinds[0].type;
-
-  const seg = document.getElementById('vb-seg');
-  seg.hidden = kinds.length < 2;
-  seg.innerHTML = kinds
+  document.getElementById('m-lb-title').textContent = sp.name;
+  document.getElementById('m-lb-prog').checked = !!sp.imProgramm;
+  document.getElementById('m-lb-items').innerHTML = sp.items
     .map(
-      (k) =>
-        `<button type="button" class="vb-seg-btn" data-vb-kind="${esc(k.type)}" aria-pressed="${k.type === _vbKind}">${esc(t(k.label))}</button>`
+      (i) =>
+        `<div class="lb-line${i.urgency === 'now' ? ' lb-now' : i.make > 0 ? ' lb-under' : ''}">` +
+        `<div class="lb-line-l"><b>${esc(_lbLang(i))}</b>${i.shop ? ` <small class="lb-shop">${esc(t('lb.shop'))}</small>` : ''}` +
+        `<small>${esc(_lbSub(i))}</small></div>` +
+        `<div class="lb-step"><button type="button" class="btn" data-lb-step="-1" data-lb-key="${esc(i.key)}" aria-label="${esc(t('vb.sollLess'))}">−</button>` +
+        `<b id="m-lb-soll-${esc(i.key)}" aria-live="polite">${esc(_lbZahl(i, i.soll || 0))}${i.key === 'GSKG' ? ' kg' : ''}</b>` +
+        `<button type="button" class="btn" data-lb-step="1" data-lb-key="${esc(i.key)}" aria-label="${esc(t('vb.sollMore'))}">+</button></div></div>`
     )
     .join('');
-
-  const mine = rows.filter((r) => r.type === _vbKind);
-  const slots = [...new Set(mine.map((r) => r.slot))].sort((a, b) => _vbSlotOrder(a) - _vbSlotOrder(b));
-  // Die Zeilen kommen je Art zusammen und nach Namen sortiert (listSyringeStock).
-  const arten = [];
-  for (const r of mine) {
-    const letzte = arten[arten.length - 1];
-    if (letzte && letzte.strainId === r.strainId) letzte.bySlot[r.slot] = r;
-    else arten.push({ strainId: r.strainId, name: r.name, bySlot: { [r.slot]: r } });
+  const go = document.getElementById('m-lb-make');
+  const fehlt = _lbFehlt(sp);
+  go.hidden = !fehlt.length;
+  go.textContent = fehlt.length ? t('np.goAll') : '';
+}
+function lbSollStep(key, d) {
+  const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
+  const i = sp && sp.items.find((x) => x.key === key);
+  if (!i) return;
+  const neu = Math.max(0, Math.min(500, (i.soll || 0) + d));
+  i.soll = neu || null;
+  const el = document.getElementById('m-lb-soll-' + key);
+  if (el) el.textContent = _lbZahl(i, neu) + (key === 'GSKG' ? ' kg' : '');
+  clearTimeout(_lbTimer[key]);
+  _lbTimer[key] = setTimeout(() => lbSollSave(sp.strainId, i, neu), 500);
+}
+async function lbSollSave(strainId, i, soll) {
+  const feld = LB_SORTE_FELD[i.key];
+  let r;
+  if (feld) {
+    r = await apiPatch('/api/mushroom-strains/' + strainId, { [feld]: soll });
+    // Die Pilzsorten-Seite zeigt dieselbe Zahl; sie soll nicht bis zum nächsten
+    // Abgleich die alte zeigen.
+    const ms = !r.error && (mushroomStrains || []).find((x) => x.id === strainId);
+    if (ms) ms[feld] = soll;
+  } else {
+    const slot = i.key.startsWith('SY') ? i.ml : 'kb' + i.kg;
+    r = await apiPut('/api/sale-stock/' + strainId + '/' + slot, { soll });
   }
-  document.getElementById('vb-table').innerHTML =
-    '<table class="vb-t"><thead><tr>' +
-    `<th scope="col">${esc(t('vb.species'))}</th>` +
-    slots.map((s) => `<th scope="col">${esc(_vbSlotLabel(s))}</th>`).join('') +
-    '</tr></thead><tbody>' +
-    arten
-      .map(
-        (a) =>
-          `<tr><th scope="row">${esc(a.name)}</th>` + slots.map((s) => _vbCell(a.bySlot[s], enabled)).join('') + '</tr>'
-      )
-      .join('') +
-    '</tbody></table>';
-
-  // Eine Zeile für alle Warenarten: Billbee bekommt sie in einem Lauf.
-  const bb = document.getElementById('vb-bb');
-  const fehler = rows.filter((r) => r.lastError).length;
-  const wartet = rows.filter((r) => !r.lastError && (!r.pushedAt || r.pushedCount !== r.count)).length;
-  const zuletzt = rows.reduce((m, r) => (r.pushedAt && r.pushedAt > m ? r.pushedAt : m), '');
-  let text;
-  if (!enabled) text = t('vb.off');
-  else if (fehler) text = t('vb.errors', { n: fehler });
-  else if (wartet) text = t('vb.waitingAll', { n: wartet });
-  else text = t('vb.allSent', { n: rows.length, time: zuletzt ? fmtDtTime(zuletzt) : '–' });
-  bb.textContent = text;
-  bb.classList.toggle('vb-bb-warn', !enabled || fehler > 0);
+  if (!r || r.error) setFb('err', (r && r.error) || t('common.error'));
+  loadLabStock();
+}
+async function lbProgramm(an) {
+  if (!_lbSheet) return;
+  const id = _lbSheet.strainId;
+  const r = await apiPatch('/api/mushroom-strains/' + id, { imProgramm: an });
+  if (!r || r.error) {
+    setFb('err', (r && r.error) || t('common.error'));
+  } else {
+    const ms = (mushroomStrains || []).find((x) => x.id === id);
+    if (ms) ms.imProgramm = an;
+  }
+  loadLabStock();
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -31821,19 +31633,15 @@ function initEventListeners() {
       renderDashBatchTasks();
       return;
     }
-    // A lab floor breached. GS is grain — that is the Labor quick-create, same
-    // as a supply row asking for grain. The three culture types open the
-    // culture form with the type already chosen.
+    // Laborarbeit für eine Art: alles, was ihr fehlt, in einem Dialog
+    // (lbAnsetzen), wie der Knopf unter Nachproduzieren.
     if (action === 'labmin-make') {
-      const ms = _strainByKey(el.dataset.sorte);
-      if (!ms) {
+      const id = parseInt(el.dataset.strain, 10);
+      if (!_lbSpecies().some((x) => x.strainId === id)) {
         setFb('err', t('todo.supplyNoSorte'));
         return;
       }
-      msQuickLabor(ms.id);
-      // The row already knows which type is short, so answer the dialog's
-      // picker rather than making the worker pick it again.
-      _msqPickType(el.dataset.labtype);
+      lbAnsetzen(id);
       return;
     }
     // A supply row carries a Sorte, not a batch — the batch is what it is
@@ -31945,46 +31753,36 @@ function initEventListeners() {
   // The stored choice belongs on the control too, or a reload shows "Nicht
   // gruppieren" over a list that is grouped.
   $('batch-group-by').value = batchGroupBy;
-  // The lab stock card is rebuilt wholesale on every sync, so its buttons are
-  // delegated like the Sorten tiles' rather than carrying inline handlers.
-  $('dash-lab-stock').addEventListener('click', (e) => {
-    const eine = e.target.closest('[data-action="lab-set-strain-min"]');
-    if (eine) {
-      setStrainLabMin(parseInt(eine.dataset.strain, 10), eine.dataset.labtype);
-      return;
-    }
-    const btn = e.target.closest('[data-action="lab-set-min"]');
-    if (btn) setLabMin(btn.dataset.labtype);
-  });
-  $('vb-seg').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-vb-kind]');
-    if (!b) return;
-    _vbKind = b.dataset.vbKind;
-    renderSaleStock();
-  });
+  // The lab cards are rebuilt wholesale on every sync, so their buttons are
+  // delegated rather than carrying inline handlers.
   $('wk-np').addEventListener('click', () => {
     go('lab', 'n-lab');
     const card = document.getElementById('np-card');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  $('vb-table').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-vb-strain]');
-    if (b) vbSheetOpen(parseInt(b.dataset.vbStrain, 10), b.dataset.vbSlot);
-  });
   $('np-rows').addEventListener('click', (e) => {
+    if (e.target.closest('[data-np-more]')) {
+      _npAlle = !_npAlle;
+      renderNachproduzieren(_lbSpecies());
+      return;
+    }
     const b = e.target.closest('[data-np-strain]');
-    if (b) npAnsetzen(parseInt(b.dataset.npStrain, 10), b.dataset.npSlot);
+    if (b) lbAnsetzen(parseInt(b.dataset.npStrain, 10));
   });
-  $('m-vb').addEventListener('click', (e) => {
-    if (e.target.id === 'm-vb') return vbSheetClose();
-    const b = e.target.closest('[data-vb-act]');
+  $('lb-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lb-strain]');
+    if (b) lbSheetOpen(parseInt(b.dataset.lbStrain, 10));
+  });
+  $('m-lb').addEventListener('click', (e) => {
+    if (e.target.id === 'm-lb') return lbSheetClose();
+    const st = e.target.closest('[data-lb-step]');
+    if (st) return lbSollStep(st.dataset.lbKey, Number(st.dataset.lbStep));
+    const b = e.target.closest('[data-lb-act]');
     if (!b) return;
-    const act = b.dataset.vbAct;
-    if (act === 'minus') vbSollStep(-1);
-    else if (act === 'plus') vbSollStep(1);
-    else if (act === 'close') vbSheetClose();
-    else if (act === 'make' && _vbSheet) npAnsetzen(_vbSheet.strainId, _vbSheet.slot);
+    if (b.dataset.lbAct === 'close') lbSheetClose();
+    else if (b.dataset.lbAct === 'make' && _lbSheet) lbAnsetzen(_lbSheet.strainId);
   });
+  $('m-lb-prog').addEventListener('change', (e) => lbProgramm(e.target.checked));
   // Which Sorten are in this season's programme. Delegated: the table is
   // rebuilt on every sync, so a listener on the row would not survive.
   $('strains-body').addEventListener('change', (e) => {

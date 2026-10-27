@@ -65,7 +65,11 @@ const versorgung = (name, key, taskAction) => ({
   species: name,
   task: { key, name, taskAction }
 });
-const laborMin = (name, key, type) => ({ kind: 'labmin', species: name, task: { key, name, type } });
+const laborMin = (name, strainId) => ({
+  kind: 'labmin',
+  species: name,
+  task: { key: 'id:' + strainId, name, strainId }
+});
 
 describe('Die Knöpfe der Tagesliste', () => {
   it('gibt der Nachschub-Zeile einen Schlüssel mit, den der Handler auflöst', () => {
@@ -74,10 +78,12 @@ describe('Die Knöpfe der Tagesliste', () => {
     assert.equal(r.ms.id, 3);
   });
 
-  it('tut dasselbe für eine Labor-Untergrenze', () => {
-    const r = rundlauf(laborMin('Blue Oyster', 'id:7', 'MC'));
-    assert.ok(r.ms, 'der Handler findet die Sorte nicht');
-    assert.equal(r.ms.id, 7);
+  it('gibt der Labor-Zeile die Sorte mit, als Id', () => {
+    // Eine Zeile je Sorte: der Knopf setzt in einem Dialog alles an, was ihr
+    // fehlt (lbAnsetzen), also braucht er die Sorte und keinen Typ.
+    const r = rundlauf(laborMin('Blue Oyster', 7));
+    assert.equal(r.aktion, 'labmin-make');
+    assert.match(r.html, /data-strain="7"/);
   });
 
   it('funktioniert auch für eine Sorte ohne strainId, über den Namensschlüssel', () => {
@@ -91,11 +97,10 @@ describe('Die Knöpfe der Tagesliste', () => {
   it('schreibt niemals den Anzeigenamen ins Attribut', () => {
     // Der eigentliche Fehler, in einem Satz. "Shiitake" steht in keinem der
     // beiden Schlüsselräume, also lief _strainByKey() jedes Mal auf null.
-    for (const it of [versorgung('Shiitake', 'id:3', 'make-grain'), laborMin('Shiitake', 'id:3', 'LC')]) {
-      const r = rundlauf(it);
-      assert.notEqual(r.sorte, 'Shiitake', 'data-sorte trägt einen Schlüssel, keinen Namen');
-      assert.match(r.sorte, /^(id:|n:)/, 'und Schlüssel sind an ihrem Präfix zu erkennen');
-    }
+    const r = rundlauf(versorgung('Shiitake', 'id:3', 'make-grain'));
+    assert.notEqual(r.sorte, 'Shiitake', 'data-sorte trägt einen Schlüssel, keinen Namen');
+    assert.match(r.sorte, /^(id:|n:)/, 'und Schlüssel sind an ihrem Präfix zu erkennen');
+    assert.doesNotMatch(rundlauf(laborMin('Shiitake', 3)).html, /Shiitake/, 'auch der Labor-Knopf nicht');
   });
 
   it('unterscheidet "Körner ansetzen" von "Charge ansetzen"', () => {
@@ -103,10 +108,6 @@ describe('Die Knöpfe der Tagesliste', () => {
     // machen. Die beiden Fälle dürfen nicht auf denselben Knopf fallen.
     assert.equal(rundlauf(versorgung('Shiitake', 'id:3', 'make-grain')).aktion, 'supply-make-grain');
     assert.equal(rundlauf(versorgung('Shiitake', 'id:3', 'make-blocks')).aktion, 'supply-make-batch');
-  });
-
-  it('gibt dem Labor-Knopf den Typ mit, der knapp ist', () => {
-    assert.match(rundlauf(laborMin('Shiitake', 'id:3', 'PD')).html, /data-labtype="PD"/);
   });
 
   it('bleibt leer statt zu raten, wenn die Zeile keinen Schlüssel trägt', () => {

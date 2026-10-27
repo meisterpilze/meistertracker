@@ -4828,123 +4828,9 @@ tr:hover td {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* Verkaufsbestand (renderSaleStock): one table per kind of article, every
-   species with a SKU and every zero, so what is missing stands there instead
-   of falling off the list like it does on the lab tiles above. */
-.vb-seg {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  margin-bottom: 10px;
-  border-radius: 10px;
-  background: var(--c-border-light);
-}
-.vb-seg[hidden] {
-  display: none;
-}
-.vb-seg-btn {
-  min-height: var(--tap-sm);
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--c-text-sec);
-  font-family: inherit;
-  font-size: max(0.8125rem, var(--fs-min));
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.vb-seg-btn[aria-pressed='true'] {
-  background: var(--c-surface);
-  color: var(--c-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-.vb-t {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-.vb-t thead th {
-  padding: 4px 0 6px;
-  color: var(--c-text-muted);
-  font-size: max(0.75rem, var(--fs-min));
-  font-weight: 600;
-  text-align: center;
-}
-.vb-t thead th:first-child {
-  width: 40%;
-  text-align: left;
-}
-.vb-t tbody th,
-.vb-t td {
-  padding: 6px 2px;
-  border-top: 1px solid var(--c-border-light);
-  border-bottom: 0;
-  vertical-align: middle;
-}
-/* The global zebra paints cells only, which left the species column white on
-   every grey row. The whole row takes it here. */
-.vb-t tbody tr:nth-child(even) > * {
-  background: var(--c-bg);
-}
-/* The species is the row's header for screen readers, not a column heading,
-   so none of the global th look: no capitals, no sticky, normal text colour.
-   It wraps rather than truncates: "Phoenix Oyster mushroom" on two lines is
-   still read, cut to "Phoenix Oys…" it is a guess. */
-.vb-t tbody th {
-  position: static;
-  padding-right: 6px;
-  color: var(--c-text);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: normal;
-  line-height: 1.25;
-  text-align: left;
-  text-transform: none;
-  overflow-wrap: anywhere;
-}
-.vb-t td {
-  text-align: center;
-}
-.vb-c {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 40px;
-  font-variant-numeric: tabular-nums;
-}
-.vb-c b {
-  font-size: 1.125rem;
-  line-height: 1.1;
-}
-.vb-c i {
-  color: var(--c-text-muted);
-  font-size: max(0.6875rem, var(--fs-min));
-  font-style: normal;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-.vb-c i.vb-err {
-  color: var(--c-red-dark);
-  font-weight: 600;
-}
-/* Grain spawn still growing, in the incubation colour the Chargen bar uses. */
-.vb-c i.vb-grow {
-  color: var(--st-inc);
-  font-weight: 600;
-}
-.vb-zero b {
-  color: var(--c-text-muted);
-  font-weight: 500;
-}
-.vb-na b {
-  color: var(--c-text-muted);
-  font-weight: 400;
-  opacity: 0.6;
-}
+/* Laborbestand je Sorte (renderLabStock, renderNachproduzieren, lbSheetRender).
+   One row per species with the same five fields in the same places; amber under
+   its target, red for an order that cannot ship. */
 .vb-legend {
   display: flex;
   flex-wrap: wrap;
@@ -4962,40 +4848,113 @@ tr:hover td {
   font-size: max(0.8125rem, var(--fs-min));
   line-height: 1.4;
 }
+.vb-bb[hidden] {
+  display: none;
+}
 .vb-bb.vb-bb-warn {
   background: var(--c-amber-light);
   color: var(--c-amber-dark);
 }
-/* A figure is a button now (it opens the article, vbSheetOpen): none of the
-   button look, only the hit area. */
-button.vb-c {
-  padding: 2px 4px;
+
+/* A species: a button the width of the card, because the whole row opens it. */
+.lb-sp {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
   border: 0;
-  border-radius: 8px;
+  border-bottom: 1px solid var(--c-border-light);
   background: transparent;
   color: inherit;
   font-family: inherit;
+  text-align: left;
   cursor: pointer;
 }
-button.vb-c:focus-visible {
-  outline: 2px solid var(--c-primary);
-  outline-offset: 1px;
+.lb-sp:last-child {
+  border-bottom: 0;
 }
-/* Under its target, or an order it cannot cover (db.saleNeed). */
-.vb-c.vb-under {
+.lb-sp:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.lb-sp-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.lb-sp-h b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lb-paused {
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.lb-chev {
+  margin-left: auto;
+  color: var(--c-text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.lb-st {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 2px;
+  border-radius: 8px;
+  background: var(--c-bg);
+  font-variant-numeric: tabular-nums;
+}
+.lb-st small {
+  color: var(--c-text-muted);
+  font-size: max(0.6875rem, var(--fs-min));
+  white-space: nowrap;
+}
+.lb-st b {
+  font-size: 0.9375rem;
+  white-space: nowrap;
+}
+.lb-st em {
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  font-style: normal;
+  font-weight: 500;
+}
+.lb-st.lb-zero b {
+  color: var(--c-text-muted);
+  font-weight: 500;
+}
+.lb-st.lb-under {
+  background: var(--c-amber-light);
+}
+.lb-st.lb-under b {
+  color: var(--c-amber-dark);
+}
+.lb-st.lb-now {
   background: var(--c-red-light);
 }
-.vb-c.vb-under b {
+.lb-st.lb-now b {
   color: var(--c-red-dark);
-  font-weight: 700;
 }
-.vb-c i.vb-ord {
-  color: var(--c-amber-dark);
-  font-weight: 600;
+/* Sold in a shop: a dot after the field's name, explained in the legend. */
+.lb-shopdot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  vertical-align: 2px;
 }
 
-/* Nachproduzieren (renderNachproduzieren): one row per article that is short,
-   its button sized to its label. */
+/* Nachproduzieren: one row per species, what it lacks as chips, one button. */
 .np-row {
   display: flex;
   align-items: center;
@@ -5003,7 +4962,7 @@ button.vb-c:focus-visible {
   padding: 10px 0;
   border-bottom: 1px solid var(--c-border-light);
 }
-.np-row:last-child {
+.np-row:last-of-type {
   border-bottom: 0;
 }
 .np-dot {
@@ -5026,14 +4985,31 @@ button.vb-c:focus-visible {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.np-why {
-  color: var(--c-text-muted);
-  font-size: max(0.8125rem, var(--fs-min));
-  line-height: 1.4;
+.np-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.np-chip {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.np-chip.np-now {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
 }
 .np-go {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+.np-more {
+  margin-top: 8px;
 }
 .np-foot {
   margin-top: 6px;
@@ -5042,51 +5018,71 @@ button.vb-c:focus-visible {
   line-height: 1.45;
 }
 
-/* The article sheet (m-vb). */
-.vb-kv {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 7px 12px;
-  margin: 8px 0 14px;
-  font-size: var(--fs-sm);
-}
-.vb-kv span {
-  color: var(--c-text-sec);
-}
-.vb-kv b {
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.vb-soll {
+/* The species sheet (m-lb). */
+.lb-prog {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-top: 1px solid var(--c-border-light);
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0 6px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--c-border-light);
+  cursor: pointer;
 }
-.vb-soll-lbl {
-  flex: 1 1 auto;
-  min-width: 0;
+.lb-prog input {
+  width: auto;
+  margin-top: 3px;
 }
-.vb-soll-lbl small {
+.lb-prog small {
   display: block;
   color: var(--c-text-muted);
   font-size: max(0.75rem, var(--fs-min));
   line-height: 1.35;
 }
-.vb-step {
-  display: inline-flex;
+.lb-line {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border-light);
 }
-.vb-step b {
-  min-width: 32px;
-  font-size: 1.25rem;
+.lb-line-l {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lb-line-l small:last-child {
+  display: block;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  line-height: 1.35;
+}
+.lb-line.lb-under .lb-line-l b {
+  color: var(--c-amber-dark);
+}
+.lb-line.lb-now .lb-line-l b {
+  color: var(--c-red-dark);
+}
+.lb-shop {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  font-size: max(0.6875rem, var(--fs-min));
+  font-weight: 700;
+}
+.lb-step {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+.lb-step b {
+  min-width: 48px;
+  font-size: 1.0625rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-#m-vb-make[hidden] {
+#m-lb-make[hidden] {
   display: none;
 }
 /* Under its floor: the number goes red, not the whole row. The Sorte's name is
