@@ -125,6 +125,35 @@
       </div>
     </div>
 
+    <!-- One article of the Verkaufsbestand: its figures and its target (vbSheetRender) -->
+    <div class="modal-bg" id="m-vb" role="dialog" aria-modal="true" aria-labelledby="m-vb-title" hidden>
+      <div class="modal">
+        <h3 id="m-vb-title"></h3>
+        <div class="vb-kv" id="m-vb-kv"></div>
+        <div class="vb-soll">
+          <div class="vb-soll-lbl">
+            <b data-i18n="vb.sollLabel">Soll</b>
+            <small data-i18n="vb.sollHelp"
+              >So viele sollen immer da sein. Darunter steht der Artikel unter Nachproduzieren. 0 = auf Bestellung.</small
+            >
+          </div>
+          <div class="vb-step">
+            <button type="button" class="btn" data-vb-act="minus" data-i18n-aria-label="vb.sollLess" aria-label="Weniger">
+              −
+            </button>
+            <b id="m-vb-soll" aria-live="polite">0</b>
+            <button type="button" class="btn" data-vb-act="plus" data-i18n-aria-label="vb.sollMore" aria-label="Mehr">
+              +
+            </button>
+          </div>
+        </div>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-vb-act="close" data-i18n="vb.close">Schließen</button>
+          <button type="button" class="btn btn-p" id="m-vb-make" data-vb-act="make" hidden></button>
+        </div>
+      </div>
+    </div>
+
     <!-- Calendar print range modal -->
     <div class="modal-bg" id="m-cal-print" role="dialog" aria-modal="true" aria-labelledby="m-cal-print-title" hidden>
       <div class="modal">
@@ -4370,6 +4399,14 @@
             <span>Lab</span>
             <div id="dash-lab-stock"></div>
           </div>
+          <!-- What is missing, first: shown only while something is (renderNachproduzieren) -->
+          <div class="card" id="np-card" hidden>
+            <div class="sec" data-i18n="np.title">Nachproduzieren</div>
+            <div id="np-rows"></div>
+            <div class="np-foot" data-i18n="np.foot">
+              Alles andere ist da oder wird auf Bestellung gemacht. Ein Soll setzt man mit einem Tipp auf die Zahl unten.
+            </div>
+          </div>
           <!-- What the shops sell, per species and size, and what Billbee got (renderSaleStock) -->
           <div class="card" id="vb-card" hidden>
             <div class="sec" data-i18n="vb.title">Verkaufsbestand</div>
@@ -4377,6 +4414,7 @@
             <div id="vb-table"></div>
             <div class="vb-legend">
               <span data-i18n="vb.legendZero">0 = nicht da</span>
+              <span data-i18n="vb.legendUnder">rot = fehlt</span>
               <span data-i18n="vb.legendNa">· = in keinem Shop</span>
             </div>
             <div class="vb-bb" id="vb-bb"></div>

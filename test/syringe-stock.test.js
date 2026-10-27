@@ -265,7 +265,9 @@ describe('Migration 103: vorhandene SKUs bleiben Spritzen', () => {
       'SPRI-TEST-IOTA50',
       4
     );
-    d.prepare('DELETE FROM schema_version WHERE version = 103').run();
+    // 103 rebuilds the table; 105 rebuilds it again and 106 adds a column, so a
+    // database that stood before 103 runs all three, in order.
+    d.prepare('DELETE FROM schema_version WHERE version IN (103, 105, 106)').run();
     const file = d.location();
     d.close();
     const d2 = db.openDb(file);

@@ -4966,6 +4966,129 @@ tr:hover td {
   background: var(--c-amber-light);
   color: var(--c-amber-dark);
 }
+/* A figure is a button now (it opens the article, vbSheetOpen): none of the
+   button look, only the hit area. */
+button.vb-c {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+button.vb-c:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+/* Under its target, or an order it cannot cover (db.saleNeed). */
+.vb-c.vb-under {
+  background: var(--c-red-light);
+}
+.vb-c.vb-under b {
+  color: var(--c-red-dark);
+  font-weight: 700;
+}
+.vb-c i.vb-ord {
+  color: var(--c-amber-dark);
+  font-weight: 600;
+}
+
+/* Nachproduzieren (renderNachproduzieren): one row per article that is short,
+   its button sized to its label. */
+.np-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.np-row:last-child {
+  border-bottom: 0;
+}
+.np-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.np-dot.np-now {
+  background: var(--c-red-strong);
+}
+.np-dot.np-low {
+  background: var(--c-amber-strong);
+}
+.np-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.np-what {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.np-why {
+  color: var(--c-text-muted);
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.4;
+}
+.np-go {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.np-foot {
+  margin-top: 6px;
+  color: var(--c-text-muted);
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.45;
+}
+
+/* The article sheet (m-vb). */
+.vb-kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 12px;
+  margin: 8px 0 14px;
+  font-size: var(--fs-sm);
+}
+.vb-kv span {
+  color: var(--c-text-sec);
+}
+.vb-kv b {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.vb-soll {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--c-border-light);
+  border-bottom: 1px solid var(--c-border-light);
+}
+.vb-soll-lbl {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vb-soll-lbl small {
+  display: block;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  line-height: 1.35;
+}
+.vb-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vb-step b {
+  min-width: 32px;
+  font-size: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#m-vb-make[hidden] {
+  display: none;
+}
 /* Under its floor: the number goes red, not the whole row. The Sorte's name is
    not the problem, the count is. */
 .lab-row.under .lab-row-n {
