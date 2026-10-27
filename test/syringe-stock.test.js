@@ -135,7 +135,11 @@ describe('Spritzen in 10, 20 und 50 ml', () => {
         [10, 1],
         [20, 1],
         [50, 2],
-        ['pd', 0]
+        ['pd', 0],
+        // Körnerbrut je Beutelgröße, siehe koernerbrut-verkauf.test.js.
+        ['kb1', 0],
+        ['kb2', 0],
+        ['kb5', 0]
       ]
     );
   });
