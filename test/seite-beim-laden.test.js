@@ -48,7 +48,8 @@ describe('Die offene Seite zeichnet sich, wenn Daten kommen', () => {
     const seite = seiteVon('dash-batch-tasks');
     assert.equal(seite, 'work', 'die Karte steht auf Arbeitsgänge');
     const r = rumpf('refresh');
-    const m = r.match(/id === '([a-z]+)'\)\s*renderDashBatchTasks\(\)/);
+    // Mit oder ohne Block: Arbeitsgänge lädt dort auch den Verkaufsbestand nach.
+    const m = r.match(/id === '([a-z]+)'\)\s*\{?\s*renderDashBatchTasks\(\)/);
     assert.ok(m, 'refresh() zeichnet die Aufgabenliste überhaupt nicht neu');
     assert.equal(m[1], seite, 'sie wird für eine andere Seite gezeichnet als die, auf der sie steht');
   });

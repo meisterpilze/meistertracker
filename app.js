@@ -875,6 +875,12 @@ function onNotifItemClick(e) {
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
+  } else if (linkType === 'sale' && linkId) {
+    // "Bestellt, aber nicht da" (checkSaleAlerts): the article, on the Labor
+    // page, with its sheet open. linkId is "<species>/<slot>".
+    const [sid, slot] = linkId.split('/');
+    go('lab', 'n-lab');
+    loadSaleStock().then(() => vbSheetOpen(parseInt(sid, 10), slot));
   } else if (linkType === 'customer' && linkId) {
     // An eBay account-closure request. The server records it and raises this
     // notification but deliberately never erases on its own, so this alert is the
@@ -1406,6 +1412,7 @@ function go(page, btnId) {
   // it — it was the Dashboard's Farm mode, which was two buttons and this row.
   if (page === 'work') {
     renderDashBatchTasks();
+    loadSaleStock();
   }
   if (page === 'batch') {
     renderStatus();
@@ -1643,7 +1650,10 @@ function refresh() {
   // frischte weder ein SSE-Ereignis noch der 30-Sekunden-Takt sie je auf.
   // #dash-batch-tasks steht nicht auf p-dash, der alte Zweig zeichnete also eine
   // Karte, die auf der offenen Seite gar nicht vorkommt.
-  if (id === 'work') renderDashBatchTasks();
+  if (id === 'work') {
+    renderDashBatchTasks();
+    loadSaleStock();
+  }
   if (id === 'dash') renderOverviewKPIs();
   if (id === 'batch') {
     renderStatus();
@@ -9048,6 +9058,25 @@ function renderNachproduzieren(rows) {
     })
     .join('');
 }
+// Dieselbe Liste als eine Zeile oben in Arbeitsgänge, wo die App aufgeht: wer
+// nicht auf die Laborseite schaut, sieht trotzdem, dass etwas fehlt. Dieselbe
+// Form wie die Warnzeile darüber (wk-alert), rot, sobald etwas dringend ist.
+// Ein Tipp führt zur Karte auf der Laborseite.
+function renderWorkNachproduzieren(rows) {
+  const el = document.getElementById('wk-np');
+  if (!el) return;
+  const offen = rows.filter((r) => r.make > 0);
+  el.hidden = !offen.length;
+  if (!offen.length) return;
+  const dringend = offen.some((r) => r.urgency === 'now');
+  el.classList.toggle('wk-np-now', dringend);
+  // Die dringenden zuerst, höchstens zwei mit Namen; der Rest als Zahl.
+  const sortiert = offen.slice().sort((a, b) => (a.urgency === 'now' ? 0 : 1) - (b.urgency === 'now' ? 0 : 1));
+  const namen = sortiert.slice(0, 2).map((r) => r.name + ' ' + _vbArtikel(r));
+  if (sortiert.length > 2) namen.push(t('work.npMore', { n: sortiert.length - 2 }));
+  el.textContent = t('work.np', { n: offen.length }) + ' · ' + namen.join(', ');
+}
+
 // "Ansetzen": die Laborarbeit, mit Art, Größe und Anzahl schon ausgefüllt. Die
 // Anzahl ist, was fehlt, keine gemerkte Zahl; geändert wird sie im Dialog wie
 // sonst, und der endet wie immer im Etikettendialog.
@@ -9150,6 +9179,7 @@ function renderSaleStock() {
   const rows = _vbData.rows || [];
   const enabled = !!_vbData.enabled;
   renderNachproduzieren(rows);
+  renderWorkNachproduzieren(rows);
   const kinds = VB_KINDS.filter((k) => rows.some((r) => r.type === k.type));
   // Ohne SKU verkauft kein Shop etwas aus dem Labor; dann gibt es nichts zu zeigen.
   card.hidden = !kinds.length;
@@ -31931,6 +31961,11 @@ function initEventListeners() {
     if (!b) return;
     _vbKind = b.dataset.vbKind;
     renderSaleStock();
+  });
+  $('wk-np').addEventListener('click', () => {
+    go('lab', 'n-lab');
+    const card = document.getElementById('np-card');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('vb-table').addEventListener('click', (e) => {
     const b = e.target.closest('[data-vb-strain]');

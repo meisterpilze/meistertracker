@@ -125,6 +125,7 @@ function zeichne(daten, art) {
     ${APP.match(/^const _vbSlotOrder = .*;$/m)[0]}
     ${_hf('_vbArtikel', APP)}
     ${_hf('renderNachproduzieren', APP)}
+    ${_hf('renderWorkNachproduzieren', APP)}
     ${_hf('renderSaleStock', APP)}
     renderSaleStock();`
   )(

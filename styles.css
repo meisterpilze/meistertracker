@@ -8215,6 +8215,13 @@ body:has(#m-camscan.open) .update-bar {
 .wk-alert[hidden] {
   display: none;
 }
+/* Nachproduzieren on the work page (renderWorkNachproduzieren): the alert's
+   shape, red while something is urgent, amber while it is only short. */
+.wk-alert.wk-np-now {
+  border-color: var(--c-red-border);
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
 /* Today's USB stick backup, for admins: the alert's shape, coloured by what
    it asks for. Blue while a backup runs, amber when one is due or nothing is
    set up, green when the stick can come out, red when it failed. */
