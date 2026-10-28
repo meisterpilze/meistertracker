@@ -88,6 +88,7 @@ function blatt({ admin = true, liste }) {
     let _lbSheet = { strainId: 1, make: {}, sollOffen: null, wegOffen: 'PD', weg: new Set() };
     const renderLabLog = () => {};
     const renderLabStock = () => {};
+    const renderCultures = () => log.push('kb');
     const lbSheetRender = () => log.push('render');
     const loadLabStock = () => log.push('reload');
     const toast = (m) => log.push('toast:' + m);
@@ -104,6 +105,7 @@ function blatt({ admin = true, liste }) {
     ${_hf('lbWegWaehlen', APP)}
     ${_hf('_lbHaveAendern', APP)}
     ${_hf('lbWegLoeschen', APP)}
+    ${_hf('kulturenLoeschen', APP)}
     return {
       kulturen: () => _lbKulturen(sp, 'PD').map((c) => c.id),
       liste: () => _lbWegListe(sp, 'PD'),

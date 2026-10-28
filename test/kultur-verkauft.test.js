@@ -11,7 +11,6 @@ const { quelle, hebeFunktion: _hf } = require('./helpers/quelle');
 const db = require('../db');
 
 const APP = quelle();
-const HTML = quelle('index.html');
 const hebe = (n) => _hf(n, APP);
 const VERKAUFBAR = APP.match(/const CI_VERKAUFBAR = \[[^\]]*\];/)[0];
 
@@ -23,12 +22,14 @@ function knoepfe(c) {
     'bmpArten',
     't',
     'esc',
+    '_lbDarfWeg',
     `${VERKAUFBAR}\n${hebe('renderCiActions')}\nrenderCiActions(${JSON.stringify(c)});`
   )(
     { getElementById: () => el },
     () => ['KB'],
     (k) => k,
-    (s) => String(s)
+    (s) => String(s),
+    () => true
   );
   return [...el.innerHTML.matchAll(/data-bi="([^"]+)"/g)].map((m) => m[1]);
 }
@@ -70,9 +71,9 @@ describe('Verkauft zählt als weg', () => {
     );
     assert.equal(msg, 'scanFb.cultureSold');
   });
-  it('der Server nimmt den Status an, und die Laborliste kann danach filtern', () => {
+  it('der Server nimmt den Status an, und die Kulturbibliothek zeigt ihn bei den erledigten', () => {
     assert.match(quelle('server.js'), /const CULTURE_STATUSES = \[[^\]]*'sold'/);
-    assert.match(HTML, /<option value="sold" data-i18n="lab\.sold">/);
+    assert.match(APP, /^const KB_STATUS = \{[^}]*sold: 'lab\.sold'/m);
   });
 });
 

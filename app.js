@@ -9135,13 +9135,21 @@ function lbWegLoeschen() {
   const { strainId, wegOffen: key } = _lbSheet;
   const ids = new Set(_lbSheet.weg);
   const weg = cultures.filter((c) => ids.has(c.id));
-  cultures = cultures.filter((c) => !ids.has(c.id));
   _lbHaveAendern(strainId, key, -weg.length);
   _lbSheet.weg = new Set();
   _lbSheet.wegOffen = null;
+  kulturenLoeschen(weg, () => _lbHaveAendern(strainId, key, weg.length));
+}
+// Kulturen löschen, mit Rückgängig statt Rückfrage: sie gehen gleich aus jeder
+// Liste, zum Server erst, wenn die Leiste unten weg ist. `zurueck` läuft, wenn
+// Rückgängig getippt wird. Das Laborblatt und das Kultur-Fenster teilen sich das.
+function kulturenLoeschen(weg, zurueck) {
+  const ids = new Set(weg.map((c) => c.id));
+  cultures = cultures.filter((c) => !ids.has(c.id));
   const neu = () => {
     renderLabLog();
     renderLabStock();
+    renderCultures();
     if (_lbSheet) lbSheetRender();
   };
   neu();
@@ -9151,6 +9159,7 @@ function lbWegLoeschen() {
       if (r && r.error) {
         cultures.push(c);
         toast(t('lb.deleteFailed', { id: c.id, msg: r.error }), 'err');
+        renderCultures();
       }
     }
     loadLabStock();
@@ -9158,7 +9167,7 @@ function lbWegLoeschen() {
   showUndoBar(t('lb.deleted', { n: weg.length }), () => {
     clearTimeout(timer);
     cultures.push(...weg);
-    _lbHaveAendern(strainId, key, weg.length);
+    if (zurueck) zurueck();
     neu();
   });
 }
@@ -12059,7 +12068,7 @@ function openMoveBatchModal(batchId) {
 // data-sort on its headers is the whole job — the click wiring, the arrows and
 // the persistence are shared rather than copied per table, which is how batches
 // and cultures ended up with two near-identical listeners.
-const SORT_TABLES = { batches: 'batches-body', cultures: 'cultures-body', harvests: 'harvest-body', grain: 'grain-body' };
+const SORT_TABLES = { batches: 'batches-body', harvests: 'harvest-body', grain: 'grain-body' };
 const tableSort = (() => {
   const empty = {};
   for (const k in SORT_TABLES) empty[k] = null;
@@ -21561,8 +21570,8 @@ function renderNbGrainBanner() {
 
 // ─── CULTURES ────────────────────────────────────────────────
 // The class comes from a lookup, so it is safe by construction — the label does
-// not. Both of these render a value straight from the cultures table, and both
-// go into the page via innerHTML, so an unescaped label is stored XSS that
+// not. It renders a value straight from the cultures table, and it goes into
+// the page via innerHTML, so an unescaped label is stored XSS that
 // fires on render with no click involved. Escaping here rather than at the
 // call sites covers all of them at once, and covers rows already in the
 // database, which validating new writes cannot.
@@ -21570,18 +21579,6 @@ const ctBadge = (t) => {
   const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g', SY: 'badge-sy' };
   return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
-const csBadge = (s) => {
-  const m = { active: 'badge-active', stored: 'badge-stored', used: 'badge-used', sold: 'badge-sold', contam: 'badge-contam' };
-  return `<span class="badge ${m[s] || ''}">${esc(s)}</span>`;
-};
-// Culture strain display: show only explicit strainText,
-// fall back to legacy free-text strain field for historical rows without strain_id.
-function cultureStrainDisplay(c) {
-  const st = (c.strainText || '').trim();
-  if (st) return esc(st);
-  if (!c.strainId && c.strain) return esc(c.strain);
-  return '\u2014';
-}
 function fillCultureSelect(id, types) {
   const s = document.getElementById(id);
   if (!s) return;
@@ -21611,30 +21608,144 @@ function fillCultureSelect(id, types) {
   s.innerHTML = opts;
   if (cur) s.value = cur;
 }
+// ── Kulturbibliothek ──
+// Eine Zeile je Sorte, mit dem, was von ihr da ist; ein Tipp klappt ihre
+// Kulturen auf, nach Art, älteste zuerst, eine Zeile je Kultur. Ein Tipp auf
+// eine Kultur öffnet dasselbe Fenster wie ein Scan (openCultureSheet), mit
+// Verkaufen, Raus, Drucken und Löschen. Vorher stand hier eine Tabelle, am
+// Telefon 140 Karten untereinander mit zwei Filtern davor, und alles, was je
+// verbraucht wurde, mitten drin. Gesucht wird jetzt mit der Kamera; was
+// verbraucht, verkauft oder kontaminiert ist, steht hinter "Erledigte".
+const KB_ARTEN = ['MC', 'LC', 'PD', 'SY'];
+const KB_TITEL = { MC: 'lab.motherCultures', LC: 'lab.liquidCultures', PD: 'lab.petriDishes', SY: 'lab.syringes' };
+const KB_KURZ = { MC: 'lb.short.MC', LC: 'lb.short.LC', PD: 'lb.short.PD', SY: 'lb.short.SYall' };
+const KB_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
+// So viele Kulturen einer Art stehen offen da; der Rest auf einen Tipp. Eine
+// einzelne mehr wird nicht versteckt, ein "+ 1 weitere" spart nichts.
+const KB_ZEIGEN = 6;
+const _kb = { offen: null, erledigt: false, mehr: {} };
+const _kbDa = (c) => c.status === 'active' || c.status === 'stored';
+function _kbSorte(c) {
+  const ms = c.strainId ? (mushroomStrains || []).find((m) => m.id === c.strainId) : null;
+  const name = (ms && ms.name) || c.strainName || c.species || '\u2014';
+  return { key: c.strainId ? 'id:' + c.strainId : 'n:' + name, name };
+}
+function _kbAlter(created) {
+  const tage = Math.floor((Date.now() - new Date(created).getTime()) / 864e5);
+  if (!Number.isFinite(tage) || tage < 1) return t('kb.today');
+  if (tage < 14) return t('kb.days', { n: tage });
+  return t('kb.weeks', { n: Math.floor(tage / 7) });
+}
+// Die Sorten der gerade gezeigten Seite: im Bestand, oder die erledigten.
+function _kbGruppen() {
+  const m = new Map();
+  for (const c of cultures) {
+    if (_kbDa(c) === _kb.erledigt || !KB_ARTEN.includes(c.type)) continue;
+    const s = _kbSorte(c);
+    if (!m.has(s.key)) m.set(s.key, { ...s, arten: { MC: [], LC: [], PD: [], SY: [] } });
+    m.get(s.key).arten[c.type].push(c);
+  }
+  // Im Bestand die älteste oben: die ist als nächste dran. Bei den erledigten
+  // die jüngste: nach der sucht man.
+  const ord = (x, y) => String(x.created).localeCompare(String(y.created)) * (_kb.erledigt ? -1 : 1);
+  for (const g of m.values()) for (const a of KB_ARTEN) g.arten[a].sort(ord);
+  return [...m.values()].sort((x, y) => x.name.localeCompare(y.name, loc(), { sensitivity: 'base' }));
+}
+function _kbKulturHtml(c) {
+  const rechts = [];
+  if (c.type === 'SY') rechts.push(syMl(c) + ' ml');
+  if (_kb.erledigt) rechts.push(t(KB_STATUS[c.status] || c.status));
+  else {
+    if (c.status === 'stored') rechts.push(t('lab.stored'));
+    rechts.push(_kbAlter(c.created));
+  }
+  return (
+    `<button type="button" class="kb-kultur" data-kb-id="${esc(c.id)}" data-find="culture:${esc(c.id)}">` +
+    `<span class="kb-id">${esc(c.id)}</span><span class="kb-r">${esc(rechts.join(' · '))}</span></button>`
+  );
+}
+function _kbArtHtml(g, a) {
+  const liste = g.arten[a];
+  const k = g.key + '|' + a;
+  const alle = _kb.mehr[k] || liste.length <= KB_ZEIGEN + 1;
+  const zeigen = alle ? liste : liste.slice(0, KB_ZEIGEN);
+  return (
+    `<div class="kb-art"><div class="kb-art-t">${esc(t(KB_TITEL[a]))} <span>${liste.length}</span></div>` +
+    zeigen.map(_kbKulturHtml).join('') +
+    (alle
+      ? ''
+      : `<button type="button" class="kb-mehr" data-kb-mehr="${esc(k)}">${esc(t('kb.more', { n: liste.length - zeigen.length }))}</button>`) +
+    '</div>'
+  );
+}
+function _kbSorteHtml(g) {
+  const offen = _kb.offen === g.key;
+  const chips = KB_ARTEN.filter((a) => g.arten[a].length)
+    .map((a) => `<span class="kb-chip">${esc(t(KB_KURZ[a]))} <b>${g.arten[a].length}</b></span>`)
+    .join('');
+  return (
+    `<div class="kb-sorte${offen ? ' open' : ''}">` +
+    `<button type="button" class="kb-kopf" data-kb-sorte="${esc(g.key)}" aria-expanded="${offen}">` +
+    `<span class="kb-name">${spDot(g.name)}${esc(g.name)}</span><span class="kb-chips">${chips}</span></button>` +
+    (offen ? KB_ARTEN.filter((a) => g.arten[a].length).map((a) => _kbArtHtml(g, a)).join('') : '') +
+    '</div>'
+  );
+}
 function renderCultures() {
-  const type = document.getElementById('cult-type').value,
-    stat = document.getElementById('cult-stat').value,
-    body = document.getElementById('cultures-body');
-  const activeState = tableSort.cultures || { key: 'created', dir: 'desc' };
-  updateSortIndicators('cultures', activeState);
-  const filtered = cultures.filter((c) => (type === 'all' || c.type === type) && (stat === 'all' || c.status === stat));
-  const rows = applyTableSort(filtered, activeState, (c, k) => {
-    if (k === 'strain') return (c.strainText || '').trim() || (!c.strainId && c.strain ? c.strain : '');
-    return c[k];
-  });
-  if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="9" class="empty">' + t('lab.noCultures') + '</td></tr>';
+  const el = document.getElementById('kb-list');
+  if (!el) return;
+  const da = cultures.filter(_kbDa).length;
+  document.getElementById('kb-count').textContent = t('kb.count', { n: da });
+  const eb = document.getElementById('kb-erledigt');
+  eb.textContent = _kb.erledigt ? t('kb.backToStock') : t('kb.done', { n: cultures.length - da });
+  eb.setAttribute('aria-pressed', String(_kb.erledigt));
+  const gruppen = _kbGruppen();
+  el.innerHTML = gruppen.length
+    ? gruppen.map(_kbSorteHtml).join('')
+    : '<div class="empty">' + esc(t(_kb.erledigt ? 'kb.noneDone' : 'lab.noCultures')) + '</div>';
+}
+// Die Kamera, wie der Scan-Knopf unten: ohne eine Aktion davor öffnet eine
+// gescannte Kultur ihr Fenster.
+function kbScan() {
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  updateSD();
+  openCamScan();
+}
+// Die globale Suche landet hier: die Kultur steht aufgeklappt da, auch wenn sie
+// hinter "+ N weitere" oder unter den erledigten läge.
+function kbZeige(id) {
+  const c = cultures.find((x) => x.id === id);
+  if (!c) return;
+  const s = _kbSorte(c);
+  _kb.erledigt = !_kbDa(c);
+  _kb.offen = s.key;
+  _kb.mehr[s.key + '|' + c.type] = true;
+  renderCultures();
+}
+function kbKlick(e) {
+  const kopf = e.target.closest('[data-kb-sorte]');
+  if (kopf) {
+    _kb.offen = _kb.offen === kopf.dataset.kbSorte ? null : kopf.dataset.kbSorte;
+    renderCultures();
+    const neu = document.querySelector('.kb-sorte.open');
+    if (neu && neu.scrollIntoView) neu.scrollIntoView({ block: 'nearest' });
     return;
   }
-  // data-mlabel attrs are rendered as ::before labels in the mobile card layout
-  // (styles.css "Cultures table \u2014 mobile card mode"); class hooks pin the ID
-  // header, status badge row, and action row in card mode.
-  body.innerHTML = rows
-    .map(
-      (c) =>
-        `<tr data-find="culture:${esc(c.id)}"><td data-mlabel="${esc(t('th.id'))}" class="cu-id fs-xs" style="font-family:monospace;font-weight:500">${esc(c.id)}</td><td data-mlabel="${esc(t('th.type'))}">${ctBadge(c.type)}${c.type === 'SY' ? ' <span class="fs-micro" style="font-weight:600">' + syMl(c) + ' ml</span>' : ''}</td><td data-mlabel="${esc(t('th.species'))}">${spDot(c.species)}${esc(c.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${cultureStrainDisplay(c)}</td><td class="fs-micro" data-mlabel="${esc(t('th.parent'))}" style="font-family:monospace;color:var(--c-text-muted)">${esc(c.parentId) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(c.created)}</td><td data-mlabel="${esc(t('th.status'))}" class="cu-status">${csBadge(c.status)}</td><td class="fs-xs" data-mlabel="${esc(t('th.notes'))}" style="color:var(--c-text-sec);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.notes) || '\u2014'}</td><td class="cu-actions" style="white-space:nowrap"><select class="fs-xs" onchange="setCultureStatus('${esc(c.id)}',this.value)" style="width:auto;padding:2px 5px"><option value="active" ${c.status === 'active' ? 'selected' : ''}>${t('lab.active')}</option><option value="stored" ${c.status === 'stored' ? 'selected' : ''}>${t('lab.stored')}</option><option value="used" ${c.status === 'used' ? 'selected' : ''}>${t('lab.usedUp')}</option><option value="sold" ${c.status === 'sold' ? 'selected' : ''}>${t('lab.sold')}</option><option value="contam" ${c.status === 'contam' ? 'selected' : ''}>${t('lab.contaminated')}</option></select> <button class="btn btn-sm" onclick="quickPrintCulture('${esc(c.id)}')" title="${t('lab.print')}" style="padding:2px 6px">${t('lab.print')}</button> <button class="btn btn-sm btn-r" onclick="deleteCulture('${esc(c.id)}')" title="${t('lab.deleteCulture')}" style="padding:2px 6px">\u2715</button></td></tr>`
-    )
-    .join('');
+  const mehr = e.target.closest('[data-kb-mehr]');
+  if (mehr) {
+    _kb.mehr[mehr.dataset.kbMehr] = true;
+    return renderCultures();
+  }
+  const k = e.target.closest('[data-kb-id]');
+  const c = k && cultures.find((x) => x.id === k.dataset.kbId);
+  if (c) openCultureSheet(c);
+}
+function kbErledigt() {
+  _kb.erledigt = !_kb.erledigt;
+  _kb.offen = null;
+  renderCultures();
 }
 function setCultureStatus(id, status) {
   const c = cultures.find((x) => x.id === id);
@@ -21650,37 +21761,6 @@ function setCultureStatus(id, status) {
     }
   });
 }
-function deleteCulture(id) {
-  const c = cultures.find((x) => x.id === id);
-  if (!c) return;
-  const childCount = cultures.filter((x) => x.parentId === id).length;
-  const batchCount = batches.filter((b) => b.sourceId === id).length;
-  let warning = '';
-  if (childCount || batchCount) {
-    const parts = [];
-    if (childCount) parts.push(t('lab.deleteChildren', { n: childCount }));
-    if (batchCount) parts.push(t('lab.deleteBatches', { n: batchCount }));
-    warning = ' \u26A0 ' + parts.join(' ') + ' ' + t('lab.deleteRefWarn');
-  }
-  confirm2(
-    t('lab.deleteCultureTitle'),
-    t('lab.deleteCultureMsg', { id: id }) + warning,
-    t('lab.deleteCulture'),
-    async () => {
-      const r = await apiDelete('/api/cultures/' + encodeURIComponent(id));
-      if (r && r.error) {
-        setFb('err', t('common.error') + ': ' + r.error);
-        return;
-      }
-      cultures = cultures.filter((x) => x.id !== id);
-      renderCultures();
-      renderLabLog();
-      fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
-      fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
-    }
-  );
-}
-
 // ─── LAB WORK ────────────────────────────────────────────────
 // Woraus eine Laborarbeit angesetzt werden darf, je Art. Dieselben Regeln wie
 // VALID_CULTURE_PARENT_TYPES in db.js — standen hier andere, bot das Formular
@@ -27028,6 +27108,15 @@ function renderCiActions(c) {
   html += '</div>';
   if (aktiv)
     html += `<button type="button" data-bi="ci-contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('ci.contam'))}</button>`;
+  // Was die Tabelle der Kulturbibliothek je Zeile hatte: drucken, löschen, und
+  // eine erledigte wieder in den Bestand holen, wenn sie doch noch da ist.
+  if (!aktiv)
+    html += `<button type="button" data-bi="ci-active" class="fs-base" style="${big};padding:13px;background:var(--c-primary-light);color:var(--c-primary);border:1px solid var(--c-border)">${esc(t('ci.backActive'))}</button>`;
+  html += '<div style="display:flex;gap:8px">';
+  html += `<button type="button" data-bi="ci-print" class="fs-base" style="${sec};color:var(--c-text)">${esc(t('ci.print'))}</button>`;
+  if (_lbDarfWeg(c))
+    html += `<button type="button" data-bi="ci-delete" class="fs-base" style="${sec};color:var(--c-red-dark)">${esc(t('ci.delete'))}</button>`;
+  html += '</div>';
   el.innerHTML = html;
 }
 // Ein Tipp, mit Rückgängig unten — wie überall, wo etwas aus dem System geht.
@@ -27045,7 +27134,10 @@ function ciAction(a) {
   if (a === 'ci-out') return ciSetStatus('used', 'ci.outDone');
   if (a === 'ci-sold') return ciSetStatus('sold', 'ci.soldDone');
   if (a === 'ci-contam') return ciSetStatus('contam', 'ci.contamDone');
+  if (a === 'ci-active') return ciSetStatus('active', 'ci.activeDone');
   document.getElementById('m-baginfo').classList.remove('open');
+  if (a === 'ci-print') return quickPrintCulture(c.id);
+  if (a === 'ci-delete') return kulturenLoeschen([c]);
   if (a === 'ci-lineage') {
     go('lab', 'n-lab');
     openStab('lab', 'lineage');
@@ -29968,10 +30060,10 @@ const GS_TYPES = [
     type: 'culture',
     group: 'search.gCultures',
     mono: true,
-    clear: () => gsSetValue(['cult-type', 'cult-stat'], 'all'),
-    go: () => {
+    go: (rec) => {
       gsNav('n-lab', 'lab');
       gsStab('lab', 'cultures');
+      kbZeige(rec.id);
     },
     flash: true
   },
@@ -32217,8 +32309,9 @@ function initEventListeners() {
   if ($('ms-q-sy')) $('ms-q-sy').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-multi')) $('ms-q-multi').addEventListener('input', () => msQuickPreview());
   if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
-  $('cult-type').addEventListener('change', renderCultures);
-  $('cult-stat').addEventListener('change', renderCultures);
+  $('kb-list').addEventListener('click', kbKlick);
+  $('kb-scan').addEventListener('click', kbScan);
+  $('kb-erledigt').addEventListener('click', kbErledigt);
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => {
     const type = document.getElementById('lw-type').value;

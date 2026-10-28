@@ -123,7 +123,6 @@ describe('the cards a table becomes on a phone', () => {
     assert.deepEqual(marked, [
       't-batches',
       't-catalog',
-      't-cultures',
       't-customers',
       't-demand',
       't-grain',
