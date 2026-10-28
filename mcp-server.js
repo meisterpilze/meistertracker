@@ -457,7 +457,6 @@ function createMcpServer(database, onWrite, printer) {
     { date: z.string().optional().describe('ISO date (YYYY-MM-DD), defaults to today') },
     async ({ date }) => {
       const batches = db.getAllBatches(database);
-      const scanLog = db.getScanLog(database);
       // The same filter GET /api/data applies. Without it this briefing was the
       // way around it: it hands back task text grouped by assignee, and an MCP
       // token is something any worker can mint for themselves through the OAuth
@@ -469,8 +468,9 @@ function createMcpServer(database, onWrite, printer) {
       const calendarEvents = db.getCalendarEvents(database);
       const target = date || today();
 
-      // Batches due today or overdue
-      const bagLoc = buildBagLocationMap(scanLog);
+      // Batches due today or overdue. A contaminated bag is not an active one:
+      // a batch with only those left is nothing to act on.
+      const bagLoc = db.getStockBagZoneMap(database);
       const dueToday = [];
       const overdue = [];
       for (const b of batches) {

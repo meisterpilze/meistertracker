@@ -3827,6 +3827,23 @@ function getBagZoneMap(db) {
   return cached;
 }
 
+/** The bags that count as stock: placed in a zone, and that zone is not a
+ * contamination zone. A contaminated bag still sits somewhere, but it is
+ * nobody's stock — no strain total, no kg on hand, nothing a shop may sell
+ * may count it. Per-zone views (zone overview, KPI role counts) read
+ * getBagZoneMap instead, since they are meant to show the contam zone. */
+function getStockBagZoneMap(db) {
+  const contam = new Set(
+    db
+      .prepare("SELECT id FROM zones WHERE role = 'contaminated'")
+      .all()
+      .map((z) => z.id)
+  );
+  const out = new Map();
+  for (const [bag, zone] of getBagZoneMap(db)) if (!contam.has(zone)) out.set(bag, zone);
+  return out;
+}
+
 /** Apply a single scan_log entry to the cache (incremental update path).
  * Called from every write site that inserts into scan_log so consumers
  * never have to re-scan the table. */
@@ -13222,12 +13239,13 @@ function setSyringeStockSyncEnabled(db, on) {
  * ueber den Namen, Spritzen ohne Groesse als 10er.
  */
 // Koernerbrut, die verkauft werden kann: Beutel einer Verkaufsgroesse, die
-// noch im Regal stehen (zuletzt hinein- oder umgescannt, nicht heraus), je Art
+// noch im Regal stehen (zuletzt hinein- oder umgescannt, nicht heraus, nicht
+// in die Kontamination), je Art
 // und Groesse. Fertig ist ein Beutel ab dem Faelligkeitstag seiner Charge;
 // davor waechst er, und das steht daneben, mit dem Tag, an dem der erste
 // fertig wird. Eine Charge ohne Art zaehlt nicht: sie gehoert zu keinem Artikel.
 function _grainSaleStock(db, nowIso) {
-  const imRegal = getBagZoneMap(db);
+  const imRegal = getStockBagZoneMap(db);
   const out = new Map();
   const rows = db
     .prepare(
@@ -13449,10 +13467,11 @@ function saleAlerts(db, now = new Date()) {
 }
 
 // Koernerbrut im Regal je Art in kg, alle Beutelgroessen: was fertig ist und
-// was noch waechst. Der Vorrat fuer die Bloecke, gegen min_spawn_kg; die
+// was noch waechst, ohne die in der Kontamination. Der Vorrat fuer die
+// Bloecke, gegen min_spawn_kg; die
 // Beutel, die ein Shop verkauft, zaehlt _grainSaleStock je Groesse.
 function _grainKgOnShelf(db, nowIso) {
-  const imRegal = getBagZoneMap(db);
+  const imRegal = getStockBagZoneMap(db);
   const out = new Map();
   const rows = db
     .prepare(
@@ -14032,6 +14051,7 @@ module.exports = {
   checkDiskSpace,
   getDataVersion,
   getBagZoneMap,
+  getStockBagZoneMap,
   invalidateBagZoneCache,
   zoneIdOfLocation,
   readCaldavConfig,
