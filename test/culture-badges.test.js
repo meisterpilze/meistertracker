@@ -42,18 +42,22 @@ function loadBadges() {
   };
   const escSrc = grab(/function esc\(s\) \{[\s\S]*?\n\}/, 'esc()');
   const ctSrc = grab(/const ctBadge = \(t\) => \{[\s\S]*?\n\};/, 'ctBadge');
-  const row = [
-    grab(/^const KB_STATUS = .*;$/m, 'KB_STATUS'),
-    grab(/^const _kb = .*;$/m, '_kb'),
-    grab(/function _kbKulturHtml\(c\) \{[\s\S]*?\n\}/, '_kbKulturHtml()')
-  ].join('\n');
+  // The Sortenliste and its Kulturbibliothek description, as they stand.
+  const a = src.indexOf('// ── Sortenliste ──');
+  const b = src.indexOf('// ── Chargen ──', a);
+  assert.ok(a > 0 && b > a, 'could not find the Sortenliste block in app.js — has it been renamed?');
   return new Function(
     escSrc +
       '\n' +
       ctSrc +
-      '\nconst t = (k) => k;\nconst syMl = () => 10;\n' +
-      row +
-      '\n_kb.erledigt = true;\nreturn { esc, ctBadge, kulturZeile: _kbKulturHtml };'
+      '\nconst t = (k) => k;\nconst syMl = () => 10;\nconst cultures = [];\nconst mushroomStrains = [];\n' +
+      grab(/function _spKey\(s\) \{[\s\S]*?\n\}/, '_spKey()') +
+      '\n' +
+      grab(/function sorteKey\(rec\) \{[\s\S]*?\n\}/, 'sorteKey()') +
+      '\n' +
+      src.slice(a, b) +
+      '\n_slStand(SL_KULTUREN).archiv = true;' +
+      '\nreturn { esc, ctBadge, kulturZeile: (c) => _slEintragHtml(SL_KULTUREN, c) };'
   )();
 }
 

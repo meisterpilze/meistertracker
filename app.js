@@ -1498,7 +1498,6 @@ function openStab(page, sub) {
   const snEl = document.getElementById(`sn-${page}-${sub}`);
   if (snEl) snEl.classList.add('active');
   if (page === 'batch' && sub === 'list') {
-    renderSorteTiles();
     renderBatches();
   }
   // Painted on arrival rather than on every sync: renderStatus() walks the whole
@@ -3276,18 +3275,6 @@ const genBatchId = (sp, d) => {
     }, 0);
   return prefix + String(n + 1).padStart(2, '0');
 };
-const sbadge = (s) => {
-  const m = {
-    INCUBATING: 'b-inc',
-    FRUITING: 'b-tent',
-    'SPAWN RUN': 'b-spawn',
-    CONTAM: 'b-contam',
-    DONE: 'b-done',
-    EMPTY: 'b-done'
-  };
-  return `<span class="badge ${m[s] || 'b-done'}">${s}</span>`;
-};
-
 // ─── STATUS CALC ─────────────────────────────────────────────
 // I-10/I-14/I-21: derive zone counts from the *last* event per bag instead
 // of incrementally counting deltas. This naturally handles out-of-order
@@ -3660,164 +3647,6 @@ function sorteRollup() {
   // list below; it still belongs on the card, because "there is spawn ready and
   // no blocks made from it" is precisely a thing worth seeing.
   return out;
-}
-
-// Sort order for the tiles. Urgency first by default — the whole point of the
-// card is that the Sorte needing a batch is the one you see without looking.
-let batchTileSort = localStorage.getItem('mp-batch-tile-sort') || 'urgency';
-let batchLegendOpen = false;
-function _sortSorten(rows) {
-  const by = batchTileSort;
-  const byName = (a, b) => a.name.localeCompare(b.name, loc(), { sensitivity: 'base' });
-  return [...rows].sort((a, b) => {
-    if (by === 'bags') return b.bags - a.bags || byName(a, b);
-    if (by === 'name') return byName(a, b);
-    return SUPPLY_RANK[a.supply] - SUPPLY_RANK[b.supply] || a.incubation - b.incubation || byName(a, b);
-  });
-}
-
-function _stageSeg(v, total, varName) {
-  return v ? `<i style="width:${(v / Math.max(total, 1)) * 100}%;background:var(${varName})"></i>` : '';
-}
-// `shown` is how the figure reads; `v` still decides whether there is one at
-// all. Grain is a weight, so three bags of 1.2 kg is 3.5999999999999996 in IEEE
-// 754 and was rendered at that length in 15px bold — but fmtKg(0) is "0,0",
-// which is truthy, so formatting first would print a zero where the dash goes.
-function _stageNum(v, varName, label, shown) {
-  return (
-    `<span class="tstage"><b style="color:${v ? 'var(' + varName + ')' : 'var(--c-text-muted)'}">${v ? esc(shown == null ? v : shown) : '–'}</b>` +
-    `<i>${esc(label)}</i></span>`
-  );
-}
-// The bar and the numbers under it are blocks, and only blocks, so the widths
-// mean something and the three figures can be compared with each other. Grain
-// is a weight, so it is labelled and formatted as one — see sorteRollup().
-function _sorteTileBody(r) {
-  return (
-    `<span class="stile-big"><b>${r.bags}</b><span>${esc(tp('batch.bagsNBatches', r.nBatches))}</span></span>` +
-    `<span class="sbar">${_stageSeg(r.incubation, r.bags, '--st-inc')}${_stageSeg(r.fruiting, r.bags, '--st-fruit')}</span>` +
-    `<span class="tstages">${_stageNum(r.grain, '--st-spawn', t('batch.grainStockKg'), fmtKg(r.grain, 1))}${_stageNum(r.incubation, '--st-inc', t('stage.incubation'))}${_stageNum(r.fruiting, '--st-fruit', t('stage.fruiting'))}</span>`
-  );
-}
-
-function renderSorteTiles() {
-  const el = document.getElementById('batch-sorten');
-  if (!el) return;
-  // nAll counts block batches only, so filtering on it alone dropped exactly
-  // the case the rollup comment promises to show: grain made, no blocks yet.
-  const rows = _sortSorten(sorteRollup().filter((r) => r.nAll > 0 || r.grain > 0));
-  // A Sorte whose last Charge was just deleted loses its tile, and with it the
-  // only control that clears this filter — leaving a table reading "keine
-  // Treffer" with nothing on screen to say why. If the selection is gone, the
-  // filter goes with it.
-  if (batchSorteFilter && !rows.some((r) => r.key === batchSorteFilter)) batchSorteFilter = '';
-  if (!rows.length) {
-    // Auch der leere Stand ist ein Stand. Ohne diese Zeile blieb der
-    // Fingerabdruck auf dem letzten gefuellten Aufbau stehen: kommen danach
-    // genau dieselben Daten zurueck, haelt die Abkuerzung unten den leeren
-    // Text fest, waehrend die Tabelle darunter jede Charge auflistet.
-    const leer = '<div class="empty">' + t(datenGeladen ? 'dash.noBatches' : 'common.loading') + '</div>';
-    el.__sortenFp = leer;
-    el.innerHTML = leer;
-    return;
-  }
-  const tot = rows.reduce(
-    (a, r) => {
-      a.grain += r.grain;
-      a.incubation += r.incubation;
-      a.fruiting += r.fruiting;
-      a.bags += r.bags;
-      a.nBatches += r.nBatches;
-      a.nAll += r.nAll;
-      return a;
-    },
-    { grain: 0, incubation: 0, fruiting: 0, bags: 0, nBatches: 0, nAll: 0 }
-  );
-  const nNow = rows.filter((r) => r.supply === 'now').length;
-  const nNoSpawn = rows.filter((r) => r.supply === 'nospawn').length;
-  const nOff = rows.filter((r) => r.supply === 'off').length;
-
-  const totalTile =
-    `<button type="button" class="stile stile-total${batchSorteFilter ? '' : ' on'}" data-action="sorte-all">` +
-    `<span class="stile-top"><span class="stile-name">${esc(t('batch.allSorten'))}</span>` +
-    `<span class="stile-kz">${rows.length}</span></span>` +
-    _sorteTileBody(tot) +
-    `<span class="stile-foot"><span class="stile-fs">${esc(t('batch.nTotalNArchived', { n: tot.nAll, a: tot.nAll - tot.nBatches }))}</span></span>` +
-    `</button>`;
-
-  const tiles = rows
-    .map((r) => {
-      const sel = batchSorteFilter === r.key;
-      const foot =
-        r.supply === 'ok' && r.nextDue
-          ? t('batch.nextDue', { d: fmtDt(r.nextDue) })
-          : r.lastDays != null
-            ? t('batch.lastAgo', { n: r.lastDays })
-            : '';
-      return (
-        `<button type="button" class="stile${sel ? ' on' : ''}${r.supply === 'now' ? ' urgent' : ''}${r.imProgramm ? '' : ' stile-off'}"` +
-        ` data-action="sorte-tile" data-sorte="${esc(r.key)}"` +
-        ` title="${esc(r.name + ' — ' + t('batch.supply.' + r.supply + 'Why'))}">` +
-        `<span class="stile-top"><span class="stile-name">${spDot(r.name)}${esc(r.name)}</span>` +
-        `<span class="stile-kz">${esc(r.kuerzel)}</span></span>` +
-        _sorteTileBody(r) +
-        `<span class="stile-foot"><span class="sup sup-${r.supply}">${esc(t('batch.supply.' + r.supply))}</span>` +
-        `<span class="stile-fs">${esc(foot)}</span></span>` +
-        `</button>`
-      );
-    })
-    .join('');
-
-  // Folded away by default: the tiles are the screen, this is the footnote, and
-  // a footnote that is always open is clutter you learn to skip past.
-  let legend =
-    `<button type="button" class="tlegend-btn" data-action="sorte-legend" aria-expanded="${batchLegendOpen}">` +
-    `<span class="tlegend-caret">${batchLegendOpen ? '▾' : '▸'}</span>${esc(t('batch.legendToggle'))}</button>`;
-  if (batchLegendOpen) {
-    const named = (k) => {
-      const n = rows.filter((r) => r.supply === k).map((r) => r.name);
-      return n.length ? ': <b>' + esc(n.join(', ')) + '</b>' : '';
-    };
-    legend +=
-      '<div class="tlegend">' +
-      ['now', 'nospawn', 'low', 'ok', 'off']
-        .map(
-          (k) =>
-            `<div><span class="sup sup-${k}">${esc(t('batch.supply.' + k))}</span> ${esc(t('batch.supply.' + k + 'Why'))}${named(k)}</div>`
-        )
-        .join('') +
-      `<div class="tlegend-note">${esc(t('batch.legendNote'))}</div>` +
-      '</div>';
-  }
-
-  const warn =
-    (nNow ? `<span class="sup sup-now">${esc(t('batch.nNeedStart', { n: nNow }))}</span>` : '') +
-    (nNoSpawn ? `<span class="sup sup-nospawn">${esc(t('batch.nNoSpawn', { n: nNoSpawn }))}</span>` : '') +
-    (nOff ? `<span class="sup sup-off">${esc(t('batch.nOffProgramme', { n: nOff }))}</span>` : '');
-
-  // translatePage() only walks static markup, and this card is rebuilt on every
-  // sync — so a data-i18n-aria-label here was replaced by the English literal
-  // beside it before it could ever be read. Every other string on the card goes
-  // through t(); this one now does too.
-  const html =
-    `<div class="sorten-head"><div class="sec" style="margin:0">${esc(t('batch.bySorte'))}</div>` +
-    `<div class="sorten-head-right">${warn}` +
-    `<select class="fs-meta" id="batch-tile-sort" aria-label="${esc(t('batch.tileSortAria'))}">` +
-    `<option value="urgency"${batchTileSort === 'urgency' ? ' selected' : ''}>${esc(t('batch.tileSortUrgency'))}</option>` +
-    `<option value="bags"${batchTileSort === 'bags' ? ' selected' : ''}>${esc(t('batch.tileSortBags'))}</option>` +
-    `<option value="name"${batchTileSort === 'name' ? ' selected' : ''}>${esc(t('batch.tileSortName'))}</option>` +
-    `</select></div></div>` +
-    `<div class="sorten-grid">${totalTile}${tiles}</div>` +
-    legend;
-
-  // renderStatus() runs on every SSE event and every 30s poll, and writing
-  // identical markup still tears out the <select> the user has open and drops
-  // focus mid-choice. renderBatches() next door keeps _rbLastRenderFp for this;
-  // comparing the string about to be written is the one fingerprint that cannot
-  // go stale, because it IS the output.
-  if (el.__sortenFp === html) return;
-  el.__sortenFp = html;
-  el.innerHTML = html;
 }
 
 function renderOverviewKPIs() {
@@ -4883,18 +4712,18 @@ function renderStatus() {
   // go() und refresh() die Betriebsseite kennen, zeichnet sie sich selbst.
   const panel = document.getElementById('sp-batch-locations');
   if (panel && !panel.classList.contains('active')) {
-    renderSorteTiles();
+    renderBatches();
     return;
   }
   if (!zones.length) {
     // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
     el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
-    renderSorteTiles();
+    renderBatches();
     return;
   }
   if (!batches.length) {
     el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
-    renderSorteTiles();
+    renderBatches();
     return;
   }
 
@@ -4948,7 +4777,7 @@ function renderStatus() {
   });
 
   el.innerHTML = html;
-  renderSorteTiles();
+  renderBatches();
   updateActionBar();
 }
 
@@ -8425,11 +8254,8 @@ function goToBatchesAttention(key) {
   const preset = BATCH_ATTENTION_PRESETS[key];
   if (!preset) return;
   batchAttentionFilter = { pred: preset.pred, label: t(preset.labelKey) };
-  // A Sorte tile left armed would narrow the list under a banner claiming to
-  // show every overdue batch.
-  batchSorteFilter = null;
-  const input = document.getElementById('batch-q');
-  if (input) input.value = '';
+  // Das Archiv zeigt nichts Überfälliges; der Filter gilt der laufenden Liste.
+  _slStand(SL_CHARGEN).archiv = false;
   go('batch', 'n-batch');
   openStab('batch', 'list');
 }
@@ -8460,24 +8286,23 @@ function renderBatchAttentionBanner() {
     `<button class="btn btn-sm fs-xs" data-action="clear-attention" style="padding:2px 8px;background:var(--c-amber-strong);color:#fff;border-color:transparent">${t('alert.filterShowAll')}</button>`;
 }
 
-// Navigate to a specific batch: filter the batches list, expand its bags row, and scroll it into view.
+// Zu einer Charge: ihre Sorte steht offen, die Zeile blinkt kurz. Körnerbrut
+// liegt im Labor, alles andere unter Chargen.
 function goToBatch(batchId) {
   batchAttentionFilter = null;
-  // The archive filter is deliberately bypassed when a query is present, but
-  // the Sorte filter is not — so a tile left armed on one Sorte swallowed every
-  // deep link to a batch of another, and the caller landed on "Keine Treffer"
-  // with nothing on screen naming the filter that did it.
-  batchSorteFilter = null;
-  const input = document.getElementById('batch-q');
-  if (input) input.value = batchId;
-  go('batch', 'n-batch');
-  openStab('batch', 'list');
+  const b = batches.find((x) => x.batchId === batchId);
+  if (b && b.batchType === 'grain') {
+    go('lab', 'n-lab');
+    openStab('lab', 'grain');
+    slZeige(SL_KOERNER, b);
+  } else {
+    go('batch', 'n-batch');
+    openStab('batch', 'list');
+    if (b) slZeige(SL_CHARGEN, b);
+    else renderBatches();
+  }
   setTimeout(() => {
-    if (!document.getElementById('brow-' + batchId)) {
-      const togBefore = document.getElementById('btog-' + batchId);
-      if (togBefore) toggleBatchBags(batchId);
-    }
-    const row = document.getElementById('btog-' + batchId)?.closest('tr');
+    const row = document.querySelector('[data-find="batch:' + CSS.escape(batchId) + '"]');
     if (row) {
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
       row.classList.add('batch-row-flash');
@@ -12068,7 +11893,7 @@ function openMoveBatchModal(batchId) {
 // data-sort on its headers is the whole job — the click wiring, the arrows and
 // the persistence are shared rather than copied per table, which is how batches
 // and cultures ended up with two near-identical listeners.
-const SORT_TABLES = { batches: 'batches-body', harvests: 'harvest-body', grain: 'grain-body' };
+const SORT_TABLES = { harvests: 'harvest-body' };
 const tableSort = (() => {
   const empty = {};
   for (const k in SORT_TABLES) empty[k] = null;
@@ -12124,15 +11949,6 @@ function updateSortIndicators(table, activeState) {
     arrow.textContent = active ? (activeState.dir === 'asc' ? ' \u25B2' : ' \u25BC') : ' \u21C5';
   });
 }
-// Guard renderBatches against unnecessary work. The dashboard polls
-// /api/data on every SSE event and re-runs renderBatches each time;
-// without this, a 200-batch table got fully regenerated (~80 ms on
-// low-end Android per the audit) even when nothing visible changed.
-// The fingerprint covers every input the row HTML depends on: filter
-// state, sort state, language, and per-batch fields (incl. the scan-
-// log-derived status). When it matches the last render, we skip the
-// rebuild entirely.
-let _rbLastRenderFp = null;
 // Archived = terminal/wrapped-up states. CONTAM lands here once bags are moved
 // to the contam zone (worker has acted; resolution is tracked in Contamination
 // reports). DONE/EMPTY = no active bags left. Pipeline KPIs still count these
@@ -12140,86 +11956,494 @@ let _rbLastRenderFp = null;
 const ARCHIVED_STATUSES = ['DONE', 'EMPTY', 'CONTAM'];
 const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
 
-// Grouping the list by stage reads well and used to be unconditional, which
-// quietly broke the thing next to it: renderBatches() sorted the rows, then
-// handed them to _groupBatchRows(), which re-bucketed them by stage. So a click
-// on Art or Menge only reordered rows *inside* Spawn / Inkubation / Fruchtung
-// and the list as a whole never moved — the sort looked broken because its
-// result was being thrown away.
+// ── Sortenliste ──
+// Eine Liste für drei Seiten: Kulturbibliothek, Körnerbrut und Chargen. Eine
+// Zeile je Sorte mit ihren Zahlen; ein Tipp klappt sie an Ort und Stelle auf,
+// nach Gruppen (Art oder Phase), eine Zeile je Eintrag; ein Tipp auf einen
+// Eintrag öffnet sein Fenster mit den Knöpfen. Oben der Scan-Knopf, was fertig
+// ist, hinter "Archiv". Jede Seite sagt nur, was ihre Einträge sind (SL_KULTUREN,
+// SL_KOERNER, SL_CHARGEN); wie die Liste aussieht und sich bedient, steht einmal
+// hier, damit die drei nicht auseinanderlaufen.
 //
-// Grouping is a setting now, defaulting to none. 'sorte' is the other useful
-// axis, and the one the tiles above are organised by.
-const BATCH_GROUP_MODES = ['none', 'sorte', 'stage'];
-let batchGroupBy = BATCH_GROUP_MODES.includes(localStorage.getItem('mp-batch-group')) ? localStorage.getItem('mp-batch-group') : 'none';
-// Set by tapping a Sorte tile; the tile and the list are one view of one thing.
-let batchSorteFilter = null;
-const BATCH_GROUP_ORDER = ['SPAWN RUN', 'INCUBATING', 'FRUITING', '__archived'];
-const BATCH_GROUP_LABEL = {
-  'SPAWN RUN': 'stage.spawn',
-  INCUBATING: 'stage.incubation',
-  FRUITING: 'stage.fruiting',
-  __archived: 'batch.filterArchived'
-};
-// Collapsed state per group. Archived starts closed — it is history, and over
-// time it can be a large share of the rows; everything else starts open.
-const _batchGroupClosed = { __archived: true };
-function toggleBatchGroup(key) {
-  _batchGroupClosed[key] = !_batchGroupClosed[key];
-  renderBatches();
-}
-function _batchGroupKey(status) {
-  return isArchivedStatus(status) ? '__archived' : status;
-}
-// `mode` defaults to 'stage' because the grain list in Labor calls this with no
-// second argument and wants exactly what it always got.
+// Vorher war jede der drei eine Tabelle: am Telefon Karten untereinander, mit
+// Filtern und einer Suche davor, die am Telefon kaum half.
 //
-// 'none' returns the rows untouched, in the order they arrived — which is the
-// order the column sort put them in, and the only mode in which that sort
-// decides anything.
-function _groupBatchRows(rows, mode) {
-  if (!rows.length) return '';
-  if (mode === 'none') return rows.map((r) => r.html).join('');
-  const bySorte = mode === 'sorte';
-  const groups = {};
-  const keyOf = (r) => (bySorte ? 'sorte:' + (r.sorte || '—') : _batchGroupKey(r.status));
-  const labelOf = new Map(rows.map((r) => ['sorte:' + (r.sorte || '—'), r.sorteName || '—']));
-  for (const r of rows) (groups[keyOf(r)] = groups[keyOf(r)] || []).push(r);
-  // By stage: the pipeline order, then anything unexpected rather than dropping
-  // it — a row nobody planned for must still be reachable. By Sorte: the order
-  // the rows arrived in, so sorting by Menge really does put the Sorte with the
-  // biggest batch on top instead of re-alphabetising behind your back.
-  const keys = bySorte
-    ? [...new Set(rows.map(keyOf))]
-    : BATCH_GROUP_ORDER.filter((k) => groups[k]).concat(
-        Object.keys(groups).filter((k) => !BATCH_GROUP_ORDER.includes(k))
-      );
-  let out = '';
-  for (const k of keys) {
-    const closed = !!_batchGroupClosed[k];
-    const label = BATCH_GROUP_LABEL[k] ? t(BATCH_GROUP_LABEL[k]) : bySorte ? labelOf.get(k) || k.slice(6) : k;
-    out +=
-      '<tr class="batch-group-row"><td colspan="12" style="padding:0;background:var(--c-bg)">' +
-      '<button type="button" class="fs-meta" data-action="batch-group" data-key="' +
-      esc(k) +
-      '" aria-expanded="' +
-      !closed +
-      '" style="width:100%;text-align:left;border:0;background:none;padding:6px 8px;cursor:pointer;font-family:inherit;font-weight:600;color:var(--c-text-sec);display:flex;align-items:center;gap:6px">' +
-      '<span class="fs-micro">' +
-      (closed ? '▸' : '▾') +
-      '</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-      esc(label) +
-      '</span><span style="color:var(--c-text-muted);font-weight:400">' +
-      groups[k].length +
-      '</span></button></td></tr>';
-    if (!closed) for (const r of groups[k]) out += r.html;
+// Eine Beschreibung (spec) hat: id (Präfix der Elemente #<id>-list, -count,
+// -archiv), find (Präfix für data-find), alle(), imArchiv(x), sorte(x) →
+// { key, name }, gruppe(x, archiv), gruppen(archiv) → [{ key, titel }],
+// ordnung und ordnungArchiv, chips(g), zeile(x, archiv) → { id, rechts },
+// zaehler(), leer(archiv, gefiltert), oeffnen(id); dazu wahlweise filter() und
+// unterzeile(g), und vorher(), das vor jedem Zeichnen läuft.
+// So viele Einträge einer Gruppe stehen offen da; der Rest auf einen Tipp. Ein
+// einzelner mehr wird nicht versteckt, ein "+ 1 weitere" spart nichts.
+const SL_ZEIGEN = 6;
+const _sl = {};
+const _slStand = (spec) => (_sl[spec.id] = _sl[spec.id] || { offen: null, archiv: false, mehr: {} });
+function slAlter(created) {
+  const tage = Math.floor((Date.now() - new Date(created).getTime()) / 864e5);
+  if (!Number.isFinite(tage) || tage < 1) return t('sl.today');
+  if (tage < 14) return t('sl.days', { n: tage });
+  return t('sl.weeks', { n: Math.floor(tage / 7) });
+}
+// Die Sorten der gerade gezeigten Seite, je mit ihren Gruppen.
+function _slGruppen(spec) {
+  const st = _slStand(spec);
+  const filter = spec.filter ? spec.filter() : null;
+  const m = new Map();
+  for (const x of spec.alle()) {
+    if (spec.imArchiv(x) !== st.archiv) continue;
+    if (filter && !filter(x)) continue;
+    const s = spec.sorte(x);
+    if (!m.has(s.key)) m.set(s.key, { key: s.key, name: s.name, teile: new Map() });
+    const g = m.get(s.key);
+    const gk = spec.gruppe(x, st.archiv);
+    if (!g.teile.has(gk)) g.teile.set(gk, []);
+    g.teile.get(gk).push(x);
   }
-  return out;
+  const ord = st.archiv ? spec.ordnungArchiv : spec.ordnung;
+  for (const g of m.values()) for (const l of g.teile.values()) l.sort(ord);
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, loc(), { sensitivity: 'base' }));
+}
+// Die Gruppen in der Reihenfolge der Beschreibung; eine, die sie nicht kennt,
+// kommt hinten dazu, statt zu verschwinden.
+function _slTeile(spec, g, archiv) {
+  const bekannt = spec.gruppen(archiv);
+  const keys = bekannt.map((x) => x.key).filter((k) => g.teile.has(k));
+  for (const k of g.teile.keys()) if (!keys.includes(k)) keys.push(k);
+  return keys.map((k) => ({ key: k, titel: (bekannt.find((x) => x.key === k) || {}).titel || k, liste: g.teile.get(k) }));
+}
+function _slEintragHtml(spec, x) {
+  const z = spec.zeile(x, _slStand(spec).archiv);
+  return (
+    `<button type="button" class="sl-eintrag" data-sl-id="${esc(z.id)}" data-find="${esc(spec.find + ':' + z.id)}">` +
+    `<span class="sl-id">${esc(z.id)}</span><span class="sl-r">${esc(z.rechts)}</span></button>`
+  );
+}
+function _slTeilHtml(spec, g, teil) {
+  const k = g.key + '|' + teil.key;
+  const alle = _slStand(spec).mehr[k] || teil.liste.length <= SL_ZEIGEN + 1;
+  const zeigen = alle ? teil.liste : teil.liste.slice(0, SL_ZEIGEN);
+  return (
+    `<div class="sl-teil"><div class="sl-teil-t">${esc(teil.titel)} <span>${teil.liste.length}</span></div>` +
+    zeigen.map((x) => _slEintragHtml(spec, x)).join('') +
+    (alle
+      ? ''
+      : `<button type="button" class="sl-mehr" data-sl-mehr="${esc(k)}">${esc(t('sl.more', { n: teil.liste.length - zeigen.length }))}</button>`) +
+    '</div>'
+  );
+}
+function _slSorteHtml(spec, g, offen) {
+  const archiv = _slStand(spec).archiv;
+  const chips = spec
+    .chips(g, archiv)
+    .map((c) => `<span class="sl-chip">${esc(c.text)} <b>${esc(c.n)}</b></span>`)
+    .join('');
+  const unter = !archiv && spec.unterzeile ? spec.unterzeile(g) : null;
+  return (
+    `<div class="sl-sorte${offen ? ' open' : ''}">` +
+    `<button type="button" class="sl-kopf" data-sl-sorte="${esc(g.key)}" aria-expanded="${offen}">` +
+    `<span class="sl-name">${spDot(g.name)}${esc(g.name)}` +
+    (unter ? `<small class="sup sup-${esc(unter.art)}">${esc(unter.text)}</small>` : '') +
+    `</span><span class="sl-chips">${chips}</span></button>` +
+    (offen
+      ? _slTeile(spec, g, archiv)
+          .map((teil) => _slTeilHtml(spec, g, teil))
+          .join('')
+      : '') +
+    '</div>'
+  );
+}
+function slRender(spec) {
+  const el = document.getElementById(spec.id + '-list');
+  if (!el) return;
+  if (spec.vorher) spec.vorher();
+  const st = _slStand(spec);
+  const imArchiv = spec.alle().filter(spec.imArchiv).length;
+  document.getElementById(spec.id + '-count').textContent = st.archiv
+    ? t('sl.inArchive', { n: imArchiv })
+    : spec.zaehler();
+  const ab = document.getElementById(spec.id + '-archiv');
+  ab.textContent = st.archiv ? t('sl.archiveBack') : t('sl.archive', { n: imArchiv });
+  ab.setAttribute('aria-pressed', String(st.archiv));
+  // Mit einem Filter (vom Dashboard: "überfällig") steht alles offen: es sind
+  // wenige, und gesucht war genau das.
+  const gefiltert = !!(spec.filter && spec.filter());
+  const gruppen = _slGruppen(spec);
+  const html = gruppen.length
+    ? gruppen.map((g) => _slSorteHtml(spec, g, gefiltert || st.offen === g.key)).join('')
+    : '<div class="empty">' + esc(spec.leer(st.archiv, gefiltert)) + '</div>';
+  // Gezeichnet wird bei jedem Sync und jedem Scan; gleiche Zeilen neu
+  // hineinzuschreiben nähme einem Daumen die Zeile weg, die er gerade trifft.
+  if (el.__slFp === html) return;
+  el.__slFp = html;
+  el.innerHTML = html;
+}
+function slKlick(spec, e) {
+  const st = _slStand(spec);
+  const kopf = e.target.closest('[data-sl-sorte]');
+  if (kopf) {
+    st.offen = st.offen === kopf.dataset.slSorte ? null : kopf.dataset.slSorte;
+    slRender(spec);
+    const neu = document.querySelector('#' + spec.id + '-list .sl-sorte.open');
+    if (neu && neu.scrollIntoView) neu.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  const mehr = e.target.closest('[data-sl-mehr]');
+  if (mehr) {
+    st.mehr[mehr.dataset.slMehr] = true;
+    return slRender(spec);
+  }
+  const x = e.target.closest('[data-sl-id]');
+  if (x) spec.oeffnen(x.dataset.slId);
+}
+function slArchiv(spec) {
+  const st = _slStand(spec);
+  st.archiv = !st.archiv;
+  st.offen = null;
+  slRender(spec);
+}
+// Ein Weg von außen (Suche, "Zur Charge") landet auf dem Eintrag: seine Sorte
+// steht offen, auch wenn er hinter "+ N weitere" oder im Archiv läge.
+function slZeige(spec, x) {
+  const st = _slStand(spec);
+  st.archiv = spec.imArchiv(x);
+  const key = spec.sorte(x).key;
+  st.offen = key;
+  st.mehr[key + '|' + spec.gruppe(x, st.archiv)] = true;
+  slRender(spec);
+}
+// Die Kamera wie der Scan-Knopf unten: ohne eine Aktion davor öffnet ein
+// gescanntes Etikett sein Fenster, eine Kultur ihres, ein Beutel seins.
+function slScan() {
+  scan.action = null;
+  scan.to = null;
+  scan.from = null;
+  updateSD();
+  openCamScan();
 }
 
-// One row of the batch table. Extracted from renderBatches so the grain list
-// in Labor renders identical rows rather than a divergent copy — and so this
-// template can be edited without splicing into the middle of a 3,000-character
-// literal, which is how it got corrupted once before.
+// ── Kulturbibliothek ──
+// Je Sorte, was von ihr da ist: Slants, Flüssigkultur, Petri, Spritzen, älteste
+// zuerst. Ein Tipp auf eine Kultur öffnet dasselbe Fenster wie ein Scan
+// (openCultureSheet), mit Verkaufen, Raus, Drucken und Löschen. Im Archiv steht,
+// was verbraucht, verkauft oder kontaminiert ist, die jüngste zuerst.
+const KB_ARTEN = ['MC', 'LC', 'PD', 'SY'];
+const KB_TITEL = { MC: 'lab.motherCultures', LC: 'lab.liquidCultures', PD: 'lab.petriDishes', SY: 'lab.syringes' };
+const KB_KURZ = { MC: 'lb.short.MC', LC: 'lb.short.LC', PD: 'lb.short.PD', SY: 'lb.short.SYall' };
+const KB_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
+const _kbDa = (c) => c.status === 'active' || c.status === 'stored';
+function _kbSorte(c) {
+  const ms = c.strainId ? (mushroomStrains || []).find((m) => m.id === c.strainId) : null;
+  return { key: sorteKey(c), name: (ms && ms.name) || sorteName(c) || '—' };
+}
+const _nachAlter = (a, b) => String(a.created).localeCompare(String(b.created));
+const _nachJung = (a, b) => String(b.created).localeCompare(String(a.created));
+const SL_KULTUREN = {
+  id: 'kb',
+  find: 'culture',
+  alle: () => cultures.filter((c) => KB_ARTEN.includes(c.type)),
+  imArchiv: (c) => !_kbDa(c),
+  sorte: _kbSorte,
+  gruppe: (c) => c.type,
+  gruppen: () => KB_ARTEN.map((a) => ({ key: a, titel: t(KB_TITEL[a]) })),
+  ordnung: _nachAlter,
+  ordnungArchiv: _nachJung,
+  chips: (g) =>
+    KB_ARTEN.filter((a) => g.teile.has(a)).map((a) => ({ text: t(KB_KURZ[a]), n: g.teile.get(a).length })),
+  zeile: (c, archiv) => {
+    const rechts = [];
+    if (c.type === 'SY') rechts.push(syMl(c) + ' ml');
+    if (archiv) rechts.push(t(KB_STATUS[c.status] || c.status));
+    else {
+      if (c.status === 'stored') rechts.push(t('lab.stored'));
+      rechts.push(slAlter(c.created));
+    }
+    return { id: c.id, rechts: rechts.join(' · ') };
+  },
+  zaehler: () => t('kb.count', { n: cultures.filter(_kbDa).length }),
+  leer: (archiv) => t(archiv ? 'sl.archiveEmpty' : 'lab.noCultures'),
+  oeffnen: (id) => {
+    const c = cultures.find((x) => x.id === id);
+    if (c) openCultureSheet(c);
+  }
+};
+function renderCultures() {
+  slRender(SL_KULTUREN);
+}
+function kbZeige(id) {
+  const c = cultures.find((x) => x.id === id);
+  if (c) slZeige(SL_KULTUREN, c);
+}
+
+// ── Chargen ──
+// Die Blöcke je Sorte, auf der Sortenliste wie die Kulturbibliothek: nach Phase,
+// die fälligste zuerst. Neben dem Namen steht, wenn einer Sorte der Nachschub
+// fehlt (sorteRollup, dieselbe Rechnung wie die Tagesliste). Im Archiv:
+// fertig, kontaminiert, ohne Beutel, die jüngste zuerst.
+const CH_PHASEN = [
+  ['INCUBATING', 'stage.incubation'],
+  ['FRUITING', 'stage.fruiting'],
+  ['SPAWN RUN', 'stage.spawn']
+];
+const CH_ARCHIV = [
+  ['DONE', 'sl.st.done'],
+  ['CONTAM', 'sl.st.contam'],
+  ['EMPTY', 'sl.st.empty']
+];
+const _chGruppen = (paare) => paare.map(([key, k]) => ({ key, titel: t(k) }));
+function _chPhase(status) {
+  const p = CH_PHASEN.concat(CH_ARCHIV).find(([k]) => k === status);
+  return p ? t(p[1]) : status;
+}
+const _chStatus = (b) => getStatus(b.batchId).status;
+const _chImArchiv = (b) => isArchivedStatus(_chStatus(b));
+const _chSorte = (b) => ({ key: sorteKey(b), name: sorteName(b) });
+// Beutel, die noch stehen: kein kontaminierter, keiner, der raus ist.
+function _chLebend(b) {
+  const s = _stageBagsOf(b);
+  return s.spawn + s.incubation + s.fruiting;
+}
+function _chFaellig(b) {
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  const due = new Date(b.due);
+  due.setHours(0, 0, 0, 0);
+  const n = Math.round((due - heute) / 864e5);
+  if (!Number.isFinite(n)) return '';
+  if (n < 0) return t('sl.overdue', { n: -n });
+  if (n === 0) return t('sl.dueToday');
+  return t('sl.due', { date: fmtDtShort(b.due) });
+}
+const _kgText = (n) => fmtKg(n, n % 1 ? 1 : 0) + ' kg';
+const _anzahl = (g) => [...g.teile.values()].reduce((s, l) => s + l.length, 0);
+let _chNachschub = new Map();
+const SL_CHARGEN = {
+  id: 'ch',
+  find: 'batch',
+  alle: () => batches.filter((b) => b.batchType !== 'grain'),
+  imArchiv: _chImArchiv,
+  sorte: _chSorte,
+  gruppe: (b) => _chStatus(b),
+  gruppen: (archiv) => _chGruppen(archiv ? CH_ARCHIV : CH_PHASEN),
+  ordnung: (a, b) => String(a.due).localeCompare(String(b.due)),
+  ordnungArchiv: _nachJung,
+  vorher: () => {
+    _chNachschub = new Map(sorteRollup().map((r) => [r.key, r.supply]));
+  },
+  chips: (g, archiv) => {
+    if (archiv) return [{ text: t('sl.ch.batches'), n: _anzahl(g) }];
+    let ink = 0;
+    let fr = 0;
+    for (const l of g.teile.values())
+      for (const b of l) {
+        const s = _stageBagsOf(b);
+        ink += s.spawn + s.incubation;
+        fr += s.fruiting;
+      }
+    return [ink && { text: t('sl.ch.inc'), n: ink }, fr && { text: t('sl.ch.fruit'), n: fr }].filter(Boolean);
+  },
+  unterzeile: (g) => {
+    const s = _chNachschub.get(g.key);
+    return s === 'now' || s === 'nospawn' ? { art: s, text: t('batch.supply.' + s) } : null;
+  },
+  zeile: (b, archiv) => {
+    const rechts = [t('sl.bags', { n: archiv ? b.qty : _chLebend(b) })];
+    if (archiv) rechts.push(fmtDtShort(b.created));
+    else rechts.push(_chStatus(b) === 'FRUITING' ? slAlter(b.created) : _chFaellig(b));
+    return { id: b.batchId, rechts: rechts.join(' · ') };
+  },
+  zaehler: () => t('ch.count', { n: batches.filter((b) => b.batchType !== 'grain' && !_chImArchiv(b)).length }),
+  leer: (archiv, gefiltert) => t(gefiltert ? 'dash.noMatches' : archiv ? 'sl.archiveEmpty' : 'dash.noBatches'),
+  filter: () => (batchAttentionFilter ? batchAttentionFilter.pred : null),
+  oeffnen: (id) => {
+    const b = batches.find((x) => x.batchId === id);
+    if (b) openChargeSheet(b);
+  }
+};
+function renderBatches() {
+  renderBatchAttentionBanner();
+  slRender(SL_CHARGEN);
+}
+
+// ── Körnerbrut ──
+// Die Gläser je Sorte, auf derselben Liste: was fertig ist und was noch wächst,
+// in kg, das älteste zuerst, denn das ist als nächstes dran. Ein Tipp öffnet
+// dasselbe Fenster wie eine Charge.
+const _grFertig = (b) => !b.due || new Date(b.due).getTime() <= Date.now();
+const SL_KOERNER = {
+  id: 'gr',
+  find: 'batch',
+  alle: () => batches.filter((b) => b.batchType === 'grain'),
+  imArchiv: _chImArchiv,
+  sorte: _chSorte,
+  gruppe: (b, archiv) => (archiv ? _chStatus(b) : _grFertig(b) ? 'fertig' : 'waechst'),
+  gruppen: (archiv) =>
+    archiv
+      ? _chGruppen(CH_ARCHIV)
+      : [
+          { key: 'fertig', titel: t('sl.gr.ready') },
+          { key: 'waechst', titel: t('sl.gr.growing') }
+        ],
+  ordnung: _nachAlter,
+  ordnungArchiv: _nachJung,
+  chips: (g, archiv) => {
+    if (archiv) return [{ text: t('sl.ch.batches'), n: _anzahl(g) }];
+    const kg = (k) => (g.teile.get(k) || []).reduce((s, b) => s + _grainKgOf(b), 0);
+    return [
+      ['fertig', 'sl.gr.readyShort'],
+      ['waechst', 'sl.gr.growingShort']
+    ]
+      .filter(([k]) => g.teile.has(k))
+      .map(([k, txt]) => ({ text: t(txt), n: _kgText(kg(k)) }));
+  },
+  zeile: (b, archiv) => {
+    const rechts = [];
+    if (archiv) rechts.push(fmtDtShort(b.created));
+    else {
+      rechts.push(_kgText(_grainKgOf(b)));
+      rechts.push(_grFertig(b) ? slAlter(b.created) : t('sl.gr.readyOn', { date: fmtDtShort(b.due) }));
+    }
+    return { id: b.batchId, rechts: rechts.join(' · ') };
+  },
+  zaehler: () =>
+    t('gr.count', {
+      kg: _kgText(
+        batches
+          .filter((b) => b.batchType === 'grain' && !_chImArchiv(b) && _grFertig(b))
+          .reduce((s, b) => s + _grainKgOf(b), 0)
+      )
+    }),
+  leer: (archiv) => t(archiv ? 'sl.archiveEmpty' : 'gr.none'),
+  oeffnen: (id) => SL_CHARGEN.oeffnen(id)
+};
+function renderGrainBatches() {
+  slRender(SL_KOERNER);
+}
+
+// Die Beutel einer Charge als Knöpfe, nach ihrem Platz: je Platz eine Zeile
+// mit der Zahl, darunter die Nummern. Stand als aufklappbare Zeile unter der
+// Tabellenzeile, je Beutel mit dem Platz daneben; im Fenster liefen zwanzig
+// Beutel so über eine ganze Seite. Ein Knopf, kein Text: er ist der Weg ins
+// Beutel-Fenster ohne Barcode, und dort liegen Umsetzen, Ernten, Melden und
+// die Geschichte. Am Laptop ist er der Weg hinein.
+let locColor = {};
+function _bagChipsHtml(b) {
+  const lastByBag = buildLastScanByBag();
+  const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
+  const plaetze = new Map();
+  for (const bag of b.bags) {
+    const last = lastByBag.get(bag.toUpperCase());
+    const raus = !!(last && last.action === 'REMOVE');
+    let loc = '—',
+      color = '#888';
+    if (raus) loc = t('bagInfo.removed');
+    else if (last && last.to) {
+      loc = zoneDisplayName(last.to);
+      color = locColor[toZone(last.to)] || '#888';
+    }
+    if (!plaetze.has(loc)) plaetze.set(loc, { color, raus, knoepfe: [] });
+    // Das Gewicht je Beutel nur, wenn die Charge verschiedene trägt.
+    const bw = b.bagWeights ? b.bagWeights[bag] : null;
+    const wTag =
+      bw != null && wVals.size > 1
+        ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:2px">${esc(String(bw).replace('.', ','))}kg</span>`
+        : '';
+    plaetze
+      .get(loc)
+      .knoepfe.push(
+        `<button type="button" class="bag-open-chip fs-micro" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-family:monospace;padding:3px 8px;border-radius:5px;background:#fff;border:1px solid var(--c-border);cursor:pointer${raus ? ';text-decoration:line-through;opacity:.5' : ''}">${esc(bag.split('-').pop())}${wTag}</button>`
+      );
+  }
+  return (
+    '<div style="margin-bottom:12px">' +
+    [...plaetze]
+      .map(
+        ([loc, p]) =>
+          `<div class="fs-meta" style="margin:8px 0 4px;font-weight:600;color:${p.raus ? 'var(--c-text-muted)' : p.color}">${esc(loc)} · ${p.knoepfe.length}</div>` +
+          `<div style="display:flex;flex-wrap:wrap;gap:4px">${p.knoepfe.join('')}</div>`
+      )
+      .join('') +
+    '</div>'
+  );
+}
+
+// ── Das Chargen-Fenster ──
+// Ein Tipp auf eine Charge öffnet, was die Zeile der alten Tabelle trug: woraus
+// sie ist, wo ihre Beutel stehen, und Umziehen, Beutel dazu, Notiz, Löschen. Im
+// selben Fenster wie Beutel und Kultur (m-baginfo), mit eigenen Knöpfen
+// (data-bi="ch-…").
+let chBatchId = null;
+function openChargeSheet(b) {
+  biBagId = null;
+  biBatchId = null;
+  ciCultureId = null;
+  chBatchId = b.batchId;
+  const { status } = getStatus(b.batchId);
+  const name = sorteName(b);
+  const met = (k, v) =>
+    `<div class="met"><div class="met-l">${esc(k)}</div><div class="fs-base" style="font-weight:600">${v}</div></div>`;
+  const groessen = b.batchType === 'grain' ? grainSizeSummary(b) : null;
+  const sub = groessen
+    ? groessen.join(' · ')
+    : b.substrate
+      ? 'HW ' +
+        b.substrate.hardwood +
+        '% · WB ' +
+        b.substrate.wheatbran +
+        '%' +
+        (b.substrate.rh ? ' · RH ' + b.substrate.rh + '%' : '') +
+        (b.substrate.gypsum ? ' · Gypsum' : '')
+      : '—';
+  const quelle = [b.sourceId].concat(spawnSourceFor(b.batchId)).filter(Boolean);
+  document.getElementById('bi-title').textContent = b.batchId;
+  document.getElementById('bi-body').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">' +
+    met(t('batch.species'), spDot(name) + esc(name)) +
+    met(t('batch.strain'), (b.strainText || '').trim() ? esc(b.strainText.trim()) : '—') +
+    met(t('ch.phase'), esc(_chPhase(status))) +
+    met(t('ch.bagsLive'), esc(_chLebend(b) + ' / ' + b.qty)) +
+    met(t('ci.created'), esc(fmtDt(b.created))) +
+    met(t('th.due'), esc(fmtDt(b.due))) +
+    met(groessen ? t('ch.sizes') : t('th.substrate'), esc(sub) + _batchIstRhTag(b)) +
+    met(
+      t('th.source'),
+      quelle.length ? `<span style="font-family:monospace">${esc(quelle.join(', '))}</span>` : '—'
+    ) +
+    '</div>' +
+    (b.notes ? `<div class="fs-meta" style="margin-bottom:10px;white-space:pre-wrap">${esc(b.notes)}</div>` : '') +
+    `<div class="fs-meta muted" style="margin-bottom:6px">${esc(t('ch.bagsTitle'))}</div>` +
+    _bagChipsHtml(b);
+  renderChActions(b, status);
+  document.getElementById('m-baginfo').classList.add('open');
+}
+function renderChActions(b, status) {
+  const el = document.getElementById('bi-actions');
+  if (!el) return;
+  // Dieselben Formen wie renderCiActions.
+  const big =
+    'width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px;border-radius:12px;border:0;font-weight:600;margin-bottom:8px;cursor:pointer';
+  const sec =
+    'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
+  let html = '';
+  if (status !== 'DONE')
+    html += `<button type="button" data-bi="ch-move" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-primary);color:#fff">${esc(t('batch.moveTo'))}</button>`;
+  html += '<div style="display:flex;gap:8px;margin-bottom:8px">';
+  html += `<button type="button" data-bi="ch-bags" class="fs-base" style="${sec};color:var(--c-text)">${esc(t('batch.addBags'))}</button>`;
+  html += `<button type="button" data-bi="ch-note" class="fs-base" style="${sec};color:var(--c-text)">${esc(t(b.notes ? 'ch.editNote' : 'batch.addNote'))}</button>`;
+  html += '</div>';
+  html += `<button type="button" data-bi="ch-del" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('batch.del'))}</button>`;
+  el.innerHTML = html;
+}
+function chAction(a) {
+  const id = chBatchId;
+  if (!id) return;
+  document.getElementById('m-baginfo').classList.remove('open');
+  if (a === 'ch-move') return openMoveBatchModal(id);
+  if (a === 'ch-bags') return openAddBags(id);
+  if (a === 'ch-note') return openNote(id);
+  if (a === 'ch-del') return delBatch(id);
+}
+
 // Woraus eine Charge besteht: Größe → wie viele Beutel davon.
 //
 // Eine Charge Körnerbrut darf mehr als eine Größe tragen, und beides, was man
@@ -12262,249 +12486,6 @@ function _batchIstRhTag(b) {
   const sb = b.substrateSubId ? (_sbList || []).find((x) => x.subId === b.substrateSubId) : null;
   if (!sb || sb.actualRhPct == null) return '';
   return `<span class="sub-tag" style="background:var(--c-blue-light);color:var(--c-blue-dark)">${esc(t('bagInfo.rhActual'))} ${esc(fmtKg(sb.actualRhPct, 1))}%</span>`;
-}
-function batchRowHtml(b) {
-      const { status } = getStatus(b.batchId);
-      const _grainSizes = b.batchType === 'grain' ? grainSizeSummary(b) : null;
-      const sub = _grainSizes
-        ? _grainSizes.map((x) => `<span class="sub-tag">${esc(x)}</span>`).join('')
-        : b.substrate
-        ? [
-            `<span class="sub-tag">HW ${b.substrate.hardwood}% WB ${b.substrate.wheatbran}%</span>`,
-            b.substrate.rh ? `<span class="sub-tag">RH ${b.substrate.rh}%</span>` : '',
-            // Was am Ansatz gemessen wurde, neben dem Soll: die eine Zahl, nach
-            // der man bei einer auffälligen Charge zuerst sucht.
-            _batchIstRhTag(b),
-            b.substrate.gypsum
-              ? `<span class="sub-tag" style="background:var(--c-primary-light);color:var(--c-green-dark)">Gypsum</span>`
-              : ''
-          ].join('')
-        : '<span class="fs-xs" style="color:#ccc">—</span>';
-      // Source is two things now: the culture on the batch row, and any grain
-      // bags written off for it (recorded in the scan log, not on the batch).
-      const _spawn = spawnSourceFor(b.batchId);
-      const _srcParts = [];
-      if (b.sourceId)
-        _srcParts.push(`<span class="fs-micro" style="font-family:monospace;color:var(--c-purple-dark)">${esc(b.sourceId)}</span>`);
-      if (_spawn.length)
-        _srcParts.push(
-          `<span class="fs-micro" style="font-family:monospace;color:var(--c-text-sec)" title="${esc(_spawn.join(', '))}">${esc(_spawn[0])}${_spawn.length > 1 ? ' +' + (_spawn.length - 1) : ''}</span>`
-        );
-      const src = _srcParts.length
-        ? _srcParts.join('<br>')
-        : '<span class="fs-xs" style="color:#ccc">—</span>';
-      const note = b.notes
-        ? `<span class="fs-xs" style="color:var(--c-text-sec);cursor:pointer" data-action="open-note" data-batch="${esc(b.batchId)}">${esc(b.notes.length > 22 ? b.notes.slice(0, 22) + '\u2026' : b.notes)}</span>`
-        : `<span class="fs-xs" style="color:#bbb;cursor:pointer;font-style:italic" data-action="open-note" data-batch="${esc(b.batchId)}">${t('batch.addNote')}</span>`;
-      const bst = (b.strainText || '').trim();
-      const strainDisplay = bst ? esc(bst) : !b.strainId && b.strain ? esc(b.strain) : '—';
-      const canMove = status !== 'DONE';
-      const moveBtn = canMove
-        ? `<button class="btn btn-sm" data-action="open-move-modal" data-batch="${esc(b.batchId)}" style="margin-right:3px">&#10554; ${t('batch.moveTo')}</button>`
-        : '';
-      // data-mlabel attrs are surfaced as ::before labels in the mobile
-      // card layout (styles.css "Batches table — mobile card mode").
-      return {
-        status,
-        // Carried so _groupBatchRows() can bucket by Sorte without going back
-        // to `batches` for something the caller already had in hand. The key
-        // groups, the name labels — grouping on the raw species split one
-        // Sorte in two wherever a batch carried the " (KZ)" suffix.
-        sorte: sorteKey(b),
-        sorteName: sorteName(b),
-        html: `<tr><td data-mlabel="${esc(t('th.batchId'))}" class="bt-id fs-micro" style="font-family:monospace"><span data-action="toggle-bags" data-batch="${esc(b.batchId)}" style="cursor:pointer;user-select:none" id="btog-${esc(b.batchId)}">&#9654;</span> ${esc(b.batchId)}</td><td data-mlabel="${esc(t('th.species'))}" class="bt-species">${spDot(b.species)}${esc(b.species)}</td><td data-mlabel="${esc(t('th.strain'))}">${strainDisplay}</td><td data-mlabel="${esc(t('th.qty'))}">${b.qty}</td><td data-mlabel="${esc(t('th.inc'))}">${b.days}d</td><td data-mlabel="${esc(t('th.substrate'))}">${sub}</td><td data-mlabel="${esc(t('th.source'))}">${src}</td><td class="fs-micro" data-mlabel="${esc(t('th.created'))}" style="color:var(--c-text-muted)">${fmtDt(b.created)}</td><td class="fs-micro" data-mlabel="${esc(t('th.due'))}" style="color:var(--c-text-muted)">${fmtDt(b.due)}</td><td data-mlabel="${esc(t('th.status'))}" class="bt-status">${sbadge(status)}</td><td data-mlabel="${esc(t('th.notes'))}">${note}</td><td class="bt-actions" style="white-space:nowrap">${moveBtn}<button class="btn btn-sm" data-action="add-bags" data-batch="${esc(b.batchId)}" style="margin-right:3px">${t('batch.addBags')}</button><button class="btn btn-sm btn-r" data-action="del-batch" data-batch="${esc(b.batchId)}">${t('batch.del')}</button></td></tr>`
-      };
-}
-
-// Grain spawn, listed in Labor. Same rows as the batch table — it is the same
-// kind of object — but its own list, because making spawn is lab work and
-// mixing the jars in among the blocks made both harder to read.
-function renderGrainBatches() {
-  const body = document.getElementById('grain-body');
-  if (!body) return;
-  const q = (document.getElementById('grain-q')?.value || '').toLowerCase();
-  const rows = batches.filter((b) => {
-    if (b.batchType !== 'grain') return false;
-    return (
-      !q ||
-      b.batchId.toLowerCase().includes(q) ||
-      (b.species || '').toLowerCase().includes(q) ||
-      (b.strain || '').toLowerCase().includes(q)
-    );
-  });
-  updateSortIndicators('grain', tableSort.grain);
-  const sorted = applyTableSort(rows, tableSort.grain, (b, k) => {
-    if (k === 'status') return getStatus(b.batchId).status;
-    if (k === 'qty') return Number(b.qty) || 0;
-    return b[k];
-  });
-  // Grouped by stage like the batch list, so a jar still colonising and one
-  // ready to use are not read as the same thing.
-  body.innerHTML =
-    _groupBatchRows(sorted.map((b) => batchRowHtml(b))) ||
-    '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
-}
-function renderBatches() {
-  const q = (document.getElementById('batch-q').value || '').toLowerCase(),
-    body = document.getElementById('batches-body');
-  // Archive filter: 'active' (default) hides DONE/EMPTY/CONTAM, 'archived' shows
-  // only those, 'all' shows everything. A search query bypasses the filter so
-  // direct lookups (incl. goToBatch) always find the batch regardless of state.
-  const archiveFilter = document.getElementById('batch-archive-filter')?.value || 'active';
-  updateSortIndicators('batches', tableSort.batches);
-  renderBatchAttentionBanner();
-  if (!batches.length) {
-    if (_rbLastRenderFp !== 'no-batches') {
-      body.innerHTML = '<tr><td colspan="12" class="empty">' + t('dash.noBatches') + '</td></tr>';
-      _rbLastRenderFp = 'no-batches';
-    }
-    return;
-  }
-  const filtered = batches.filter((b) => {
-    // Grain spawn is lab work, not production — it lives under Labor now, so
-    // Chargen shows blocks only and stops being rows of jars mixed in with
-    // rows of blocks.
-    if (b.batchType === 'grain') return false;
-    const matchesQ =
-      !q ||
-      b.batchId.toLowerCase().includes(q) ||
-      (b.species || '').toLowerCase().includes(q) ||
-      (b.strain || '').toLowerCase().includes(q) ||
-      (b.strainName || '').toLowerCase().includes(q);
-    if (!matchesQ) return false;
-    // Set by a Sorte tile. Not bypassed by a search: the two narrow together,
-    // which is what "show me BO-... inside Blue Oyster" has to mean.
-    if (batchSorteFilter && sorteKey(b) !== batchSorteFilter) return false;
-    if (batchAttentionFilter && !batchAttentionFilter.pred(b)) return false;
-    // Skip archive filter when searching — explicit lookup wins over the toggle.
-    if (!q && archiveFilter !== 'all') {
-      const archived = isArchivedStatus(getStatus(b.batchId).status);
-      if (archiveFilter === 'active' && archived) return false;
-      if (archiveFilter === 'archived' && !archived) return false;
-    }
-    return true;
-  });
-  const sorted = applyTableSort(filtered, tableSort.batches, (b, k) => {
-    if (k === 'strain') return (b.strainText || '').trim() || (!b.strainId && b.strain ? b.strain : '');
-    if (k === 'status') return getStatus(b.batchId).status;
-    if (k === 'qty' || k === 'days') return Number(b[k]) || 0;
-    return b[k];
-  });
-  // Fingerprint: filter state + per-batch fields + status.  /  are
-  // unlikely to appear in real data so they're safe field/row separators.
-  const renderFp =
-    q +
-    '|' +
-    currentLang +
-    '|' +
-    archiveFilter +
-    '|' +
-    // Which stage groups are folded is part of what is on screen — leave it out
-    // and the early return below swallows every expand and collapse.
-    JSON.stringify(_batchGroupClosed) +
-    '|' +
-    batchGroupBy +
-    '|' +
-    (batchSorteFilter || '') +
-    '|' +
-    JSON.stringify(tableSort.batches || null) +
-    '|' +
-    (batchAttentionFilter ? batchAttentionFilter.label || 'flt' : '') +
-    '|' +
-    sorted
-      .map((b) => {
-        const s = getStatus(b.batchId).status;
-        const sub = b.substrate
-          ? b.substrate.hardwood +
-            ',' +
-            b.substrate.wheatbran +
-            ',' +
-            b.substrate.rh +
-            ',' +
-            (b.substrate.gypsum ? 1 : 0)
-          : '';
-        return [
-          b.batchId,
-          b.species,
-          b.qty,
-          b.days,
-          b.notes || '',
-          b.due,
-          b.created,
-          s,
-          b.strain || '',
-          b.strainId || '',
-          b.strainName || '',
-          b.strainText || '',
-          b.bagKg || '',
-          b.batchType || '',
-          b.sourceId || '',
-          sub
-        ].join('');
-      })
-      .join('');
-  if (renderFp === _rbLastRenderFp) return;
-  _rbLastRenderFp = renderFp;
-  // Each row is returned with its status so _groupBatchRows can bucket it by
-  // stage; the row markup itself is unchanged.
-  const _rows = sorted.map((b) => batchRowHtml(b));
-  body.innerHTML =
-    _groupBatchRows(_rows, batchGroupBy) || '<tr><td colspan="12" class="empty">' + t('dash.noMatches') + '</td></tr>';
-}
-let locColor = {};
-function toggleBatchBags(batchId) {
-  const existing = document.getElementById('brow-' + batchId);
-  if (existing) {
-    existing.remove();
-    document.getElementById('btog-' + batchId).innerHTML = '&#9654;';
-    return;
-  }
-  const b = batches.find((x) => x.batchId === batchId);
-  if (!b) return;
-  document.getElementById('btog-' + batchId).innerHTML = '&#9660;';
-  const parentRow = document.getElementById('btog-' + batchId).closest('tr');
-  const tr = document.createElement('tr');
-  tr.id = 'brow-' + batchId;
-  const td = document.createElement('td');
-  td.colSpan = 12;
-  td.style.cssText = 'background:var(--c-bg);padding:8px 12px';
-  const lastByBag = buildLastScanByBag();
-  td.innerHTML =
-    '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-    b.bags
-      .map((bag) => {
-        const last = lastByBag.get(bag.toUpperCase());
-        let loc = '—',
-          color = '#aaa';
-        if (last) {
-          if (last.action === 'REMOVE') {
-            loc = t('bagInfo.removed');
-            color = '#999';
-          } else if (last.to) {
-            loc = zoneDisplayName(last.to);
-            const z = toZone(last.to);
-            color = locColor[z] || '#888';
-          }
-        }
-        const num = bag.split('-').pop();
-        // Show per-bag weight if batch has mixed weights
-        const bw = b.bagWeights ? b.bagWeights[bag] : null;
-        const wVals = b.bagWeights ? new Set(Object.values(b.bagWeights)) : new Set();
-        const showW = bw != null && wVals.size > 1;
-        const wTag = showW
-          ? `<span class="fs-floor" style="--fs-own:8px;color:#888;margin-left:1px">${esc(String(bw).replace('.', ','))}kg</span>`
-          : '';
-        // A button, not a span: this chip is the only way into the bag sheet
-        // that does not involve a barcode, and the sheet is where moving,
-        // harvesting, reporting and the history live. On a laptop it is the way in.
-        return `<button type="button" class="bag-open-chip fs-micro" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-family:monospace;padding:3px 7px;border-radius:5px;background:#fff;border:1px solid var(--c-border);display:inline-flex;align-items:center;gap:3px;cursor:pointer${last && last.action === 'REMOVE' ? ';text-decoration:line-through;opacity:.5' : ''}">
-      ${esc(num)}${wTag} <span class="fs-floor" style="--fs-own:9px;color:${color};font-weight:600">${esc(loc)}</span>
-    </button>`;
-      })
-      .join('') +
-    '</div>';
-  tr.appendChild(td);
-  parentRow.after(tr);
 }
 let addBagsBatchId = null;
 let _lastNewBags = [];
@@ -21607,145 +21588,6 @@ function fillCultureSelect(id, types) {
   const cur = s.value;
   s.innerHTML = opts;
   if (cur) s.value = cur;
-}
-// ── Kulturbibliothek ──
-// Eine Zeile je Sorte, mit dem, was von ihr da ist; ein Tipp klappt ihre
-// Kulturen auf, nach Art, älteste zuerst, eine Zeile je Kultur. Ein Tipp auf
-// eine Kultur öffnet dasselbe Fenster wie ein Scan (openCultureSheet), mit
-// Verkaufen, Raus, Drucken und Löschen. Vorher stand hier eine Tabelle, am
-// Telefon 140 Karten untereinander mit zwei Filtern davor, und alles, was je
-// verbraucht wurde, mitten drin. Gesucht wird jetzt mit der Kamera; was
-// verbraucht, verkauft oder kontaminiert ist, steht hinter "Erledigte".
-const KB_ARTEN = ['MC', 'LC', 'PD', 'SY'];
-const KB_TITEL = { MC: 'lab.motherCultures', LC: 'lab.liquidCultures', PD: 'lab.petriDishes', SY: 'lab.syringes' };
-const KB_KURZ = { MC: 'lb.short.MC', LC: 'lb.short.LC', PD: 'lb.short.PD', SY: 'lb.short.SYall' };
-const KB_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
-// So viele Kulturen einer Art stehen offen da; der Rest auf einen Tipp. Eine
-// einzelne mehr wird nicht versteckt, ein "+ 1 weitere" spart nichts.
-const KB_ZEIGEN = 6;
-const _kb = { offen: null, erledigt: false, mehr: {} };
-const _kbDa = (c) => c.status === 'active' || c.status === 'stored';
-function _kbSorte(c) {
-  const ms = c.strainId ? (mushroomStrains || []).find((m) => m.id === c.strainId) : null;
-  const name = (ms && ms.name) || c.strainName || c.species || '\u2014';
-  return { key: c.strainId ? 'id:' + c.strainId : 'n:' + name, name };
-}
-function _kbAlter(created) {
-  const tage = Math.floor((Date.now() - new Date(created).getTime()) / 864e5);
-  if (!Number.isFinite(tage) || tage < 1) return t('kb.today');
-  if (tage < 14) return t('kb.days', { n: tage });
-  return t('kb.weeks', { n: Math.floor(tage / 7) });
-}
-// Die Sorten der gerade gezeigten Seite: im Bestand, oder die erledigten.
-function _kbGruppen() {
-  const m = new Map();
-  for (const c of cultures) {
-    if (_kbDa(c) === _kb.erledigt || !KB_ARTEN.includes(c.type)) continue;
-    const s = _kbSorte(c);
-    if (!m.has(s.key)) m.set(s.key, { ...s, arten: { MC: [], LC: [], PD: [], SY: [] } });
-    m.get(s.key).arten[c.type].push(c);
-  }
-  // Im Bestand die älteste oben: die ist als nächste dran. Bei den erledigten
-  // die jüngste: nach der sucht man.
-  const ord = (x, y) => String(x.created).localeCompare(String(y.created)) * (_kb.erledigt ? -1 : 1);
-  for (const g of m.values()) for (const a of KB_ARTEN) g.arten[a].sort(ord);
-  return [...m.values()].sort((x, y) => x.name.localeCompare(y.name, loc(), { sensitivity: 'base' }));
-}
-function _kbKulturHtml(c) {
-  const rechts = [];
-  if (c.type === 'SY') rechts.push(syMl(c) + ' ml');
-  if (_kb.erledigt) rechts.push(t(KB_STATUS[c.status] || c.status));
-  else {
-    if (c.status === 'stored') rechts.push(t('lab.stored'));
-    rechts.push(_kbAlter(c.created));
-  }
-  return (
-    `<button type="button" class="kb-kultur" data-kb-id="${esc(c.id)}" data-find="culture:${esc(c.id)}">` +
-    `<span class="kb-id">${esc(c.id)}</span><span class="kb-r">${esc(rechts.join(' · '))}</span></button>`
-  );
-}
-function _kbArtHtml(g, a) {
-  const liste = g.arten[a];
-  const k = g.key + '|' + a;
-  const alle = _kb.mehr[k] || liste.length <= KB_ZEIGEN + 1;
-  const zeigen = alle ? liste : liste.slice(0, KB_ZEIGEN);
-  return (
-    `<div class="kb-art"><div class="kb-art-t">${esc(t(KB_TITEL[a]))} <span>${liste.length}</span></div>` +
-    zeigen.map(_kbKulturHtml).join('') +
-    (alle
-      ? ''
-      : `<button type="button" class="kb-mehr" data-kb-mehr="${esc(k)}">${esc(t('kb.more', { n: liste.length - zeigen.length }))}</button>`) +
-    '</div>'
-  );
-}
-function _kbSorteHtml(g) {
-  const offen = _kb.offen === g.key;
-  const chips = KB_ARTEN.filter((a) => g.arten[a].length)
-    .map((a) => `<span class="kb-chip">${esc(t(KB_KURZ[a]))} <b>${g.arten[a].length}</b></span>`)
-    .join('');
-  return (
-    `<div class="kb-sorte${offen ? ' open' : ''}">` +
-    `<button type="button" class="kb-kopf" data-kb-sorte="${esc(g.key)}" aria-expanded="${offen}">` +
-    `<span class="kb-name">${spDot(g.name)}${esc(g.name)}</span><span class="kb-chips">${chips}</span></button>` +
-    (offen ? KB_ARTEN.filter((a) => g.arten[a].length).map((a) => _kbArtHtml(g, a)).join('') : '') +
-    '</div>'
-  );
-}
-function renderCultures() {
-  const el = document.getElementById('kb-list');
-  if (!el) return;
-  const da = cultures.filter(_kbDa).length;
-  document.getElementById('kb-count').textContent = t('kb.count', { n: da });
-  const eb = document.getElementById('kb-erledigt');
-  eb.textContent = _kb.erledigt ? t('kb.backToStock') : t('kb.done', { n: cultures.length - da });
-  eb.setAttribute('aria-pressed', String(_kb.erledigt));
-  const gruppen = _kbGruppen();
-  el.innerHTML = gruppen.length
-    ? gruppen.map(_kbSorteHtml).join('')
-    : '<div class="empty">' + esc(t(_kb.erledigt ? 'kb.noneDone' : 'lab.noCultures')) + '</div>';
-}
-// Die Kamera, wie der Scan-Knopf unten: ohne eine Aktion davor öffnet eine
-// gescannte Kultur ihr Fenster.
-function kbScan() {
-  scan.action = null;
-  scan.to = null;
-  scan.from = null;
-  updateSD();
-  openCamScan();
-}
-// Die globale Suche landet hier: die Kultur steht aufgeklappt da, auch wenn sie
-// hinter "+ N weitere" oder unter den erledigten läge.
-function kbZeige(id) {
-  const c = cultures.find((x) => x.id === id);
-  if (!c) return;
-  const s = _kbSorte(c);
-  _kb.erledigt = !_kbDa(c);
-  _kb.offen = s.key;
-  _kb.mehr[s.key + '|' + c.type] = true;
-  renderCultures();
-}
-function kbKlick(e) {
-  const kopf = e.target.closest('[data-kb-sorte]');
-  if (kopf) {
-    _kb.offen = _kb.offen === kopf.dataset.kbSorte ? null : kopf.dataset.kbSorte;
-    renderCultures();
-    const neu = document.querySelector('.kb-sorte.open');
-    if (neu && neu.scrollIntoView) neu.scrollIntoView({ block: 'nearest' });
-    return;
-  }
-  const mehr = e.target.closest('[data-kb-mehr]');
-  if (mehr) {
-    _kb.mehr[mehr.dataset.kbMehr] = true;
-    return renderCultures();
-  }
-  const k = e.target.closest('[data-kb-id]');
-  const c = k && cultures.find((x) => x.id === k.dataset.kbId);
-  if (c) openCultureSheet(c);
-}
-function kbErledigt() {
-  _kb.erledigt = !_kb.erledigt;
-  _kb.offen = null;
-  renderCultures();
 }
 function setCultureStatus(id, status) {
   const c = cultures.find((x) => x.id === id);
@@ -31478,6 +31320,7 @@ function initEventListeners() {
       return;
     }
     if (a.startsWith('ci-')) return ciAction(a);
+    if (a.startsWith('ch-')) return chAction(a);
     if (!biBatchId) return;
     if (a === 'harvest') return biOpenHarvest();
     if (a === 'contam') return biReportContam();
@@ -31998,35 +31841,17 @@ function initEventListeners() {
   });
   initDashCollapse();
 
-  // Batches — delegated actions for dynamically rendered rows + attention banner (CSP-safe)
+  // Chargen and Körnerbrut: the shared Sortenliste, delegated because it is
+  // rebuilt on every sync. The banner's button clears the dashboard filter.
   $('sp-batch-list').addEventListener('click', function (e) {
-    const el = e.target.closest('[data-action]');
-    if (!el) return;
-    const batch = el.dataset.batch;
-    switch (el.dataset.action) {
-      case 'batch-group':
-        toggleBatchGroup(el.dataset.key);
-        break;
-      case 'toggle-bags':
-        toggleBatchBags(batch);
-        break;
-      case 'open-note':
-        openNote(batch);
-        break;
-      case 'add-bags':
-        openAddBags(batch);
-        break;
-      case 'del-batch':
-        delBatch(batch);
-        break;
-      case 'open-move-modal':
-        openMoveBatchModal(batch);
-        break;
-      case 'clear-attention':
-        clearBatchAttentionFilter();
-        break;
-    }
+    if (e.target.closest('[data-action="clear-attention"]')) return clearBatchAttentionFilter();
+    if (e.target.closest('#ch-list')) slKlick(SL_CHARGEN, e);
   });
+  $('ch-scan').addEventListener('click', slScan);
+  $('ch-archiv').addEventListener('click', () => slArchiv(SL_CHARGEN));
+  $('gr-list').addEventListener('click', (e) => slKlick(SL_KOERNER, e));
+  $('gr-scan').addEventListener('click', slScan);
+  $('gr-archiv').addEventListener('click', () => slArchiv(SL_KOERNER));
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
@@ -32043,11 +31868,6 @@ function initEventListeners() {
     openStab('batch', 'harvest');
   });
   $('st-batch-blocks').addEventListener('click', () => openStab('batch', 'blocks'));
-  $('batch-q').addEventListener('input', renderBatches);
-  $('batch-archive-filter').addEventListener('change', renderBatches);
-  // The stored choice belongs on the control too, or a reload shows "Nicht
-  // gruppieren" over a list that is grouped.
-  $('batch-group-by').value = batchGroupBy;
   // The lab cards are rebuilt wholesale on every sync, so their buttons are
   // delegated rather than carrying inline handlers.
   $('wk-np').addEventListener('click', () => {
@@ -32103,64 +31923,21 @@ function initEventListeners() {
     const prev = ms.imProgramm !== false;
     ms.imProgramm = want; // optimistic — the row is already drawn that way
     renderStrains();
-    renderSorteTiles();
+    renderBatches();
     renderDashBatchTasks();
     apiPatch('/api/mushroom-strains/' + id, { imProgramm: want }).then((r) => {
       if (r && r.error) {
         ms.imProgramm = prev;
         setFb('err', t('common.error') + ': ' + r.error);
         renderStrains();
-        renderSorteTiles();
+        renderBatches();
         renderDashBatchTasks();
       }
     });
   });
-  $('batch-group-by').addEventListener('change', function () {
-    batchGroupBy = BATCH_GROUP_MODES.includes(this.value) ? this.value : 'none';
-    try {
-      localStorage.setItem('mp-batch-group', batchGroupBy);
-    } catch (e) {
-      /* storage disabled — the choice still holds for this session */
-    }
-    renderBatches();
-  });
-  // The Sorten card: tiles filter the list, the first tile clears the filter,
-  // and the legend folds. Delegated because the card is re-rendered wholesale
-  // on every data refresh, so nothing inside it may hold a listener.
-  $('batch-sorten').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const a = btn.dataset.action;
-    if (a === 'sorte-legend') {
-      batchLegendOpen = !batchLegendOpen;
-      renderSorteTiles();
-      return;
-    }
-    if (a === 'sorte-all') {
-      if (!batchSorteFilter) return;
-      batchSorteFilter = null;
-    } else if (a === 'sorte-tile') {
-      // Tapping the selected tile again clears it — the same gesture both ways,
-      // so there is nothing to learn about how to get back out.
-      batchSorteFilter = batchSorteFilter === btn.dataset.sorte ? null : btn.dataset.sorte;
-    } else return;
-    renderSorteTiles();
-    renderBatches();
-  });
-  $('batch-sorten').addEventListener('change', (e) => {
-    const sel = e.target.closest('#batch-tile-sort');
-    if (!sel) return;
-    batchTileSort = sel.value;
-    try {
-      localStorage.setItem('mp-batch-tile-sort', batchTileSort);
-    } catch (e2) {
-      /* storage disabled — the choice still holds for this session */
-    }
-    renderSorteTiles();
-  });
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.
-  const SORT_RERENDER = { batches: renderBatches, cultures: renderCultures, harvests: renderHarvests, grain: renderGrainBatches };
+  const SORT_RERENDER = { harvests: renderHarvests };
   for (const table in SORT_TABLES) {
     const body = document.getElementById(SORT_TABLES[table]);
     const thead = body && body.closest('table') ? body.closest('table').tHead : null;
@@ -32246,7 +32023,6 @@ function initEventListeners() {
     openStab('lab', 'grain');
     renderGrainBatches();
   });
-  $('grain-q').addEventListener('input', renderGrainBatches);
   $('btn-lab-work').addEventListener('click', () => msQuickLaborNew());
   $('st-lab-lineage').addEventListener('click', () => {
     openStab('lab', 'lineage');
@@ -32309,9 +32085,9 @@ function initEventListeners() {
   if ($('ms-q-sy')) $('ms-q-sy').addEventListener('input', () => msQuickPreview());
   if ($('ms-q-multi')) $('ms-q-multi').addEventListener('input', () => msQuickPreview());
   if ($('gs-rh')) $('gs-rh').addEventListener('input', gsPreview);
-  $('kb-list').addEventListener('click', kbKlick);
-  $('kb-scan').addEventListener('click', kbScan);
-  $('kb-erledigt').addEventListener('click', kbErledigt);
+  $('kb-list').addEventListener('click', (e) => slKlick(SL_KULTUREN, e));
+  $('kb-scan').addEventListener('click', slScan);
+  $('kb-archiv').addEventListener('click', () => slArchiv(SL_KULTUREN));
   $('lw-type').addEventListener('change', lwUpdate);
   $('lw-st').addEventListener('change', () => {
     const type = document.getElementById('lw-type').value;

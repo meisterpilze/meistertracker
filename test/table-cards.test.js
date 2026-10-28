@@ -121,11 +121,9 @@ describe('the cards a table becomes on a phone', () => {
     // role="table". Was hier geprüft wird, ist die Liste, nicht die Schreibweise.
     const marked = [...HTML.matchAll(/<table id="([^"]+)" class="t-cards"[^>]*>/g)].map((m) => m[1]).sort();
     assert.deepEqual(marked, [
-      't-batches',
       't-catalog',
       't-customers',
       't-demand',
-      't-grain',
       't-harvest',
       't-harvestrelease',
       't-log',
@@ -135,14 +133,11 @@ describe('the cards a table becomes on a phone', () => {
     ]);
   });
 
-  // #t-grain is the reason this became one mechanism instead of a fifth copy.
-  it('covers the table that was missed for having no block of its own', () => {
-    assert.match(
-      HTML,
-      /<table id="t-grain" class="t-cards"[^>]*>/,
-      '#t-grain is filled by batchRowHtml(), the same function that fills #t-batches, so every one of its ' +
-        'cells already carries a data-mlabel — it scrolled sideways only because nobody wrote it an id block'
-    );
+  // #t-grain was the reason this became one mechanism instead of a fifth copy.
+  // It and #t-batches are the Sortenliste now (test/sortenliste.test.js), which
+  // is a list, not a table, and needs no card mode.
+  it('has no table left on the pages the Sortenliste took over', () => {
+    assert.doesNotMatch(HTML, /<table id="t-(grain|batches|cultures)"/);
   });
 
   it('keeps the mechanism and its markup in step', () => {

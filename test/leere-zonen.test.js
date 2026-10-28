@@ -75,13 +75,13 @@ describe('leere Zonenliste', () => {
 
   // Dasselbe auf der Arbeitsgang-Seite, die dieselbe leere Liste anders
   // beschriftet — und denselben Fehler machte.
-  // renderPipelineKPIs hieß die Attrappe früher; die Kennzahlenleiste ist den
-  // Sorten-Kacheln gewichen, die renderStatus an genau denselben Stellen ruft.
+  // renderPipelineKPIs hieß die Attrappe früher, dann renderSorteTiles; seit
+  // der Sortenliste ruft renderStatus an genau denselben Stellen renderBatches.
   // Die Standorte liegen inzwischen auf einem eigenen Reiter, und renderStatus
   // baut sie nur noch, wenn der offen ist — die Attrappe muss also einen
   // aktiven Reiter vortäuschen, sonst prüft der Test den Auslassungspfad.
   const DASH_ATTRAPPEN =
-    'const renderSorteTiles = () => {}; const renderOverviewKPIs = () => {};' +
+    'const renderBatches = () => {}; const renderOverviewKPIs = () => {};' +
     " document.getElementById = (id) => (id === 'sp-batch-locations' ? { classList: { contains: () => true } } : ausgabe);";
 
   it('hält die Arbeitsgang-Seite an dieselbe Regel', () => {
