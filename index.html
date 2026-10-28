@@ -2977,88 +2977,23 @@
           </div>
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
-            <!-- Totals and the per-Sorte breakdown, in one card. The old stage
-                 strip was a separate box above this one showing batch counts
-                 next to bag counts in the same row; it is the first tile here
-                 now, and the rest of the grid answers the question the page
-                 could not: which Sorte is running out. -->
-            <div class="card" style="padding: 12px 14px; margin-bottom: 10px">
-              <div id="batch-sorten"></div>
-            </div>
+            <!-- Chargen on the Sortenliste, the same list as the Kulturbibliothek:
+                 one row per Sorte with its bags by phase; a tap opens its Chargen,
+                 the most due first; a tap on a Charge opens its window
+                 (renderBatches). -->
             <div class="card">
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  justify-content: space-between;
-                  margin-bottom: 8px;
-                  gap: 6px;
-                  flex-wrap: wrap;
-                "
-              >
-                <div class="sec" style="margin: 0" data-i18n="batch.allBatches">All batches</div>
-                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
-                  <!-- Grouping is a choice now, and "none" is the default.
-                       renderBatches() always sorted correctly and then handed
-                       the rows to _groupBatchRows(), which re-bucketed them by
-                       stage — so a click on Art or Menge only reordered rows
-                       inside each stage block and the list as a whole never
-                       moved. Ungrouped is the only state in which the column
-                       sort owns the order, and it was unreachable. -->
-                  <select class="fs-meta"
-                    id="batch-group-by"
-                    data-i18n-aria-label="batch.groupByAria"
-                    aria-label="Group the list"
-                    style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
-                  >
-                    <option value="none" data-i18n="batch.groupNone">Nicht gruppieren</option>
-                    <option value="sorte" data-i18n="batch.groupSorte">Nach Sorte</option>
-                    <option value="stage" data-i18n="batch.groupStage">Nach Phase</option>
-                  </select>
-                  <select class="fs-meta"
-                    id="batch-archive-filter"
-                    data-i18n-aria-label="batch.filterArchiveAria"
-                    aria-label="Filter by archive status"
-                    style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--c-border)"
-                  >
-                    <option value="active" data-i18n="batch.filterActive">Active</option>
-                    <option value="archived" data-i18n="batch.filterArchived">Archived</option>
-                    <option value="all" data-i18n="batch.filterAll">All</option>
-                  </select>
-                  <input class="fs-meta"
-                    type="search"
-                    enterkeyhint="search"
-                    autocomplete="off"
-                    id="batch-q"
-                    data-i18n-aria-label="aria.searchBatches"
-                    aria-label="Search batches"
-                    data-i18n-placeholder="dash.search"
-                    placeholder="Search..."
-                    style="width: 140px; padding: 4px 8px"
-                  />
-                </div>
+              <div class="sl-head">
+                <div class="sec" data-i18n="ch.title">Chargen</div>
+                <span class="sl-count" id="ch-count"></span>
               </div>
-              <div style="overflow-x: auto">
-                <table id="t-batches" class="t-cards" role="table">
-                  <thead role="rowgroup">
-                    <tr role="row">
-                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId" role="columnheader">Batch ID</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
-                      <th class="sortable" data-sort="qty" data-i18n="th.qty" role="columnheader">Qty</th>
-                      <th class="sortable" data-sort="days" data-i18n="th.inc" role="columnheader">Inc</th>
-                      <th data-i18n="th.substrate" role="columnheader">Substrate</th>
-                      <th data-i18n="th.source" role="columnheader">Source</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
-                      <th class="sortable" data-sort="due" data-i18n="th.due" role="columnheader">Due</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
-                      <th data-i18n="th.notes" role="columnheader">Notes</th>
-                      <th role="columnheader"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="batches-body" role="rowgroup"></tbody>
-                </table>
+              <div class="sl-tools">
+                <button type="button" id="ch-scan" class="btn btn-p" data-i18n="ch.scan">Charge scannen</button>
+                <button type="button" id="ch-archiv" class="btn" aria-pressed="false"></button>
               </div>
+              <p class="lb-tap" data-i18n="ch.help">
+                Tipp auf eine Sorte, dann auf eine Charge: umziehen, Beutel, Notiz, löschen.
+              </p>
+              <div id="ch-list"></div>
             </div>
           </div>
           <!-- Where everything currently sits, by room. Unchanged in every
@@ -4416,57 +4351,37 @@
           </div>
           <!-- Körnerbrut — grain spawn batches. Same columns as the batch
                  table so both lists share batchRowHtml. -->
+          <!-- Körnerbrut on the Sortenliste, like Chargen and the Kulturbibliothek
+                 (renderGrainBatches). -->
           <div class="sp" id="sp-lab-grain">
             <div class="card">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-                <div class="sec" style="margin: 0" data-i18n="lab.grain">Körnerbrut</div>
-                <span style="flex: 1"></span>
-                <input
-                  type="text"
-                  id="grain-q"
-                  class="dash-search-inline"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Suchen..."
-                />
+              <div class="sl-head">
+                <div class="sec" data-i18n="lab.grain">Körnerbrut</div>
+                <span class="sl-count" id="gr-count"></span>
               </div>
-              <div style="overflow-x: auto">
-                <table id="t-grain" class="t-cards" role="table">
-                  <thead role="rowgroup">
-                    <tr role="row">
-                      <th class="sortable" data-sort="batchId" data-i18n="th.batchId" role="columnheader">Batch ID</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
-                      <th class="sortable" data-sort="qty" data-i18n="th.qty" role="columnheader">Qty</th>
-                      <th data-i18n="th.inc" role="columnheader">Inc</th>
-                      <th data-i18n="th.substrate" role="columnheader">Substrate</th>
-                      <th data-i18n="th.source" role="columnheader">Source</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
-                      <th class="sortable" data-sort="due" data-i18n="th.due" role="columnheader">Due</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
-                      <th data-i18n="th.notes" role="columnheader">Notes</th>
-                      <th role="columnheader"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="grain-body" role="rowgroup"></tbody>
-                </table>
+              <div class="sl-tools">
+                <button type="button" id="gr-scan" class="btn btn-p" data-i18n="gr.scan">Glas scannen</button>
+                <button type="button" id="gr-archiv" class="btn" aria-pressed="false"></button>
               </div>
+              <p class="lb-tap" data-i18n="gr.help">Tipp auf eine Sorte, dann auf eine Charge: Beutel, Notiz, löschen.</p>
+              <div id="gr-list"></div>
             </div>
           </div>
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
-            <!-- Kulturbibliothek: one row per Sorte with what is in stock; a tap
-                 opens its cultures by type, oldest first; a tap on a culture
-                 opens the same sheet a scan does (renderCultures). -->
+            <!-- Kulturbibliothek on the Sortenliste: one row per Sorte with what is
+                 in stock; a tap opens its cultures by type, oldest first; a tap
+                 on a culture opens the same sheet a scan does (renderCultures). -->
             <div class="card">
-              <div class="kb-head">
+              <div class="sl-head">
                 <div class="sec" data-i18n="lab.cultureLibrary">Kulturbibliothek</div>
-                <span class="kb-count" id="kb-count"></span>
+                <span class="sl-count" id="kb-count"></span>
               </div>
-              <div class="kb-tools">
+              <div class="sl-tools">
                 <button type="button" id="kb-scan" class="btn btn-p" data-i18n="kb.scan">Kultur scannen</button>
                 <!-- Lab stocktake: scan the shelf, mark what's gone as used up -->
                 <button type="button" id="lab-check-btn" class="btn" data-i18n="zoneCheck.btn">Prüfen</button>
-                <button type="button" id="kb-erledigt" class="btn" aria-pressed="false"></button>
+                <button type="button" id="kb-archiv" class="btn" aria-pressed="false"></button>
               </div>
               <p class="lb-tap" id="kb-help" data-i18n="kb.help">
                 Tipp auf eine Sorte, dann auf eine Kultur: verkaufen, verbrauchen, drucken, löschen.

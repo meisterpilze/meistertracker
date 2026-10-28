@@ -276,7 +276,9 @@ describe('where a result lands', () => {
   const FLASHED = ['culture', 'strain', 'zone', 'order', 'customer'];
 
   it('has a renderer emitting the hook for every type it flashes', () => {
-    const missing = FLASHED.filter((type) => !APP.includes(`data-find="${type}:`));
+    // The Sortenliste writes its hook from its description's `find`, so a
+    // culture's data-find is built rather than written out.
+    const missing = FLASHED.filter((type) => !APP.includes(`data-find="${type}:`) && !APP.includes(`find: '${type}',`));
     assert.deepEqual(
       missing,
       [],
