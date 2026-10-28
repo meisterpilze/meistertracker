@@ -5111,6 +5111,64 @@ tr:hover td {
   min-width: 40px;
   font-size: 0.9375rem;
 }
+/* Delete sits next to the target link, in the same quiet style, in red. */
+.lb-weg-btn {
+  margin-left: 14px;
+  color: var(--c-red-dark);
+}
+/* What is gone: one row per culture, tap to mark. Rows are list items, so
+   they span the sheet; the delete button below sizes to its words. */
+.lb-weg {
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.lb-weg-id {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-surface, #fff);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lb-weg-id span {
+  min-width: 0;
+  font-family: monospace;
+  font-size: max(0.8125rem, var(--fs-min));
+  overflow-wrap: anywhere;
+}
+.lb-weg-id small {
+  flex: 0 0 auto;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.lb-weg-id.on {
+  border-color: var(--c-red-dark);
+  background: var(--c-red-light, #fee2e2);
+  text-decoration: line-through;
+}
+.lb-weg-id:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+/* Admin only: the reason goes under the ID, so the ID stays on one line. */
+.lb-weg-id:disabled {
+  flex-wrap: wrap;
+}
+.lb-weg-id:disabled small {
+  flex: 1 1 100%;
+}
+.lb-weg .btn {
+  margin-top: 4px;
+}
 .lb-help,
 .lb-tap {
   margin: 0 0 8px;

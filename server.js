@@ -9820,11 +9820,17 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
   if (req.method === 'DELETE' && cultureMatch) {
-    // S-03: deleting a culture orphans batches.source_id and
-    // contradicts the README role model (workers may create cultures
-    // but only admins remove them).
-    if (requireAdmin(req, res)) return;
+    // S-03: deleting a culture something was made from orphans its children's
+    // parent_id and batches.source_id, so only an admin removes one of those.
+    // Anyone may delete a culture nothing came from: a plate that fell or
+    // cannot be found any more otherwise sat in the stock until an admin got
+    // round to it.
     const id = decodeURIComponent(cultureMatch[1]);
+    const isAdmin = req.authUser && req.authUser.role === 'admin';
+    if (!isAdmin && db.cultureHasOffspring(database, id)) {
+      jsonErr(res, 403, 'Aus ' + id + ' ist schon etwas angesetzt worden. Löschen kann das nur ein Admin.');
+      return;
+    }
     try {
       const deleted = db.deleteCulture(database, id, req.authUser);
       broadcastSSE(res);

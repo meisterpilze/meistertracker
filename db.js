@@ -6426,6 +6426,14 @@ function getCultureById(db, id) {
   };
 }
 
+// Ist aus dieser Kultur schon etwas angesetzt: eine Kultur oder eine Charge?
+function cultureHasOffspring(db, id) {
+  return !!(
+    db.prepare('SELECT 1 FROM cultures WHERE parent_id = ? LIMIT 1').get(id) ||
+    db.prepare('SELECT 1 FROM batches WHERE source_id = ? LIMIT 1').get(id)
+  );
+}
+
 function deleteCulture(db, id, wer) {
   return withSavepoint(db, 'mt_kultur_weg', () => {
     _verknuepfungGeht(db, 'cultureId', [id], wer);
@@ -14202,6 +14210,7 @@ module.exports = {
   updateCulture,
   getCultureById,
   deleteCulture,
+  cultureHasOffspring,
   insertTask,
   updateTaskById,
   deleteTaskById,
