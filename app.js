@@ -878,6 +878,12 @@ function onNotifItemClick(e) {
     const sid = parseInt(linkId.split('/')[0], 10);
     go('lab', 'n-lab');
     loadLabStock().then(() => lbSheetOpen(sid));
+  } else if (linkType === 'label_unsaved' && linkId) {
+    // "Gedruckt, aber nicht gespeichert" (checkUnsavedLabels): a culture goes
+    // straight into the intake, dated from its label, as if it had been scanned.
+    // A bag has no intake; the notice text says what to do.
+    const k = kulturKennungLesen(linkId);
+    if (k && ['MC', 'PD', 'LC', 'SY'].includes(k.type) && !cultures.some((c) => c.id === k.id)) msQuickOpenIntake(k);
   } else if (linkType === 'customer' && linkId) {
     // An eBay account-closure request. The server records it and raises this
     // notification but deliberately never erases on its own, so this alert is the

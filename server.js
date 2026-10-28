@@ -1400,6 +1400,69 @@ if (!WORKTREE_MODE) {
   if (t.unref) t.unref();
 }
 
+// ── Printed, but not saved ──
+// A label whose culture or bag is not in the app sits on a jar nobody counts.
+// Each printed ID is checked LABEL_CHECK_GRACE_MS after the print (an offline
+// save may still be on its way) and every signed-in user gets one bell notice
+// per missing ID. Tapping it opens the intake, dated from the label.
+const LABEL_CHECK_GRACE_MS = 5 * 60 * 1000;
+let labelCheckTimer = null;
+function checkUnsavedLabels() {
+  if (WORKTREE_MODE) return;
+  try {
+    const fehlt = db.unsavedLabels(database, new Date(), LABEL_CHECK_GRACE_MS);
+    if (!fehlt.length) return;
+    const users = db.listUsers(database);
+    for (const f of fehlt) {
+      const um = new Date(f.printedAt).toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Berlin'
+      });
+      for (const u of users) {
+        db.createNotificationOnce(database, {
+          userId: u.id,
+          type: 'label_unsaved',
+          title: 'Gedruckt, aber nicht gespeichert: ' + f.id,
+          body:
+            'Das Etikett kam um ' +
+            um +
+            ' Uhr aus dem Drucker, aber ' +
+            f.id +
+            ' steht nicht in der App und zählt nirgends. Antippen zum Aufnehmen, oder das Glas scannen.',
+          linkType: 'label_unsaved',
+          linkId: f.id
+        });
+      }
+    }
+    log('warn', 'Printed labels not in the app', { count: fehlt.length });
+  } catch (e) {
+    log('warn', 'Unsaved label check failed', { error: e.message });
+  }
+}
+function rememberPrintedLabels(zpl) {
+  if (WORKTREE_MODE) return;
+  try {
+    if (!db.recordPrintedLabels(database, zpl)) return;
+  } catch (e) {
+    log('warn', 'Could not remember printed labels', { error: e.message });
+    return;
+  }
+  if (labelCheckTimer) return;
+  labelCheckTimer = setTimeout(
+    () => {
+      labelCheckTimer = null;
+      checkUnsavedLabels();
+    },
+    LABEL_CHECK_GRACE_MS + 10 * 1000
+  );
+  if (labelCheckTimer.unref) labelCheckTimer.unref();
+}
+if (!WORKTREE_MODE) {
+  const t = setInterval(checkUnsavedLabels, LABEL_CHECK_GRACE_MS);
+  if (t.unref) t.unref();
+}
+
 function _oauthResultHtml(channel, ok, msg) {
   const label = channel === 'etsy' ? 'Etsy' : 'eBay';
   const icon = ok ? '✓' : '⚠';
@@ -3311,8 +3374,14 @@ function printZPL(zplData, callback) {
     log('warn', 'Refused a print job', { reason: bad });
     return callback('Refused: ' + bad);
   }
-  if (getEffectiveBridgeConfig()) return _printViaBridge(zplData, callback);
-  return _printViaPowerShell(zplData, callback);
+  // Every label that left the printer is remembered by its ID, so one whose
+  // culture or bag never got saved shows up in the bell the same day.
+  const done = (err) => {
+    if (!err) rememberPrintedLabels(zplData);
+    callback(err);
+  };
+  if (getEffectiveBridgeConfig()) return _printViaBridge(zplData, done);
+  return _printViaPowerShell(zplData, done);
 }
 
 function _printViaBridge(zplData, callback) {
