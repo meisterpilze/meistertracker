@@ -125,7 +125,7 @@
       </div>
     </div>
 
-    <!-- One species of the Laborbestand: every field with its target (lbSheetRender) -->
+    <!-- One species of the Laborbestand: stock (read-only), target, and what to make (lbSheetRender) -->
     <div class="modal-bg" id="m-lb" role="dialog" aria-modal="true" aria-labelledby="m-lb-title" hidden>
       <div class="modal">
         <h3 id="m-lb-title"></h3>
@@ -138,7 +138,14 @@
             >
           </span>
         </label>
+        <p class="lb-help" data-i18n="lb.sheetHelp">
+          Der Bestand ist gezählt, aus Ansetzen, Verbrauchen und Rausscannen, und lässt sich hier nicht ändern. Rechts
+          steht, was du jetzt ansetzt.
+        </p>
         <div id="m-lb-items"></div>
+        <p class="lb-help" id="m-lb-hint" data-i18n="lb.slantsApart" hidden>
+          Slants gehen nicht mit den anderen zusammen: erst die anderen ansetzen, dann die Slants.
+        </p>
         <div class="modal-btns">
           <button type="button" class="btn" data-lb-act="close" data-i18n="vb.close">Schließen</button>
           <button type="button" class="btn btn-p" id="m-lb-make" data-lb-act="make" hidden></button>
@@ -4396,6 +4403,7 @@
                card (renderLabStock). -->
           <div class="card" id="lb-card" hidden>
             <div class="sec" data-i18n="lb.title">Laborbestand</div>
+            <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
             <div id="lb-list"></div>
             <div class="vb-legend">
               <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>

@@ -5049,7 +5049,7 @@ tr:hover td {
   flex: 1 1 auto;
   min-width: 0;
 }
-.lb-line-l small:last-child {
+.lb-line-l .lb-info {
   display: block;
   color: var(--c-text-muted);
   font-size: max(0.75rem, var(--fs-min));
@@ -5082,8 +5082,45 @@ tr:hover td {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-#m-lb-make[hidden] {
+#m-lb-make[hidden],
+#m-lb-hint[hidden] {
   display: none;
+}
+/* What to make: 0 is the start, not a figure, so it stays quiet. */
+.lb-step b.lb-null {
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+/* The target sits under the stock as a small link; a tap opens its own
+   minus and plus, smaller than the one for what to make. */
+.lb-soll-btn {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--c-primary);
+  font: inherit;
+  font-size: max(0.75rem, var(--fs-min));
+  cursor: pointer;
+}
+.lb-step-soll {
+  display: flex;
+  margin-top: 2px;
+}
+.lb-step-soll b {
+  min-width: 40px;
+  font-size: 0.9375rem;
+}
+.lb-help,
+.lb-tap {
+  margin: 0 0 8px;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  line-height: 1.35;
+}
+.lb-ruhen {
+  margin: 8px 0 4px;
 }
 /* Under its floor: the number goes red, not the whole row. The Sorte's name is
    not the problem, the count is. */
