@@ -23,8 +23,8 @@ const kartentabellen = [...html.matchAll(/<table id="([\w-]+)" class="t-cards"([
 
 describe('die feste Hälfte: der Kopf steht im Markup', () => {
   it('findet die Kartentabellen überhaupt', () => {
-    // Elf seit der Kulturbibliothek: sie ist eine Liste je Sorte, keine Tabelle mehr.
-    assert.ok(kartentabellen.length >= 11, `nur ${kartentabellen.length} Kartentabellen gefunden`);
+    // Neun seit der Sortenliste: Kulturen, Körnerbrut und Chargen sind Listen je Sorte, keine Tabellen mehr.
+    assert.ok(kartentabellen.length >= 9, `nur ${kartentabellen.length} Kartentabellen gefunden`);
   });
 
   it('gibt jeder von ihnen die Tabellenrolle', () => {
