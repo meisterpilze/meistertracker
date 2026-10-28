@@ -28,6 +28,7 @@ const SY = _hebe(
 );
 const MEHRERE = [
   APP.match(/^const MSQ_MEHRERE = .*$/m)[0],
+  APP.match(/^const MSQ_STUECK = .*$/m)[0],
   hebe('msqMehrere'),
   hebe('msqArten'),
   hebe('msqParentTypes')
@@ -45,6 +46,8 @@ describe('Mehrere Arten: die eine Herkunft', () => {
 
   it('muss zu jeder angetippten Art passen', () => {
     assert.deepEqual(herkunft(['PD', 'LC']), ['MC', 'PD', 'LC', 'SY']);
+    // Slants mit Petrischalen aus derselben Schale.
+    assert.deepEqual(herkunft(['MC', 'PD']), ['MC', 'PD', 'LC', 'SY']);
     // Körnerbrut wächst nicht aus einem Slant.
     assert.deepEqual(herkunft(['PD', 'LC', 'KB']), ['PD', 'LC', 'SY']);
     // Und eine Spritze nicht aus einer Spritze.
@@ -150,7 +153,7 @@ describe('Mehrere Arten: die Zahlen', () => {
       const syBox = { innerHTML: 'alt' };
       const kbBox = { innerHTML: 'alt' };
       const document = { getElementById: (id) => (id === 'ms-q-labtype' ? sel : id === 'ms-q-sy' ? syBox : id === 'ms-q-sizes' ? kbBox : null) };
-      const _msQuickCtx = { mode: 'labor', mehrere: false, arten: [], n: { PD: 7, LC: 9 } };
+      const _msQuickCtx = { mode: 'labor', mehrere: false, arten: [], n: { MC: 3, PD: 7, LC: 9 } };
       const msQuickRender = () => {};
       const syMengenHtml = (pre, n) => 'sy:' + pre + JSON.stringify(n);
       const kbMengenHtml = (pre, n) => 'kb:' + pre + JSON.stringify(n);
@@ -161,7 +164,7 @@ describe('Mehrere Arten: die Zahlen', () => {
     `)();
     assert.equal(r.ctx.mehrere, true);
     assert.deepEqual(r.ctx.arten, ['LC']);
-    assert.deepEqual(r.ctx.n, { PD: 0, LC: 0 });
+    assert.deepEqual(r.ctx.n, { MC: 0, PD: 0, LC: 0 });
     assert.equal(r.sy, 'sy:ms-q{}');
     assert.equal(r.kb, 'kb:ms-q{}');
   });

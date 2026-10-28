@@ -404,7 +404,8 @@ describe('Laborbestand: ansetzen und das Soll', () => {
       'document',
       'log',
       'ctxBox',
-      `const MSQ_MEHRERE = ['PD', 'LC', 'SY', 'KB'];
+      `${APP.match(/^const MSQ_MEHRERE = .*$/m)[0]}
+      ${APP.match(/^const MSQ_STUECK = .*$/m)[0]}
       let _msQuickCtx = null;
       const mushroomStrains = [{ id: 1, name: 'Testart Alpha' }];
       let _lbData = { species: [${JSON.stringify(art(1, 'Testart Alpha', items))}] };
@@ -434,30 +435,32 @@ describe('Laborbestand: ansetzen und das Soll', () => {
       kb1: { make: 1 }
     });
     assert.deepEqual(r.log.slice(0, 3), ['zu', 'open:labor:1', 'mehrere']);
-    assert.deepEqual(r.ctx.arten, ['PD', 'SY', 'KB'], 'Slants sind die Quelle und nicht Teil von Mehrere');
-    assert.deepEqual(r.ctx.n, { PD: 3, LC: 0 });
+    assert.deepEqual(r.ctx.arten, ['MC', 'PD', 'SY', 'KB'], 'Slants gehen mit, aus derselben Schale');
+    assert.deepEqual(r.ctx.n, { MC: 2, PD: 3, LC: 0 });
     assert.equal(r.els['ms-q-sy'].innerHTML, 'sy{"10":2}');
     assert.equal(r.els['ms-q-sizes'].innerHTML, 'kb{"1":1}');
     assert.deepEqual(r.log.slice(-2), ['render', 'preview']);
   });
 
-  it('fehlen nur Slants, geht der Dialog für eine Art auf, mit Slant gewählt', () => {
+  it('fehlen nur Slants, geht Mehrere mit Slants auf', () => {
     const r = ansetzen({ MC: { make: 2 } });
-    assert.deepEqual(r.log, ['zu', 'open:labor:1', 'typ:MC']);
+    assert.deepEqual(r.log.slice(0, 3), ['zu', 'open:labor:1', 'mehrere']);
+    assert.deepEqual(r.ctx.arten, ['MC']);
+    assert.deepEqual(r.ctx.n, { MC: 2, PD: 0, LC: 0 });
   });
 
   it('aus dem Blatt: genau die eingetippten Anzahlen, nicht was fehlt', () => {
     const r = ansetzen({ PD: { make: 3 }, SY10: { make: 2 }, kb1: { make: 1 } }, { PD: 1, LC: 2, SY10: 0 });
     assert.deepEqual(r.ctx.arten, ['PD', 'LC']);
-    assert.deepEqual(r.ctx.n, { PD: 1, LC: 2 });
+    assert.deepEqual(r.ctx.n, { MC: 0, PD: 1, LC: 2 });
     assert.equal(r.els['ms-q-sy'].innerHTML, 'sy{}');
     assert.equal(r.els['ms-q-sizes'].innerHTML, 'kb{}');
   });
 
-  it('aus dem Blatt nur Slants: der Dialog für eine Art, mit der Anzahl', () => {
-    const r = ansetzen({}, { MC: 4 });
-    assert.deepEqual(r.log, ['zu', 'open:labor:1', 'typ:MC', 'preview']);
-    assert.equal(r.els['ms-q-qty'].value, 4);
+  it('aus dem Blatt Slants und Petri zusammen: eine Herkunft, ein Durchgang', () => {
+    const r = ansetzen({}, { MC: 4, PD: 2 });
+    assert.deepEqual(r.ctx.arten, ['MC', 'PD']);
+    assert.deepEqual(r.ctx.n, { MC: 4, PD: 2, LC: 0 });
   });
 
   it('der kg-Vorrat wählt Körnerbrut, die Beutelgrößen trägt man ein', () => {

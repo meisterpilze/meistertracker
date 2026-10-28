@@ -6187,7 +6187,10 @@ function insertHarvest(db, h) {
 // Existing rows in the DB may already violate these rules — we don't run any
 // retroactive cleanup, just enforce the constraint going forward.
 const VALID_CULTURE_PARENT_TYPES = {
-  MC: [], // mother culture is the lineage root — no parent allowed
+  // A slant is mostly streaked from a good plate, sometimes from a liquid
+  // culture or another slant. Bought or from a print it has no parent, which
+  // is why a parent stays optional for every type.
+  MC: ['MC', 'PD', 'LC', 'SY'],
   // A plate streaked from a liquid culture is how an LC is checked and cleaned up.
   // A syringe drawn from an LC inoculates plates, new LCs and grain in one go.
   PD: ['MC', 'PD', 'LC', 'SY'],

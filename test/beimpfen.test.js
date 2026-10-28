@@ -21,14 +21,17 @@ const LAB = APP.match(/const LAB_PARENT_TYPES = \{[\s\S]*?\n\};/)[0];
 const arten = (type) => new Function(`${LAB}\n${hebe('bmpArten')}\nreturn bmpArten(${JSON.stringify(type)});`)();
 
 describe('Beimpfen: was woraus', () => {
-  it('eine Spritze beimpft Körnerbrut, Flüssigkultur und Petrischale, aber keine Spritze', () => {
-    assert.deepEqual(arten('SY'), ['KB', 'LC', 'PD']);
+  it('eine Spritze beimpft Körnerbrut, Flüssigkultur, Petrischale und Slant, aber keine Spritze', () => {
+    assert.deepEqual(arten('SY'), ['KB', 'LC', 'PD', 'MC']);
   });
-  it('eine Flüssigkultur alles vier', () => {
-    assert.deepEqual(arten('LC'), ['KB', 'LC', 'PD', 'SY']);
+  it('eine Flüssigkultur alles fünf', () => {
+    assert.deepEqual(arten('LC'), ['KB', 'LC', 'PD', 'MC', 'SY']);
   });
-  it('ein Slant keine Körnerbrut, wie bisher', () => {
-    assert.deepEqual(arten('MC'), ['LC', 'PD', 'SY']);
+  it('eine Petrischale auch Slants: von einer guten Schale werden sie abgeimpft', () => {
+    assert.ok(arten('PD').includes('MC'));
+  });
+  it('ein Slant keine Körnerbrut, wie bisher, aber neue Slants', () => {
+    assert.deepEqual(arten('MC'), ['LC', 'PD', 'MC', 'SY']);
   });
   it('die Körnerbrut-Auswahl im Formular nimmt Spritzen mit', () => {
     assert.doesNotMatch(APP, /fillCultureSelect\('gs-culture', \['PD', 'LC', 'GS'\]\)/);
@@ -176,7 +179,7 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
       return _bmp;
     `
     )();
-    assert.deepEqual(b.n, { KB: 0, LC: 0, PD: 0, SY: 0 });
+    assert.deepEqual(b.n, { KB: 0, LC: 0, PD: 0, MC: 0, SY: 0 });
     assert.deepEqual(b.sy, { 10: 0, 20: 0, 50: 0 });
     assert.deepEqual(b.kb, { 1: 0, 2: 0, 5: 0 });
     assert.equal(b.kg, undefined, 'ein Gewicht zum Eintippen gibt es nicht mehr');

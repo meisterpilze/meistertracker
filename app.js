@@ -8914,22 +8914,20 @@ function renderLabStock() {
 }
 
 // ── Ansetzen: Laborarbeit → Mehrere, mit allem, was der Art fehlt ──
-// Petri und Flüssigkultur mit ihrer Anzahl, Spritzen und Verkaufsbeutel je
-// Größe. Der Körnerbrut-Vorrat steht in kg, und welche Beutel ihn füllen, weiß
-// die Zahl nicht: Körnerbrut ist dann angetippt, die Größen trägt man ein.
-// Slants sind die Quelle und nicht Teil von Mehrere; fehlen nur sie, geht der
-// Dialog für eine Art auf, mit Slant gewählt. Die Anzahl ist, was fehlt, keine
-// gemerkte Zahl, und alles endet wie immer im Etikettendialog.
+// Slants, Petri und Flüssigkultur mit ihrer Anzahl, Spritzen und
+// Verkaufsbeutel je Größe. Der Körnerbrut-Vorrat steht in kg, und welche
+// Beutel ihn füllen, weiß die Zahl nicht: Körnerbrut ist dann angetippt, die
+// Größen trägt man ein.
 //
 // Aus dem Blatt einer Art kommt statt dessen, was man dort eingetippt hat
-// (menge: Feld → Anzahl, jede ab 0). Slants mit anderem zusammen gehen nicht:
-// Mehrere kennt sie nicht, und das Blatt sagt das, bevor man tippt.
+// (menge: Feld → Anzahl, jede ab 0). Die Anzahl ist nie eine gemerkte Zahl,
+// und alles endet wie immer im Etikettendialog.
 function lbAnsetzen(strainId, menge) {
   const sp = _lbSpecies().find((x) => x.strainId === strainId);
   const ms = (mushroomStrains || []).find((x) => x.id === strainId);
   if (!sp || !ms) return;
   lbSheetClose();
-  const n = { PD: 0, LC: 0 };
+  const n = { MC: 0, PD: 0, LC: 0 };
   const sy = {};
   const kb = {};
   const arten = new Set();
@@ -8937,7 +8935,7 @@ function lbAnsetzen(strainId, menge) {
     ? sp.items.filter((i) => menge[i.key] > 0).map((i) => ({ ...i, make: menge[i.key] }))
     : _lbFehlt(sp);
   for (const i of quelle) {
-    if (i.key === 'PD' || i.key === 'LC') {
+    if (MSQ_STUECK.includes(i.key)) {
       n[i.key] = Math.ceil(i.make);
       arten.add(i.key);
     } else if (i.key.startsWith('SY')) {
@@ -8949,15 +8947,7 @@ function lbAnsetzen(strainId, menge) {
     } else if (i.key === 'GSKG') arten.add('KB');
   }
   msQuickOpen('labor', ms);
-  if (!arten.size) {
-    _msqPickType('MC');
-    const qty = menge && menge.MC && document.getElementById('ms-q-qty');
-    if (qty) {
-      qty.value = menge.MC;
-      msQuickPreview();
-    }
-    return;
-  }
+  if (!arten.size) return;
   msqMehrereUmschalten();
   _msQuickCtx.arten = MSQ_MEHRERE.filter((a) => arten.has(a));
   _msQuickCtx.n = n;
@@ -9062,8 +9052,6 @@ function lbSheetKnopf(sp) {
   const fehlt = _lbFehlt(sp);
   go.hidden = !summe && !fehlt.length;
   go.textContent = summe ? t('lb.goN', { n: summe }) : fehlt.length ? t('np.goAll') : '';
-  const m = _lbSheet.make;
-  document.getElementById('m-lb-hint').hidden = !(m.MC > 0 && summe > m.MC);
 }
 function lbMakeStep(key, d) {
   const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
@@ -20504,9 +20492,8 @@ function _msqLastQty(mode) {
 // Herkunft, also ohne "Beimpft mit", und genau das Feld fehlte dann.
 function _msqLastArt() {
   try {
-    // Nie auf Slant: der hat keine Herkunft, und das Feld wäre wieder weg.
     const a = localStorage.getItem('mp-msq-art');
-    if (a && a !== 'MC' && LAB_PARENT_TYPES[a]) return a;
+    if (a && LAB_PARENT_TYPES[a]) return a;
   } catch (e) {
     /* storage disabled */
   }
@@ -20558,7 +20545,7 @@ function msQuickOpen(mode, ms) {
   // zählen Spritzen und Körnerbrut je Größe, und jede Größe fängt bei 0 an.
   // Jedes Öffnen beginnt mit einer Art; "Mehrere" ist ein Tipp
   // (msqMehrereUmschalten).
-  _msQuickCtx = { mode, ms: ms || null, ml: 10, mehrere: false, arten: [], n: { PD: 0, LC: 0 } };
+  _msQuickCtx = { mode, ms: ms || null, ml: 10, mehrere: false, arten: [], n: { MC: 0, PD: 0, LC: 0 } };
   const syBox = document.getElementById('ms-q-sy');
   if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
   const kbBox = document.getElementById('ms-q-sizes');
@@ -20705,7 +20692,7 @@ function msQuickRender() {
   }
 }
 // Woraus die gewählte Laborarbeit angesetzt werden darf, oder null, wenn der
-// Dialog keine Laborarbeit ist. [] heißt: diese Art hat keine Herkunft (Slant).
+// Dialog keine Laborarbeit ist.
 function msqParentTypes() {
   if (!_msQuickCtx || _msQuickCtx.mode !== 'labor') return null;
   // Mehrere Arten teilen sich die eine Herkunft: sie muss zu jeder passen.
@@ -20867,9 +20854,11 @@ function _msqIsGrain() {
 // "Mehrere" macht aus der Liste Knöpfe zum Antippen: jede angetippte Art
 // bekommt ihre Zahlen, Sorte, Stamm, Tag und die eine Herkunft gelten für alle,
 // und am Ende steht ein Etiketten-Fenster mit einem Druck (etikettenFuerAlles).
-// Slant steht nicht zur Wahl: er hat keine Herkunft, die er teilen könnte. Jede
-// Zahl fängt bei 0 an.
-const MSQ_MEHRERE = ['PD', 'LC', 'SY', 'KB'];
+// Slants gehören dazu: sie kommen meist von derselben Petrischale. Jede Zahl
+// fängt bei 0 an.
+const MSQ_MEHRERE = ['MC', 'PD', 'LC', 'SY', 'KB'];
+// Die Arten, die eine Anzahl zählen, ohne Größen.
+const MSQ_STUECK = ['MC', 'PD', 'LC'];
 function msqMehrere() {
   return !!(_msQuickCtx && _msQuickCtx.mode === 'labor' && _msQuickCtx.mehrere && !_msQuickCtx.intake);
 }
@@ -20883,7 +20872,7 @@ function msqMehrereUmschalten() {
   if (_msQuickCtx.mehrere) {
     // Die Art, die gerade dasteht, ist die erste angetippte.
     _msQuickCtx.arten = sel && MSQ_MEHRERE.includes(sel.value) ? [sel.value] : [];
-    _msQuickCtx.n = { PD: 0, LC: 0 };
+    _msQuickCtx.n = { MC: 0, PD: 0, LC: 0 };
     const syBox = document.getElementById('ms-q-sy');
     if (syBox) syBox.innerHTML = syMengenHtml('ms-q', {});
     const kbBox = document.getElementById('ms-q-sizes');
@@ -20922,7 +20911,7 @@ function msqArtenRender() {
   }
   const zaehler = document.getElementById('ms-q-multi');
   if (zaehler) {
-    const gezaehlt = arten.filter((a) => a === 'PD' || a === 'LC');
+    const gezaehlt = MSQ_STUECK.filter((a) => arten.includes(a));
     zaehler.style.display = gezaehlt.length ? '' : 'none';
     zaehler.innerHTML = gezaehlt
       .map(
@@ -20941,22 +20930,24 @@ function msqArtenRender() {
 // Beutelgröße. Was nicht angetippt ist, zählt nicht mit.
 function msqMehrereLesen() {
   const arten = msqArten();
-  for (const a of ['PD', 'LC']) {
+  for (const a of MSQ_STUECK) {
     const el = document.getElementById('ms-q-n-' + a);
     if (el) _msQuickCtx.n[a] = Math.max(0, Math.min(500, parseInt(el.value, 10) || 0));
   }
   const z = {
+    MC: arten.includes('MC') ? _msQuickCtx.n.MC : 0,
     PD: arten.includes('PD') ? _msQuickCtx.n.PD : 0,
     LC: arten.includes('LC') ? _msQuickCtx.n.LC : 0,
     sy: arten.includes('SY') ? syMengenLesen('ms-q') : {},
     kb: arten.includes('KB') ? msqReadSizes() : []
   };
-  z.summe = z.PD + z.LC + sySumme(z.sy) + z.kb.reduce((a, l) => a + l.qty, 0);
+  z.summe = z.MC + z.PD + z.LC + sySumme(z.sy) + z.kb.reduce((a, l) => a + l.qty, 0);
   return z;
 }
 function msqMehrerePreview(el) {
   const z = msqMehrereLesen();
   const teile = [];
+  if (z.MC) teile.push(z.MC + ' ' + t('bmp.MC'));
   if (z.PD) teile.push(z.PD + ' ' + t('bmp.PD'));
   if (z.LC) teile.push(z.LC + ' ' + t('bmp.LC'));
   teile.push(...syTeile(z.sy));
@@ -21325,6 +21316,7 @@ function msqMehrereAnlegen(spec) {
   const { ms, strainText, angesetzt, zahlen } = spec;
   const wann = anlageZeitpunkt(angesetzt);
   const posten = [];
+  if (zahlen.MC > 0) posten.push(['MC', zahlen.MC, null]);
   if (zahlen.PD > 0) posten.push(['PD', zahlen.PD, null]);
   if (zahlen.LC > 0) posten.push(['LC', zahlen.LC, null]);
   for (const ml of SY_ML) if (zahlen.sy[ml] > 0) posten.push(['SY', zahlen.sy[ml], ml]);
@@ -21568,10 +21560,12 @@ function deleteCulture(id) {
 // ─── LAB WORK ────────────────────────────────────────────────
 // Woraus eine Laborarbeit angesetzt werden darf, je Art. Dieselben Regeln wie
 // VALID_CULTURE_PARENT_TYPES in db.js — standen hier andere, bot das Formular
-// eine Herkunft an, die der Server dann abwies. Ein Slant (MC) ist der Ursprung
-// und hat keine; Körnerbrut (KB) ist keine Kultur und geht über createGrainBatch.
+// eine Herkunft an, die der Server dann abwies. Ein Slant (MC) kommt meist von
+// einer guten Petrischale; gekauft oder vom Abdruck hat er keine, und deshalb
+// bleibt die Herkunft freiwillig. Körnerbrut (KB) ist keine Kultur und geht
+// über createGrainBatch.
 const LAB_PARENT_TYPES = {
-  MC: [],
+  MC: ['MC', 'PD', 'LC', 'SY'],
   PD: ['MC', 'PD', 'LC', 'SY'],
   LC: ['MC', 'PD', 'LC', 'SY'],
   SY: ['MC', 'PD', 'LC'],
@@ -21667,7 +21661,10 @@ function lwUpdate() {
     if (strainTextRow) strainTextRow.style.display = type === 'G2G' ? 'none' : 'block';
     if (qtyRow) qtyRow.style.display = 'block';
     if (type === 'MC') {
-      pr.style.display = 'none';
+      // Von einer Petrischale abgeimpft, oder gekauft: beides kann dastehen.
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.parentMcPdLc');
+      fillParentSelect(LAB_PARENT_TYPES.MC);
       sr.style.display = 'block';
       ql.textContent = t('lab.qtyTubes');
     } else if (type === 'PD') {
@@ -26951,7 +26948,7 @@ let _bmp = null;
 // Was aus einer Kultur dieser Art angesetzt werden darf, in der Reihenfolge der
 // Zeilen. KB ist Körnerbrut (eine Charge mit Beuteln), der Rest sind Kulturen.
 function bmpArten(type) {
-  return ['KB', 'LC', 'PD', 'SY'].filter((k) => (LAB_PARENT_TYPES[k] || []).includes(type));
+  return ['KB', 'LC', 'PD', 'MC', 'SY'].filter((k) => (LAB_PARENT_TYPES[k] || []).includes(type));
 }
 function bmpOpen(c) {
   // Jede Anzahl fängt bei 0 an: was letztes Mal angesetzt wurde, ist nicht, was
@@ -27064,7 +27061,7 @@ function bmpGo() {
   // Herkunft. Spritzen je Größe, jede Größe ihre eigenen Nummern.
   const ids = [];
   const saves = [];
-  for (const k of ['LC', 'PD', 'SY']) {
+  for (const k of ['LC', 'PD', 'MC', 'SY']) {
     if (!(n[k] > 0)) continue;
     const posten = k === 'SY' ? SY_ML.filter((ml) => sy[ml] > 0).map((ml) => [sy[ml], ml]) : [[n[k], null]];
     for (const [qty, ml] of posten) {
