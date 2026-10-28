@@ -3131,6 +3131,17 @@ const MIGRATIONS = [
                 WHERE id IN (SELECT strain_id FROM syringe_stock_sku WHERE type = 'PD' AND soll IS NOT NULL)`);
       db.exec("UPDATE syringe_stock_sku SET soll = NULL WHERE type = 'PD'");
     }
+  },
+  {
+    version: 109,
+    description: 'Gedruckte Etiketten: je Kennung, wann, damit ein nicht gespeichertes am selben Tag auffaellt',
+    fn(db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS printed_labels (
+                 label_id   TEXT PRIMARY KEY,
+                 printed_at TEXT NOT NULL,
+                 checked    INTEGER NOT NULL DEFAULT 0
+               )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -13466,6 +13477,70 @@ function saleAlerts(db, now = new Date()) {
   return neu;
 }
 
+// ── Gedruckt, aber nicht gespeichert ──
+// Ein Etikett, dessen Kennung danach nicht in der App steht, klebt auf einem
+// Glas oder Beutel, den die App nirgends zaehlt: kein Bestand, kein Billbee,
+// nichts auf der Nachproduzieren-Liste. So fehlten Petrischalen wochenlang,
+// bis jemand eine scannte. Darum merkt sich der Server jede gedruckte Kennung
+// und fragt ein paar Minuten spaeter nach; fehlt sie, meldet die Glocke es am
+// selben Tag.
+//
+// Die Kennung steht als erste Zeile auf jedem Kultur- und Beutel-Etikett, vor
+// einer Herkunft ("<- PD-...") und vor allem anderen. Der Strichcode taugt
+// nicht: er traegt meist eine Nummer aus der Registry, nicht die Kennung.
+const LABEL_ID_RE = /(?<![A-Z0-9-])[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{6}-\d{2}(?:-\d{2})?(?![\dA-Z-])/;
+function labelIdsFromZpl(zpl) {
+  const ids = new Set();
+  for (const label of String(zpl || '')
+    .split('^XA')
+    .slice(1)) {
+    // Nur Textfelder; ein Strichcode oder QR-Code ist kein Text. Eine Kennung,
+    // die am Bindestrich umbrochen wurde, steht wieder in einem Stueck da.
+    const zeilen = label
+      .split('^FS')
+      .filter((f) => f.includes('^FD') && !/\^B[CQ]/.test(f))
+      .map((f) => f.slice(f.indexOf('^FD') + 3));
+    const m = zeilen.join('\n').replace(/-\n/g, '-').match(LABEL_ID_RE);
+    if (m) ids.add(m[0]);
+  }
+  return [...ids];
+}
+
+/** Merkt sich die Kennungen eines gedruckten Auftrags. Gibt ihre Zahl zurueck. */
+function recordPrintedLabels(db, zpl, now = new Date()) {
+  const ids = labelIdsFromZpl(zpl);
+  const merke = db.prepare(
+    `INSERT INTO printed_labels(label_id, printed_at, checked) VALUES(?, ?, 0)
+     ON CONFLICT(label_id) DO UPDATE SET printed_at = excluded.printed_at, checked = 0`
+  );
+  for (const id of ids) merke.run(id, now.toISOString());
+  return ids.length;
+}
+
+/**
+ * Die gedruckten Kennungen, die `graceMs` nach dem Druck nicht in der App
+ * stehen: keine Kultur, kein Beutel, keine Charge. Jede wird einmal geprueft;
+ * wer sie danach aufnimmt, hoert nichts mehr. Nach 30 Tagen wird vergessen.
+ */
+function unsavedLabels(db, now = new Date(), graceMs = 5 * 60 * 1000) {
+  const bis = new Date(now.getTime() - graceMs).toISOString();
+  const offen = db
+    .prepare('SELECT label_id, printed_at FROM printed_labels WHERE checked = 0 AND printed_at <= ?')
+    .all(bis);
+  const da = (id) =>
+    db.prepare('SELECT 1 FROM cultures WHERE id = ? COLLATE NOCASE').get(id) ||
+    db.prepare('SELECT 1 FROM bags WHERE bag_id = ? COLLATE NOCASE').get(id) ||
+    db.prepare('SELECT 1 FROM batches WHERE batch_id = ? COLLATE NOCASE').get(id);
+  const erledigt = db.prepare('UPDATE printed_labels SET checked = 1 WHERE label_id = ?');
+  const fehlt = [];
+  for (const r of offen) {
+    if (!da(r.label_id)) fehlt.push({ id: r.label_id, printedAt: r.printed_at });
+    erledigt.run(r.label_id);
+  }
+  db.prepare('DELETE FROM printed_labels WHERE printed_at < ?').run(new Date(now.getTime() - 30 * 864e5).toISOString());
+  return fehlt;
+}
+
 // Koernerbrut im Regal je Art in kg, alle Beutelgroessen: was fertig ist und
 // was noch waechst, ohne die in der Kontamination. Der Vorrat fuer die
 // Bloecke, gegen min_spawn_kg; die
@@ -14034,6 +14109,9 @@ module.exports = {
   saleNeed,
   setSaleTarget,
   saleAlerts,
+  labelIdsFromZpl,
+  recordPrintedLabels,
+  unsavedLabels,
   labStock,
   getOrder,
   setOrderStatus,
