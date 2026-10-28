@@ -3771,7 +3771,12 @@ const USER_CALENDAR_COLORS = ['#f97316', '#ec4899', '#eab308', '#6366f1', '#06b6
 function getBatchLocServer(batch, scanLog) {
   const locs = {};
   (batch.bags || []).forEach((bag) => {
-    const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === bag.toUpperCase());
+    // A new Charge posts its bags as { id, bagKg }; one read back from the
+    // database has plain IDs. Both are a bag. Taking only the string form
+    // threw on every new Charge, and its due date never reached the calendar.
+    const id = String((bag && typeof bag === 'object' ? bag.id : bag) || '').toUpperCase();
+    if (!id) return;
+    const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === id);
     if (last && last.action !== 'REMOVE' && last.to) locs[last.to] = (locs[last.to] || 0) + 1;
   });
   const entries = Object.entries(locs);
