@@ -5082,8 +5082,7 @@ tr:hover td {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-#m-lb-make[hidden],
-#m-lb-hint[hidden] {
+#m-lb-make[hidden] {
   display: none;
 }
 /* What to make: 0 is the start, not a figure, so it stays quiet. */

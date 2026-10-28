@@ -516,21 +516,72 @@ describe('db – cultures', () => {
   });
 
   // I-20: parent type validation in insertCultures.
-  it('insertCultures rejects MC with a parent (root must have no parent)', () => {
+  it('insertCultures accepts a slant streaked from a plate or another slant, and one without a parent', () => {
+    db.insertCultures(d, [
+      {
+        id: 'PD-SLANT-SRC-01',
+        type: 'PD',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-02T00:00:00Z'
+      },
+      {
+        id: 'MC-FROM-PD-01',
+        type: 'MC',
+        parentId: 'PD-SLANT-SRC-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-03T00:00:00Z'
+      },
+      {
+        id: 'MC-FROM-MC-01',
+        type: 'MC',
+        parentId: 'MC-FROM-PD-01',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-04T00:00:00Z'
+      },
+      {
+        id: 'MC-BOUGHT-01',
+        type: 'MC',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-04T00:00:00Z'
+      }
+    ]);
+    const ids = db.readAll(d).cultures.map((c) => c.id);
+    for (const id of ['MC-FROM-PD-01', 'MC-FROM-MC-01', 'MC-BOUGHT-01']) assert.ok(ids.includes(id), id);
+  });
+
+  it('insertCultures rejects a slant from grain spawn', () => {
+    db.insertCultures(d, [
+      {
+        id: 'GS-SLANT-SRC-01',
+        type: 'GS',
+        species: 'Pleurotus',
+        status: 'active',
+        notes: '',
+        created: '2024-01-02T00:00:00Z'
+      }
+    ]);
     assert.throws(
       () =>
         db.insertCultures(d, [
           {
-            id: 'MC-BAD-PARENT',
+            id: 'MC-FROM-GS-01',
             type: 'MC',
-            parentId: 'MC-PLEU-010124-01',
+            parentId: 'GS-SLANT-SRC-01',
             species: 'Pleurotus',
             status: 'active',
             notes: '',
-            created: '2024-01-02T00:00:00Z'
+            created: '2024-01-03T00:00:00Z'
           }
         ]),
-      /MC cultures cannot have a parent/
+      /MC parent must be one of/
     );
   });
 
