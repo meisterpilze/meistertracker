@@ -8995,7 +8995,7 @@ const _lbAnsetzbar = (i) => i.key !== 'GSKG';
 const _lbMengeSumme = () =>
   _lbSheet ? Object.values(_lbSheet.make).reduce((s, n) => s + n, 0) : 0;
 function lbSheetOpen(strainId) {
-  _lbSheet = { strainId, make: {}, sollOffen: null };
+  _lbSheet = { strainId, make: {}, sollOffen: null, wegOffen: null, weg: new Set() };
   lbSheetRender();
   if (_lbSheet) document.getElementById('m-lb').classList.add('open');
 }
@@ -9028,13 +9028,13 @@ function lbSheetRender() {
   }
   document.getElementById('m-lb-title').textContent = sp.name;
   document.getElementById('m-lb-prog').checked = !!sp.imProgramm;
-  document.getElementById('m-lb-items').innerHTML = sp.items.map(_lbSheetZeile).join('');
+  document.getElementById('m-lb-items').innerHTML = sp.items.map((i) => _lbSheetZeile(i, sp)).join('');
   lbSheetKnopf(sp);
 }
 // "Soll 2 ›", oder "Kein Soll ›": der Knopf, der das Soll aufklappt.
 const _lbSollText = (i) =>
   i.soll ? t('lb.soll', { n: _lbZahl(i, i.soll) + (i.key === 'GSKG' ? ' kg' : '') }) : t('lb.sollNone');
-function _lbSheetZeile(i) {
+function _lbSheetZeile(i, sp) {
   const k = esc(i.key);
   const offen = _lbSheet.sollOffen === i.key;
   const soll =
@@ -9051,11 +9051,116 @@ function _lbSheetZeile(i) {
       `<b id="m-lb-make-${k}" class="${n ? '' : 'lb-null'}" aria-live="polite">${n}</b>` +
       `<button type="button" class="btn" data-lb-make="1" data-lb-key="${k}" aria-label="${esc(t('lb.makeMore'))}">+</button></div>`
     : '';
+  const wegOffen = _lbSheet.wegOffen === i.key;
+  const weg =
+    sp && i.have > 0 && _lbWegTyp(i.key)
+      ? `<button type="button" class="lb-soll-btn lb-weg-btn" data-lb-weg="${k}" aria-expanded="${wegOffen}">` +
+        `${esc(t('lb.delete'))} <span aria-hidden="true">${wegOffen ? '‹' : '›'}</span></button>`
+      : '';
   return (
     `<div class="lb-line${i.urgency === 'now' ? ' lb-now' : i.make > 0 ? ' lb-under' : ''}">` +
     `<div class="lb-line-l"><b>${esc(_lbLang(i))}</b>${i.shop ? ` <small class="lb-shop">${esc(t('lb.shop'))}</small>` : ''}` +
-    `<small class="lb-info">${esc(_lbSub(i))}</small>${soll}</div>${make}</div>`
+    `<small class="lb-info">${esc(_lbSub(i))}</small>${soll}${weg}</div>${make}</div>` +
+    (wegOffen && sp ? _lbWegListe(sp, i.key) : '')
   );
+}
+
+// ── Löschen, was nicht mehr da ist ──
+// Eine Schale, die runtergefallen ist oder sich nicht mehr findet, stand sonst
+// im Bestand, bis jemand sie in der Kulturenliste suchte. Unter jeder Zeile
+// klappt die Liste ihrer Kulturen auf, älteste zuerst; was weg ist, antippen,
+// ein Knopf löscht. Kein Rückfragefenster: die Leiste unten bietet Rückgängig,
+// und zum Server geht das Löschen erst, wenn ihre Zeit um ist. Eine Kultur, aus
+// der schon etwas angesetzt ist, löscht nur ein Admin (der Server ebenso).
+const LB_WEG_MS = 8500;
+function _lbWegTyp(key) {
+  if (key === 'MC' || key === 'LC' || key === 'PD') return { type: key, ml: null };
+  if (/^SY\d+$/.test(key)) return { type: 'SY', ml: Number(key.slice(2)) };
+  return null;
+}
+function _lbKulturen(sp, key) {
+  const f = _lbWegTyp(key);
+  if (!f) return [];
+  return cultures
+    .filter(
+      (c) =>
+        c.type === f.type &&
+        (c.status === 'active' || c.status === 'stored') &&
+        (f.ml == null || syMl(c) === f.ml) &&
+        (c.strainId === sp.strainId || (!c.strainId && c.species === sp.name))
+    )
+    .sort((a, b) => String(a.created).localeCompare(String(b.created)));
+}
+function _lbDarfWeg(c) {
+  if (currentUser && currentUser.role === 'admin') return true;
+  return !cultures.some((x) => x.parentId === c.id) && !batches.some((b) => b.sourceId === c.id);
+}
+function _lbWegListe(sp, key) {
+  const n = _lbSheet.weg.size;
+  const zeilen = _lbKulturen(sp, key)
+    .map((c) => {
+      const darf = _lbDarfWeg(c);
+      const an = _lbSheet.weg.has(c.id);
+      return (
+        `<button type="button" class="lb-weg-id${an ? ' on' : ''}" data-lb-wegid="${esc(c.id)}" aria-pressed="${an}"${darf ? '' : ' disabled'}>` +
+        `<span>${esc(c.id)}</span><small>${esc(darf ? fmtDt(c.created) : t('lb.deleteAdminOnly'))}</small></button>`
+      );
+    })
+    .join('');
+  return (
+    `<div class="lb-weg"><p class="lb-tap">${esc(t('lb.deleteHelp'))}</p>${zeilen}` +
+    `<button type="button" class="btn btn-sm btn-r" data-lb-act="weg"${n ? '' : ' disabled'}>${esc(t('lb.deleteN', { n }))}</button></div>`
+  );
+}
+function lbWegZeigen(key) {
+  if (!_lbSheet) return;
+  _lbSheet.wegOffen = _lbSheet.wegOffen === key ? null : key;
+  _lbSheet.weg = new Set();
+  lbSheetRender();
+}
+function lbWegWaehlen(id) {
+  if (!_lbSheet) return;
+  if (_lbSheet.weg.has(id)) _lbSheet.weg.delete(id);
+  else _lbSheet.weg.add(id);
+  lbSheetRender();
+}
+// Der Bestand im Blatt folgt sofort; die Zahl vom Server kommt nach dem Löschen.
+function _lbHaveAendern(strainId, key, d) {
+  const sp = _lbSpecies().find((x) => x.strainId === strainId);
+  const i = sp && sp.items.find((x) => x.key === key);
+  if (i) i.have = Math.max(0, i.have + d);
+}
+function lbWegLoeschen() {
+  if (!_lbSheet || !_lbSheet.weg.size) return;
+  const { strainId, wegOffen: key } = _lbSheet;
+  const ids = new Set(_lbSheet.weg);
+  const weg = cultures.filter((c) => ids.has(c.id));
+  cultures = cultures.filter((c) => !ids.has(c.id));
+  _lbHaveAendern(strainId, key, -weg.length);
+  _lbSheet.weg = new Set();
+  _lbSheet.wegOffen = null;
+  const neu = () => {
+    renderLabLog();
+    renderLabStock();
+    if (_lbSheet) lbSheetRender();
+  };
+  neu();
+  const timer = setTimeout(async () => {
+    for (const c of weg) {
+      const r = await apiDelete('/api/cultures/' + encodeURIComponent(c.id));
+      if (r && r.error) {
+        cultures.push(c);
+        toast(t('lb.deleteFailed', { id: c.id, msg: r.error }), 'err');
+      }
+    }
+    loadLabStock();
+  }, LB_WEG_MS);
+  showUndoBar(t('lb.deleted', { n: weg.length }), () => {
+    clearTimeout(timer);
+    cultures.push(...weg);
+    _lbHaveAendern(strainId, key, weg.length);
+    neu();
+  });
 }
 // Unten ein Knopf: "N ansetzen" mit dem, was eingetippt ist; ist nichts
 // eingetippt und fehlt etwas, wie bisher "Alles ansetzen" mit dem, was fehlt.
@@ -31883,9 +31988,14 @@ function initEventListeners() {
     if (mk) return lbMakeStep(mk.dataset.lbKey, Number(mk.dataset.lbMake));
     const so = e.target.closest('[data-lb-soll]');
     if (so) return lbSollZeigen(so.dataset.lbSoll);
+    const wg = e.target.closest('[data-lb-weg]');
+    if (wg) return lbWegZeigen(wg.dataset.lbWeg);
+    const wi = e.target.closest('[data-lb-wegid]');
+    if (wi) return lbWegWaehlen(wi.dataset.lbWegid);
     const b = e.target.closest('[data-lb-act]');
     if (!b) return;
-    if (b.dataset.lbAct === 'close') lbSheetClose();
+    if (b.dataset.lbAct === 'weg') lbWegLoeschen();
+    else if (b.dataset.lbAct === 'close') lbSheetClose();
     else if (b.dataset.lbAct === 'make' && _lbSheet) lbAnsetzen(_lbSheet.strainId, _lbMengeSumme() ? _lbSheet.make : null);
   });
   $('m-lb-prog').addEventListener('change', (e) => lbProgramm(e.target.checked));
