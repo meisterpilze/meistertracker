@@ -13483,9 +13483,9 @@ function _grainKgOnShelf(db, nowIso) {
  * Eine Art ausser Programm hat kein Soll; nur ihre offenen Bestellungen
  * zaehlen noch, denn die wartet jemand.
  *
- * Gezeigt wird eine Art, wenn sie im Programm ist, etwas da ist oder ein Shop
- * etwas von ihr verkauft. Gezaehlt wird ueberall gleich: Kulturen aktiv und
- * gelagert, Koernerbrut was im Regal steht.
+ * Jede Art steht da; eine ausser Programm ohne Bestand, Bestellung und Shop
+ * heisst ruht, und die Laborseite klappt sie ein. Gezaehlt wird ueberall
+ * gleich: Kulturen aktiv und gelagert, Koernerbrut was im Regal steht.
  */
 function labStock(db, now = new Date()) {
   const nowIso = now.toISOString();
@@ -13553,9 +13553,12 @@ function labStock(db, now = new Date()) {
           shop: shop(r)
         })
       );
+    // Ruhend: ausser Programm, und nichts da, nichts bestellt, kein Shop. Sie
+    // steht trotzdem in der Liste, eingeklappt, sonst liesse sie sich auf der
+    // Laborseite nie wieder einschalten.
     const hatWas = items.some((i) => i.have > 0 || i.growing > 0 || i.shop || i.ordered > 0);
-    if (!imProgramm && !hatWas) continue;
-    out.push({ strainId: ms.id, name: ms.name, kuerzel: ms.kuerzel || '', imProgramm, items });
+    const ruht = !imProgramm && !hatWas;
+    out.push({ strainId: ms.id, name: ms.name, kuerzel: ms.kuerzel || '', imProgramm, ruht, items });
   }
   return out;
 }

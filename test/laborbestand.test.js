@@ -163,10 +163,16 @@ describe('Laborbestand: die Rechnung je Sorte', () => {
     assert.ok(sy.shop && sy.shop.sku === 'SPRI-TEST-BETA10', 'ein Shop-Artikel trägt seinen Billbee-Stand');
   });
 
-  it('eine Sorte außer Programm ohne Bestand und ohne Shop steht gar nicht da', () => {
+  it('eine Sorte außer Programm ohne Bestand und ohne Shop ruht, steht aber da, damit man sie einschalten kann', () => {
     const z = Number(db.createMushroomStrain(d, { name: 'Testart Zeta', kuerzel: 'TZ' }));
     db.updateMushroomStrain(d, z, { imProgramm: false });
-    assert.equal(sorte(db.labStock(d, JETZT), z), undefined);
+    const s = sorte(db.labStock(d, JETZT), z);
+    assert.equal(s.ruht, true);
+    assert.ok(
+      s.items.every((i) => !i.make),
+      'eine ruhende Sorte fehlt nirgends'
+    );
+    assert.equal(sorte(db.labStock(d, JETZT), b).ruht, false, 'mit Restbestand ruht sie nicht');
   });
 });
 
@@ -254,6 +260,7 @@ function seite(species, extra = '') {
     'fmtKg',
     `let _lbData = ${JSON.stringify({ enabled: true, species })};
     let _npAlle = false;
+    let _lbRuhenOffen = false;
     ${code}
     renderLabStock();
     ${extra}
@@ -299,6 +306,17 @@ describe('Laborbestand: die Liste je Sorte', () => {
     assert.equal((h.match(/class="lb-st/g) || []).length, 5);
     assert.match(h, /class="lb-st lb-under"><small>lb\.short\.MC<\/small><b>1<em>\/2<\/em><\/b>/);
     assert.match(h, /lb\.short\.SYall<\/small><b>–<\/b>/, 'eine Sorte ohne Spritzen zeigt einen Strich');
+  });
+
+  it('eine ruhende Sorte steht eingeklappt unten, hinter einem Knopf', () => {
+    const { els } = seite([
+      art(1, 'Testart Alpha', {}),
+      art(2, 'Testart Ruhend', {}, { imProgramm: false, ruht: true })
+    ]);
+    const h = els['lb-list'].innerHTML;
+    assert.match(h, /data-lb-strain="1"/);
+    assert.doesNotMatch(h, /data-lb-strain="2"/);
+    assert.match(h, /data-lb-ruhen[^>]*>lb\.resting\{"n":1\}/);
   });
 
   it('eine Sorte außer Programm sagt es', () => {
@@ -377,7 +395,7 @@ describe('Laborbestand: die Tagesliste', () => {
 
 describe('Laborbestand: ansetzen und das Soll', () => {
   // lbAnsetzen gegen einen Laborarbeit-Dialog aus Platzhaltern.
-  function ansetzen(items) {
+  function ansetzen(items, menge) {
     const els = {};
     const el = (id) => (els[id] = els[id] || { innerHTML: '' });
     const log = [];
@@ -401,7 +419,7 @@ describe('Laborbestand: ansetzen und das Soll', () => {
       const msQuickRender = () => log.push('render');
       const msQuickPreview = () => log.push('preview');
       ${_hf('lbAnsetzen', APP)}
-      lbAnsetzen(1);
+      lbAnsetzen(1, ${JSON.stringify(menge || null)});
       Object.assign(ctxBox, _msQuickCtx);`
     )({ getElementById: el }, log, ctx);
     return { els, log, ctx };
@@ -428,6 +446,20 @@ describe('Laborbestand: ansetzen und das Soll', () => {
     assert.deepEqual(r.log, ['zu', 'open:labor:1', 'typ:MC']);
   });
 
+  it('aus dem Blatt: genau die eingetippten Anzahlen, nicht was fehlt', () => {
+    const r = ansetzen({ PD: { make: 3 }, SY10: { make: 2 }, kb1: { make: 1 } }, { PD: 1, LC: 2, SY10: 0 });
+    assert.deepEqual(r.ctx.arten, ['PD', 'LC']);
+    assert.deepEqual(r.ctx.n, { PD: 1, LC: 2 });
+    assert.equal(r.els['ms-q-sy'].innerHTML, 'sy{}');
+    assert.equal(r.els['ms-q-sizes'].innerHTML, 'kb{}');
+  });
+
+  it('aus dem Blatt nur Slants: der Dialog für eine Art, mit der Anzahl', () => {
+    const r = ansetzen({}, { MC: 4 });
+    assert.deepEqual(r.log, ['zu', 'open:labor:1', 'typ:MC', 'preview']);
+    assert.equal(r.els['ms-q-qty'].value, 4);
+  });
+
   it('der kg-Vorrat wählt Körnerbrut, die Beutelgrößen trägt man ein', () => {
     const r = ansetzen({ GSKG: { make: 10 } });
     assert.deepEqual(r.ctx.arten, ['KB']);
@@ -439,6 +471,15 @@ describe('Laborbestand: ansetzen und das Soll', () => {
     assert.match(f, /apiPatch\('\/api\/mushroom-strains\/' \+ strainId/);
     assert.match(f, /apiPut\('\/api\/sale-stock\/' \+ strainId \+ '\/' \+ slot/);
     assert.match(APP, /const LB_SORTE_FELD = \{ MC: 'minMc', LC: 'minLc', PD: 'minPd', GSKG: 'minSpawnKg' \};/);
+  });
+
+  it('der Bestand steht nur da; die Zahl mit − und + ist, was man ansetzt, und fängt bei 0 an', () => {
+    assert.match(_hf('lbSheetOpen', APP), /make: \{\}/);
+    const zeile = _hf('_lbSheetZeile', APP);
+    assert.match(zeile, /data-lb-make="-1"/);
+    assert.match(zeile, /_lbSheet\.make\[i\.key\] \|\| 0/);
+    assert.match(zeile, /data-lb-step="-1"/, 'das Soll hat sein eigenes − und +');
+    assert.doesNotMatch(_hf('lbMakeStep', APP), /api(Patch|Put|Post)/, 'ansetzen-Zahl speichert nichts');
   });
 
   it('ein Tipp auf + oder − gilt sofort, ohne Rückfrage, und "Im Programm" schaltet die Sorte', () => {

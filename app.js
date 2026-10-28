@@ -8872,6 +8872,7 @@ function _lbZeile(sp) {
     '</span></button>'
   );
 }
+let _lbRuhenOffen = false;
 function renderLabStock() {
   const d = _lbData;
   if (!d) return;
@@ -8882,7 +8883,18 @@ function renderLabStock() {
   if (!card) return;
   card.hidden = !species.length;
   if (!species.length) return;
-  document.getElementById('lb-list').innerHTML = species.map(_lbZeile).join('');
+  // Eine Sorte, die ruht (außer Programm, nichts da), steht eingeklappt unten:
+  // im Weg ist sie nicht, und einschalten lässt sie sich trotzdem hier.
+  const ruhen = species.filter((sp) => sp.ruht);
+  document.getElementById('lb-list').innerHTML =
+    species
+      .filter((sp) => !sp.ruht)
+      .map(_lbZeile)
+      .join('') +
+    (ruhen.length
+      ? `<button type="button" class="btn btn-sm lb-ruhen" data-lb-ruhen aria-expanded="${_lbRuhenOffen}">${esc(t(_lbRuhenOffen ? 'lb.restingHide' : 'lb.resting', { n: ruhen.length }))}</button>` +
+        (_lbRuhenOffen ? ruhen.map(_lbZeile).join('') : '')
+      : '');
   // Was ein Shop verkauft, geht an Billbee; eine Zeile sagt, wie es darum steht.
   const shop = [];
   for (const sp of species) for (const i of sp.items) if (i.shop) shop.push(i);
@@ -8908,7 +8920,11 @@ function renderLabStock() {
 // Slants sind die Quelle und nicht Teil von Mehrere; fehlen nur sie, geht der
 // Dialog für eine Art auf, mit Slant gewählt. Die Anzahl ist, was fehlt, keine
 // gemerkte Zahl, und alles endet wie immer im Etikettendialog.
-function lbAnsetzen(strainId) {
+//
+// Aus dem Blatt einer Art kommt statt dessen, was man dort eingetippt hat
+// (menge: Feld → Anzahl, jede ab 0). Slants mit anderem zusammen gehen nicht:
+// Mehrere kennt sie nicht, und das Blatt sagt das, bevor man tippt.
+function lbAnsetzen(strainId, menge) {
   const sp = _lbSpecies().find((x) => x.strainId === strainId);
   const ms = (mushroomStrains || []).find((x) => x.id === strainId);
   if (!sp || !ms) return;
@@ -8917,7 +8933,10 @@ function lbAnsetzen(strainId) {
   const sy = {};
   const kb = {};
   const arten = new Set();
-  for (const i of _lbFehlt(sp)) {
+  const quelle = menge
+    ? sp.items.filter((i) => menge[i.key] > 0).map((i) => ({ ...i, make: menge[i.key] }))
+    : _lbFehlt(sp);
+  for (const i of quelle) {
     if (i.key === 'PD' || i.key === 'LC') {
       n[i.key] = Math.ceil(i.make);
       arten.add(i.key);
@@ -8932,6 +8951,11 @@ function lbAnsetzen(strainId) {
   msQuickOpen('labor', ms);
   if (!arten.size) {
     _msqPickType('MC');
+    const qty = menge && menge.MC && document.getElementById('ms-q-qty');
+    if (qty) {
+      qty.value = menge.MC;
+      msQuickPreview();
+    }
     return;
   }
   msqMehrereUmschalten();
@@ -8944,17 +8968,31 @@ function lbAnsetzen(strainId) {
 }
 
 // ── Eine Art im Einzelnen ──
-// Jedes Feld mit seiner Zahl und seinem Soll. Ein Tipp auf + oder − gilt
-// sofort, ohne Speichern und ohne Rückfrage, und wird kurz nach dem letzten
-// gespeichert. Das Soll steht, wo es immer stand: an der Sorte für Slants,
+// Jedes Feld mit seinem Bestand, seinem Soll und dem, was man ansetzen will.
+// Der Bestand ist gezählt, aus den Scans, und steht nur da: ändern tut ihn
+// Ansetzen, Verbrauchen und Rausscannen, nie eine Hand im Blatt. Die große
+// Zahl mit − und + ist, was man jetzt ansetzt; sie fängt bei 0 an, und "N
+// ansetzen" öffnet Laborarbeit damit. Vorher war das die Stelle des Solls,
+// und ein Soll von 2 neben 2 Schalen im Regal las sich wie ein Bestand, den
+// man von Hand verstellt.
+//
+// Das Soll steht klein unter dem Bestand und geht auf einen Tipp mit eigenem
+// − und + auf. Ein Tipp gilt sofort, ohne Rückfrage, und wird kurz nach dem
+// letzten gespeichert. Es steht, wo es immer stand: an der Sorte für Slants,
 // Flüssigkultur, Petrischale und den kg-Vorrat (dieselben Felder wie auf der
 // Pilzsorten-Seite), an der SKU für eine Verkaufsgröße. "Im Programm" aus
 // heißt: die Art fehlt nirgends, nur ihre offenen Bestellungen zählen noch.
+//
+// Der kg-Vorrat hat keinen Zähler zum Ansetzen: in welche Beutel er geht,
+// weiß die Zahl nicht. Die Beutel, die ein Shop verkauft, haben ihren.
 const LB_SORTE_FELD = { MC: 'minMc', LC: 'minLc', PD: 'minPd', GSKG: 'minSpawnKg' };
 let _lbSheet = null;
 const _lbTimer = {};
+const _lbAnsetzbar = (i) => i.key !== 'GSKG';
+const _lbMengeSumme = () =>
+  _lbSheet ? Object.values(_lbSheet.make).reduce((s, n) => s + n, 0) : 0;
 function lbSheetOpen(strainId) {
-  _lbSheet = { strainId };
+  _lbSheet = { strainId, make: {}, sollOffen: null };
   lbSheetRender();
   if (_lbSheet) document.getElementById('m-lb').classList.add('open');
 }
@@ -8987,21 +9025,63 @@ function lbSheetRender() {
   }
   document.getElementById('m-lb-title').textContent = sp.name;
   document.getElementById('m-lb-prog').checked = !!sp.imProgramm;
-  document.getElementById('m-lb-items').innerHTML = sp.items
-    .map(
-      (i) =>
-        `<div class="lb-line${i.urgency === 'now' ? ' lb-now' : i.make > 0 ? ' lb-under' : ''}">` +
-        `<div class="lb-line-l"><b>${esc(_lbLang(i))}</b>${i.shop ? ` <small class="lb-shop">${esc(t('lb.shop'))}</small>` : ''}` +
-        `<small>${esc(_lbSub(i))}</small></div>` +
-        `<div class="lb-step"><button type="button" class="btn" data-lb-step="-1" data-lb-key="${esc(i.key)}" aria-label="${esc(t('vb.sollLess'))}">−</button>` +
-        `<b id="m-lb-soll-${esc(i.key)}" aria-live="polite">${esc(_lbZahl(i, i.soll || 0))}${i.key === 'GSKG' ? ' kg' : ''}</b>` +
-        `<button type="button" class="btn" data-lb-step="1" data-lb-key="${esc(i.key)}" aria-label="${esc(t('vb.sollMore'))}">+</button></div></div>`
-    )
-    .join('');
+  document.getElementById('m-lb-items').innerHTML = sp.items.map(_lbSheetZeile).join('');
+  lbSheetKnopf(sp);
+}
+// "Soll 2 ›", oder "Kein Soll ›": der Knopf, der das Soll aufklappt.
+const _lbSollText = (i) =>
+  i.soll ? t('lb.soll', { n: _lbZahl(i, i.soll) + (i.key === 'GSKG' ? ' kg' : '') }) : t('lb.sollNone');
+function _lbSheetZeile(i) {
+  const k = esc(i.key);
+  const offen = _lbSheet.sollOffen === i.key;
+  const soll =
+    `<button type="button" class="lb-soll-btn" data-lb-soll="${k}" aria-expanded="${offen}">` +
+    `<span id="m-lb-sollt-${k}">${esc(_lbSollText(i))}</span> <span aria-hidden="true">${offen ? '‹' : '›'}</span></button>` +
+    (offen
+      ? `<div class="lb-step lb-step-soll"><button type="button" class="btn btn-sm" data-lb-step="-1" data-lb-key="${k}" aria-label="${esc(t('vb.sollLess'))}">−</button>` +
+        `<b id="m-lb-soll-${k}" aria-live="polite">${esc(_lbZahl(i, i.soll || 0))}${i.key === 'GSKG' ? ' kg' : ''}</b>` +
+        `<button type="button" class="btn btn-sm" data-lb-step="1" data-lb-key="${k}" aria-label="${esc(t('vb.sollMore'))}">+</button></div>`
+      : '');
+  const n = _lbSheet.make[i.key] || 0;
+  const make = _lbAnsetzbar(i)
+    ? `<div class="lb-step"><button type="button" class="btn" data-lb-make="-1" data-lb-key="${k}" aria-label="${esc(t('lb.makeLess'))}">−</button>` +
+      `<b id="m-lb-make-${k}" class="${n ? '' : 'lb-null'}" aria-live="polite">${n}</b>` +
+      `<button type="button" class="btn" data-lb-make="1" data-lb-key="${k}" aria-label="${esc(t('lb.makeMore'))}">+</button></div>`
+    : '';
+  return (
+    `<div class="lb-line${i.urgency === 'now' ? ' lb-now' : i.make > 0 ? ' lb-under' : ''}">` +
+    `<div class="lb-line-l"><b>${esc(_lbLang(i))}</b>${i.shop ? ` <small class="lb-shop">${esc(t('lb.shop'))}</small>` : ''}` +
+    `<small class="lb-info">${esc(_lbSub(i))}</small>${soll}</div>${make}</div>`
+  );
+}
+// Unten ein Knopf: "N ansetzen" mit dem, was eingetippt ist; ist nichts
+// eingetippt und fehlt etwas, wie bisher "Alles ansetzen" mit dem, was fehlt.
+function lbSheetKnopf(sp) {
   const go = document.getElementById('m-lb-make');
+  const summe = _lbMengeSumme();
   const fehlt = _lbFehlt(sp);
-  go.hidden = !fehlt.length;
-  go.textContent = fehlt.length ? t('np.goAll') : '';
+  go.hidden = !summe && !fehlt.length;
+  go.textContent = summe ? t('lb.goN', { n: summe }) : fehlt.length ? t('np.goAll') : '';
+  const m = _lbSheet.make;
+  document.getElementById('m-lb-hint').hidden = !(m.MC > 0 && summe > m.MC);
+}
+function lbMakeStep(key, d) {
+  const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
+  if (!sp || !sp.items.some((x) => x.key === key)) return;
+  const neu = Math.max(0, Math.min(500, (_lbSheet.make[key] || 0) + d));
+  if (neu) _lbSheet.make[key] = neu;
+  else delete _lbSheet.make[key];
+  const el = document.getElementById('m-lb-make-' + key);
+  if (el) {
+    el.textContent = String(neu);
+    el.classList.toggle('lb-null', !neu);
+  }
+  lbSheetKnopf(sp);
+}
+function lbSollZeigen(key) {
+  if (!_lbSheet) return;
+  _lbSheet.sollOffen = _lbSheet.sollOffen === key ? null : key;
+  lbSheetRender();
 }
 function lbSollStep(key, d) {
   const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
@@ -9011,6 +9091,8 @@ function lbSollStep(key, d) {
   i.soll = neu || null;
   const el = document.getElementById('m-lb-soll-' + key);
   if (el) el.textContent = _lbZahl(i, neu) + (key === 'GSKG' ? ' kg' : '');
+  const txt = document.getElementById('m-lb-sollt-' + key);
+  if (txt) txt.textContent = _lbSollText(i);
   clearTimeout(_lbTimer[key]);
   _lbTimer[key] = setTimeout(() => lbSollSave(sp.strainId, i, neu), 500);
 }
@@ -31770,6 +31852,10 @@ function initEventListeners() {
     if (b) lbAnsetzen(parseInt(b.dataset.npStrain, 10));
   });
   $('lb-list').addEventListener('click', (e) => {
+    if (e.target.closest('[data-lb-ruhen]')) {
+      _lbRuhenOffen = !_lbRuhenOffen;
+      return renderLabStock();
+    }
     const b = e.target.closest('[data-lb-strain]');
     if (b) lbSheetOpen(parseInt(b.dataset.lbStrain, 10));
   });
@@ -31777,10 +31863,14 @@ function initEventListeners() {
     if (e.target.id === 'm-lb') return lbSheetClose();
     const st = e.target.closest('[data-lb-step]');
     if (st) return lbSollStep(st.dataset.lbKey, Number(st.dataset.lbStep));
+    const mk = e.target.closest('[data-lb-make]');
+    if (mk) return lbMakeStep(mk.dataset.lbKey, Number(mk.dataset.lbMake));
+    const so = e.target.closest('[data-lb-soll]');
+    if (so) return lbSollZeigen(so.dataset.lbSoll);
     const b = e.target.closest('[data-lb-act]');
     if (!b) return;
     if (b.dataset.lbAct === 'close') lbSheetClose();
-    else if (b.dataset.lbAct === 'make' && _lbSheet) lbAnsetzen(_lbSheet.strainId);
+    else if (b.dataset.lbAct === 'make' && _lbSheet) lbAnsetzen(_lbSheet.strainId, _lbMengeSumme() ? _lbSheet.make : null);
   });
   $('m-lb-prog').addEventListener('change', (e) => lbProgramm(e.target.checked));
   // Which Sorten are in this season's programme. Delegated: the table is
