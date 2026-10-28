@@ -1,10 +1,12 @@
 'use strict';
 // Culture badges escape what they render.
 //
-// `ctBadge`/`csBadge` build a `<span>` from two things: a CSS class looked up
-// in a fixed map, and the value itself. The class is safe by construction — an
-// unknown key yields ''. The value is not: it comes from the cultures table,
-// and both badges are dropped into the page with innerHTML.
+// `ctBadge` builds a `<span>` from two things: a CSS class looked up in a fixed
+// map, and the value itself. The class is safe by construction — an unknown key
+// yields ''. The value is not: it comes from the cultures table, and the badge
+// is dropped into the page with innerHTML. The status had a badge of its own in
+// the old culture table; the Kulturbibliothek that replaced it writes status
+// and id as text, and is held to the same rule below.
 //
 // That made `type` and `status` a stored-XSS pair. POST /api/cultures pinned
 // the character set of `id` and nothing else, so any logged-in worker could
@@ -30,7 +32,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-/** Lift `esc` and the two badge builders out of app.js and make them callable. */
+/** Lift `esc`, the badge and the library row out of app.js and make them callable. */
 function loadBadges() {
   const src = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
   const grab = (re, what) => {
@@ -40,8 +42,19 @@ function loadBadges() {
   };
   const escSrc = grab(/function esc\(s\) \{[\s\S]*?\n\}/, 'esc()');
   const ctSrc = grab(/const ctBadge = \(t\) => \{[\s\S]*?\n\};/, 'ctBadge');
-  const csSrc = grab(/const csBadge = \(s\) => \{[\s\S]*?\n\};/, 'csBadge');
-  return new Function(escSrc + '\n' + ctSrc + '\n' + csSrc + '\nreturn { esc, ctBadge, csBadge };')();
+  const row = [
+    grab(/^const KB_STATUS = .*;$/m, 'KB_STATUS'),
+    grab(/^const _kb = .*;$/m, '_kb'),
+    grab(/function _kbKulturHtml\(c\) \{[\s\S]*?\n\}/, '_kbKulturHtml()')
+  ].join('\n');
+  return new Function(
+    escSrc +
+      '\n' +
+      ctSrc +
+      '\nconst t = (k) => k;\nconst syMl = () => 10;\n' +
+      row +
+      '\n_kb.erledigt = true;\nreturn { esc, ctBadge, kulturZeile: _kbKulturHtml };'
+  )();
 }
 
 const PAYLOAD = '<img src=x onerror=alert(document.domain)>';
@@ -62,8 +75,8 @@ describe('culture badges escape their label', () => {
     assert.ok(html.includes('&lt;img'), 'it should be visible as text instead');
   });
 
-  it('csBadge does not let a culture status open a tag', () => {
-    const html = badges.csBadge(PAYLOAD);
+  it('a library row does not let a culture status or id open a tag', () => {
+    const html = badges.kulturZeile({ id: PAYLOAD, type: 'PD', status: PAYLOAD });
     assert.equal(html.includes('<img'), false, 'a stored culture status must not become markup');
     assert.ok(html.includes('&lt;img'), 'it should be visible as text instead');
   });
@@ -76,7 +89,6 @@ describe('culture badges escape their label', () => {
   // The badge must still do its actual job, or the fix above is just deletion.
   it('still renders the ordinary values, class and all', () => {
     assert.equal(badges.ctBadge('MC'), '<span class="badge badge-mc">MC</span>');
-    assert.equal(badges.csBadge('active'), '<span class="badge badge-active">active</span>');
   });
 
   it('renders an unknown-but-harmless value with an empty class', () => {

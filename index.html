@@ -4454,55 +4454,24 @@
           </div>
           <!-- Cultures -->
           <div class="sp active" id="sp-lab-cultures">
+            <!-- Kulturbibliothek: one row per Sorte with what is in stock; a tap
+                 opens its cultures by type, oldest first; a tap on a culture
+                 opens the same sheet a scan does (renderCultures). -->
             <div class="card">
-              <div class="sec-head">
-                <div class="sec" data-i18n="lab.cultureLibrary">Culture library</div>
-                <div class="sec-head-tools">
-                  <select id="cult-type" class="head-select">
-                    <option value="all" data-i18n="lab.allTypes">All types</option>
-                    <option value="MC" data-i18n="lab.motherCultures">Mother cultures</option>
-                    <option value="PD" data-i18n="lab.petriDishes">Petri dishes</option>
-                    <option value="LC" data-i18n="lab.liquidCultures">Liquid cultures</option>
-                    <option value="SY" data-i18n="lab.syringes">Liquid syringes</option>
-                  </select>
-                  <select id="cult-stat" class="head-select">
-                    <option value="all" data-i18n="lab.allStatuses">All statuses</option>
-                    <option value="active" data-i18n="lab.active">Active</option>
-                    <option value="stored" data-i18n="lab.stored">Stored</option>
-                    <option value="used" data-i18n="lab.usedUp">Used up</option>
-                    <option value="sold" data-i18n="lab.sold">Sold</option>
-                    <option value="contam" data-i18n="lab.contaminated">Contaminated</option>
-                  </select>
-                  <!-- Lab stocktake: scan the shelf, mark what's gone as used up -->
-                  <button
-                    type="button"
-                    id="lab-check-btn"
-                    class="btn btn-sm"
-                    style="white-space: nowrap"
-                    data-i18n="zoneCheck.btn"
-                  >
-                    Check
-                  </button>
-                </div>
+              <div class="kb-head">
+                <div class="sec" data-i18n="lab.cultureLibrary">Kulturbibliothek</div>
+                <span class="kb-count" id="kb-count"></span>
               </div>
-              <div style="overflow-x: auto">
-                <table id="t-cultures" class="t-cards" role="table">
-                  <thead role="rowgroup">
-                    <tr role="row">
-                      <th class="sortable" data-sort="id" data-i18n="th.id" role="columnheader">ID</th>
-                      <th class="sortable" data-sort="type" data-i18n="th.type" role="columnheader">Type</th>
-                      <th class="sortable" data-sort="species" data-i18n="th.species" role="columnheader">Species</th>
-                      <th class="sortable" data-sort="strain" data-i18n="th.strain" role="columnheader">Strain</th>
-                      <th class="sortable" data-sort="parentId" data-i18n="th.parent" role="columnheader">Parent</th>
-                      <th class="sortable" data-sort="created" data-i18n="th.created" role="columnheader">Created</th>
-                      <th class="sortable" data-sort="status" data-i18n="th.status" role="columnheader">Status</th>
-                      <th data-i18n="th.notes" role="columnheader">Notes</th>
-                      <th role="columnheader"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="cultures-body" role="rowgroup"></tbody>
-                </table>
+              <div class="kb-tools">
+                <button type="button" id="kb-scan" class="btn btn-p" data-i18n="kb.scan">Kultur scannen</button>
+                <!-- Lab stocktake: scan the shelf, mark what's gone as used up -->
+                <button type="button" id="lab-check-btn" class="btn" data-i18n="zoneCheck.btn">Prüfen</button>
+                <button type="button" id="kb-erledigt" class="btn" aria-pressed="false"></button>
               </div>
+              <p class="lb-tap" id="kb-help" data-i18n="kb.help">
+                Tipp auf eine Sorte, dann auf eine Kultur: verkaufen, verbrauchen, drucken, löschen.
+              </p>
+              <div id="kb-list"></div>
             </div>
           </div>
           <!-- Log work -->

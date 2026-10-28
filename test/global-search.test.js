@@ -764,7 +764,9 @@ describe('the route the palette takes to a destination', () => {
     // nothing of the kind.
     const kultur = GS_TYPES.find((k) => k.type === 'culture');
     const bestellung = GS_TYPES.find((k) => k.type === 'order');
-    assert.match(String(kultur.clear), /'cult-type', 'cult-stat'/);
+    // The Kulturbibliothek has no filters any more; it opens the culture's
+    // Sorte, past "+ N weitere" and into the erledigte if that is where it is.
+    assert.match(String(kultur.go), /kbZeige\(rec\.id\)/);
     // Through the setter, or one chip stays looking selected over an
     // unfiltered list.
     assert.match(String(bestellung.clear), /setOrdersFilter\(''\)/);

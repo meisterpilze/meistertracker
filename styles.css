@@ -5169,6 +5169,121 @@ tr:hover td {
 .lb-weg .btn {
   margin-top: 4px;
 }
+
+/* ── Kulturbibliothek ──
+   One row per Sorte with its counts; a tap opens its cultures by type, one
+   line each. Rows are list items and span the card; the buttons on top size
+   to their words. */
+.kb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.kb-head .sec {
+  margin: 0;
+}
+.kb-count {
+  color: var(--c-text-muted);
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.kb-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.kb-tools .btn[aria-pressed='true'] {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+.kb-sorte {
+  border-bottom: 1px solid var(--c-border-light);
+}
+.kb-sorte.open {
+  padding-bottom: 8px;
+}
+.kb-kopf,
+.kb-kultur,
+.kb-mehr {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kb-kopf {
+  min-height: 48px;
+  padding: 8px 2px;
+}
+.kb-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.kb-chips {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.kb-chip {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--c-bg);
+  color: var(--c-text-sec);
+  font-size: max(0.75rem, var(--fs-min));
+  white-space: nowrap;
+}
+.kb-chip b {
+  color: var(--c-text);
+}
+.kb-sorte.open .kb-kopf {
+  color: var(--c-primary);
+}
+.kb-art {
+  margin: 2px 0 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--c-border-light);
+}
+.kb-art-t {
+  padding: 4px 0;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 600;
+}
+.kb-kultur {
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.kb-kultur:hover,
+.kb-kultur:focus-visible {
+  background: var(--c-bg);
+}
+.kb-id {
+  min-width: 0;
+  font-family: monospace;
+  font-size: max(0.8125rem, var(--fs-min));
+  overflow-wrap: anywhere;
+}
+.kb-r {
+  flex: 0 0 auto;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  white-space: nowrap;
+}
+.kb-mehr {
+  padding: 6px 8px;
+  color: var(--c-primary);
+  font-size: max(0.8125rem, var(--fs-min));
+}
 .lb-help,
 .lb-tap {
   margin: 0 0 8px;
@@ -7364,10 +7479,9 @@ body:has(#m-camscan.open) .update-bar {
 
   /* ── Per table, only what is genuinely its own ───────────────── */
 
-  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  /* Batches and grain lead with an id, which is the card's name. */
   #t-batches > tbody > tr > td.bt-id,
-  #t-grain > tbody > tr > td.bt-id,
-  #t-cultures > tbody > tr > td.cu-id {
+  #t-grain > tbody > tr > td.bt-id {
     font-size: 0.9375rem !important;
     font-weight: 600;
   }
@@ -7387,12 +7501,6 @@ body:has(#m-camscan.open) .update-bar {
     border: 1px dashed var(--c-border);
     padding: 10px 12px;
     background: var(--c-bg);
-  }
-  /* The status dropdown in the cultures action row is a control, not a
-     button; stretching it to share the row makes it unreadable. */
-  #t-cultures > tbody > tr > td.cu-actions select {
-    flex: 1 1 100%;
-    width: 100%;
   }
   /* Harvest cards: grams pinned top-right as a big amber number, the
      most-scanned value when reading a harvest log on a phone. */
@@ -7582,10 +7690,9 @@ body:has(#m-camscan.open) .update-bar {
 
   /* ── Per table, only what is genuinely its own ───────────────── */
 
-  /* Batches, grain and cultures lead with an id, which is the card's name. */
+  /* Batches and grain lead with an id, which is the card's name. */
   #t-batches > tbody > tr > td.bt-id,
-  #t-grain > tbody > tr > td.bt-id,
-  #t-cultures > tbody > tr > td.cu-id {
+  #t-grain > tbody > tr > td.bt-id {
     font-size: 0.9375rem !important;
     font-weight: 600;
   }
@@ -7605,12 +7712,6 @@ body:has(#m-camscan.open) .update-bar {
     border: 1px dashed var(--c-border);
     padding: 10px 12px;
     background: var(--c-bg);
-  }
-  /* The status dropdown in the cultures action row is a control, not a
-     button; stretching it to share the row makes it unreadable. */
-  #t-cultures > tbody > tr > td.cu-actions select {
-    flex: 1 1 100%;
-    width: 100%;
   }
   /* Harvest cards: grams pinned top-right as a big amber number, the
      most-scanned value when reading a harvest log on a phone. */
