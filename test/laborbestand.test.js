@@ -176,6 +176,48 @@ describe('Laborbestand: die Rechnung je Sorte', () => {
   });
 });
 
+describe('Laborbestand: ein kontaminierter Beutel ist kein Bestand', () => {
+  it('zählt weder im kg-Vorrat noch bei den Beuteln, die ein Shop verkauft', () => {
+    const { d, dir } = freshDb();
+    try {
+      const a = Number(db.createMushroomStrain(d, { name: 'Testart Kappa', kuerzel: 'TK' }));
+      db.setSyringeSku(d, a, 'kb2', 'GRSP-TEST-KAPPA2');
+      beutel(d, 'G-TK-061026-01', a, '2026-10-20T08:00:00.000Z', [2, 2, 2]);
+      beutel(d, 'G-TK-211026-01', a, '2026-11-04T08:00:00.000Z', [2]);
+      const vorher = db.labStock(d, JETZT);
+      assert.equal(feld(vorher, a, 'GSKG').have, 6);
+      assert.equal(feld(vorher, a, 'kb2').have, 3);
+      db.appendScanEntries(d, [
+        {
+          time: '2026-10-27T10:00:00.000Z',
+          action: 'MOVE',
+          batch: 'G-TK-061026-01',
+          bag: 'G-TK-061026-01-01',
+          from: 'SPAWN',
+          to: 'CONTAM'
+        },
+        {
+          time: '2026-10-27T10:01:00.000Z',
+          action: 'MOVE',
+          batch: 'G-TK-211026-01',
+          bag: 'G-TK-211026-01-01',
+          from: 'SPAWN',
+          to: 'CONTAM'
+        }
+      ]);
+      const L = db.labStock(d, JETZT);
+      assert.equal(feld(L, a, 'GSKG').have, 4);
+      assert.equal(feld(L, a, 'GSKG').growing, 0, 'auch was noch wächst, zählt nicht, wenn es kontaminiert ist');
+      assert.equal(feld(L, a, 'kb2').have, 2);
+      assert.equal(db.getStockBagZoneMap(d).has('G-TK-061026-01-01'), false);
+      assert.equal(db.getBagZoneMap(d).get('G-TK-061026-01-01'), 'CONTAM', 'die Zone selbst zeigt ihn weiter');
+    } finally {
+      d.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Laborbestand: eine Zahl für die Petrischale', () => {
   it('das Soll der Petrischale ist die Untergrenze der Sorte, auch über die Verkaufsroute', () => {
     const { d, dir } = freshDb();

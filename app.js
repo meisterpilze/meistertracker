@@ -3310,6 +3310,12 @@ function stageOf(role, batchType) {
   if (role === 'fruiting' || role === 'contaminated') return role;
   return batchType === 'grain' ? 'spawn' : 'incubation';
 }
+// A bag in a contamination zone is nobody's stock: no count of a batch's or a
+// Sorte's bags may include it. Only the contamination zone itself shows it.
+function isContamLoc(loc) {
+  const z = loc ? ZONE_BY_ID[toZone(loc)] : null;
+  return !!(z && z.role === 'contaminated');
+}
 function _statusFromCounts(c, hasScans, batchType) {
   let total = 0;
   for (const k in c) total += c[k];
@@ -4568,7 +4574,8 @@ function renderKpiHistory() {
     const totalData = histKeys.map((k) => {
       const s = snapshotMap[k];
       if (!s) return null;
-      return (s.bags_spawn || 0) + (s.bags_incubation || 0) + (s.bags_fruiting || 0) + (s.bags_contaminated || 0);
+      // Contaminated bags are no part of the total; they have their own line.
+      return (s.bags_spawn || 0) + (s.bags_incubation || 0) + (s.bags_fruiting || 0);
     });
     ovHistPipelineInst = new Chart(c3, {
       type: 'line',
@@ -5331,7 +5338,7 @@ function _batchZoneCounts(batch, lastByBag) {
   const counts = {};
   (batch.bags || []).forEach((bag) => {
     const last = lastByBag.get(bag.toUpperCase());
-    if (!last || last.action === 'REMOVE' || !last.to) return;
+    if (!last || last.action === 'REMOVE' || !last.to || isContamLoc(last.to)) return;
     const z = toZone(last.to);
     counts[z] = (counts[z] || 0) + 1;
   });
@@ -8495,7 +8502,7 @@ function buildHarvestTasks() {
         enteredTent = null;
       b.bags.forEach((bag) => {
         const last = lastByBag.get(bag.toUpperCase());
-        if (!last || last.action === 'REMOVE' || !last.to) return;
+        if (!last || last.action === 'REMOVE' || !last.to || isContamLoc(last.to)) return;
         activeBags++;
         const z = toZone(last.to);
         zoneCounts[z] = (zoneCounts[z] || 0) + 1;
@@ -11709,11 +11716,17 @@ function moveBagsTo(batch, bagIds, dest, cb, opts) {
 // "no bags to move" and the batch could not be recovered from the UI at all.
 // Placing them here is also what the worker means: a whole-batch move to a zone
 // says "this batch is now there", however it got created.
+// A whole-batch move leaves the batch's contaminated bags where they are: moving
+// the batch on would carry them out of the contamination zone and back into
+// stock. Moving one of them on purpose is still a single-bag move.
 function moveBatchTo(batch, dest, cb) {
   const lastPlacement = buildLastPlacementByBag();
   const unplaced = (batch.bags || []).filter((id) => !lastPlacement.get(id.toUpperCase()));
-  if (!unplaced.length) return moveBagsTo(batch, batch.bags, dest, cb);
-  const placed = (batch.bags || []).filter((id) => lastPlacement.get(id.toUpperCase()));
+  const placed = (batch.bags || []).filter((id) => {
+    const last = lastPlacement.get(id.toUpperCase());
+    return last && !(isContamLoc(last.to) && !isContamLoc(dest));
+  });
+  if (!unplaced.length) return moveBagsTo(batch, placed, dest, cb);
   addBagsToLocation(batch, unplaced, dest, function (added) {
     if (!placed.length) {
       if (cb) cb(added, 0);
