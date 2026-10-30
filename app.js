@@ -23024,12 +23024,12 @@ let _crZoneId = null;
 // Schwere, Fotos und Notiz so, wie sie vor dem Scannen standen.
 let _crResumeForm = false;
 let _crTypes = null; // lazily loaded from /api/contamination-types
+// Der Typ ist freiwillig: Beutel scannen, Senden, fertig. Er stand vorher als
+// Pflichtfeld davor, und für die meisten Meldungen war die Antwort "weiß ich
+// nicht". Ohne Wahl legt der Server den Bericht unter "Unbekannt / Sonstiges"
+// ab. Er wird auch nicht mehr vom letzten Bericht übernommen — ein Typ, den
+// niemand für diesen Beutel gewählt hat, wäre eine stille Falschangabe.
 let _crSelectedTypeId = null;
-// Last type reported this session — pre-selected on the next report so a whole
-// shelf of the same contamination (e.g. a Trichoderma row) is just tap-Senden
-// per bag. Session-scoped (resets on reload) to avoid carrying a stale type
-// across days. Pairs with the scanner's "stay in CONTAM mode" chaining.
-let _crLastTypeId = null;
 let _crSeverity = 'minor';
 let _crPhotos = []; // [{ data_url, thumb_data_url, width, height }]
 const CR_MAX_PHOTOS = 4;
@@ -23063,7 +23063,7 @@ function crOpenCollected() {
 // den Typ schon getippt.
 function _crOpenForm(keep) {
   if (!keep) {
-    _crSelectedTypeId = _crLastTypeId;
+    _crSelectedTypeId = null;
     _crSeverity = 'minor';
     _crPhotos = [];
     // Reset form
@@ -23312,8 +23312,10 @@ function _renderCrPhotos() {
   tiles.innerHTML = tilesHtml + addTile;
 }
 
+// Ein zweiter Tipp auf denselben Typ nimmt ihn wieder heraus — sonst gäbe es,
+// einmal getippt, keinen Weg mehr zurück zu "ohne Typ".
 function _crSelectType(typeId) {
-  _crSelectedTypeId = typeId;
+  _crSelectedTypeId = _crSelectedTypeId === typeId ? null : typeId;
   _renderCrTypeGrid();
 }
 
@@ -23496,10 +23498,6 @@ function crReportBags() {
 }
 
 async function _crSubmit() {
-  if (!_crSelectedTypeId) {
-    setFb('err', t('contam.errNoType'));
-    return;
-  }
   // Alle Beutel wieder aus der Meldung genommen und trotzdem gesendet: ohne
   // Beutel und ohne Charge wäre das ein Bericht über nichts, und niemand könnte
   // ihm hinterher ansehen, worüber er sein sollte.
@@ -23525,7 +23523,6 @@ async function _crSubmit() {
       setFb('err', t('contam.errSave', { err: r.error }));
       return;
     }
-    _crLastTypeId = _crSelectedTypeId; // pre-select this type on the next report
     closeContamReport();
     if (r && r.queued) {
       // Service worker queued the report because the network was unreachable.
