@@ -1269,58 +1269,50 @@
           "
         ></div>
 
-        <div style="margin-bottom: 14px">
-          <label class="cr-label" data-i18n="contam.type">Typ (optional)</label>
-          <div id="cr-type-grid" class="contam-type-grid"></div>
-        </div>
-
-        <div style="margin-bottom: 14px">
-          <label class="cr-label" data-i18n="contam.severity">Schwere</label>
-          <div class="contam-severity-row" id="cr-severity-row">
-            <button type="button" class="contam-sev-btn active" data-sev="minor" data-i18n="contam.sevMinor">
-              Klein
-            </button>
-            <button type="button" class="contam-sev-btn" data-sev="major" data-i18n="contam.sevMajor">Größer</button>
-            <button type="button" class="contam-sev-btn" data-sev="lost" data-i18n="contam.sevLost">Total</button>
-          </div>
-        </div>
-
-        <div style="margin-bottom: 14px">
-          <label class="cr-label" data-i18n="contam.photos">Foto(s) (optional)</label>
+        <!-- Am Regal braucht es nur das: Beutel scannen, Senden. Foto und Notiz
+             stehen bereit, wenn man will; Typ, Schwere und das Verschieben
+             liegen unter "Mehr", zugeklappt. Vorher stand alles offen da, zehn
+             Typen, drei Schweregrade, ein Kästchen, und das Fenster füllte den
+             ganzen Bildschirm, bevor man an Senden kam. -->
+        <div class="cr-quick">
           <div id="cr-photo-tiles" class="contam-photo-tiles"></div>
           <input type="file" id="cr-file-input" accept="image/*" capture="environment" multiple hidden />
-          <div class="fs-xs" id="cr-photo-status" style="color: var(--c-text-muted); margin-top: 4px"></div>
-        </div>
-
-        <div style="margin-bottom: 14px">
-          <label class="cr-label" data-i18n="contam.notes">Notiz (optional)</label>
-          <textarea
+          <div class="fs-xs" id="cr-photo-status" style="color: var(--c-text-muted)"></div>
+          <input
+            type="text"
             id="cr-notes"
-            rows="2"
             maxlength="2000"
             data-i18n-placeholder="contam.notesPlaceholder"
-            placeholder="z.B. Bag-Lid feucht, neben TENT-3 entdeckt"
-          ></textarea>
+            placeholder="Notiz (optional)"
+          />
         </div>
 
-        <!-- Auto-MOVE checkbox: defaults on for major/lost, off for minor.
-             When checked, the server inserts a MOVE-to-CONTAM scan-log entry
-             alongside the report so the bag's location trail stays accurate. -->
-        <label
-          id="cr-auto-move-row"
-          style="
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 14px;
-            font-size: 13px;
-            color: var(--c-text-sec);
-            cursor: pointer;
-          "
-        >
-          <input type="checkbox" id="cr-auto-move" style="width: 24px; height: 24px; cursor: pointer" />
-          <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
-        </label>
+        <details id="cr-more" class="cr-more">
+          <summary data-i18n="contam.more">Mehr: Typ, Schwere, nach CONTAM</summary>
+          <div class="cr-more-body">
+            <label class="cr-label" data-i18n="contam.type">Typ</label>
+            <div id="cr-type-grid" class="contam-type-grid"></div>
+
+            <label class="cr-label" data-i18n="contam.severity">Schwere</label>
+            <div class="contam-severity-row" id="cr-severity-row">
+              <button type="button" class="contam-sev-btn active" data-sev="minor" data-i18n="contam.sevMinor">
+                Klein
+              </button>
+              <button type="button" class="contam-sev-btn" data-sev="major" data-i18n="contam.sevMajor">
+                Größer
+              </button>
+              <button type="button" class="contam-sev-btn" data-sev="lost" data-i18n="contam.sevLost">Total</button>
+            </div>
+
+            <!-- Auto-MOVE: defaults on for major/lost, off for minor. When
+                 checked, the server inserts a MOVE-to-CONTAM scan-log entry
+                 alongside the report. -->
+            <label id="cr-auto-move-row" class="cr-auto-move-row">
+              <input type="checkbox" id="cr-auto-move" />
+              <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
+            </label>
+          </div>
+        </details>
 
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap">
           <button id="cr-cancel" type="button" class="btn btn-sm" data-i18n="common.cancel">Abbrechen</button>

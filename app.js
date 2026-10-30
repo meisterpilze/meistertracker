@@ -23077,6 +23077,9 @@ function _crOpenForm(keep) {
     // Worker can still toggle it manually before submit.
     const autoMoveEl = document.getElementById('cr-auto-move');
     if (autoMoveEl) autoMoveEl.checked = false;
+    // "Mehr" geht jedes Mal zu auf: ein neuer Bericht fängt schlank an.
+    const mehr = document.getElementById('cr-more');
+    if (mehr) mehr.open = false;
   }
   _crRenderTargets();
   _renderCrPhotos();
@@ -23307,7 +23310,7 @@ function _renderCrPhotos() {
     .join('');
   const addTile =
     _crPhotos.length < CR_MAX_PHOTOS
-      ? `<button type="button" id="cr-add-photo" class="contam-photo-tile add" aria-label="${esc(t('contam.addPhoto'))}">+</button>`
+      ? `<button type="button" id="cr-add-photo" class="contam-photo-tile add" aria-label="${esc(t('contam.addPhoto'))}">${esc(t('contam.photoTile'))}</button>`
       : '';
   tiles.innerHTML = tilesHtml + addTile;
 }

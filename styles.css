@@ -7514,6 +7514,80 @@ body:has(#m-camscan.open) .update-bar {
    Capture flow: type chips, severity row, 80x80 photo tiles. Photos
    are compressed to ~200KB JPEG client-side before submit (canvas
    resize at 1280px / quality 0.8). */
+/* Foto und Notiz: das, was am Regal manchmal dazukommt. Eng gesetzt, damit
+   Senden am Telefon ohne Scrollen zu sehen ist. */
+.cr-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cr-quick .contam-photo-tile {
+  width: 64px;
+  height: 64px;
+}
+.cr-quick .contam-photo-tile.add {
+  width: auto;
+  padding: 0 14px;
+  font-size: max(0.875rem, var(--fs-min));
+  font-weight: 600;
+}
+.cr-quick #cr-photo-status:empty {
+  display: none;
+}
+/* Typ, Schwere, Verschieben: zugeklappt. Die Zeile ist eine Daumenbreite hoch,
+   damit sie sich am Telefon treffen lässt. */
+.cr-more summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: max(0.8125rem, var(--fs-min));
+  font-weight: 600;
+  color: var(--c-text-sec);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  list-style: none;
+  gap: 8px;
+}
+.cr-more summary::-webkit-details-marker {
+  display: none;
+}
+/* Der Pfeil sagt, dass die Zeile aufgeht; display:flex nimmt den eigenen weg. */
+.cr-more summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.cr-more[open] summary::before {
+  transform: rotate(45deg);
+}
+.cr-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+.cr-more-body .contam-severity-row {
+  margin-bottom: 6px;
+}
+.cr-auto-move-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: max(0.8125rem, var(--fs-min));
+  color: var(--c-text-sec);
+  cursor: pointer;
+}
+.cr-auto-move-row input {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
 .cr-label {
   display: block;
   font-size: max(0.6875rem, var(--fs-min));
