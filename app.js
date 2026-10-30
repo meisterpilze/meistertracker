@@ -26417,8 +26417,15 @@ function processScan(raw, opts) {
     kulturAufnehmenAnbieten(val);
     return;
   }
-  const isBag = /-\d{2}$/.test(val);
-  const batchId = isBag ? val.split('-').slice(0, -1).join('-') : val;
+  // Ein Beutel ist, was eine Charge als Beutel führt — nicht nur, was auf zwei
+  // Ziffern endet. Blöcke aus einem Substratansatz werden nur so breit gezählt,
+  // wie die Charge groß ist: der siebte von acht heißt "-7". Die Zwei-Ziffern-
+  // Regel allein ließ jeden davon als "kein Etikett aus diesem System" durchfallen,
+  // obwohl er dastand. Für Beutel, die dieses Telefon noch nicht kennt, gilt sie
+  // weiter: die fragen erst beim Server nach.
+  const bagOwner = batches.find((b) => (b.bags || []).some((x) => String(x).toUpperCase() === val));
+  const isBag = !!bagOwner || /-\d{2}$/.test(val);
+  const batchId = bagOwner ? bagOwner.batchId : isBag ? val.split('-').slice(0, -1).join('-') : val;
   const batch = batches.find((b) => b.batchId.toUpperCase() === batchId.toUpperCase());
   // Ein Beutel, dessen Charge hier niemand kennt. Vorher ging er trotzdem in die
   // Vorgänge und kam als "hat keinen bekannten Standort — erst mit ADD
@@ -27225,7 +27232,8 @@ function isKnownBarcode(val) {
   const h = val.replace(/_/g, '-');
   if (/^[A-Z]{2,6}-[A-Z]{2,6}-\d{4}-\d{1,2}$/.test(h)) return true;
   if (/^(MC|PD|LC|SY|G2G|GS)-[A-Z0-9]+(?:-[A-Z0-9]+)?-\d{6}-\d{2}$/.test(h)) return true; // wie in processScan
-  if (/^[A-Z]+-\d{6}-\d{2}-\d{2}$/.test(h)) return true;
+  // Beutel: die Nummer hat eine bis drei Stellen ("-7" bei einer Charge unter zehn).
+  if (/^[A-Z]+-\d{6}-\d{2}-\d{1,3}$/.test(h)) return true;
   if (/^[A-Z]+-\d{6}-\d{2}$/.test(h)) return true;
   return false;
 }
