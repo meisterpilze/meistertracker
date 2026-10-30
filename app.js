@@ -11471,6 +11471,7 @@ async function printBatchLabelsInline() {
   }
   const modeEl = document.getElementById('print-mode');
   const qrEl = document.getElementById('bag-qr');
+  await ensureBagBarcodes(b.bags);
   const zpl = makeBagZPL(b.bags, b, modeEl ? modeEl.value : 'full', qrEl ? qrEl.checked : true);
   if (!zpl || !zpl.includes('^XA')) {
     toast(t('print.noLabels'), 'err');
@@ -12595,6 +12596,7 @@ function confirmAddBags() {
 async function printNewBags() {
   const b = batches.find((x) => x.batchId === addBagsBatchId);
   if (!b || !_lastNewBags.length) return;
+  await ensureBagBarcodes(_lastNewBags);
   const zpl = makeBagZPL(_lastNewBags, b, 'full');
   const err = await sendToPrinter(zpl);
   if (err) {
@@ -24471,6 +24473,17 @@ function labLabelItems(id, c, detail, qr) {
   return labelLayout(bcVal, qr, absaetze, null);
 }
 
+// Vor dem Drucken: kennt dieses Telefon für einen Beutel die siebenstellige
+// Nummer nicht, erst den Stand vom Server holen. Der Server vergibt sie beim
+// Anlegen jedem Beutel; fehlt sie hier, ist nur die Liste auf dem Telefon alt
+// (das Nachladen nach dem Anlegen kann still scheitern). Ohne diesen Schritt
+// ging das Etikett mit dem alten Text-Strichcode hinaus, und der fand den
+// Beutel beim Scannen nicht wieder.
+async function ensureBagBarcodes(bags) {
+  if ((bags || []).every((id) => barcodeByEntity.has('bag:' + id))) return;
+  await loadData();
+}
+
 function makeBagZPL(bags, batch, detail, qr) {
   const legacyFallbackIds = [];
   const zpl = bags
@@ -24519,6 +24532,7 @@ async function printBagLabels() {
       return;
     }
   }
+  await ensureBagBarcodes(bags);
   const zpl = makeBagZPL(
     bags,
     b,
@@ -24905,6 +24919,7 @@ async function printCultureLabelsInline() {
     if (b) {
       const pm = document.getElementById('print-mode');
       const bq = document.getElementById('bag-qr');
+      await ensureBagBarcodes(korn.bagIds);
       zpl += '\n' + makeBagZPL(korn.bagIds, b, pm ? pm.value : 'full', bq ? bq.checked : true);
       n += korn.bagIds.length;
     }
@@ -26147,6 +26162,55 @@ function scanAfterSync(raw) {
   });
 }
 
+// Ein Strichcode aus der Zeit vor den siebenstelligen Nummern, oder einer, der
+// gedruckt wurde, als dieses Telefon die Nummer des Beutels noch nicht kannte:
+//   KUERZEL_MMDD_N  → nach _ → - drei Teile
+//   SP_ST_MMDD_N    → vier Teile (altes spAbbrev + Stammpräfix)
+// Gibt null zurück, wenn val keins von beiden ist; sonst { bag, batch }, oder
+// { ambiguous: [...] }, oder {} für "keine passende Charge".
+//
+// Der Beutel wird über seine NUMMER gesucht, nicht über einen zusammengesetzten
+// Text. Vorher hieß "_7" immer "-07" — aber Blöcke aus einem Substratansatz
+// tragen in einer Charge unter zehn Beuteln "-7", und der Scan suchte einen
+// Beutel, den es nicht gibt: "nicht im System" über einem Block, der dort stand.
+// Und es galt die erste Charge mit Kürzel und Tag; zwei Chargen vom selben Tag
+// (-01, -02) haben beide einen Beutel 7, und der Scan nahm stumm den falschen.
+function legacyBagMatch(val) {
+  const parts = val.split('-');
+  let num, passt;
+  if (parts.length === 3 && /^\d{4}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) {
+    const [kz, mmdd] = parts;
+    num = parseInt(parts[2], 10);
+    passt = (b) => (b.strainKuerzel || b.strain || '').toUpperCase() === kz && _batchMmdd(b) === mmdd;
+  } else if (parts.length === 4 && /^\d{4}$/.test(parts[2]) && /^\d{1,2}$/.test(parts[3])) {
+    const [sp, st, mmdd] = parts;
+    num = parseInt(parts[3], 10);
+    passt = (b) =>
+      spAbbrev(b.species) === sp && (b.strain || '000').slice(0, 3).toUpperCase() === st && _batchMmdd(b) === mmdd;
+  } else {
+    return null;
+  }
+  const kandidaten = batches.filter(passt);
+  const treffer = [];
+  for (const b of kandidaten) {
+    for (const bag of b.bags || []) {
+      if (parseInt(String(bag).split('-').pop(), 10) === num) treffer.push({ bag, batch: b.batchId });
+    }
+  }
+  if (treffer.length === 1) return treffer[0];
+  if (treffer.length > 1) return { ambiguous: treffer.map((x) => x.bag) };
+  // Die Charge gibt es, den Beutel in ihr nicht: so wie früher weiterreichen,
+  // damit die Meldung danach den Beutel nennt, statt die Charge zu verneinen.
+  if (kandidaten.length) {
+    return { bag: kandidaten[0].batchId + '-' + String(num).padStart(2, '0'), batch: kandidaten[0].batchId };
+  }
+  return {};
+}
+function _batchMmdd(b) {
+  const d = b.batchId.split('-')[1];
+  return d ? d.slice(2, 4) + d.slice(0, 2) : '';
+}
+
 function processScan(raw, opts) {
   // Underscore/hyphen convention:
   // - Location barcodes use UNDERSCORES (e.g. INC_MUSTER_01, SPAWN_R1) — kept as-is
@@ -26191,47 +26255,18 @@ function processScan(raw, opts) {
     } else {
       val = val.replace(/_/g, '-');
     } // German HID keyboard fix for bag IDs
-    // Decode barcode → full bag ID.
-    // Current format: KUERZEL_MMDD_N → 3 parts after underscore→hyphen conversion.
-    // Legacy format:  SP_ST_MMDD_N  → 4 parts (old hardcoded spAbbrev + strain prefix).
-    const parts = val.split('-');
-    let matchBatch = null,
-      scannedBag = '';
-    if (parts.length === 3 && /^\d{4}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) {
-      const scannedKz = parts[0];
-      const scannedMmdd = parts[1];
-      scannedBag = parts[2].padStart(2, '0');
-      matchBatch = batches.find((b) => {
-        const bKz = (b.strainKuerzel || b.strain || '').toUpperCase();
-        const bDateParts = b.batchId.split('-');
-        const bMmdd = bDateParts[1] ? bDateParts[1].slice(2, 4) + bDateParts[1].slice(0, 2) : '';
-        return bKz === scannedKz && bMmdd === scannedMmdd;
-      });
-    } else if (parts.length === 4 && /^\d{4}$/.test(parts[2]) && /^\d{1,2}$/.test(parts[3])) {
-      const scannedSp = parts[0];
-      const scannedSt = parts[1];
-      const scannedMmdd = parts[2];
-      scannedBag = parts[3].padStart(2, '0');
-      matchBatch = batches.find((b) => {
-        const bSp = spAbbrev(b.species);
-        const bSt = (b.strain || '000').slice(0, 3).toUpperCase();
-        const bDateParts = b.batchId.split('-');
-        const bMmdd = bDateParts[1] ? bDateParts[1].slice(2, 4) + bDateParts[1].slice(0, 2) : '';
-        return bSp === scannedSp && bSt === scannedSt && bMmdd === scannedMmdd;
-      });
-    }
-    if (
-      (parts.length === 3 && /^\d{4}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) ||
-      (parts.length === 4 && /^\d{4}$/.test(parts[2]) && /^\d{1,2}$/.test(parts[3]))
-    ) {
-      if (matchBatch) {
-        val = matchBatch.batchId + '-' + scannedBag;
-        setFb('info', t('scanFb.matched', { val: val, batch: matchBatch.batchId }));
+    const legacy = legacyBagMatch(val);
+    if (legacy) {
+      if (legacy.bag) {
+        val = legacy.bag;
+        setFb('info', t('scanFb.matched', { val: val, batch: legacy.batch }));
+      } else if (!synced) {
+        scanAfterSync(raw);
+        return;
+      } else if (legacy.ambiguous) {
+        setFb('err', t('scanFb.legacyAmbiguous', { list: legacy.ambiguous.join(', ') }));
+        return;
       } else {
-        if (!synced) {
-          scanAfterSync(raw);
-          return;
-        }
         setFb('err', t('scanFb.noBatchFound', { val: val }));
         return;
       }

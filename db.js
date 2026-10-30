@@ -13496,7 +13496,9 @@ function saleAlerts(db, now = new Date()) {
 // Die Kennung steht als erste Zeile auf jedem Kultur- und Beutel-Etikett, vor
 // einer Herkunft ("<- PD-...") und vor allem anderen. Der Strichcode taugt
 // nicht: er traegt meist eine Nummer aus der Registry, nicht die Kennung.
-const LABEL_ID_RE = /(?<![A-Z0-9-])[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{6}-\d{2}(?:-\d{2})?(?![\dA-Z-])/;
+// Die Beutelnummer hat eine bis drei Stellen: Bloecke aus einem Substratansatz
+// werden nur so breit gezaehlt, wie die Charge gross ist ("-7" bei acht).
+const LABEL_ID_RE = /(?<![A-Z0-9-])[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{6}-\d{2}(?:-\d{1,3})?(?![\dA-Z-])/;
 function labelIdsFromZpl(zpl) {
   const ids = new Set();
   for (const label of String(zpl || '')

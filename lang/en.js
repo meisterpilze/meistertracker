@@ -1884,6 +1884,7 @@ window.LANG['en'] = {
     'Barcode not readable ("{val}") — scan again. If the characters always come out wrong, the scanner has the wrong keyboard setting.',
   'scanFb.matched': 'Matched: {val} from {batch}',
   'scanFb.noBatchFound': 'No batch in the system for "{val}" — deleted, or misread. Scan again.',
+  'scanFb.legacyAmbiguous': 'This old label fits more than one bag ({list}). Print a new label for this bag, then it scans.',
   'scanFb.checking': 'Label not known on this phone yet — fetching the latest data …',
   'scanFb.unknownOffline':
     'Label unknown, and the server cannot be reached. Check the Wi-Fi, then scan again — if that does not help, restart the app.',

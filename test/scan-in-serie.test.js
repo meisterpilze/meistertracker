@@ -112,6 +112,8 @@ function werkbank(stand) {
     ${hebe('scanActionName')}
     ${hebe('cultureGone')}
     ${hebe('cultureRefusal')}
+    ${hebe('_batchMmdd')}
+    ${hebe('legacyBagMatch')}
     ${hebe('processScan')}
     return {
       scan: (raw, o) => processScan(raw, o),

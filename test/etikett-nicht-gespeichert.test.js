@@ -47,6 +47,11 @@ describe('Etikett: welche Kennung darauf steht', () => {
     assert.deepEqual(db.labelIdsFromZpl(z), ['G-TA-TESTMP01-281026-01-03', 'G-TA-TESTMP01-281026-01-04']);
   });
 
+  it('ein Block mit einstelliger Nummer, wie ihn eine Charge unter zehn Beuteln trägt', () => {
+    const z = etikett(text('/8', 200), strich('TA_1008_7'), text('TA-081026-01-7'));
+    assert.deepEqual(db.labelIdsFromZpl(z), ['TA-081026-01-7']);
+  });
+
   it('ein Etikett ohne Kennung (Produktetikett als Bild, Regal-QR) bleibt außen vor', () => {
     assert.deepEqual(db.labelIdsFromZpl('^XA^FO0,0^GFA,4,4,1,FFFFFFFF^FS^XZ'), []);
     assert.deepEqual(db.labelIdsFromZpl(etikett(qr('INC_R1'), text('Incubation Regal 1'))), []);
