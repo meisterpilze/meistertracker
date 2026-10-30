@@ -9381,14 +9381,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                 photoIds.push(db.addContaminationPhoto(database, reportId, saved));
               }
             }
-            // Auto-MOVE-to-CONTAM lifecycle: when severity is major/lost (and the
-            // client didn't explicitly opt out), insert a MOVE scan-log entry that
-            // moves the bag to the first zone with role='contaminated'. Stamps
+            // Auto-MOVE-to-CONTAM lifecycle: insert a MOVE scan-log entry that
+            // moves the bag to the first zone with role='contaminated', and stamp
             // contamination_reports.scan_log_id to link the two records together.
-            // Skipped silently when (a) auto_move is false, (b) severity is minor,
-            // (c) no bag_id (whole-batch report), (d) no contam zone configured.
+            //
+            // auto_move: true zieht um, wie schwer es auch ist: ein kontaminierter
+            // Block gehört aus dem Bestand, und das Formular schickt das jetzt als
+            // Vorgabe. Vorher zog nur "Größer" oder "Total" um, und das Formular
+            // stand auf "Klein" — gemeldet wurde, umgezogen nie, und der Block
+            // zählte weiter in der Inkubation. Ohne Angabe (ältere Clients, die
+            // Warteschlange) bleibt es bei major/lost; false heißt nein.
+            // Skipped silently when there is no bag_id (whole-batch report), no
+            // contam zone, or the bag already stands in one.
             const wantAutoMove =
-              !cr.duplicate && data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost');
+              !cr.duplicate &&
+              (data.auto_move === true ||
+                (data.auto_move !== false && (data.severity === 'major' || data.severity === 'lost')));
             if (wantAutoMove && target.bag_id) {
               const contamZone = database
                 .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
@@ -9399,6 +9407,18 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                     "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
                   )
                   .get(target.bag_id);
+                // Schon in einer Kontaminationszone (oder einem ihrer Regale):
+                // ein zweiter Umzug dorthin wäre nur ein doppelter Eintrag.
+                const schonDa =
+                  lastLoc &&
+                  database
+                    .prepare(
+                      `SELECT 1 FROM zones WHERE id = ? AND role = 'contaminated'
+                       UNION SELECT 1 FROM racks r JOIN zones z ON z.id = r.zone_id
+                        WHERE r.id = ? AND z.role = 'contaminated'`
+                    )
+                    .get(lastLoc.toLoc, lastLoc.toLoc);
+                if (schonDa) continue;
                 const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
                 const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
                 // Use the no-txn variant so this insert is part of the surrounding transaction.
