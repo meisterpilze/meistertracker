@@ -145,6 +145,8 @@ function werkbank(stand) {
     ${hebe('cultureRefusal')}
     ${hebe('buildLastPlacementByBag')}
     ${hebe('istVerbraucht')}
+    ${hebe('istVerkauft')}
+    ${hebe('biSchonRausKey')}
     ${hebe('spawnBuchen')}
     ${hebe('verbrauchtScan')}
     ${hebe('processScan')}
