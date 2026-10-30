@@ -6227,7 +6227,11 @@ const VALID_CULTURE_PARENT_TYPES = {
   GS: ['MC', 'PD', 'LC', 'SY', 'G2G', 'GS'],
   // A syringe is drawn from something liquid or from a plate — never from grain,
   // which cannot be drawn into a syringe at all.
-  SY: ['MC', 'PD', 'LC']
+  SY: ['MC', 'PD', 'LC'],
+  // Impfdübel: a bag of wooden dowels inoculated from a liquid culture, a
+  // syringe or a plate. Grain spawn inoculates them too, but a grain bag is not
+  // a culture; it is written off in the scan log as "spawn:<Dübel id>".
+  DU: ['MC', 'PD', 'LC', 'SY']
 };
 
 // Die Groessen, in denen Spritzen abgefuellt werden. Eine Spritze ohne Angabe

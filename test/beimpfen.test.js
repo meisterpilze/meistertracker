@@ -235,7 +235,10 @@ describe('Schnelldialog: Spritzen je Größe', () => {
   it('der Schnelldialog reicht die Mengen je Größe weiter, ohne sie zu merken', () => {
     const f = hebe('msQuickConfirm');
     assert.match(f, /syMengenLesen\('ms-q'\)/);
-    assert.match(f, /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : undefined\);/);
+    assert.match(
+      f,
+      /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : korn\.length \? \{ korn \} : undefined\);/
+    );
     assert.match(HTML, /id="ms-q-sy"/);
     // Jedes Öffnen fängt bei 0 an.
     assert.match(hebe('msQuickOpen'), /syMengenHtml\('ms-q', \{\}\)/);

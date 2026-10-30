@@ -2942,6 +2942,10 @@ textarea.is-invalid {
   background: #cffafe;
   color: #155e75;
 }
+.badge-du {
+  background: #f5ebe0;
+  color: #7c4a1e;
+}
 .badge-active {
   background: #dcfce7;
   color: #166534;
