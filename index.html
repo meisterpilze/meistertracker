@@ -509,6 +509,12 @@
             <label data-i18n="batch.incDays">Inkubationstage</label>
             <input type="number" id="ms-q-days" min="1" value="14" />
           </div>
+          <!-- Impfdübel: wie viele Dübel ein Beutel hat. Steht aufs Etikett
+               ("ca. 100") und bleibt fürs nächste Mal stehen, wie eine Größe. -->
+          <div id="ms-q-stueck-wrap" style="display: none">
+            <label for="ms-q-stueck" data-i18n="lab.duStueck">Dübel je Beutel</label>
+            <input type="number" id="ms-q-stueck" min="1" inputmode="numeric" />
+          </div>
         </div>
         <!-- Der Stamm kommt aus der Liste der Sorte (Pilzsorten → Stämme), nicht
              mehr als freier Text — dieselbe Linie hieß sonst jedes Mal anders.

@@ -86,4 +86,50 @@ describe('Impfdübel in der Datenbank', () => {
       assert.throws(() => db.insertCultures(d, [kultur('DU-TD-081026-02', 'DU', art, 'DU-TD-081026-01')]));
     });
   });
+  it('merkt sich, wie viele Dübel im Beutel sind, und nur bei Dübeln', () => {
+    mitDb((d, art) => {
+      db.insertCultures(d, [
+        { ...kultur('DU-TD-081026-01', 'DU', art), stueck: 50 },
+        { ...kultur('DU-TD-081026-02', 'DU', art), stueck: 'viele' },
+        { ...kultur('PD-TD-081026-01', 'PD', art), stueck: 50 }
+      ]);
+      const stueck = (id) => d.prepare('SELECT stueck FROM cultures WHERE id = ?').get(id).stueck;
+      assert.equal(stueck('DU-TD-081026-01'), 50);
+      assert.equal(stueck('DU-TD-081026-02'), null);
+      assert.equal(stueck('PD-TD-081026-01'), null);
+    });
+  });
+});
+
+describe('Impfdübel: das Etikett', () => {
+  // Die zweite Zeile unter der Kennung, wie labLabelItems sie an labelLayout gibt.
+  function zeile(c) {
+    let absaetze;
+    new Function(
+      'c',
+      'fang',
+      `
+      const t = (k, p) => (p ? k + ' ' + p.n : k);
+      const syMl = () => null;
+      const barcodeByEntity = new Map();
+      const fmtDt = () => '';
+      const labelLayout = (bc, qr, a) => fang(a);
+      ${hebe('labLabelItems')}
+      labLabelItems(c.id, c, 'sorte', false);
+    `
+    )(c, (a) => (absaetze = a));
+    return absaetze[1].text;
+  }
+  it('sagt, dass es Dübel sind, und wie viele', () => {
+    assert.equal(
+      zeile({ id: 'DU-TD-081026-01', type: 'DU', strainName: 'Testart', stueck: 50 }),
+      'Testart – label.duebelCa 50'
+    );
+  });
+  it('ohne Anzahl nur das Wort', () => {
+    assert.equal(zeile({ id: 'DU-TD-081026-01', type: 'DU', strainName: 'Testart' }), 'Testart – label.duebel');
+  });
+  it('eine Petrischale bleibt, wie sie war', () => {
+    assert.equal(zeile({ id: 'PD-TD-081026-01', type: 'PD', strainName: 'Testart', stueck: 50 }), 'Testart');
+  });
 });

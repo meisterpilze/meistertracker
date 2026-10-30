@@ -3142,6 +3142,14 @@ const MIGRATIONS = [
                  checked    INTEGER NOT NULL DEFAULT 0
                )`);
     }
+  },
+  {
+    version: 110,
+    description: 'Impfduebel: wie viele Duebel ein Beutel hat, fuers Etikett',
+    fn(db) {
+      const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='stueck'").get();
+      if (!has.c) db.exec('ALTER TABLE cultures ADD COLUMN stueck INTEGER');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3520,6 +3528,7 @@ function readAll(db, opts = {}) {
         strainDescriptor: ms ? ms.description || null : null,
         strainText: r.strain_text || '',
         ml: r.ml || null,
+        stueck: r.stueck || null,
         parentId: r.parent_id,
         source: r.source,
         status: r.status,
@@ -4055,13 +4064,13 @@ function writeAll(db, incoming, opts) {
       }
 
       const upsert = db.prepare(`
-        INSERT INTO cultures(id, type, species, strain, strain_id, strain_text, parent_id, source, status, notes, created, ml)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cultures(id, type, species, strain, strain_id, strain_text, parent_id, source, status, notes, created, ml, stueck)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type=excluded.type, species=excluded.species, strain=excluded.strain,
           strain_id=excluded.strain_id, strain_text=excluded.strain_text,
           parent_id=excluded.parent_id, source=excluded.source, status=excluded.status,
-          notes=excluded.notes, created=excluded.created, ml=excluded.ml
+          notes=excluded.notes, created=excluded.created, ml=excluded.ml, stueck=excluded.stueck
       `);
       const cultureIds = [];
       for (const c of incoming.cultures) {
@@ -4077,7 +4086,8 @@ function writeAll(db, incoming, opts) {
           c.status || 'active',
           c.notes || '',
           c.created,
-          syringeMl(c.type, c.ml)
+          syringeMl(c.type, c.ml),
+          duebelStueck(c.type, c.stueck)
         );
         cultureIds.push(c.id);
       }
@@ -6237,6 +6247,13 @@ const VALID_CULTURE_PARENT_TYPES = {
 // Die Groessen, in denen Spritzen abgefuellt werden. Eine Spritze ohne Angabe
 // ist eine 10er: so war jede, bevor es die Wahl gab (Migration 102).
 const SYRINGE_SIZES = [10, 20, 50];
+// Wie viele Duebel in einem Beutel Impfduebel sind, fuers Etikett ("ca. 100").
+// Nur bei DU; eine leere oder unsinnige Angabe ist keine.
+function duebelStueck(type, n) {
+  if (type !== 'DU') return null;
+  const v = Math.round(Number(n));
+  return Number.isFinite(v) && v > 0 && v <= 100000 ? v : null;
+}
 function syringeMl(type, ml) {
   if (type !== 'SY') return null;
   const n = Number(ml);
@@ -6259,9 +6276,9 @@ function validateCultureParent(db, type, parentId) {
 function insertCultures(db, cultures) {
   if (!cultures.length) return;
   const ins = db.prepare(
-    `INSERT INTO cultures(id,type,species,strain,strain_id,parent_id,source,status,notes,created,strain_text,ml) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+    `INSERT INTO cultures(id,type,species,strain,strain_id,parent_id,source,status,notes,created,strain_text,ml,stueck) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET type=excluded.type, species=excluded.species, strain=excluded.strain, strain_id=excluded.strain_id,
-       parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text, ml=excluded.ml`
+       parent_id=excluded.parent_id, source=excluded.source, status=excluded.status, notes=excluded.notes, created=excluded.created, strain_text=excluded.strain_text, ml=excluded.ml, stueck=excluded.stueck`
   );
   // Wrap the whole batch so a validation failure on culture N doesn't leave
   // cultures 1..N-1 committed without barcodes or a version bump (the callers
@@ -6307,7 +6324,8 @@ function insertCultures(db, cultures) {
         c.notes || '',
         c.created,
         c.strainText || '',
-        syringeMl(c.type, c.ml)
+        syringeMl(c.type, c.ml),
+        duebelStueck(c.type, c.stueck)
       );
     }
     // Assign numeric barcodes to all new cultures
@@ -6419,6 +6437,7 @@ function getCultureById(db, id) {
     strainKuerzel,
     strainText: r.strain_text || '',
     ml: r.ml || null,
+    stueck: r.stueck || null,
     parentId: r.parent_id,
     parent: parent || null,
     source: r.source,
@@ -11380,6 +11399,7 @@ function getAllCultures(db) {
         strainKuerzel,
         strainText: r.strain_text || '',
         ml: r.ml || null,
+        stueck: r.stueck || null,
         parentId: r.parent_id,
         source: r.source,
         status: r.status,

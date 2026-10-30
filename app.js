@@ -20623,6 +20623,24 @@ function _msqSaveArt(art) {
     /* storage disabled — next open starts at Petrischale */
   }
 }
+// Dübel je Beutel: wie die Größe einer Spritze eine Angabe zum Stück, keine
+// Anzahl, also darf sie stehenbleiben. Leer, solange nie eine eingetragen war.
+function _msqDuebelStueck() {
+  try {
+    const n = parseInt(localStorage.getItem('mp-du-stueck'), 10);
+    return n > 0 ? n : null;
+  } catch (e) {
+    return null;
+  }
+}
+function _msqSaveDuebelStueck(n) {
+  if (!(n > 0)) return;
+  try {
+    localStorage.setItem('mp-du-stueck', String(n));
+  } catch (e) {
+    /* storage disabled — next open asks again */
+  }
+}
 function _msqSaveQty(mode, qty) {
   if (!(qty > 0)) return;
   try {
@@ -20757,6 +20775,11 @@ function msQuickRender() {
   const isKb = mehrere ? arten.includes('KB') : _msqIsGrainspawn();
   const dw = document.getElementById('ms-q-days-wrap');
   if (dw) dw.style.display = mode === 'charge' || isKb ? '' : 'none';
+  const istDu = mode === 'labor' && !mehrere && !!artEl && artEl.value === 'DU';
+  const stw = document.getElementById('ms-q-stueck-wrap');
+  if (stw) stw.style.display = istDu ? '' : 'none';
+  const st = document.getElementById('ms-q-stueck');
+  if (istDu && st && !st.value) st.value = _msqDuebelStueck() || '';
   // Koernerbrut zaehlt nach Groesse, alles andere nach Stueck. Die Zeilenliste
   // und der gemeinsame Anzahl-Zaehler sind zwei Antworten auf dieselbe Frage,
   // also steht immer nur eine davon da -- sonst haette ein Ansatz aus 10x1 und
@@ -21377,6 +21400,9 @@ async function msQuickConfirm() {
     // Impfdübel aus einem Körnerbeutel: der Beutel steht als Quelle an den
     // Dübeln und geht als verbraucht raus, sobald sie gespeichert sind.
     const korn = labType === 'DU' ? inocMit.filter((x) => x.kind === 'bag').map((x) => x.id) : [];
+    const stueckEl = document.getElementById('ms-q-stueck');
+    const stueck = labType === 'DU' && stueckEl ? parseInt(stueckEl.value, 10) || null : null;
+    if (stueck) _msqSaveDuebelStueck(stueck);
     setv('lw-type', labType);
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
@@ -21393,7 +21419,7 @@ async function msQuickConfirm() {
     lwUpdate();
     const parent = document.getElementById('lw-parent');
     if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
-    logLabWork(intake ? { id: intake.id } : syN ? { sy: syN } : korn.length ? { korn } : undefined);
+    logLabWork(intake ? { id: intake.id } : syN ? { sy: syN } : labType === 'DU' ? { korn, stueck } : undefined);
     return;
   }
   // Charge: prefill the existing Charge form from the recipe and reuse its
@@ -21853,7 +21879,19 @@ function logLabWork(opts) {
           ]
         ];
   const angelegt = posten.map(([qty, ml]) =>
-    kulturenAnlegen({ type, ms, wann, qty, id: intakeId, parentId, strainText, source, notes, ml })
+    kulturenAnlegen({
+      type,
+      ms,
+      wann,
+      qty,
+      id: intakeId,
+      parentId,
+      strainText,
+      source,
+      notes,
+      ml,
+      stueck: opts && opts.stueck
+    })
   );
   const newC = angelegt.flatMap((r) => r.newC);
   const saved = Promise.all(angelegt.map((r) => r.saved));
@@ -21889,8 +21927,8 @@ function logLabWork(opts) {
 // Legt qty Kulturen einer Art an, mit Kennung, Speichern und Barcodes — ohne ein
 // Formular zu lesen. logLabWork() und das Beimpfen-Fenster (bmpGo) teilen sich
 // das; jeder Weg zeigt danach sein eigenes Etiketten-Fenster.
-// spec: { type, ms, wann, qty, id?, parentId?, strainText?, source?, notes?, ml? }
-// ml zählt nur bei Spritzen; ohne Angabe eine 10er.
+// spec: { type, ms, wann, qty, id?, parentId?, strainText?, source?, notes?, ml?, stueck? }
+// ml zählt nur bei Spritzen; ohne Angabe eine 10er. stueck nur bei Impfdübeln.
 function kulturenAnlegen(spec) {
   const { type, ms, wann } = spec;
   const sp = ms.name,
@@ -21913,7 +21951,8 @@ function kulturenAnlegen(spec) {
     status: 'active',
     notes: spec.notes || '',
     created: wann.toISOString(),
-    ml: type === 'SY' ? (SY_ML.includes(spec.ml) ? spec.ml : 10) : null
+    ml: type === 'SY' ? (SY_ML.includes(spec.ml) ? spec.ml : 10) : null,
+    stueck: type === 'DU' && spec.stueck > 0 ? spec.stueck : null
   }));
   cultures.push(...newC);
   const saved = apiPost('/api/cultures', { cultures: newC }).then((r) => {
@@ -24481,6 +24520,8 @@ function labLabelItems(id, c, detail, qr) {
   const spParts = [species];
   // Die Größe gleich hinter der Sorte: beim Packen ist sie, was man sucht.
   if (c.type === 'SY') spParts.push(syMl(c) + ' ml');
+  // Ein Beutel Dübel sieht aus wie jeder andere Beutel: das Wort sagt, was drin ist.
+  if (c.type === 'DU') spParts.push(c.stueck ? t('label.duebelCa', { n: c.stueck }) : t('label.duebel'));
   if (strainTxt) spParts.push(strainTxt);
   if (notes) spParts.push(notes);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
