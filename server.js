@@ -9300,11 +9300,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
-      const vr = validateRequired(data, ['type_id']);
-      if (vr) {
-        jsonErr(res, 400, vr);
-        return;
-      }
+      // Der Typ ist freiwillig. Am Regal sieht man, dass ein Beutel hin ist,
+      // nicht immer, woran; wer ihn nicht wählt, meldet unter "Unbekannt /
+      // Sonstiges" — die Spalte bleibt NOT NULL, und die Liste zeigt das so.
       const vt = validateTypes(data, { type_id: 'number', photos: 'array' });
       if (vt) {
         jsonErr(res, 400, vt);
@@ -9346,6 +9344,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const photoIds = [];
       const autoMovedScanIds = [];
       try {
+        if (data.type_id === undefined || data.type_id === null) {
+          const unknown = database.prepare("SELECT id FROM contamination_types WHERE key = 'unknown_other'").get();
+          if (!unknown) {
+            jsonErr(res, 400, 'type_id is required');
+            return;
+          }
+          data.type_id = unknown.id;
+        }
         database.exec('BEGIN');
         try {
           for (const target of targets) {
