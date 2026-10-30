@@ -23103,10 +23103,10 @@ function _crOpenForm(keep) {
     document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.sev === 'minor');
     });
-    // Auto-MOVE default tracks severity: off for minor, on for major/lost.
-    // Worker can still toggle it manually before submit.
     const autoMoveEl = document.getElementById('cr-auto-move');
-    if (autoMoveEl) autoMoveEl.checked = false;
+    // Kontaminiert heißt raus aus dem Bestand: der Block zieht in die
+    // Kontaminationszone, außer jemand nimmt den Haken unter "Mehr" heraus.
+    if (autoMoveEl) autoMoveEl.checked = true;
     // "Mehr" geht jedes Mal zu auf: ein neuer Bericht fängt schlank an.
     const mehr = document.getElementById('cr-more');
     if (mehr) mehr.open = false;
@@ -31450,14 +31450,8 @@ function initEventListeners() {
     document.querySelectorAll('#cr-severity-row .contam-sev-btn').forEach((b) => {
       b.classList.toggle('active', b === btn);
     });
-    // Update auto-MOVE checkbox to the recommended default for this severity.
-    // Worker can still override before submit. Don't override an already-set
-    // explicit choice — only flip if the previous default matches current state.
-    const autoMoveEl = document.getElementById('cr-auto-move');
-    if (autoMoveEl) {
-      const recommended = _crSeverity === 'major' || _crSeverity === 'lost';
-      autoMoveEl.checked = recommended;
-    }
+    // Die Schwere ändert den Umzug nicht mehr: er ist immer an, bis jemand
+    // den Haken selbst herausnimmt. Vorher nahm "Klein" ihn stumm wieder weg.
   });
   // Photo tiles — add tile triggers file input; remove buttons splice the photo;
   // tile body taps open the annotation editor (draw on the photo before submit).
