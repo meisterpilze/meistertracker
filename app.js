@@ -9856,6 +9856,11 @@ function istVerbraucht(entry) {
   const r = entry && entry.reason;
   return !!entry && entry.action === 'REMOVE' && typeof r === 'string' && (r === 'spawn' || r.startsWith('spawn:'));
 }
+// Ein verkaufter Beutel, Körnerbrut oder Growkit, geht mit dem Grund "sold" aus
+// dem Bestand: weg wie ein entsorgter, aber kein Verlust.
+function istVerkauft(entry) {
+  return !!entry && entry.action === 'REMOVE' && entry.reason === 'sold';
+}
 // Bucht Körnerbeutel als verbraucht aus: je Beutel ein REMOVE von dem Platz, an
 // dem er stand — ohne Platz, wenn er nie eingelagert war —, mit dem Grund
 // `reason`. Ein Beutel, der schon draußen ist, bekommt keinen zweiten Eintrag.
@@ -22370,7 +22375,8 @@ function openBagInfo(bagId, batchId, batch) {
   let currentLoc = t('bagInfo.notPlaced');
   if (bagLogs.length) {
     const last = bagLogs[bagLogs.length - 1];
-    if (last.action === 'REMOVE') currentLoc = istVerbraucht(last) ? t('bagInfo.usedUp') : t('bagInfo.removed');
+    if (last.action === 'REMOVE')
+      currentLoc = istVerbraucht(last) ? t('bagInfo.usedUp') : istVerkauft(last) ? t('bagInfo.sold') : t('bagInfo.removed');
     else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
@@ -22547,6 +22553,10 @@ function renderBiActions() {
   } else if (!cur.removed && role === 'fruiting') {
     html += `<button type="button" data-bi="harvest" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-amber-dark);color:#fff">✂ ${esc(t('bagInfo.harvest'))}</button>`;
   }
+  // Verkauft: Körnerbrut und Growkits gehen auch in den Versand. Ein Tipp, mit
+  // Rückgängig wie Verbraucht; die Zahl an Billbee zählt den Beutel dann nicht mehr.
+  if (!cur.removed)
+    html += `<button type="button" data-bi="sold" class="fs-base" style="${big};padding:13px;background:var(--c-primary-light);color:var(--c-primary);border:1px solid var(--c-border)">✓ ${esc(t('bagInfo.sold'))}</button>`;
   const sec =
     'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:13px;border-radius:10px;cursor:pointer;background:var(--c-surface);border:1px solid var(--c-border)';
   html +=
@@ -22611,6 +22621,28 @@ function biMarkUsed() {
   setFb('ok', msg, entries.length === 1 ? entries[0] : undefined);
   showUndoBar(msg, () => spawnZuruecknehmen(entries));
   updateSD();
+}
+// Verkauft aus dem Beutel-Fenster, genauso: der gescannte Beutel oder die ganze
+// Charge, ein REMOVE mit dem Grund "sold", Rückgängig unten und zurück in die Kamera.
+function biMarkSold() {
+  const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
+  if (!b || !biBagId) return;
+  document.getElementById('m-baginfo').classList.remove('open');
+  biRearmScanner();
+  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], 'sold', { sitzung: true });
+  if (!entries.length) {
+    setFb('warn', t('scanFb.alreadySold', { bag: biBagId }));
+    return;
+  }
+  const msg =
+    entries.length === 1 ? t('bagInfo.soldOne', { bag: entries[0].bag }) : t('bagInfo.soldN', { n: entries.length, id: b.batchId });
+  setFb('ok', msg, entries.length === 1 ? entries[0] : undefined);
+  showUndoBar(msg, () => spawnZuruecknehmen(entries));
+  updateSD();
+}
+// Was ein schon ausgebuchter Beutel beim nächsten Scan sagt.
+function biSchonRausKey(last) {
+  return istVerbraucht(last) ? 'scanFb.alreadyUsed' : istVerkauft(last) ? 'scanFb.alreadySold' : 'scanFb.alreadyRemoved';
 }
 // Return to a clean scan state and re-open the camera, so scanning the next bag
 // opens its sheet again (no action armed).
@@ -26750,7 +26782,7 @@ function verbrauchtScan(val, batch) {
   const last = buildLastPlacementByBag().get(bag.toUpperCase());
   if (last && last.action === 'REMOVE') {
     _scanBeep(500, 120);
-    setFb('warn', t(istVerbraucht(last) ? 'scanFb.alreadyUsed' : 'scanFb.alreadyRemoved', { bag: bag }));
+    setFb('warn', t(biSchonRausKey(last), { bag: bag }));
     return;
   }
   const [entry] = spawnBuchen([bag], 'spawn', { sitzung: true });
@@ -26922,7 +26954,8 @@ function ciHerkunftHtml(c) {
     `<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">${inhalt}</div></div>`
   );
 }
-// Was als Kultur auch im Shop steht.
+// Was als Kultur meist in den Versand geht: dort steht Verkauft zuoberst. Jede
+// andere Kultur lässt sich auch verkaufen, der Knopf steht dann unter "Raus".
 const CI_VERKAUFBAR = ['SY', 'PD'];
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
@@ -26943,6 +26976,8 @@ function renderCiActions(c) {
     html += `<button type="button" data-bi="ci-sold" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-primary);color:#fff">✓ ${esc(t('ci.sold'))}</button>`;
   if (aktiv)
     html += `<button type="button" data-bi="ci-out" class="fs-floor" style="--fs-own:1.0625rem;${big};background:var(--c-purple-dark);color:#fff">✓ ${esc(t('ci.out'))}</button>`;
+  if (aktiv && !CI_VERKAUFBAR.includes(c.type))
+    html += `<button type="button" data-bi="ci-sold" class="fs-base" style="${big};padding:13px;background:var(--c-primary-light);color:var(--c-primary);border:1px solid var(--c-border)">✓ ${esc(t('ci.sold'))}</button>`;
   html += '<div style="display:flex;gap:8px;margin-bottom:8px">';
   if (aktiv && alsHerkunft)
     html += `<button type="button" data-bi="ci-beimpfen" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('ci.beimpfen'))}</button>`;
@@ -31326,6 +31361,7 @@ function initEventListeners() {
     if (a === 'contam') return biReportContam();
     if (a === 'remove') return biConfirmRemove();
     if (a === 'used') return biMarkUsed();
+    if (a === 'sold') return biMarkSold();
     // Same explicit target as the dashboard one-tap — this button names no tent
     // either, so it must not resolve to a different one.
     if (a === 'fruchtung') return biMoveTo(fruitingTarget());
