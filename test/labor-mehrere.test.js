@@ -31,7 +31,8 @@ const MEHRERE = [
   APP.match(/^const MSQ_STUECK = .*$/m)[0],
   hebe('msqMehrere'),
   hebe('msqArten'),
-  hebe('msqParentTypes')
+  hebe('msqParentTypes'),
+  hebe('kornAlsHerkunft')
 ].join('\n');
 
 describe('Mehrere Arten: die eine Herkunft', () => {

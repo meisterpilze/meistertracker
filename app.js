@@ -8409,7 +8409,8 @@ const LAB_LABELS = {
   LC: 'Liquid cultures',
   G2G: 'G2G',
   GS: null,
-  SY: 'Liquid syringes'
+  SY: 'Liquid syringes',
+  DU: 'Dowels'
 };
 function getLabLabel(type) {
   if (type === 'GS') return t('lab.gsLabel');
@@ -9773,7 +9774,7 @@ function inocRender(prefix) {
     const sorte = prefix === 'wkb' ? WKB.strainId : art && _msQuickCtx.ms ? _msQuickCtx.ms.id : null;
     const passtZurArt = (x) => {
       if (!art) return true;
-      if (x.kind === 'bag') return art === LAB_PARENT_TYPES.KB;
+      if (x.kind === 'bag') return kornAlsHerkunft(art);
       const c = cultures.find((y) => y.id === x.id);
       return !!c && art.includes(c.type);
     };
@@ -20835,9 +20836,10 @@ function msqInocAdd(rawId) {
     const artName = art && art.selectedOptions[0] ? art.selectedOptions[0].textContent : '';
     const mehrere = msqMehrere();
     const isKb = !mehrere && art && art.value === 'KB';
-    // Körnerbrut darf auch aus einem Körnerbeutel kommen (Körner aus Körnern) —
-    // aber nur allein: eine Petrischale wächst nicht aus einem Körnerbeutel.
-    if (!(isKb && !c) && (!c || !types.includes(c.type)))
+    // Körnerbrut darf auch aus einem Körnerbeutel kommen (Körner aus Körnern),
+    // Impfdübel ebenso — aber nur allein: eine Petrischale wächst nicht aus
+    // einem Körnerbeutel.
+    if (!(kornAlsHerkunft(types) && !c) && (!c || !types.includes(c.type)))
       return mehrere
         ? t('msq.parentWrongTypeMulti', {
             id: id,
@@ -21226,7 +21228,7 @@ function msQuickFillCulture() {
     types = msqParentTypes();
     // Eine Herkunft, die zur neuen Art nicht mehr passt, fällt heraus.
     _inoc = _inoc.filter((x) => {
-      if (x.kind === 'bag') return types === LAB_PARENT_TYPES.KB;
+      if (x.kind === 'bag') return kornAlsHerkunft(types);
       const c = cultures.find((y) => y.id === x.id);
       return !!c && types.includes(c.type);
     });
@@ -21372,13 +21374,16 @@ async function msQuickConfirm() {
       createGrainBatch();
       return;
     }
+    // Impfdübel aus einem Körnerbeutel: der Beutel steht als Quelle an den
+    // Dübeln und geht als verbraucht raus, sobald sie gespeichert sind.
+    const korn = labType === 'DU' ? inocMit.filter((x) => x.kind === 'bag').map((x) => x.id) : [];
     setv('lw-type', labType);
     setv('lw-st', ms.id);
     setv('lw-strain-text', strainText);
     setv('lw-created', angesetzt);
     setv('lw-qty', qty);
     setv('lw-ml', _msQuickCtx.ml);
-    setv('lw-source', '');
+    setv('lw-source', korn.join(', '));
     setv('lw-notes', '');
     msQuickClose();
     // Kein Wechsel auf die Laborseite. Der ging dorthin, damit openStab()
@@ -21388,7 +21393,7 @@ async function msQuickConfirm() {
     lwUpdate();
     const parent = document.getElementById('lw-parent');
     if (parent) parent.value = sourceCulture; // valid: the modal used the same culture types
-    logLabWork(intake ? { id: intake.id } : syN ? { sy: syN } : undefined);
+    logLabWork(intake ? { id: intake.id } : syN ? { sy: syN } : korn.length ? { korn } : undefined);
     return;
   }
   // Charge: prefill the existing Charge form from the recipe and reuse its
@@ -21559,7 +21564,7 @@ function renderNbGrainBanner() {
 // call sites covers all of them at once, and covers rows already in the
 // database, which validating new writes cannot.
 const ctBadge = (t) => {
-  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g', SY: 'badge-sy' };
+  const m = { MC: 'badge-mc', PD: 'badge-pd', LC: 'badge-lc', G2G: 'badge-g2g', SY: 'badge-sy', DU: 'badge-du' };
   return `<span class="badge ${m[t] || ''}">${esc(t)}</span>`;
 };
 function fillCultureSelect(id, types) {
@@ -21617,8 +21622,17 @@ const LAB_PARENT_TYPES = {
   PD: ['MC', 'PD', 'LC', 'SY'],
   LC: ['MC', 'PD', 'LC', 'SY'],
   SY: ['MC', 'PD', 'LC'],
-  KB: ['PD', 'LC', 'SY']
+  KB: ['PD', 'LC', 'SY'],
+  // Impfdübel: aus einer Kultur wie die Spritze, oder aus einem Körnerbeutel
+  // (kornAlsHerkunft). Der Beutel ist dann verbraucht, wie bei der Körnerbrut.
+  DU: ['MC', 'PD', 'LC', 'SY']
 };
+// Die Arten, die auch aus einem Körnerbeutel angesetzt werden. `types` ist die
+// Liste aus LAB_PARENT_TYPES, wie msqParentTypes() sie gibt; bei "Mehrere" ist
+// es eine neue Liste, und dann zählt kein Körnerbeutel.
+function kornAlsHerkunft(types) {
+  return types === LAB_PARENT_TYPES.KB || types === LAB_PARENT_TYPES.DU;
+}
 // Spritzen gibt es in drei Größen, wie SYRINGE_SIZES in db.js. Eine Spritze
 // ohne Angabe ist eine 10er: so war jede, bevor es die Wahl gab.
 const SY_ML = [10, 20, 50];
@@ -21735,6 +21749,14 @@ function lwUpdate() {
       fillParentSelect(LAB_PARENT_TYPES.SY);
       sr.style.display = 'none';
       ql.textContent = t('lab.qtySyringes');
+    } else if (type === 'DU') {
+      // Hier nur aus einer Kultur. Aus einem Körnerbeutel geht es über die
+      // Laborarbeit im Schnelldialog, die den Beutel scannt und verbucht.
+      pr.style.display = 'block';
+      document.getElementById('lw-parent-lbl').textContent = t('lab.sourceLcPdMc');
+      fillParentSelect(LAB_PARENT_TYPES.DU);
+      sr.style.display = 'none';
+      ql.textContent = t('lab.qtyBags');
     } else {
       pr.style.display = 'none';
       sr.style.display = 'none';
@@ -21836,6 +21858,14 @@ function logLabWork(opts) {
   const newC = angelegt.flatMap((r) => r.newC);
   const saved = Promise.all(angelegt.map((r) => r.saved));
   saved.catch(() => {}); // gemeldet in kulturenAnlegen
+  // opts.korn: die Körnerbeutel, aus denen Impfdübel angesetzt wurden. Wie bei
+  // einer Charge (inocVerbrauchtBuchen) ein REMOVE mit "spawn:<Kennung>", erst
+  // wenn die Dübel gespeichert sind — sonst wäre der Beutel weg und die Dübel nicht da.
+  if (opts && opts.korn && opts.korn.length && newC.length)
+    saved.then(
+      () => spawnBuchen(opts.korn, 'spawn:' + newC[0].id),
+      () => {}
+    );
   document.getElementById('lw-notes').value = '';
   document.getElementById('lw-qty').value = '1';
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
