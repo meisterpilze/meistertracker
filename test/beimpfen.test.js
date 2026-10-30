@@ -237,7 +237,7 @@ describe('Schnelldialog: Spritzen je Größe', () => {
     assert.match(f, /syMengenLesen\('ms-q'\)/);
     assert.match(
       f,
-      /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : korn\.length \? \{ korn \} : undefined\);/
+      /logLabWork\(intake \? \{ id: intake\.id \} : syN \? \{ sy: syN \} : labType === 'DU' \? \{ korn, stueck \} : undefined\);/
     );
     assert.match(HTML, /id="ms-q-sy"/);
     // Jedes Öffnen fängt bei 0 an.
