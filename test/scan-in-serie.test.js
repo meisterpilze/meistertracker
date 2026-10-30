@@ -866,3 +866,51 @@ describe('Kamera-Leiste: Aufbau und Stil', () => {
     assert.match(APP.slice(i, i + 400), /return;\s*\}\s*_resumedAt = Date\.now\(\);\s*pollSync\(\);/);
   });
 });
+
+// Blöcke aus einem Substratansatz werden nur so breit gezählt, wie die Charge
+// groß ist: der siebte von acht heißt "-7". Der Scan erkannte einen Beutel nur
+// an zwei Ziffern am Ende, und jeder dieser Blöcke kam als "kein Etikett aus
+// diesem System" zurück, obwohl er in der App stand.
+describe('Beutel mit einstelliger Nummer', () => {
+  const ACHT = {
+    batchId: 'TA-081026-01',
+    species: 'Testart',
+    strain: 'X',
+    bags: Array.from({ length: 8 }, (_, i) => 'TA-081026-01-' + (i + 1))
+  };
+  const steht = (bag) => ({ action: 'ADD', batch: 'TA-081026-01', bag, to: 'INC_R1' });
+
+  it('der Text auf dem Etikett öffnet das Beutel-Fenster', () => {
+    const w = werkbank({ scan: neutral(), batches: [ACHT], scanLog: [steht('TA-081026-01-7')] });
+    w.scan('TA-081026-01-7');
+    assert.deepEqual(w.beutelFenster, ['TA-081026-01-7']);
+    assert.ok(!w.fb.some((f) => /scanFb\.unknown/.test(f.msg)));
+  });
+
+  it('auch mit Unterstrichen, wie der Handscanner sie schickt, und im Umzug', () => {
+    const w = werkbank({ scan: umzug('TENT1'), batches: [ACHT], scanLog: [steht('TA-081026-01-7')] });
+    w.scan('TA_081026_01_7');
+    assert.equal(w.gepostet.length, 1);
+    assert.equal(w.gepostet[0].bag, 'TA-081026-01-7');
+    assert.equal(w.gepostet[0].batch, 'TA-081026-01');
+    assert.equal(w.gepostet[0].to, 'TENT1');
+  });
+
+  it('ein Beutel, den das Telefon noch nicht kennt, fragt erst beim Server nach', () => {
+    const w = werkbank({ scan: neutral(), batches: [] });
+    w.scan('TA-081026-01-7');
+    assert.deepEqual(w.nachgefragt, ['TA-081026-01-7']);
+  });
+
+  it('der Handscanner lässt so ein Etikett durch', () => {
+    const ACTIONS = [];
+    const LOCS = [];
+    const isKnownBarcode = new Function('ACTIONS', 'LOCS', hebe('isKnownBarcode') + '\nreturn isKnownBarcode;')(
+      ACTIONS,
+      LOCS
+    );
+    assert.equal(isKnownBarcode('TA_081026_01_7'), true);
+    assert.equal(isKnownBarcode('TA-081026-01-07'), true);
+    assert.equal(isKnownBarcode('TA-081026-01-123'), true);
+  });
+});
