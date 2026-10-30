@@ -1670,6 +1670,7 @@ window.LANG['pt'] = {
     'Código ilegível ("{val}") — escaneie de novo. Se os caracteres sempre saem errados, o leitor está com o teclado mal configurado.',
   'scanFb.matched': 'Correspondido: {val} de {batch}',
   'scanFb.noBatchFound': 'Nenhum lote no sistema para "{val}" — apagado ou leitura errada. Escaneie de novo.',
+  'scanFb.legacyAmbiguous': 'Esta etiqueta antiga serve para mais de um saco ({list}). Imprima uma etiqueta nova para este saco e o scan funciona.',
   'scanFb.checking': 'Etiqueta ainda desconhecida neste telefone — buscando os dados mais recentes …',
   'scanFb.unknownOffline':
     'Etiqueta desconhecida e o servidor não responde. Verifique o Wi-Fi e escaneie de novo — se não resolver, reinicie o aplicativo.',

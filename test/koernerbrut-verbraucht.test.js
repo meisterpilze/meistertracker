@@ -147,6 +147,8 @@ function werkbank(stand) {
     ${hebe('istVerbraucht')}
     ${hebe('spawnBuchen')}
     ${hebe('verbrauchtScan')}
+    ${hebe('_batchMmdd')}
+    ${hebe('legacyBagMatch')}
     ${hebe('processScan')}
     return {
       scan: (raw) => processScan(raw, { synced: true }),

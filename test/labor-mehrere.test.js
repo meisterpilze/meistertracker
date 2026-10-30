@@ -317,6 +317,7 @@ describe('Ein Etiketten-Fenster, ein Druck', () => {
         const toast = () => {};
         const makeLabZPL = (ids) => ids.map((id) => '^XA' + id + '^XZ').join('\\n');
         const makeBagZPL = (bags) => bags.map((id) => '^XA' + id + '^XZ').join('\\n');
+        const ensureBagBarcodes = async () => {};
         const sendToPrinter = async (zpl) => { reihenfolge.push('gedruckt'); gesendet.push(zpl); return null; };
         let gemeldet = '';
         const printedFb = (m) => { gemeldet = m; };

@@ -1894,6 +1894,7 @@ window.LANG['de'] = {
     'Barcode nicht lesbar („{val}") — nochmal scannen. Kommen immer falsche Zeichen, ist beim Scanner die Tastatur falsch eingestellt.',
   'scanFb.matched': 'Zugeordnet: {val} aus {batch}',
   'scanFb.noBatchFound': 'Zu „{val}" gibt es keine Charge im System — gelöscht, oder falsch gelesen. Nochmal scannen.',
+  'scanFb.legacyAmbiguous': 'Dieses alte Etikett passt auf mehrere Beutel ({list}). Für diesen Beutel ein neues Etikett drucken, dann geht der Scan.',
   'scanFb.checking': 'Etikett ist auf diesem Telefon noch unbekannt — hole den neuesten Stand …',
   'scanFb.unknownOffline':
     'Etikett unbekannt, und der Server ist nicht erreichbar. WLAN prüfen, dann nochmal scannen — hilft das nicht, die App neu starten.',
