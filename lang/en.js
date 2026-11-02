@@ -497,6 +497,7 @@ window.LANG['en'] = {
   'sub.calcium': 'Calcium carbonate',
   'sub.steri': 'Sterilization',
   'sub.phAtInoc': 'pH at inoculation',
+  'sub.phAvgOf': 'Average of {n} measured Charges',
   'sub.steriAdd': 'Add sterilization time',
   'sub.steriEdit': 'Change sterilization time',
   'sub.steriPrompt': 'How long was {id} sterilized?',

@@ -1395,6 +1395,7 @@ window.LANG['pt'] = {
   'sub.calcium': 'Carbonato de cálcio',
   'sub.steri': 'Esterilização',
   'sub.phAtInoc': 'pH na inoculação',
+  'sub.phAvgOf': 'Média de {n} lotes medidos',
   'sub.steriAdd': 'Registar tempo de esterilização',
   'sub.steriEdit': 'Alterar tempo de esterilização',
   'sub.steriPrompt': 'Quanto tempo foi {id} esterilizado?',
