@@ -179,3 +179,140 @@ describe('Ansatz mit Calciumcarbonat und Sterilisierzeit, Chargen mit pH', () =>
     assert.deepEqual(inv.thresholds.calcium, { minKg: 0 });
   });
 });
+
+describe('was die Durchsicht gefunden hat', () => {
+  let d, p, ms;
+  before(() => {
+    ({ db: d, path: p } = tmpDb());
+    ms = seedStrain(d);
+    for (const [mat, v] of [
+      ['hardwood', 500],
+      ['wheatbran', 200],
+      ['gypsum', 20],
+      ['calcium', 10]
+    ]) {
+      db.setInventoryAbsolute(d, mat, v, 'count', 'Inventur', null);
+    }
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('speichert die Warnschwelle für Calciumcarbonat und Maismehl', () => {
+    const inv = db.getInventory(d, 1);
+    db.updateInventoryConfig(d, { ...inv.thresholds, calcium: { minKg: 4 }, corn: { minKg: 7 } }, inv.avgComposition);
+    const nachher = db.getInventory(d, 1).thresholds;
+    assert.deepEqual(nachher.calcium, { minKg: 4 });
+    assert.deepEqual(nachher.corn, { minKg: 7 });
+  });
+
+  it('lässt die Schwelle stehen, wenn ein älterer Client sie nicht mitschickt', () => {
+    const inv = db.getInventory(d, 1);
+    const ohne = { ...inv.thresholds };
+    delete ohne.calcium;
+    db.updateInventoryConfig(d, ohne, inv.avgComposition);
+    assert.deepEqual(db.getInventory(d, 1).thresholds.calcium, { minKg: 4 });
+  });
+
+  it('nennt im Namen jede Abweichung vom Rezept, Calciumcarbonat immer', () => {
+    const rezept = { branPct: 20, cornPct: 0, gypsumPct: 1, moisturePct: 60 };
+    const name = (ov) => db.mixLabel('Beispiel', rezept, db.computeMixBatch({ ...rezept, ...ov }, 50, {}));
+    assert.equal(name({}), 'Beispiel');
+    assert.equal(name({ calciumPct: 2 }), 'Beispiel · CaCO₃ 2 %');
+    assert.equal(name({ branPct: 25 }), 'Beispiel · 75/25');
+    assert.equal(name({ gypsumPct: 1.5 }), 'Beispiel · Gips 1,5 %');
+    assert.equal(name({ moisturePct: 62 }), 'Beispiel · 62 % Feuchte');
+  });
+
+  it('gibt zwei Ansätzen, die sich nur im Calciumcarbonat unterscheiden, verschiedene Namen', () => {
+    db.createSubstrateBatch(d, { subId: 'SUB-N0', recipeStrainId: ms, targetKg: 20 }, null);
+    db.createSubstrateBatch(d, { subId: 'SUB-N2', recipeStrainId: ms, targetKg: 20, mix: { calciumPct: 2 } }, null);
+    const n0 = sub(d, 'SUB-N0').recipeLabel;
+    const n2 = sub(d, 'SUB-N2').recipeLabel;
+    assert.notEqual(n0, n2);
+    assert.match(n2, /CaCO₃ 2 %$/);
+  });
+
+  it('trägt den pH an der Charge nach, korrigiert und löscht ihn', () => {
+    db.createBagBatchFromSubstrate(d, { batchId: 'TP-NACH', subId: 'SUB-N2', strainId: ms, qty: 1, bagKg: 5 }, null);
+    const ph = () => d.prepare("SELECT ph FROM batches WHERE batch_id='TP-NACH'").get().ph;
+    db.updateBatchField(d, 'TP-NACH', { ph: 6.2 });
+    assert.equal(ph(), 6.2);
+    assert.equal(sub(d, 'SUB-N2').phAvg, 6.2, 'der Mittelwert am Ansatz zieht mit');
+    db.updateBatchField(d, 'TP-NACH', { ph: '' });
+    assert.equal(ph(), null);
+    assert.throws(
+      () => db.updateBatchField(d, 'TP-NACH', { ph: 20 }),
+      (e) => db.isSafeError(e.message)
+    );
+    assert.equal(ph(), null, 'ein abgewiesener Wert ändert nichts');
+    db.updateBatchField(d, 'TP-NACH', { notes: 'nur die Notiz' });
+    assert.equal(ph(), null, 'wer den pH nicht nennt, lässt ihn stehen');
+  });
+});
+
+describe('die Felder im Browser', () => {
+  const { hebeFunktion, quelle } = require('./helpers/quelle');
+  const APP = quelle();
+  const hebe = (n) => hebeFunktion(n, APP);
+
+  it('liest den pH: leer ist erlaubt, vertippt nicht', () => {
+    const phLesen = new Function(hebe('parseDecimal') + '\n' + hebe('phLesen') + '\nreturn phLesen;')();
+    assert.equal(phLesen(''), null);
+    assert.equal(phLesen('6,5'), 6.5);
+    assert.equal(phLesen('abc'), undefined);
+    assert.equal(phLesen('15'), undefined);
+  });
+
+  it('schätzt für Calciumcarbonat keine Blöcke, statt 0 zu behaupten', () => {
+    const est = new Function(
+      'function getAvgComp() { return { bagKg: 3.8, rhPct: 60, hwPct: 80, wbPct: 20, gypPct: 1, grainBagKg: 1, grainRhPct: 52 }; }\n' +
+        'function mtDryKg(kg, rh) { return kg * (1 - rh / 100); }\n' +
+        hebe('estBagsFromMat') +
+        '\nreturn estBagsFromMat;'
+    )();
+    assert.equal(est('calcium', 10).bags, null);
+    assert.equal(est('corn', 10).bags, null);
+    assert.ok(est('gypsum', 10).bags > 0);
+  });
+
+  it('nimmt im Ansatz-Dialog eine Nicht-Zahl nicht still als leer', () => {
+    const felder = {};
+    const document = { getElementById: (id) => felder[id] || null };
+    const t = (k, p) => k + (p ? JSON.stringify(p) : '');
+    const ctx = new Function(
+      'document',
+      't',
+      'const WKM = { mix: { branPct: 20 }, steriMin: null, unlesbar: {} };\n' +
+        hebe('parseDecimal') +
+        '\n' +
+        APP.match(/^const WKM_FELD_NAME = \{[\s\S]*?\n\};/m)[0] +
+        '\n' +
+        hebe('wkmFeldLesen') +
+        '\n' +
+        hebe('wkmUnlesbar') +
+        '\n' +
+        hebe('wkmMixOk') +
+        '\n' +
+        hebe('wkmSteriOk') +
+        '\n' +
+        hebe('wkmMixFehler') +
+        '\nreturn { WKM, wkmFeldLesen, wkmMixOk, wkmSteriOk, wkmMixFehler };'
+    )(document, t);
+    felder['wkm-ca'] = { value: 'zwei' };
+    felder['wkm-steri'] = { value: '' };
+    assert.equal(ctx.wkmFeldLesen('ca'), null);
+    assert.equal(ctx.wkmMixOk(), false, 'eine unlesbare Zahl sperrt die Rechnung');
+    assert.match(ctx.wkmMixFehler(), /work\.mNotNumber.*sub\.calcium/);
+    felder['wkm-ca'].value = '2';
+    assert.equal(ctx.wkmFeldLesen('ca'), 2);
+    assert.equal(ctx.wkmMixOk(), true);
+    assert.equal(ctx.wkmFeldLesen('steri'), null, 'leer ist erlaubt');
+    assert.equal(ctx.wkmSteriOk(), true);
+    felder['wkm-steri'].value = 'lang';
+    ctx.wkmFeldLesen('steri');
+    assert.equal(ctx.wkmSteriOk(), false);
+    assert.equal(ctx.wkmMixOk(), true, 'die Zeit sperrt die Mischung nicht');
+  });
+});

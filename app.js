@@ -10704,11 +10704,9 @@ async function sbPreview() {
     return;
   }
   const m = r.mix;
-  // Die Beschriftung trägt die Mischung, sobald sie vom Rezept abweicht — und
-  // zwar dieselbe, die der Server dem Ansatz gibt. Der Bestätigungsdialog soll
-  // sagen, was gleich in der Liste steht.
-  const label =
-    r.recipeLabel + (r.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
+  // Die Beschriftung, die der Server dem Ansatz geben wird (mixLabel), damit
+  // der Bestätigungsdialog sagt, was gleich in der Liste steht.
+  const label = r.label || r.recipeLabel;
   _sbLast = { recipeId, kg, bags, bagKg, mix: m, label: label, blend: blend };
   if (btn) btn.disabled = false;
   const stock = (inventory && inventory.stock) || {};
@@ -10803,6 +10801,16 @@ async function createSubstrateBatchUI() {
   const st = document.getElementById('sb-status');
   if (!_sbLast) {
     setStatus(st, t('sub.pickBoth'), false);
+    return;
+  }
+  // Ein Zahlenfeld, in dem keine Zahl steht, meldet der Browser als leer —
+  // gebucht würde dann still das Rezept oder keine Zeit. badInput verrät es.
+  const unlesbar = SB_BLEND_FIELDS.concat('sb-steri')
+    .map((id) => document.getElementById(id))
+    .find((el) => el && el.validity && el.validity.badInput);
+  if (unlesbar) {
+    const lab = unlesbar.parentElement.querySelector('label');
+    setStatus(st, t('work.mNotNumber', { feld: lab ? lab.textContent.replace(/%|min/g, '').trim() : '' }), false);
     return;
   }
   const steriMin = _sbNum('sb-steri');
@@ -12508,6 +12516,15 @@ function openChargeSheet(b) {
       t('th.source'),
       quelle.length ? `<span style="font-family:monospace">${esc(quelle.join(', '))}</span>` : '—'
     ) +
+    // Gemessen beim Beimpfen. Steht hier, weil eine Charge ohne Ansatz sonst
+    // nirgends zeigte, was für sie eingetragen wurde. Geändert wird direkt an
+    // der Zahl: ein dritter Knopf in der Reihe darunter brach dort jede
+    // Beschriftung am Telefon in zwei Zeilen.
+    met(
+      t('sub.phAtInoc'),
+      (b.ph == null ? '—' : esc(fmtKg(b.ph, 1))) +
+        ` <button type="button" class="wkf-link" data-bi="ch-ph">${esc(t(b.ph == null ? 'ch.phAdd' : 'ch.phEdit'))}</button>`
+    ) +
     '</div>' +
     (b.notes ? `<div class="fs-meta" style="margin-bottom:10px;white-space:pre-wrap">${esc(b.notes)}</div>` : '') +
     `<div class="fs-meta muted" style="margin-bottom:6px">${esc(t('ch.bagsTitle'))}</div>` +
@@ -12540,7 +12557,37 @@ function chAction(a) {
   if (a === 'ch-move') return openMoveBatchModal(id);
   if (a === 'ch-bags') return openAddBags(id);
   if (a === 'ch-note') return openNote(id);
+  if (a === 'ch-ph') return recordBatchPh(id);
   if (a === 'ch-del') return delBatch(id);
+}
+
+// pH nachtragen oder korrigieren, wie die Sterilisierzeit am Ansatz. Leer
+// löscht ihn wieder.
+function recordBatchPh(id) {
+  const b = batches.find((x) => x.batchId === id);
+  if (!b) return;
+  prompt2(
+    t('ch.phPrompt', { id }),
+    t('ch.phHint'),
+    async (v) => {
+      const ph = phLesen(v);
+      if (ph === undefined) {
+        toast(t('batch.phNaN'), 'err');
+        return;
+      }
+      const r = await apiPatch('/api/batches/' + encodeURIComponent(id), { ph });
+      if (r && r.error) {
+        toast(t('sub.failed', { err: r.error }), 'err');
+        return;
+      }
+      b.ph = ph;
+      toast(ph == null ? t('ch.phCleared') : t('ch.phSaved', { ph: fmtKg(ph, 1) }));
+      // Der Mittelwert am Ansatz hängt daran.
+      if (b.substrateSubId) refreshSubstrateBatches();
+      openChargeSheet(b);
+    },
+    { inputmode: 'decimal', value: b.ph == null ? '' : fmtKg(b.ph, 1) }
+  );
 }
 
 // Woraus eine Charge besteht: Größe → wie viele Beutel davon.
@@ -15697,6 +15744,12 @@ function estBagsFromMat(mat, stockKg) {
   if (mat === 'hardwood') matPerBag = dryPerBag * (c.hwPct / 100);
   if (mat === 'wheatbran') matPerBag = dryPerBag * (c.wbPct / 100);
   if (mat === 'gypsum') matPerBag = dryPerBag * (c.gypPct / 100);
+  // Maismehl und Calciumcarbonat haben keinen Durchschnittsanteil, aus dem sich
+  // schätzen ließe. null heißt "keine Schätzung" — "reicht für ~0 Blöcke" las
+  // sich bei 10 kg im Regal wie ein leerer Bestand.
+  if (!['hardwood', 'wheatbran', 'gypsum'].includes(mat)) {
+    return { bags: null, matPerBag: 0, bagKg: c.bagKg, isGrain: false };
+  }
   const bags = matPerBag > 0 ? Math.floor(stockKg / matPerBag) : 0;
   return { bags, matPerBag, bagKg: c.bagKg, isGrain: false };
 }
@@ -15726,7 +15779,9 @@ function renderInvStock() {
           : Math.min(100, Math.round((stock / Math.max(stock, 100)) * 100));
       const estNote = isGrain
         ? t('inv.grainBagsEst', { n: bags, kg: bagKg })
-        : t('inv.blocksEst', { n: '<strong>' + bags + '</strong>', kg: bagKg }) +
+        : bags == null
+          ? ''
+          : t('inv.blocksEst', { n: '<strong>' + bags + '</strong>', kg: bagKg }) +
           ' <span class="fs-micro" style="color:var(--c-text-muted)">' +
           t('inv.avgEstimate') +
           '</span>';
@@ -15774,7 +15829,7 @@ function renderThresholds() {
         <td style="font-weight:500;color:${MAT_COLORS[mat]}">${MAT_LABELS[mat]}</td>
         <td style="font-weight:600">${stock.toFixed(2)} kg</td>
         <td><input class="fs-meta" type="text" inputmode="decimal" value="${esc(t.minKg)}" style="width:80px;padding:3px 6px" onchange="updateThreshold('${mat}','minKg',this.value)" /></td>
-        <td class="fs-meta" style="color:var(--c-text-sec)">~${bags} bags <span class="fs-micro" style="color:var(--c-text-muted)">(avg)</span></td>
+        <td class="fs-meta" style="color:var(--c-text-sec)">${bags == null ? '–' : `~${bags} bags <span class="fs-micro" style="color:var(--c-text-muted)">(avg)</span>`}</td>
       </tr>`;
       })
       .join('')}
@@ -16055,7 +16110,7 @@ function getInvAlerts() {
       const supNote = sups.length ? ` — ${t('inv.reorderFrom')}: ${sups.map((s) => s.name).join(', ')}` : '';
       return {
         text: `Low stock: ${MAT_LABELS[mat]}`,
-        detail: `${stock.toFixed(1)} kg remaining (≈${bags} bags) — below ${thresh}kg threshold${supNote}`,
+        detail: `${stock.toFixed(1)} kg remaining${bags == null ? '' : ` (≈${bags} bags)`} — below ${thresh}kg threshold${supNote}`,
         urgent: stock < thresh * 0.5,
         warn: true,
         species: null
@@ -31517,6 +31572,12 @@ function initEventListeners() {
   $('cls-11').addEventListener('click', () => {
     document.getElementById('m-baginfo').classList.remove('open');
   });
+  // Im Körper der Karte gibt es nur den pH an der Charge zum Antippen; alles
+  // andere steht in der Knopfreihe darunter.
+  $('bi-body').addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-bi="ch-ph"]');
+    if (btn) chAction('ch-ph');
+  });
   $('bi-actions').addEventListener('click', function (e) {
     const btn = e.target.closest('[data-bi]');
     if (!btn) return;
@@ -33936,6 +33997,11 @@ function wkbCreateFromShelf(stamm, angesetzt, inoc, ph) {
     inoc: inoc || []
   });
   createBatch();
+  // createBatch hat den pH schon gelesen, bevor es zum ersten Mal wartet. Bricht
+  // es danach ab (Rückfrage verneint), stünde er sonst im versteckten Formular
+  // und ginge mit der nächsten Charge von dort mit — gemessen an einer anderen.
+  const phFeld = document.getElementById('nb-ph');
+  if (phFeld) phFeld.value = '';
 }
 
 async function wkbCreate() {
@@ -34132,11 +34198,13 @@ async function wkbCreate() {
 // Formular oder das Rezept umschreiben, und damit jeden künftigen Ansatz mit.
 // `steriMin` gehört nicht zur Mischung und nicht in den Vorschau-Schlüssel: es
 // ändert keine Zahl der Rechnung, es wird nur mit dem Ansatz gespeichert.
-const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, steriMin: null, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, steriMin: null, unlesbar: {}, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
 const WKM_MIX_KEYS = ['branPct', 'gypsumPct', 'calciumPct', 'moisturePct'];
 
 function wkmKey() {
-  return String(WKM.recipeId) + '|' + WKM.kg + '|' + JSON.stringify(WKM.mix);
+  // Mit den unlesbaren Feldern: eine getippte Nicht-Zahl ändert WKM.mix nicht,
+  // muss die alte Vorschau aber trotzdem ungültig machen.
+  return String(WKM.recipeId) + '|' + WKM.kg + '|' + JSON.stringify(WKM.mix) + '|' + Object.keys(WKM.unlesbar).sort();
 }
 
 function wkmMixFromRecipe() {
@@ -34160,12 +34228,47 @@ function wkmMixOk() {
   const m = WKM.mix || {};
   const drin = (k, lo, hi) => !(k in m) || (m[k] >= lo && m[k] <= hi);
   return (
-    drin('branPct', 0, 95) && drin('gypsumPct', 0, 20) && drin('calciumPct', 0, 20) && drin('moisturePct', 20, 90)
+    !wkmUnlesbar('mix') &&
+    drin('branPct', 0, 95) &&
+    drin('gypsumPct', 0, 20) &&
+    drin('calciumPct', 0, 20) &&
+    drin('moisturePct', 20, 90)
   );
 }
 // Leer heißt: nicht eingetragen. Sonst ganze oder halbe Minuten bis zu einem Tag.
 function wkmSteriOk() {
-  return WKM.steriMin == null || (WKM.steriMin >= 0 && WKM.steriMin <= 1440);
+  return !WKM.unlesbar.steri && (WKM.steriMin == null || (WKM.steriMin >= 0 && WKM.steriMin <= 1440));
+}
+
+// Ein Feld, das etwas enthält, aber keine Zahl: das darf nicht still als "leer"
+// gelten. Leer hieße beim Anteil "wie im Rezept" und bei der Zeit "nicht
+// eingetragen" — der Ansatz würde mit einer anderen Zahl angelegt als der, die
+// der Mischende getippt zu haben glaubt.
+const WKM_FELD_NAME = {
+  hw: 'sub.pellets',
+  wb: 'sub.bran',
+  gyp: 'sub.gypsum',
+  ca: 'sub.calcium',
+  rh: 'sub.moisture',
+  steri: 'sub.steri'
+};
+function wkmFeldLesen(which) {
+  const el = document.getElementById('wkm-' + which);
+  const raw = el ? el.value.trim() : '';
+  const v = raw === '' ? null : parseDecimal(raw);
+  const lesbar = v == null || Number.isFinite(v);
+  if (lesbar) delete WKM.unlesbar[which];
+  else WKM.unlesbar[which] = true;
+  return lesbar ? v : null;
+}
+// Das erste unlesbare Feld, für die Mischung oder für die Zeit.
+function wkmUnlesbar(teil) {
+  return Object.keys(WKM.unlesbar).find((k) => (teil === 'steri' ? k === 'steri' : k !== 'steri')) || null;
+}
+// Was über der Tabelle steht, wenn sich nicht rechnen lässt.
+function wkmMixFehler() {
+  const u = wkmUnlesbar('mix');
+  return u ? t('work.mNotNumber', { feld: t(WKM_FELD_NAME[u]) }) : t('work.mMixRange');
 }
 
 // Pellets und Kleie sind eine Zahl in zwei Feldern, wie in sbBlendEdited():
@@ -34174,7 +34277,9 @@ let _wkmMixTimer = null;
 function wkmBlendEdited(which) {
   if (!WKM.mix) WKM.mix = {};
   if (which === 'hw' || which === 'wb') {
-    const v = _sbNum(which === 'hw' ? 'wkm-hw' : 'wkm-wb');
+    const v = wkmFeldLesen(which);
+    // Das Gegenfeld ist jetzt wieder lesbar, weil es gleich überschrieben wird.
+    delete WKM.unlesbar[which === 'hw' ? 'wb' : 'hw'];
     if (v == null) {
       delete WKM.mix.branPct;
     } else {
@@ -34184,7 +34289,7 @@ function wkmBlendEdited(which) {
     }
   } else {
     const k = { gyp: 'gypsumPct', ca: 'calciumPct', rh: 'moisturePct' }[which];
-    const v = _sbNum('wkm-' + which);
+    const v = wkmFeldLesen(which);
     if (v == null) delete WKM.mix[k];
     else WKM.mix[k] = v;
   }
@@ -34194,13 +34299,11 @@ function wkmBlendEdited(which) {
   _wkmMixTimer = setTimeout(wkmLoadPreview, 300);
 }
 
-// Die Beschriftung, die der Ansatz in der Liste bekommt: mit dem Verhältnis,
-// sobald es vom Rezept abweicht — wie im Formular.
+// Die Beschriftung, die der Ansatz in der Liste bekommt. Gebaut vom Server
+// (mixLabel), damit Dialog, Formular und Liste dasselbe sagen.
 function wkmLabel() {
   const p = WKM.preview;
-  if (!p) return '';
-  const m = p.mix;
-  return (p.recipeLabel || '') + (p.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
+  return p ? p.label || p.recipeLabel || '' : '';
 }
 
 function wkmStock() {
@@ -34239,7 +34342,7 @@ async function wkmLoadPreview() {
   WKM.fehler = '';
   if (!WKM.recipeId || !(WKM.kg > 0) || !wkmMixOk()) {
     WKM.laedt = false;
-    if (!wkmMixOk()) WKM.fehler = t('work.mMixRange');
+    if (!wkmMixOk()) WKM.fehler = wkmMixFehler();
     wkmRenderOut();
     wkmUpdateButton();
     return;
@@ -34271,6 +34374,7 @@ async function wkmOpen() {
   WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
   wkmMixFromRecipe();
   WKM.steriMin = null;
+  WKM.unlesbar = {};
   WKM.bags = 50;
   WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
   WKM.notes = '';
@@ -34289,7 +34393,7 @@ function wkmRead() {
   if (g('wkm-recipe')) WKM.recipeId = parseInt(g('wkm-recipe').value, 10) || null;
   if (g('wkm-bags')) WKM.bags = sbParseBags(g('wkm-bags').value);
   WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
-  if (g('wkm-steri')) WKM.steriMin = _sbNum('wkm-steri');
+  if (g('wkm-steri')) WKM.steriMin = wkmFeldLesen('steri');
   if (g('wkm-notes')) WKM.notes = g('wkm-notes').value;
 }
 
@@ -34351,6 +34455,9 @@ function wkmRender() {
   // inzwischen geöffneten anderen Ablauf schreiben.
   if (WKF.kind !== 'mix') return;
   wkf('wkf-title').textContent = t('work.substrate');
+  // Die Felder werden gleich aus dem Zustand neu gezeichnet, also steht danach
+  // in jedem eine lesbare Zahl.
+  WKM.unlesbar = {};
   wkf('wkf-back').hidden = true;
   wkf('wkf-steps').innerHTML = '';
 
@@ -34375,10 +34482,11 @@ function wkmRender() {
 
   const list = sbRecipeOptions(WKM.recipeId);
   const mix = WKM.mix || {};
-  const zahl = (v) => (v == null ? '' : String(Math.round(v * 100) / 100));
+  // Mit Komma, wie getippt wird; parseDecimal liest beides.
+  const zahl = (v) => (v == null ? '' : String(Math.round(v * 100) / 100).replace('.', ','));
   const feld = (id, label, wert, min, max, step, einheit) =>
     `<div><label class="fs-xs">${esc(label)} ${einheit || '%'}</label>
-       <input type="number" id="${id}" min="${min}" max="${max}" step="${step}" inputmode="decimal" value="${zahl(wert)}" /></div>`;
+       <input type="text" id="${id}" inputmode="decimal" data-min="${min}" data-max="${max}" value="${zahl(wert)}" /></div>`;
 
   wkf('wkf-body').innerHTML =
     `<div class="wkf-q">${esc(t('work.mQ'))}</div>
@@ -34425,7 +34533,7 @@ async function wkmCreate() {
   if (!WKM.preview || WKM.previewKey !== wkmKey()) await wkmLoadPreview();
   if (!WKM.preview) return;
   if (!wkmSteriOk()) {
-    WKM.fehler = t('sub.steriNaN');
+    WKM.fehler = WKM.unlesbar.steri ? t('work.mNotNumber', { feld: t('sub.steri') }) : t('sub.steriNaN');
     wkmRenderOut();
     return;
   }
@@ -34562,6 +34670,6 @@ function wkmSubmit(subId, menge, label, mix, steriMin) {
     const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-gyp,#wkm-ca,#wkm-rh');
     if (f) wkmBlendEdited(f.id.slice(4));
     // Die Zeit ändert die Rechnung nicht, also nur merken.
-    else if (e.target.closest('#wkm-steri')) WKM.steriMin = _sbNum('wkm-steri');
+    else if (e.target.closest('#wkm-steri')) WKM.steriMin = wkmFeldLesen('steri');
   });
 })();
