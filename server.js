@@ -961,6 +961,7 @@ function validateMixOverride(mix) {
     branPct: { min: 0, max: 95 },
     cornPct: { min: 0, max: 95 },
     gypsumPct: { min: 0, max: 20 },
+    calciumPct: { min: 0, max: 20 },
     moisturePct: { min: 20, max: 90 }
   });
 }
@@ -8671,6 +8672,33 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, err.message);
           return;
         }
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // Sterilisierzeit nachtragen. Ein fehlendes oder leeres Feld setzt auf "nicht
+  // eingetragen" zurück; die Grenzen prüft die DB-Schicht.
+  const subSteriMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/steri$/);
+  if (req.method === 'POST' && subSteriMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.setSubstrateSteriMin(
+          database,
+          decodeURIComponent(subSteriMatch[1]),
+          data && 'steriMin' in data ? data.steriMin : null
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
         safeErr(res, err);
       }
     });
