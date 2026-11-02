@@ -501,6 +501,7 @@ window.LANG['de'] = {
   'sub.calcium': 'Calciumcarbonat',
   'sub.steri': 'Sterilisieren',
   'sub.phAtInoc': 'pH beim Beimpfen',
+  'sub.phAvgOf': 'Mittel aus {n} gemessenen Chargen',
   'sub.steriAdd': 'Sterilisierzeit eintragen',
   'sub.steriEdit': 'Sterilisierzeit ändern',
   'sub.steriPrompt': 'Wie lange wurde {id} sterilisiert?',

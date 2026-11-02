@@ -11047,7 +11047,7 @@ function renderSubstrateTab() {
     box.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
     return;
   }
-  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thRh', 'sub.thSteriPh', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
+  const head = ['sub.thId', 'sub.thRecipe', 'sub.thSteriPh', 'sub.thMade', 'sub.thRh', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
     .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
     .join('');
   box.innerHTML =
@@ -11082,6 +11082,10 @@ function _sbRowHtml(s) {
       'font-family:monospace;font-weight:600'
     ) +
     cell(esc(s.recipeLabel), 'color:var(--c-text-sec)') +
+    // Gleich neben der Mischung, nicht hinter der Feuchte: am Telefon scrollt
+    // die Tabelle seitwärts, und der Vergleich Mischung – Zeit – pH ist der
+    // Grund, diese Liste gerade anzusehen. Weiter hinten stand er außer Sicht.
+    cell(_sbSteriPhCell(s), 'white-space:nowrap') +
     cell(fmtDtShort(s.created), 'white-space:nowrap') +
     // Direkt in der Zeile eintragbar: die Messung kommt nach dem Mischen, und
     // der Weg über die Karte des Ansatzes war zu weit, um es zu tun.
@@ -11093,7 +11097,6 @@ function _sbRowHtml(s) {
         '</button>',
       'white-space:nowrap'
     ) +
-    cell(esc(_subSteriText(s)) + ' · ' + esc(_subPhText(s)), 'white-space:nowrap') +
     cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
     cell(
       s.remainingKg.toFixed(1) +
@@ -11200,6 +11203,13 @@ function _subSteriText(s) {
 function _subPhText(s) {
   if (s.phAvg == null) return '–';
   return 'pH ' + fmtKg(s.phAvg, 1) + (s.phN > 1 ? ' (' + s.phN + ')' : '');
+}
+// Die Zelle in der Liste. Fehlt beides, ein Strich statt "– · –"; die Zahl in
+// Klammern erklärt sich im Tooltip, weil "(3)" allein nicht sagt, wovon drei.
+function _sbSteriPhCell(s) {
+  if (s.steriMin == null && s.phAvg == null) return '<span style="color:var(--c-text-muted)">–</span>';
+  const title = s.phN > 1 ? ' title="' + esc(t('sub.phAvgOf', { n: s.phN })) + '"' : '';
+  return '<span' + title + '>' + esc(_subSteriText(s)) + ' · ' + esc(_subPhText(s)) + '</span>';
 }
 
 // Nachgetragen wie die geplatzten Beutel: sterilisiert wird nach dem Mischen.
