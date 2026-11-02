@@ -5025,12 +5025,7 @@ function createSubstrateBatch(db, b, userId) {
   if (!found) throw new Error('Diese Mischung hat noch keine Soll-Feuchte. Bitte zuerst im Rezept eintragen.');
   const adj = mixWithOverride(found.recipe, b.mix);
   const mix = computeMixBatch(adj.recipe, b.targetKg, found.opts);
-  // Ein abweichender Ansatz trägt seine Mischung im Namen. Ohne das stünde in
-  // der Liste der Rezeptname über einer abweichenden Mischung, und wer später
-  // sucht, warum dieser eine Ansatz sich anders verhalten hat, findet den
-  // Unterschied nur, wenn er die Zeile aufklappt.
-  const label =
-    found.label + (adj.adjusted ? ' · ' + Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct) : '');
+  const label = mixLabel(found.label, found.recipe, mix);
   const water = waterPlan(db, mix.waterL, found.opts.flowLmin);
   const created = b.created || new Date().toISOString();
   db.exec('BEGIN');
@@ -5077,6 +5072,29 @@ function createSubstrateBatch(db, b, userId) {
     throw e;
   }
   return { subId: b.subId, mix, water };
+}
+
+// Der Name eines Ansatzes: das Rezept, und dahinter jede Zahl, in der er davon
+// abweicht. Ohne das stuende in der Liste der Rezeptname ueber einer anderen
+// Mischung, und zwei Ansaetze, die sich nur im Calciumcarbonat oder im Gips
+// unterscheiden, saehen gleich aus — gerade die, die man vergleichen will.
+// Calciumcarbonat steht immer da, sobald welches drin ist: Rezepte kennen es
+// nicht, also ist es immer eine Angabe dieses einen Ansatzes.
+//
+// Hier und nur hier gebaut. Die Vorschau gibt denselben Namen zurueck, damit
+// Dialog, Formular und Liste nicht je ihre eigene Fassung pflegen.
+function mixLabel(base, recipe, mix) {
+  const r = recipe || {};
+  const anders = (a, b) => Math.abs((+a || 0) - (+b || 0)) > 1e-9;
+  const zahl = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
+  const teile = [];
+  if (anders(mix.wheatbranPct, r.branPct) || anders(mix.cornPct, r.cornPct)) {
+    teile.push(Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct));
+  }
+  if (anders(mix.gypsumPct, r.gypsumPct)) teile.push('Gips ' + zahl(mix.gypsumPct) + ' %');
+  if (mix.calciumPct > 0) teile.push('CaCO₃ ' + zahl(mix.calciumPct) + ' %');
+  if (anders(mix.rhPct, r.moisturePct)) teile.push(zahl(mix.rhPct) + ' % Feuchte');
+  return (base || '') + teile.map((x) => ' · ' + x).join('');
 }
 
 // Sterilisierzeit in Minuten, oder null fuer "nicht eingetragen". Ein leeres
@@ -5430,12 +5448,14 @@ function setSubstrateSteriMin(db, subId, minutes) {
   return { subId, steriMin: v };
 }
 
-// Der Ansatz mit dem pH seiner Chargen. AVG und COUNT ueberspringen NULL, also
-// zaehlt eine Charge ohne Messung weder als 0 noch ueberhaupt.
-const SUBSTRATE_SELECT = `SELECT s.*,
-    (SELECT AVG(b.ph) FROM batches b WHERE b.substrate_batch_id = s.id) AS ph_avg,
-    (SELECT COUNT(b.ph) FROM batches b WHERE b.substrate_batch_id = s.id) AS ph_n
-  FROM substrate_batches s`;
+// Der Ansatz mit dem pH seiner Chargen. Nur gemessene Chargen gehen ein: eine
+// ohne Messung zaehlt weder als 0 noch ueberhaupt. Einmal gruppiert und
+// angehaengt, statt je Ansatz zweimal in batches zu suchen.
+const SUBSTRATE_SELECT = `SELECT s.*, p.ph_avg, p.ph_n
+  FROM substrate_batches s
+  LEFT JOIN (SELECT substrate_batch_id, AVG(ph) AS ph_avg, COUNT(*) AS ph_n
+               FROM batches WHERE ph IS NOT NULL AND substrate_batch_id IS NOT NULL
+              GROUP BY substrate_batch_id) p ON p.substrate_batch_id = s.id`;
 
 function listSubstrateBatches(db, opts) {
   const o = opts || {};
@@ -5709,8 +5729,14 @@ function updateBatchField(db, batchId, fields) {
   // they create/destroy and write the corresponding inventory_log entries; a
   // bare qty update here would mutate the count without any of that ledger
   // bookkeeping. Use addBagsToBatch to grow a batch.
+  //
+  // pH: nachgetragen oder korrigiert an der Charge. Vor BEGIN geprüft, damit
+  // ein vertippter Wert nichts halb ändert; leer setzt auf "nicht gemessen".
+  const hatPh = fields && 'ph' in fields;
+  const ph = hatPh ? _phOf(fields.ph) : null;
   db.exec('BEGIN');
   try {
+    if (hatPh) db.prepare('UPDATE batches SET ph=? WHERE batch_id=?').run(ph, batchId);
     // Handle strainId update: resolve species+strain from mushroom_strains
     if (fields.strainId != null) {
       const ms = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(fields.strainId);
@@ -7940,14 +7966,24 @@ function setInventoryAbsolute(db, mat, value, type, ref, userId) {
 function updateInventoryConfig(db, thresholds, avgComposition) {
   const t = thresholds || {};
   const a = avgComposition || {};
+  // Maismehl und Calciumcarbonat stehen in derselben Tabelle zum Eintragen wie
+  // die anderen, wurden hier aber nie gespeichert: die Zahl sprang nach dem
+  // nächsten Laden zurück auf 0, und die Warnung kam nie. Fehlt eine Angabe
+  // (ein älterer Client), bleibt der gespeicherte Wert stehen, statt auf 0 zu
+  // fallen.
+  const ohneAngabe = (m) => (t[m] && Number.isFinite(+t[m].minKg) ? +t[m].minKg : null);
   db.prepare(
-    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,thresh_coir=?,avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
+    `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,thresh_coir=?,
+       thresh_corn=COALESCE(?, thresh_corn),thresh_calcium=COALESCE(?, thresh_calcium),
+       avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
   ).run(
     (t.hardwood && t.hardwood.minKg) ?? 50,
     (t.wheatbran && t.wheatbran.minKg) ?? 20,
     (t.gypsum && t.gypsum.minKg) ?? 5,
     (t.grain && t.grain.minKg) ?? 10,
     (t.coir && t.coir.minKg) ?? 0,
+    ohneAngabe('corn'),
+    ohneAngabe('calcium'),
     a.hwPct ?? 75,
     a.wbPct ?? 25,
     a.rhPct ?? 63,
@@ -14307,6 +14343,7 @@ module.exports = {
   resetOperationalData,
   computeMixBatch,
   mixWithOverride,
+  mixLabel,
   getMixRecipe,
   resolveMix,
   getResidualMoisture,

@@ -8771,7 +8771,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           mix,
           water: db.waterPlan(database, mix.waterL, found.opts.flowLmin),
           adjusted: adj.adjusted,
-          recipeLabel: found.label
+          recipeLabel: found.label,
+          // Der Name, den der Ansatz beim Anlegen bekommt — gebaut wie dort,
+          // damit die Bestätigung sagt, was gleich in der Liste steht.
+          label: db.mixLabel(found.label, found.recipe, mix)
         });
       } catch (err) {
         safeErr(res, err);
