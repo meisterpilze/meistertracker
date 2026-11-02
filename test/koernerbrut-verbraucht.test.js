@@ -604,7 +604,7 @@ describe('Beimpft mit, im geführten Ablauf', () => {
       c.indexOf('const inoc = wkbInocListe();') < c.indexOf('await stammFertig'),
       'kopiert, bevor der Ablauf zugeht'
     );
-    assert.match(c, /wkbCreateFromShelf\(stamm, angesetzt, inoc\)/);
+    assert.match(c, /wkbCreateFromShelf\(stamm, angesetzt, inoc, ph\)/);
     assert.match(c, /sourceId: kultur \? kultur\.id : undefined/);
     assert.match(c, /inocVerbrauchtBuchen\(neu, inoc\)/);
     assert.match(hebe('wkbCreateFromShelf'), /inoc: inoc \|\| \[\]/);

@@ -519,7 +519,7 @@ describe('Jeder Weg trägt Stamm und Tag bis zum Anlegen', () => {
     assert.match(c, /const angesetzt = anlageLesen\('wkb'\)/);
     assert.match(c, /const stamm = await stammFertig\('wkb'\)/);
     // Dazu die Beimpf-Liste, siehe test/koernerbrut-verbraucht.test.js.
-    assert.match(c, /wkbCreateFromShelf\(stamm, angesetzt, inoc\)/);
+    assert.match(c, /wkbCreateFromShelf\(stamm, angesetzt, inoc, ph\)/);
     assert.match(c, /genBatchId\(ms\.name, wann\)/);
     assert.match(c, /createBatchFromSubstrate\([^;]*stamm \|\| 'XXX', stamm,/);
     assert.match(c, /created: angesetzt \? wann\.toISOString\(\) : undefined/);

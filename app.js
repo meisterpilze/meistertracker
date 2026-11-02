@@ -2765,7 +2765,8 @@ const _OH_MAT_KEY = {
   wheatbran: 'inv.wheatBran',
   gypsum: 'inv.gypsum',
   coir: 'inv.coir',
-  corn: 'inv.corn'
+  corn: 'inv.corn',
+  calcium: 'inv.calcium'
 };
 function _ohMatName(mat) {
   return t(_OH_MAT_KEY[mat] || mat);
@@ -2924,7 +2925,7 @@ function renderInventoryCard() {
   if (!body) return;
   const stock = (inventory && inventory.stock) || {};
   const thr = (inventory && inventory.thresholds) || {};
-  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir', 'corn'];
+  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir', 'corn', 'calcium'];
   body.innerHTML = mats
     .map((m) => {
       const have = stock[m] || 0;
@@ -10050,6 +10051,19 @@ function nbApplyDefaults() {
 // async since the two warnings inside became dialogs rather than window.confirm().
 // Both internal callers invoke it as their last statement and ignore the result,
 // and $('btn-24') is a click handler, so nothing was waiting on it before either.
+// pH aus einem Feld: null für leer, undefined für nicht lesbar oder außerhalb
+// 0–14. Zwei verschiedene Antworten, weil leer erlaubt ist und vertippt nicht.
+function phLesen(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (s === '') return null;
+  const v = parseDecimal(s);
+  return Number.isFinite(v) && v >= 0 && v <= 14 ? v : undefined;
+}
+function nbPhLesen() {
+  const el = document.getElementById('nb-ph');
+  return el ? phLesen(el.value) : null;
+}
+
 async function createBatch() {
   // Angesetzt am: gesetzt nur von dem Arbeitsgang, der hierher übergibt, und
   // gelesen als Erstes — auch wenn gleich eine Prüfung abbricht, soll kein Datum
@@ -10079,6 +10093,13 @@ async function createBatch() {
   const bagKg = parseDecimal(document.getElementById('nb-weight').value) || 0;
   if (qty < 1) {
     fieldError('nb-qty', t('batch.fillQty'));
+    return;
+  }
+  // Gemessen beim Beimpfen, freiwillig. Für beide Wege unten geprüft: aus dem
+  // Ansatz liest createBatchFromSubstrate dasselbe Feld.
+  const ph = nbPhLesen();
+  if (ph === undefined) {
+    fieldError('nb-ph', t('batch.phNaN'));
     return;
   }
   // v67: portioned out of an existing mix. None of the composition and delta
@@ -10220,6 +10241,7 @@ async function createBatch() {
     grainRh,
     sourceId: inocCultureId() || document.getElementById('nb-culture').value || null,
     notes: document.getElementById('nb-notes').value.trim(),
+    ph,
     strainText,
     created: wann.toISOString(),
     due: due.toISOString(),
@@ -10323,6 +10345,7 @@ async function createBatch() {
   // qty/days/weight/substrate intentionally kept (persisted via nbSaveDefaults
   // above) so the next batch reuses them; only per-batch fields are cleared.
   document.getElementById('nb-notes').value = '';
+  if (document.getElementById('nb-ph')) document.getElementById('nb-ph').value = '';
   document.getElementById('nb-mat-preview').style.display = 'none';
   nbPreview();
   updateTodoBadge();
@@ -10398,7 +10421,7 @@ function sbPreviewSoon() {
 // Das Rezept der Sorte belegt die Felder, danach gehören sie diesem einen
 // Ansatz. Wer 70/30 mischen will, tippt hier 70 — vorher hätte er dafür das
 // Rezept der Sorte umschreiben müssen, und damit jeden künftigen Ansatz mit.
-const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-corn', 'sb-gyp', 'sb-rh'];
+const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-corn', 'sb-gyp', 'sb-ca', 'sb-rh'];
 function _sbNum(id) {
   const el = document.getElementById(id);
   if (!el || el.value === '') return null;
@@ -10569,6 +10592,8 @@ function sbRecipeOf(recipeId) {
     branPct: +r.wheatbranPct || 0,
     cornPct: 0,
     gypsumPct: +r.gypsumPct || 0,
+    // Gespeicherte Mischungen kennen kein Calciumcarbonat; es kommt pro Ansatz dazu.
+    calciumPct: 0,
     moisturePct: +r.rhPct || 0
   };
 }
@@ -10592,6 +10617,7 @@ function sbFillBlendFromRecipe() {
   _sbSet('sb-corn', rec.cornPct);
   _sbSet('sb-hw', 100 - rec.branPct - rec.cornPct);
   _sbSet('sb-gyp', rec.gypsumPct);
+  _sbSet('sb-ca', rec.calciumPct);
   _sbSet('sb-rh', rec.moisturePct);
   // Maismehl steht nur da, wo das Rezept welches vorsieht — sonst wäre es ein
   // Feld, das bei den meisten Sorten 0 sagt und nur Platz kostet.
@@ -10625,6 +10651,7 @@ function sbBlendAdjusted() {
     gleich(_sbNum('sb-wb'), rec.branPct) &&
     gleich(_sbNum('sb-corn'), rec.cornPct) &&
     gleich(_sbNum('sb-gyp'), rec.gypsumPct) &&
+    gleich(_sbNum('sb-ca'), rec.calciumPct) &&
     gleich(_sbNum('sb-rh'), rec.moisturePct)
   );
 }
@@ -10645,6 +10672,8 @@ function sbBlend() {
   if (corn != null) o.cornPct = corn;
   const gyp = _sbNum('sb-gyp');
   if (gyp != null) o.gypsumPct = gyp;
+  const ca = _sbNum('sb-ca');
+  if (ca != null) o.calciumPct = ca;
   const rh = _sbNum('sb-rh');
   if (rh != null) o.moisturePct = rh;
   return o;
@@ -10715,6 +10744,7 @@ async function sbPreview() {
     row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
     (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
     row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
+    (m.calciumKg > 0.005 ? row(t('sub.calcium'), m.calciumKg, 'kg', 'calcium', 2) : '') +
     row(t('sub.waterNow'), sbWater(r).nowL, 'L') +
     '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
     esc(t('sub.waterTime')) +
@@ -10775,6 +10805,11 @@ async function createSubstrateBatchUI() {
     setStatus(st, t('sub.pickBoth'), false);
     return;
   }
+  const steriMin = _sbNum('sb-steri');
+  if (steriMin != null && !(steriMin >= 0 && steriMin <= 1440)) {
+    setStatus(st, t('sub.steriNaN'), false);
+    return;
+  }
   const subId = sbGenId();
   sbConfirmMix(
     subId,
@@ -10790,6 +10825,7 @@ async function createSubstrateBatchUI() {
         // Dieselben Zahlen, die die Vorschau gerechnet hat. Sie hier wegzulassen
         // hieße, etwas anderes anzulegen als das, was auf dem Schirm stand.
         mix: _sbLast.blend,
+        steriMin,
         notes: (document.getElementById('sb-notes').value || '').trim()
       });
       if (!r || r.error) {
@@ -10798,6 +10834,7 @@ async function createSubstrateBatchUI() {
       }
       setStatus(st, t('sub.done', sbMengeParams(_sbLast, { id: r.subId })), true);
       document.getElementById('sb-notes').value = '';
+      _sbSet('sb-steri', null);
       await loadData();
       await refreshSubstrateBatches();
       sbPreview();
@@ -10932,6 +10969,9 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       // Der geführte Ablauf bringt seine eigene Notiz mit; das lange Formular
       // liest weiter sein Feld.
       notes: opts && opts.notes != null ? opts.notes : (document.getElementById('nb-notes').value || '').trim(),
+      // Ebenso der pH: der Ablauf bringt ihn mit, das Formular hat sein Feld.
+      // Geprüft ist er an beiden Stellen schon, bevor es hierher geht.
+      ph: opts && opts.ph !== undefined ? opts.ph : nbPhLesen() == null ? null : nbPhLesen(),
       // Nur bei einer Charge aus der Inventur; sonst setzt der Server jetzt, und
       // die Fälligkeit rechnet er in beiden Fällen selbst davon aus.
       ...(frueher ? { created: opts.created, noBooking: true } : {}),
@@ -10943,6 +10983,8 @@ function createBatchFromSubstrate(batchId, subId, strainId, qty, bagKg, days, st
       toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
       return;
     }
+    // Ein gemessener pH gehört zu dieser Charge, nicht zur nächsten.
+    if (!(opts && opts.ph !== undefined) && document.getElementById('nb-ph')) document.getElementById('nb-ph').value = '';
     await loadData();
     await refreshSubstrateBatches();
     nbSubstrateNeed();
@@ -11005,7 +11047,7 @@ function renderSubstrateTab() {
     box.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.noneAtAll')) + '</div>';
     return;
   }
-  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thRh', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
+  const head = ['sub.thId', 'sub.thRecipe', 'sub.thMade', 'sub.thRh', 'sub.thSteriPh', 'sub.thUsed', 'sub.thLeft', 'sub.thStatus', 'sub.thBatches']
     .map((k) => '<th style="padding:4px 8px 4px 0;font-weight:600">' + esc(t(k)) + '</th>')
     .join('');
   box.innerHTML =
@@ -11051,6 +11093,7 @@ function _sbRowHtml(s) {
         '</button>',
       'white-space:nowrap'
     ) +
+    cell(esc(_subSteriText(s)) + ' · ' + esc(_subPhText(s)), 'white-space:nowrap') +
     cell(s.usedKg.toFixed(1) + ' kg', 'white-space:nowrap') +
     cell(
       s.remainingKg.toFixed(1) +
@@ -11145,6 +11188,44 @@ function recordBurstBags(s) {
       openSubstrateInfo(s.subId);
     },
     { inputmode: 'numeric', value: s.burstBags ? String(s.burstBags) : '' }
+  );
+}
+
+// Sterilisierzeit und pH stehen nebeneinander, weil die eine Zahl die andere
+// erklären soll: wie lange sterilisiert wurde, und welcher pH beim Beimpfen der
+// Chargen aus diesem Ansatz gemessen wurde. Fehlt eins, steht ein Strich da.
+function _subSteriText(s) {
+  return s.steriMin == null ? '–' : fmtKg(s.steriMin, 0) + ' min';
+}
+function _subPhText(s) {
+  if (s.phAvg == null) return '–';
+  return 'pH ' + fmtKg(s.phAvg, 1) + (s.phN > 1 ? ' (' + s.phN + ')' : '');
+}
+
+// Nachgetragen wie die geplatzten Beutel: sterilisiert wird nach dem Mischen.
+// Leer löscht die Angabe.
+function recordSteriMin(s) {
+  closeSubstrateInfo();
+  prompt2(
+    t('sub.steriPrompt', { id: s.subId }),
+    t('sub.steriHint'),
+    async (v) => {
+      const raw = (v || '').trim();
+      const n = raw === '' ? null : parseDecimal(raw);
+      if (n != null && !(Number.isFinite(n) && n >= 0 && n <= 1440)) {
+        toast(t('sub.steriNaN'), 'err');
+        return;
+      }
+      const r = await apiPost('/api/substrate-batches/' + encodeURIComponent(s.subId) + '/steri', { steriMin: n });
+      if (!r || r.error) {
+        toast(t('sub.failed', { err: (r && r.error) || '?' }), 'err');
+        return;
+      }
+      toast(n == null ? t('sub.steriCleared') : t('sub.steriSaved', { n: fmtKg(n, 0) }));
+      await refreshSubstrateBatches();
+      openSubstrateInfo(s.subId);
+    },
+    { inputmode: 'numeric', value: s.steriMin == null ? '' : String(s.steriMin) }
   );
 }
 
@@ -11291,6 +11372,7 @@ async function openSubstrateInfo(subId) {
     line(t('sub.bran'), kg(s.branKg)) +
     (s.cornKg > 0.005 ? line(t('sub.corn'), kg(s.cornKg)) : '') +
     line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
+    (s.calciumKg > 0.005 ? line(t('sub.calcium'), kg(s.calciumKg, 2) + ' (' + c.calciumPct + ' %)') : '') +
     line(t('sub.waterCalc'), s.waterL.toFixed(1) + ' L') +
     (s.waterNowL != null ? line(t('sub.waterNow'), s.waterNowL.toFixed(1) + ' L') : '') +
     line(
@@ -11310,6 +11392,8 @@ async function openSubstrateInfo(subId) {
     // die erst erscheint, wenn schon etwas kaputt ist, sieht aus wie keine, und
     // dann trägt sie niemand nach.
     line(t('sub.burst'), _subBurstCell(s)) +
+    line(t('sub.steri'), esc(_subSteriText(s))) +
+    line(t('sub.phAtInoc'), esc(_subPhText(s))) +
     '</table>';
   // Wer gemessen hat und wann, unter die Tabelle statt in die Zeile: in der
   // Zeile stünde es neben der Zahl und läse sich wie ein Teil von ihr.
@@ -11355,9 +11439,11 @@ async function openSubstrateInfo(subId) {
             b.qty +
             ' × ' +
             b.bagKg +
-            ' kg</td><td style="padding:4px 0;white-space:nowrap;font-weight:600">' +
+            ' kg</td><td style="padding:4px 8px 4px 0;white-space:nowrap;font-weight:600">' +
             b.substrateKg.toFixed(1) +
-            ' kg</td></tr>'
+            ' kg</td><td style="padding:4px 0;white-space:nowrap;color:var(--c-text-sec)">' +
+            (b.ph == null ? '' : 'pH ' + esc(fmtKg(b.ph, 1))) +
+            '</td></tr>'
         )
         .join('') +
       '</table>';
@@ -11400,6 +11486,7 @@ async function openSubstrateInfo(subId) {
   // Auch bei einem verworfenen Ansatz: geplatzte Beutel sind oft genau der
   // Grund, aus dem er verworfen wurde, und dann wird die Zahl danach eingetragen.
   act(s.burstBags ? t('sub.burstEdit') : t('sub.burstAdd'), 'btn-p', () => recordBurstBags(s));
+  act(s.steriMin == null ? t('sub.steriAdd') : t('sub.steriEdit'), 'btn-p', () => recordSteriMin(s));
   act(s.notes ? t('sub.commentEdit') : t('sub.commentAdd'), 'btn-p', () => editSubstrateComment(s));
   if (!s.drawn.length) {
     act(t('sub.delete'), 'btn-r', () => deleteSubstrate(s.subId));
@@ -15491,10 +15578,10 @@ function clearLog() {
 }
 
 // ─── INVENTORY ───────────────────────────────────────────────
-const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal' };
-const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207' };
-const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8' };
-const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a' };
+const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal', calcium: 'Calcium carbonate' };
+const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207', calcium: '#475569' };
+const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8', calcium: '#f8fafc' };
+const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a', calcium: '#cbd5e1' };
 
 // Wie weit zurück gezählt wird, um zu gewichten. Kurz genug, dass eine
 // Umstellung im Sortiment durchschlägt, lang genug, dass eine ruhige Woche
@@ -21548,6 +21635,7 @@ function nbFillFromStrain(ms, o) {
   _inoc = opt.inoc || [];
   inocRender('nb');
   setv('nb-notes', opt.notes || '');
+  setv('nb-ph', opt.ph == null ? '' : String(opt.ph).replace('.', ','));
   // Erst am Ende nachrechnen lassen: jeder dieser Aufrufe zieht eine Vorschau
   // nach sich, und mittendrin gerufen rechnen sie mit halb gefüllten Feldern
   // etwas aus, das die nächste Zeile sofort ersetzt.
@@ -33433,6 +33521,8 @@ const WKB = {
   // mehr vor.
   subVonHand: false,
   notes: '',
+  // Was im Feld steht, als Text: geprüft wird erst beim Anlegen (phLesen).
+  ph: '',
   custom: false,
   hw: null,
   wb: null,
@@ -33494,6 +33584,7 @@ function wkbQuelleVorgabe() {
 function wkbOpen() {
   WKB.step = 1;
   WKB.notes = '';
+  WKB.ph = '';
   WKB.custom = false;
   WKB.hw = WKB.wb = WKB.rh = WKB.days = null;
   // Jede Charge fängt bei "ohne Stamm" und heute an — auch "Noch eine Charge".
@@ -33682,7 +33773,11 @@ function wkbRender() {
          <div><span class="wkf-r-k">${esc(t('batch.incDays'))}</span>${r.days}</div>
        </div>
        <div class="wkf-field"><label>${esc(t('work.bNote'))}</label>
-         <input type="text" id="wkb-notes" value="${esc(WKB.notes)}" placeholder="${esc(t('work.bNotePh'))}" /></div>`;
+         <input type="text" id="wkb-notes" value="${esc(WKB.notes)}" placeholder="${esc(t('work.bNotePh'))}" /></div>
+       <div class="wkf-two">
+         <div class="wkf-field"><label>${esc(t('batch.ph'))}</label>
+           <input type="text" inputmode="decimal" id="wkb-ph" value="${esc(WKB.ph)}" /></div>
+       </div>`;
   }
   wkf('wkf-body').innerHTML = body;
   // Stamm und Datum zeichnen sich selbst in ihre Plätze; ihr Zustand überlebt
@@ -33722,6 +33817,7 @@ function wkbReadStep() {
     }
   } else if (WKB.step === 3) {
     if (g('wkb-notes')) WKB.notes = g('wkb-notes').value;
+    if (g('wkb-ph')) WKB.ph = g('wkb-ph').value;
   }
 }
 
@@ -33805,7 +33901,7 @@ function wkbInocListe() {
 // Liste der Sorte ('' für ohne), der Tag als JJJJ-MM-TT ('' für heute). `inoc`
 // ist die Beimpf-Liste aus wkbInocListe(); createBatch() bucht die Brut nach dem
 // Speichern aus (inocAskConsume) und nimmt die erste Kultur als Herkunft.
-function wkbCreateFromShelf(stamm, angesetzt, inoc) {
+function wkbCreateFromShelf(stamm, angesetzt, inoc, ph) {
   const ms = wkbStrain();
   if (!ms) return;
   const r = wkbRecipe();
@@ -33824,6 +33920,7 @@ function wkbCreateFromShelf(stamm, angesetzt, inoc) {
     wb: r.wb,
     rh: r.rh,
     notes: WKB.notes.trim(),
+    ph,
     strainText: stamm || '',
     created: angesetzt || '',
     inoc: inoc || []
@@ -33838,6 +33935,13 @@ async function wkbCreate() {
   const ms = wkbStrain();
   const mix = wkbMix();
   if (!ms) return;
+  // Vor allem anderen: ein vertippter pH soll nicht erst nach dem Stamm-Anlegen
+  // auffallen. Leer ist erlaubt — gemessen wird nicht bei jeder Charge.
+  const ph = phLesen(WKB.ph);
+  if (ph === undefined) {
+    toast(t('batch.phNaN'), 'err');
+    return;
+  }
   // Ein gewählter Ansatz, der inzwischen leer ist, ist kein "ohne Ansatz":
   // _sbList wird im Hintergrund aufgefrischt, und derselbe Tipp buchte sonst
   // klammheimlich Pellets und Kleie vom Lager statt aus dem Ansatz.
@@ -33859,7 +33963,7 @@ async function wkbCreate() {
   if (knopf) knopf.disabled = false;
   // Fehlgeschlagen (gemeldet ist es), oder der Ablauf wurde währenddessen zu.
   if (stamm === null || WKF.kind !== 'batch') return;
-  if (!mix) return wkbCreateFromShelf(stamm, angesetzt, inoc);
+  if (!mix) return wkbCreateFromShelf(stamm, angesetzt, inoc, ph);
   const r = wkbRecipe();
   const wann = anlageZeitpunkt(angesetzt);
   const batchId = genBatchId(ms.name, wann);
@@ -33869,6 +33973,7 @@ async function wkbCreate() {
   // nach Eingabeweg etwas anderes.
   createBatchFromSubstrate(batchId, mix.subId, ms.id, WKB.qty, WKB.bagKg, r.days, stamm || 'XXX', stamm, {
     notes: WKB.notes.trim(),
+    ph,
     created: angesetzt ? wann.toISOString() : undefined,
     sourceId: kultur ? kultur.id : undefined,
     onDone: (res) => {
@@ -34015,8 +34120,10 @@ async function wkbCreate() {
 // dann hier änderbar — dieselben Zahlen, die das Formular auf der Chargen-Seite
 // schickt. Drei Rezepte zur Auswahl hießen sonst: wer 70/30 will, muss ins
 // Formular oder das Rezept umschreiben, und damit jeden künftigen Ansatz mit.
-const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
-const WKM_MIX_KEYS = ['branPct', 'gypsumPct', 'moisturePct'];
+// `steriMin` gehört nicht zur Mischung und nicht in den Vorschau-Schlüssel: es
+// ändert keine Zahl der Rechnung, es wird nur mit dem Ansatz gespeichert.
+const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, steriMin: null, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+const WKM_MIX_KEYS = ['branPct', 'gypsumPct', 'calciumPct', 'moisturePct'];
 
 function wkmKey() {
   return String(WKM.recipeId) + '|' + WKM.kg + '|' + JSON.stringify(WKM.mix);
@@ -34024,7 +34131,9 @@ function wkmKey() {
 
 function wkmMixFromRecipe() {
   const rec = sbRecipeOf(WKM.recipeId);
-  WKM.mix = rec ? { branPct: rec.branPct, gypsumPct: rec.gypsumPct, moisturePct: rec.moisturePct } : null;
+  WKM.mix = rec
+    ? { branPct: rec.branPct, gypsumPct: rec.gypsumPct, calciumPct: rec.calciumPct, moisturePct: rec.moisturePct }
+    : null;
 }
 
 // Ein leeres Feld fehlt im Objekt: dann gilt dafür das Rezept, so wie der
@@ -34040,7 +34149,13 @@ function wkmMixAdjusted() {
 function wkmMixOk() {
   const m = WKM.mix || {};
   const drin = (k, lo, hi) => !(k in m) || (m[k] >= lo && m[k] <= hi);
-  return drin('branPct', 0, 95) && drin('gypsumPct', 0, 20) && drin('moisturePct', 20, 90);
+  return (
+    drin('branPct', 0, 95) && drin('gypsumPct', 0, 20) && drin('calciumPct', 0, 20) && drin('moisturePct', 20, 90)
+  );
+}
+// Leer heißt: nicht eingetragen. Sonst ganze oder halbe Minuten bis zu einem Tag.
+function wkmSteriOk() {
+  return WKM.steriMin == null || (WKM.steriMin >= 0 && WKM.steriMin <= 1440);
 }
 
 // Pellets und Kleie sind eine Zahl in zwei Feldern, wie in sbBlendEdited():
@@ -34058,8 +34173,8 @@ function wkmBlendEdited(which) {
       _sbSet(which === 'hw' ? 'wkm-wb' : 'wkm-hw', 100 - teil);
     }
   } else {
-    const k = which === 'gyp' ? 'gypsumPct' : 'moisturePct';
-    const v = _sbNum(which === 'gyp' ? 'wkm-gyp' : 'wkm-rh');
+    const k = { gyp: 'gypsumPct', ca: 'calciumPct', rh: 'moisturePct' }[which];
+    const v = _sbNum('wkm-' + which);
     if (v == null) delete WKM.mix[k];
     else WKM.mix[k] = v;
   }
@@ -34094,6 +34209,7 @@ function wkmShortfalls() {
     [t('sub.gypsum'), m.gypsumKg, s.gypsum || 0]
   ];
   if (m.cornKg > 0.005) zeilen.push([t('sub.corn'), m.cornKg, s.corn || 0]);
+  if (m.calciumKg > 0.005) zeilen.push([t('sub.calcium'), m.calciumKg, s.calcium || 0]);
   return zeilen.filter((z) => z[1] > z[2] + 1e-9).map((z) => ({ label: z[0], need: z[1], have: z[2] }));
 }
 
@@ -34144,6 +34260,7 @@ async function wkmOpen() {
   await loadSubstrateRecipes();
   WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
   wkmMixFromRecipe();
+  WKM.steriMin = null;
   WKM.bags = 50;
   WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
   WKM.notes = '';
@@ -34162,6 +34279,7 @@ function wkmRead() {
   if (g('wkm-recipe')) WKM.recipeId = parseInt(g('wkm-recipe').value, 10) || null;
   if (g('wkm-bags')) WKM.bags = sbParseBags(g('wkm-bags').value);
   WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
+  if (g('wkm-steri')) WKM.steriMin = _sbNum('wkm-steri');
   if (g('wkm-notes')) WKM.notes = g('wkm-notes').value;
 }
 
@@ -34193,6 +34311,7 @@ function wkmRenderOut() {
         zeile(t('sub.bran'), m.branKg, 'kg') +
         (m.cornKg > 0.005 ? zeile(t('sub.corn'), m.cornKg, 'kg') : '') +
         zeile(t('sub.gypsum'), m.gypsumKg, 'kg') +
+        (m.calciumKg > 0.005 ? zeile(t('sub.calcium'), m.calciumKg, 'kg') : '') +
         zeile(t('sub.waterNow'), sbWater(WKM.preview).nowL, 'L') +
         // Direkt unter die Literzahl: hier steht man am Hahn, und "107 L" sagt
         // nicht, wie lange er laufen soll. Die Vorschau im Formular zeigt es
@@ -34247,8 +34366,8 @@ function wkmRender() {
   const list = sbRecipeOptions(WKM.recipeId);
   const mix = WKM.mix || {};
   const zahl = (v) => (v == null ? '' : String(Math.round(v * 100) / 100));
-  const feld = (id, label, wert, min, max, step) =>
-    `<div><label class="fs-xs">${esc(label)} %</label>
+  const feld = (id, label, wert, min, max, step, einheit) =>
+    `<div><label class="fs-xs">${esc(label)} ${einheit || '%'}</label>
        <input type="number" id="${id}" min="${min}" max="${max}" step="${step}" inputmode="decimal" value="${zahl(wert)}" /></div>`;
 
   wkf('wkf-body').innerHTML =
@@ -34263,7 +34382,11 @@ function wkmRender() {
     feld('wkm-hw', t('sub.pellets'), 'branPct' in mix ? 100 - mix.branPct : null, 0, 100, 1) +
     feld('wkm-wb', t('sub.bran'), mix.branPct, 0, 95, 1) +
     feld('wkm-gyp', t('sub.gypsum'), mix.gypsumPct, 0, 20, 0.5) +
+    feld('wkm-ca', t('sub.calcium'), mix.calciumPct, 0, 20, 0.5) +
     feld('wkm-rh', t('sub.moisture'), mix.moisturePct, 20, 90, 0.5) +
+    // Keine Zahl der Mischung, aber mit ihr gespeichert: neben dem pH der
+    // Chargen zeigt sie, was die Sterilisierzeit mit dem Substrat macht.
+    feld('wkm-steri', t('sub.steri'), WKM.steriMin, 0, 1440, 1, 'min') +
     `</div>
      </div>
      <div class="wkf-two">
@@ -34291,6 +34414,11 @@ async function wkmCreate() {
   // lassen. Sonst muss der Arbeiter nach jeder Mengenänderung zweimal tippen.
   if (!WKM.preview || WKM.previewKey !== wkmKey()) await wkmLoadPreview();
   if (!WKM.preview) return;
+  if (!wkmSteriOk()) {
+    WKM.fehler = t('sub.steriNaN');
+    wkmRenderOut();
+    return;
+  }
   const kurz = wkmShortfalls();
   const subId = sbGenId();
   const menge = { bags: WKM.bags, bagKg: sbBagKg(), kg: WKM.kg };
@@ -34298,10 +34426,11 @@ async function wkmCreate() {
   // Die Anteile, die die Vorschau gerechnet hat, festhalten: wer tippt, während
   // die Bestätigung offen ist, soll nicht etwas anderes anlegen als bestätigt.
   const mix = WKM.mix ? Object.assign({}, WKM.mix) : undefined;
-  sbConfirmMix(subId, menge, label, kurz.length > 0, () => wkmSubmit(subId, menge, label, mix));
+  const steriMin = WKM.steriMin;
+  sbConfirmMix(subId, menge, label, kurz.length > 0, () => wkmSubmit(subId, menge, label, mix, steriMin));
 }
 
-function wkmSubmit(subId, menge, label, mix) {
+function wkmSubmit(subId, menge, label, mix, steriMin) {
   // Der Knopf bleibt sonst die ganze Runde über anfassbar: POST, loadData und
   // refreshSubstrateBatches dauern, auf dem Bildschirm ändert sich nichts, und
   // ein zweiter Tipp legt einen zweiten Ansatz an.
@@ -34312,6 +34441,7 @@ function wkmSubmit(subId, menge, label, mix) {
     recipeId: WKM.recipeId,
     targetKg: menge.kg,
     mix,
+    steriMin,
     notes: WKM.notes.trim()
   })
     .then(async (r) => {
@@ -34351,11 +34481,13 @@ function wkmSubmit(subId, menge, label, mix) {
               ? [
                   [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
                   [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
+                  ...(m.calciumKg > 0.005 ? [[t('sub.calcium'), fmtKg(m.calciumKg, 1) + ' kg']] : []),
                   [t('sub.waterNow'), fmtKg(sbWater(r.water ? r : WKM.preview).nowL, 1) + ' L'],
                   [t('sub.waterRest'), fmtKg(sbWater(r.water ? r : WKM.preview).restL, 1) + ' L']
                 ]
               : []
           )
+          .concat(steriMin != null ? [[t('sub.steri'), fmtKg(steriMin, 0) + ' min']] : [])
           .concat(WKM.notes.trim() ? [[t('work.bNote'), WKM.notes.trim()]] : []),
         next: null
       };
@@ -34417,7 +34549,9 @@ function wkmSubmit(subId, menge, label, mix) {
   // Die Anteile beim Tippen: das Gegenfeld sofort, die Rechnung kurz danach.
   flow.addEventListener('input', (e) => {
     if (WKF.kind !== 'mix') return;
-    const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-gyp,#wkm-rh');
+    const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-gyp,#wkm-ca,#wkm-rh');
     if (f) wkmBlendEdited(f.id.slice(4));
+    // Die Zeit ändert die Rechnung nicht, also nur merken.
+    else if (e.target.closest('#wkm-steri')) WKM.steriMin = _sbNum('wkm-steri');
   });
 })();

@@ -3131,6 +3131,18 @@
                     />
                   </div>
                   <div>
+                    <label class="fs-xs"><span data-i18n="sub.calcium">Calciumcarbonat</span> %</label>
+                    <input
+                      type="number"
+                      id="sb-ca"
+                      min="0"
+                      max="20"
+                      step="0.5"
+                      inputmode="decimal"
+                      oninput="sbBlendEdited('ca')"
+                    />
+                  </div>
+                  <div>
                     <label class="fs-xs"><span data-i18n="sub.moisture">Soll-Feuchte</span> %</label>
                     <input
                       type="number"
@@ -3141,6 +3153,13 @@
                       inputmode="decimal"
                       oninput="sbBlendEdited('rh')"
                     />
+                  </div>
+                  <!-- Keine Zahl der Mischung: ändert die Rechnung nicht, wird
+                       nur mit dem Ansatz gespeichert, damit sich der pH der
+                       Chargen gegen die Sterilisierzeit lesen lässt. -->
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.steri">Sterilisieren</span> min</label>
+                    <input type="number" id="sb-steri" min="0" max="1440" step="1" inputmode="decimal" />
                   </div>
                 </div>
               </div>
@@ -3381,6 +3400,12 @@
                 <!-- Kept for createBatch's sourceId and for the scan autofill;
                      the visible control above is what the operator uses. -->
                 <select id="nb-culture" style="display: none"></select>
+                <!-- Beim Beimpfen gemessen. Neben der Sterilisierzeit des
+                     Ansatzes zeigt es, wie die Zeit den pH verschiebt. -->
+                <div>
+                  <label data-i18n="batch.ph">pH (gemessen, optional)</label>
+                  <input type="text" id="nb-ph" inputmode="decimal" class="w-cap" style="--w-cap: 120px" />
+                </div>
                 <div>
                   <label data-i18n="batch.notes">Notes (optional)</label
                   ><textarea
@@ -6433,6 +6458,7 @@
                       <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
                       <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                       <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+                      <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>
                       <option value="grain" data-i18n="inv.grain">Grain</option>
                     </select>
                   </div>
@@ -6483,6 +6509,7 @@
                       <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
                       <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                       <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+                      <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>
                       <option value="grain" data-i18n="inv.grain">Grain</option>
                     </select>
                   </div>
@@ -6551,6 +6578,7 @@
                   <option value="hardwood" data-i18n="inv.hardwood">Hardwood</option>
                   <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                   <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
+                  <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>
                   <option value="grain" data-i18n="inv.grain">Grain</option>
                 </select>
               </div>
