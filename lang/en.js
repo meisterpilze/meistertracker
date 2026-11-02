@@ -2645,6 +2645,7 @@ window.LANG['en'] = {
   'work.bMixFirst': 'Mix a batch of substrate first',
   'work.mQ': 'How many bags, and which mix?',
   'work.mCalc': 'calculating …',
+  'work.mMixRange': 'This blend cannot be mixed: wheat bran 0–95 %, gypsum 0–20 %, target moisture 20–90 %. Please adjust the number.',
   'work.mNotePh': 'e.g. new pellet delivery',
   'work.mDone': '{bags} bags of {recipe} mixed ({kg} kg)',
   'work.mId': 'Mix',

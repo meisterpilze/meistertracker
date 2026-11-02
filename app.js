@@ -34011,10 +34011,71 @@ async function wkbCreate() {
 // `previewKey` sagt, zu welchem Rezept und welcher Menge die Vorschau gehört —
 // ohne das lässt sich nicht erkennen, ob sie noch gilt. `bucht` sperrt den
 // Knopf für die Dauer der Buchung, nicht für die Dauer der Rechnerei.
-const WKM = { recipeId: null, bags: 50, kg: 0, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+// `mix` sind die Anteile dieses einen Ansatzes, aus dem Rezept vorbelegt und
+// dann hier änderbar — dieselben Zahlen, die das Formular auf der Chargen-Seite
+// schickt. Drei Rezepte zur Auswahl hießen sonst: wer 70/30 will, muss ins
+// Formular oder das Rezept umschreiben, und damit jeden künftigen Ansatz mit.
+const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
+const WKM_MIX_KEYS = ['branPct', 'gypsumPct', 'moisturePct'];
 
 function wkmKey() {
-  return String(WKM.recipeId) + '|' + WKM.kg;
+  return String(WKM.recipeId) + '|' + WKM.kg + '|' + JSON.stringify(WKM.mix);
+}
+
+function wkmMixFromRecipe() {
+  const rec = sbRecipeOf(WKM.recipeId);
+  WKM.mix = rec ? { branPct: rec.branPct, gypsumPct: rec.gypsumPct, moisturePct: rec.moisturePct } : null;
+}
+
+// Ein leeres Feld fehlt im Objekt: dann gilt dafür das Rezept, so wie der
+// Server ein fehlendes Feld liest.
+function wkmMixAdjusted() {
+  const rec = sbRecipeOf(WKM.recipeId);
+  if (!rec || !WKM.mix) return false;
+  return WKM_MIX_KEYS.some((k) => k in WKM.mix && Math.abs(WKM.mix[k] - rec[k]) > 1e-9);
+}
+
+// Dieselben Grenzen wie validateMixOverride() im Server. Hier geprüft, damit
+// statt "branPct must be <= 95" ein Satz dasteht, mit dem man etwas anfangen kann.
+function wkmMixOk() {
+  const m = WKM.mix || {};
+  const drin = (k, lo, hi) => !(k in m) || (m[k] >= lo && m[k] <= hi);
+  return drin('branPct', 0, 95) && drin('gypsumPct', 0, 20) && drin('moisturePct', 20, 90);
+}
+
+// Pellets und Kleie sind eine Zahl in zwei Feldern, wie in sbBlendEdited():
+// wer eines tippt, hat das andere mitgesagt.
+let _wkmMixTimer = null;
+function wkmBlendEdited(which) {
+  if (!WKM.mix) WKM.mix = {};
+  if (which === 'hw' || which === 'wb') {
+    const v = _sbNum(which === 'hw' ? 'wkm-hw' : 'wkm-wb');
+    if (v == null) {
+      delete WKM.mix.branPct;
+    } else {
+      const teil = Math.min(100, Math.max(0, v));
+      WKM.mix.branPct = which === 'hw' ? 100 - teil : teil;
+      _sbSet(which === 'hw' ? 'wkm-wb' : 'wkm-hw', 100 - teil);
+    }
+  } else {
+    const k = which === 'gyp' ? 'gypsumPct' : 'moisturePct';
+    const v = _sbNum(which === 'gyp' ? 'wkm-gyp' : 'wkm-rh');
+    if (v == null) delete WKM.mix[k];
+    else WKM.mix[k] = v;
+  }
+  const reset = document.querySelector('[data-wkm="mixreset"]');
+  if (reset) reset.hidden = !wkmMixAdjusted();
+  clearTimeout(_wkmMixTimer);
+  _wkmMixTimer = setTimeout(wkmLoadPreview, 300);
+}
+
+// Die Beschriftung, die der Ansatz in der Liste bekommt: mit dem Verhältnis,
+// sobald es vom Rezept abweicht — wie im Formular.
+function wkmLabel() {
+  const p = WKM.preview;
+  if (!p) return '';
+  const m = p.mix;
+  return (p.recipeLabel || '') + (p.adjusted ? ' · ' + Math.round(m.hardwoodPct) + '/' + Math.round(m.wheatbranPct) : '');
 }
 
 function wkmStock() {
@@ -34050,8 +34111,9 @@ async function wkmLoadPreview() {
   WKM.preview = null;
   WKM.previewKey = '';
   WKM.fehler = '';
-  if (!WKM.recipeId || !(WKM.kg > 0)) {
+  if (!WKM.recipeId || !(WKM.kg > 0) || !wkmMixOk()) {
     WKM.laedt = false;
+    if (!wkmMixOk()) WKM.fehler = t('work.mMixRange');
     wkmRenderOut();
     wkmUpdateButton();
     return;
@@ -34059,7 +34121,11 @@ async function wkmLoadPreview() {
   WKM.laedt = true;
   wkmRenderOut();
   wkmUpdateButton();
-  const r = await apiPost('/api/substrate-batches/preview', { recipeId: WKM.recipeId, targetKg: WKM.kg });
+  const r = await apiPost('/api/substrate-batches/preview', {
+    recipeId: WKM.recipeId,
+    targetKg: WKM.kg,
+    mix: WKM.mix || undefined
+  });
   if (seq !== _wkmSeq) return;
   WKM.laedt = false;
   if (!r || r.error) {
@@ -34077,6 +34143,7 @@ async function wkmLoadPreview() {
 async function wkmOpen() {
   await loadSubstrateRecipes();
   WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
+  wkmMixFromRecipe();
   WKM.bags = 50;
   WKM.kg = sbTargetKg(WKM.bags, sbBagKg());
   WKM.notes = '';
@@ -34178,10 +34245,27 @@ function wkmRender() {
   }
 
   const list = sbRecipeOptions(WKM.recipeId);
+  const mix = WKM.mix || {};
+  const zahl = (v) => (v == null ? '' : String(Math.round(v * 100) / 100));
+  const feld = (id, label, wert, min, max, step) =>
+    `<div><label class="fs-xs">${esc(label)} %</label>
+       <input type="number" id="${id}" min="${min}" max="${max}" step="${step}" inputmode="decimal" value="${zahl(wert)}" /></div>`;
 
   wkf('wkf-body').innerHTML =
     `<div class="wkf-q">${esc(t('work.mQ'))}</div>
      <div class="wkf-field"><label>${esc(t('sub.recipe'))}</label><select id="wkm-recipe">${list}</select></div>
+     <div class="wkf-field">
+       <div class="wkm-blend-head">
+         <label>${esc(t('sub.blendTitle'))}</label>
+         <button type="button" class="btn-xs" data-wkm="mixreset"${wkmMixAdjusted() ? '' : ' hidden'}>${esc(t('sub.blendReset'))}</button>
+       </div>
+       <div class="wkf-two wkm-blend">` +
+    feld('wkm-hw', t('sub.pellets'), 'branPct' in mix ? 100 - mix.branPct : null, 0, 100, 1) +
+    feld('wkm-wb', t('sub.bran'), mix.branPct, 0, 95, 1) +
+    feld('wkm-gyp', t('sub.gypsum'), mix.gypsumPct, 0, 20, 0.5) +
+    feld('wkm-rh', t('sub.moisture'), mix.moisturePct, 20, 90, 0.5) +
+    `</div>
+     </div>
      <div class="wkf-two">
        <div class="wkf-field"><label>${esc(t('sub.bags'))}</label>
          <input type="text" inputmode="numeric" id="wkm-bags" value="${WKM.bags || ''}" /></div>
@@ -34210,11 +34294,14 @@ async function wkmCreate() {
   const kurz = wkmShortfalls();
   const subId = sbGenId();
   const menge = { bags: WKM.bags, bagKg: sbBagKg(), kg: WKM.kg };
-  const label = WKM.preview.recipeLabel || '';
-  sbConfirmMix(subId, menge, label, kurz.length > 0, () => wkmSubmit(subId, menge, label));
+  const label = wkmLabel();
+  // Die Anteile, die die Vorschau gerechnet hat, festhalten: wer tippt, während
+  // die Bestätigung offen ist, soll nicht etwas anderes anlegen als bestätigt.
+  const mix = WKM.mix ? Object.assign({}, WKM.mix) : undefined;
+  sbConfirmMix(subId, menge, label, kurz.length > 0, () => wkmSubmit(subId, menge, label, mix));
 }
 
-function wkmSubmit(subId, menge, label) {
+function wkmSubmit(subId, menge, label, mix) {
   // Der Knopf bleibt sonst die ganze Runde über anfassbar: POST, loadData und
   // refreshSubstrateBatches dauern, auf dem Bildschirm ändert sich nichts, und
   // ein zweiter Tipp legt einen zweiten Ansatz an.
@@ -34224,6 +34311,7 @@ function wkmSubmit(subId, menge, label) {
     subId,
     recipeId: WKM.recipeId,
     targetKg: menge.kg,
+    mix,
     notes: WKM.notes.trim()
   })
     .then(async (r) => {
@@ -34289,7 +34377,12 @@ function wkmSubmit(subId, menge, label) {
     if (!el || el.disabled) return;
     if (el.dataset.wkm === 'create') wkmCreate();
     else if (el.dataset.wkm === 'again') wkmOpen();
-    else if (el.dataset.wkm === 'bagkg') {
+    else if (el.dataset.wkm === 'mixreset') {
+      wkmRead();
+      wkmMixFromRecipe();
+      wkmRender();
+      wkmLoadPreview();
+    } else if (el.dataset.wkm === 'bagkg') {
       wkmRead();
       sbSetBagKg(parseFloat(el.dataset.val));
       sbRenderBagChips();
@@ -34306,11 +34399,25 @@ function wkmSubmit(subId, menge, label) {
   // Rezept und Menge neu rechnen lassen; die Notiz nicht, sonst springt der Cursor.
   flow.addEventListener('change', (e) => {
     if (WKF.kind !== 'mix') return;
-    if (e.target.closest('#wkm-recipe,#wkm-bags')) {
+    if (e.target.closest('#wkm-recipe')) {
+      // Andere Mischung: die Anteile kommen frisch aus deren Rezept, wie im
+      // Formular (sbRecipeChanged). Eine Abweichung still mitzunehmen wäre die
+      // unangenehmere Überraschung.
+      wkmRead();
+      wkmMixFromRecipe();
+      wkmRender();
+      wkmLoadPreview();
+    } else if (e.target.closest('#wkm-bags')) {
       wkmRead();
       wkmLoadPreview();
     } else if (e.target.closest('#wkm-notes')) {
       wkmRead();
     }
+  });
+  // Die Anteile beim Tippen: das Gegenfeld sofort, die Rechnung kurz danach.
+  flow.addEventListener('input', (e) => {
+    if (WKF.kind !== 'mix') return;
+    const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-gyp,#wkm-rh');
+    if (f) wkmBlendEdited(f.id.slice(4));
   });
 })();

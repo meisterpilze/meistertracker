@@ -2662,6 +2662,7 @@ window.LANG['pt'] = {
   'work.bMixFirst': 'Preparar uma mistura primeiro',
   'work.mQ': 'Quantos sacos, e qual mistura?',
   'work.mCalc': 'calculando …',
+  'work.mMixRange': 'Esta mistura não é possível: farelo de trigo 0–95 %, gesso 0–20 %, humidade alvo 20–90 %. Ajuste o número.',
   'work.mNotePh': 'ex.: nova entrega de pellets',
   'work.mDone': '{bags} sacos de {recipe} preparados ({kg} kg)',
   'work.mId': 'Mistura',
