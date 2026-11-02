@@ -2668,6 +2668,7 @@ window.LANG['de'] = {
   'work.bMixFirst': 'Lieber erst einen Ansatz mischen',
   'work.mQ': 'Wie viele Beutel, und nach welcher Mischung?',
   'work.mCalc': 'wird berechnet …',
+  'work.mMixRange': 'So lässt sich nicht mischen: Weizenkleie 0–95 %, Gips 0–20 %, Soll-Feuchte 20–90 %. Bitte die Zahl anpassen.',
   'work.mNotePh': 'z.B. neue Pelletslieferung',
   'work.mDone': '{bags} Beutel {recipe} angesetzt ({kg} kg)',
   'work.mId': 'Ansatz',

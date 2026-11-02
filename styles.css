@@ -8895,6 +8895,30 @@ body:has(#m-camscan.open) .update-bar {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* "Mischung" mit dem Rückweg zum Rezept daneben, im Substrat-Arbeitsgang. Die
+   Beschriftung sieht aus wie die der anderen Felder; der Knopf erscheint erst,
+   wenn eine Zahl vom Rezept abweicht. */
+.wkm-blend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wkm-blend-head label {
+  font-size: max(0.71875rem, var(--fs-min));
+  color: var(--c-text-sec);
+  font-weight: 600;
+  margin: 0;
+}
+.wkm-blend-head [hidden] {
+  display: none;
+}
+/* Vier Anteile, zwei je Zeile: am Telefon passen nicht mehr nebeneinander, und
+   ein auto-fit-Raster bricht dort drei plus eins um. */
+.wkm-blend label {
+  color: var(--c-text-sec);
+}
 .wkf-chipsrow {
   display: flex;
   gap: 6px;
