@@ -3150,6 +3150,28 @@ const MIGRATIONS = [
       const has = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('cultures') WHERE name='stueck'").get();
       if (!has.c) db.exec('ALTER TABLE cultures ADD COLUMN stueck INTEGER');
     }
+  },
+  {
+    version: 111,
+    description: 'Calciumcarbonat als Rohstoff im Ansatz, Sterilisierzeit je Ansatz, pH je Charge',
+    fn(db) {
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // Calciumcarbonat geht wie Gips obendrauf auf die Trockenmischung und vom
+      // Lager ab — also braucht es einen Bestand, sonst verlassen Kilos das Haus,
+      // ohne dass es jemand verbucht.
+      addCol('inventory', 'stock_calcium', 'REAL DEFAULT 0');
+      addCol('inventory', 'thresh_calcium', 'REAL DEFAULT 0');
+      addCol('substrate_batches', 'calcium_pct', 'REAL DEFAULT 0');
+      addCol('substrate_batches', 'calcium_kg', 'REAL DEFAULT 0');
+      // NULL heisst: nicht eingetragen. 0 Minuten waere eine Aussage.
+      addCol('substrate_batches', 'steri_min', 'REAL');
+      // Gemessen beim Beimpfen. Zusammen mit steri_min des Ansatzes zeigt es, wie
+      // die Sterilisierzeit den pH verschiebt. NULL heisst: nicht gemessen.
+      addCol('batches', 'ph', 'REAL');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3459,6 +3481,8 @@ function readAll(db, opts = {}) {
       batchType: r.batch_type,
       grainRh: r.grain_rh || 0,
       grainKg: r.grain_kg || 0,
+      // Gemessen beim Beimpfen; null, solange niemand gemessen hat.
+      ph: r.ph == null ? null : r.ph,
       sourceId: r.source_id,
       notes: r.notes,
       strainText: r.strain_text || '',
@@ -3594,7 +3618,8 @@ function readAll(db, opts = {}) {
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
       coir: inv.stock_coir || 0,
-      corn: inv.stock_corn || 0
+      corn: inv.stock_corn || 0,
+      calcium: inv.stock_calcium || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
@@ -3602,7 +3627,8 @@ function readAll(db, opts = {}) {
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
       coir: { minKg: inv.thresh_coir || 0 },
-      corn: { minKg: inv.thresh_corn || 0 }
+      corn: { minKg: inv.thresh_corn || 0 },
+      calcium: { minKg: inv.thresh_calcium || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -4810,6 +4836,8 @@ function computeMixBatch(rec, targetKg, opts) {
   const bran = num(rec.branPct, 0) / 100;
   const corn = num(rec.cornPct, 0) / 100;
   const gyp = num(rec.gypsumPct, 0) / 100;
+  // Calciumcarbonat wie Gips: ein Anteil der Trockenmischung, obendrauf.
+  const calc = num(rec.calciumPct, 0) / 100;
   const moist = num(rec.moisturePct, 0) / 100;
 
   // Pellets are the remainder so the three shares can never total anything but
@@ -4830,11 +4858,11 @@ function computeMixBatch(rec, targetKg, opts) {
   // gewogenen Mittel ueber die Trockenmischung; ohne Kleie-Wert ist es R0.
   const Rbran = o.residualBranPct == null || o.residualBranPct === '' ? R0 : num(o.residualBranPct, R0 * 100) / 100;
   const R = R0 + bran * (Rbran - R0);
-  const denom = 1 + gyp - R;
+  const denom = 1 + gyp + calc - R;
   if (!(denom > 0)) throw new Error('Restfeuchte zu hoch fuer dieses Rezept');
 
   const dryKg = (target * (1 - moist)) / denom;
-  const waterL = target - dryKg * (1 + gyp);
+  const waterL = target - dryKg * (1 + gyp + calc);
   // Negative water means the delivery is already wetter than the recipe target.
   // Clamping silently would hand over a mix that cannot reach spec.
   if (waterL < 0) {
@@ -4851,6 +4879,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const branKg = dryKg * bran;
   const cornKg = dryKg * corn;
   const gypsumKg = dryKg * gyp;
+  const calciumKg = dryKg * calc;
 
   const deltas = [];
   const push = (mat, kg) => {
@@ -4860,6 +4889,7 @@ function computeMixBatch(rec, targetKg, opts) {
   push('wheatbran', branKg);
   push('corn', cornKg);
   push('gypsum', gypsumKg);
+  push('calcium', calciumKg);
 
   return {
     targetKg: target,
@@ -4868,6 +4898,7 @@ function computeMixBatch(rec, targetKg, opts) {
     branKg,
     cornKg,
     gypsumKg,
+    calciumKg,
     waterL,
     // What the mix will actually measure once the residual moisture is in it —
     // the figure to check the halogen analyser against, not the recipe target.
@@ -4880,6 +4911,7 @@ function computeMixBatch(rec, targetKg, opts) {
     wheatbranPct: bran * 100,
     cornPct: corn * 100,
     gypsumPct: gyp * 100,
+    calciumPct: calc * 100,
     rhPct: moist * 100,
     deltas
   };
@@ -4905,7 +4937,7 @@ function mixWithOverride(recipe, ov) {
   if (!ov || typeof ov !== 'object') return { recipe, adjusted: false };
   const out = { ...recipe };
   let adjusted = false;
-  for (const k of ['branPct', 'cornPct', 'gypsumPct', 'moisturePct']) {
+  for (const k of ['branPct', 'cornPct', 'gypsumPct', 'calciumPct', 'moisturePct']) {
     const v = ov[k];
     if (v == null || !Number.isFinite(+v)) continue;
     if (Math.abs(+v - (+recipe[k] || 0)) < 1e-9) continue;
@@ -5008,8 +5040,8 @@ function createSubstrateBatch(db, b, userId) {
          (sub_id, recipe_strain_id, recipe_label, target_kg, remaining_kg,
           hardwood_pct, wheatbran_pct, corn_pct, gypsum_pct, rh_pct,
           dry_kg, pellets_kg, bran_kg, corn_kg, gypsum_kg, water_l, moisture_pct,
-          notes, created, status, water_now_l)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?)`
+          notes, created, status, water_now_l, calcium_pct, calcium_kg, steri_min)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?)`
     ).run(
       b.subId,
       found.strainId != null ? found.strainId : null,
@@ -5030,7 +5062,10 @@ function createSubstrateBatch(db, b, userId) {
       mix.moisturePct,
       b.notes || '',
       created,
-      water.nowL
+      water.nowL,
+      mix.calciumPct,
+      mix.calciumKg,
+      _steriMinOf(b.steriMin)
     );
     for (const d of mix.deltas) {
       applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, 'mix', b.subId, userId || null);
@@ -5042,6 +5077,25 @@ function createSubstrateBatch(db, b, userId) {
     throw e;
   }
   return { subId: b.subId, mix, water };
+}
+
+// Sterilisierzeit in Minuten, oder null fuer "nicht eingetragen". Ein leeres
+// Feld ist keine 0: 0 Minuten hiesse unsterilisiert.
+function _steriMinOf(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error('Sterilisierzeit muss eine Zahl sein');
+  if (n < 0 || n > 1440) throw new Error('Sterilisierzeit zwischen 0 und 1440 Minuten');
+  return n;
+}
+
+// pH einer Charge, oder null fuer "nicht gemessen".
+function _phOf(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error('pH muss eine Zahl sein');
+  if (n < 0 || n > 14) throw new Error('pH liegt zwischen 0 und 14');
+  return n;
 }
 
 function _mapSubstrateRow(r) {
@@ -5057,6 +5111,7 @@ function _mapSubstrateRow(r) {
       wheatbranPct: r.wheatbran_pct,
       cornPct: r.corn_pct,
       gypsumPct: r.gypsum_pct,
+      calciumPct: r.calcium_pct || 0,
       rhPct: r.rh_pct
     },
     dryKg: r.dry_kg,
@@ -5064,6 +5119,13 @@ function _mapSubstrateRow(r) {
     branKg: r.bran_kg,
     cornKg: r.corn_kg,
     gypsumKg: r.gypsum_kg,
+    calciumKg: r.calcium_kg || 0,
+    steriMin: r.steri_min == null ? null : r.steri_min,
+    // Der pH der Chargen aus diesem Ansatz, gemessen beim Beimpfen: Mittel und
+    // wie viele gemessen haben. Neben steriMin die Antwort auf "was macht die
+    // Sterilisierzeit mit dem pH".
+    phAvg: r.ph_avg == null ? null : r.ph_avg,
+    phN: r.ph_n || 0,
     waterL: r.water_l,
     // moisturePct kommt aus dem Rezept — was der Ansatz treffen sollte.
     // actualRhPct ist, was jemand nachgemessen hat, und bleibt null, solange
@@ -5088,11 +5150,11 @@ function _mapSubstrateRow(r) {
 // left. The Chargen matter as much as the recipe — a mix that went wrong is
 // diagnosed by what was made from it, not by re-reading its percentages.
 function getSubstrateBatch(db, subId) {
-  const row = db.prepare('SELECT * FROM substrate_batches WHERE sub_id=?').get(subId);
+  const row = db.prepare(SUBSTRATE_SELECT + ' WHERE s.sub_id=?').get(subId);
   if (!row) return null;
   const drawn = db
     .prepare(
-      `SELECT batch_id, species, strain, strain_text, qty, bag_kg, substrate_kg, created, due
+      `SELECT batch_id, species, strain, strain_text, qty, bag_kg, substrate_kg, created, due, ph
          FROM batches WHERE substrate_batch_id=? ORDER BY created`
     )
     .all(row.id)
@@ -5104,7 +5166,8 @@ function getSubstrateBatch(db, subId) {
       bagKg: b.bag_kg,
       substrateKg: b.substrate_kg,
       created: b.created,
-      due: b.due
+      due: b.due,
+      ph: b.ph == null ? null : b.ph
     }));
   // What the mix actually took off the shelf, as booked — not as computed.
   const ledger = db
@@ -5183,7 +5246,7 @@ function waterFactorOf(r) {
   const a = r.actual_rh_pct / 100;
   const t = r.rh_pct / 100;
   if (!(W > 0) || !(r.water_l > 0) || !(r.dry_kg > 0) || !(a > 0 && a < 1) || !(t > 0 && t < 1)) return null;
-  const solids = r.dry_kg + (r.gypsum_kg || 0);
+  const solids = r.dry_kg + (r.gypsum_kg || 0) + (r.calcium_kg || 0);
   const ausMaterial = a * (solids + W) - W;
   const noetig = (t * solids - ausMaterial) / (1 - t);
   const f = noetig / r.water_l;
@@ -5195,7 +5258,7 @@ function waterFactorOf(r) {
 function learnedWaterFactor(db) {
   const rows = db
     .prepare(
-      `SELECT water_l, dry_kg, gypsum_kg, rh_pct, actual_rh_pct, actual_water_l FROM substrate_batches
+      `SELECT water_l, dry_kg, gypsum_kg, calcium_kg, rh_pct, actual_rh_pct, actual_water_l FROM substrate_batches
         WHERE actual_water_l > 0 AND actual_rh_pct IS NOT NULL ORDER BY created DESC LIMIT 50`
     )
     .all();
@@ -5355,11 +5418,30 @@ function setSubstrateBurstBags(db, subId, count) {
   return { subId, burstBags: n };
 }
 
+// Nachgetragen wie die geplatzten Beutel: sterilisiert wird nach dem Mischen,
+// und nicht jeder weiss die Zeit schon, wenn er den Ansatz anlegt. Leer setzt
+// auf "nicht eingetragen" zurueck.
+function setSubstrateSteriMin(db, subId, minutes) {
+  const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const v = _steriMinOf(minutes);
+  db.prepare('UPDATE substrate_batches SET steri_min=? WHERE sub_id=?').run(v, subId);
+  incrementDataVersion(db);
+  return { subId, steriMin: v };
+}
+
+// Der Ansatz mit dem pH seiner Chargen. AVG und COUNT ueberspringen NULL, also
+// zaehlt eine Charge ohne Messung weder als 0 noch ueberhaupt.
+const SUBSTRATE_SELECT = `SELECT s.*,
+    (SELECT AVG(b.ph) FROM batches b WHERE b.substrate_batch_id = s.id) AS ph_avg,
+    (SELECT COUNT(b.ph) FROM batches b WHERE b.substrate_batch_id = s.id) AS ph_n
+  FROM substrate_batches s`;
+
 function listSubstrateBatches(db, opts) {
   const o = opts || {};
-  const where = o.openOnly ? " WHERE status='open' AND remaining_kg > 0.0001" : '';
+  const where = o.openOnly ? " WHERE s.status='open' AND s.remaining_kg > 0.0001" : '';
   return db
-    .prepare('SELECT * FROM substrate_batches' + where + ' ORDER BY created DESC')
+    .prepare(SUBSTRATE_SELECT + where + ' ORDER BY s.created DESC')
     .all()
     .map(_mapSubstrateRow);
 }
@@ -5472,6 +5554,7 @@ function createBagBatchFromSubstrate(db, b, userId) {
       sourceId: b.sourceId || null,
       notes: b.notes || '',
       strainText: b.strainText || '',
+      ph: b.ph,
       created,
       due,
       // The composition is the mix's, not the species' — the bags are made of
@@ -5545,6 +5628,8 @@ function insertBatch(db, b, deltas, userId) {
       throw new Error('Substrate composition must total 100% (got ' + (hw0 + wb0 + cm0).toFixed(1) + '%)');
     }
   }
+  // Vor BEGIN geprüft: ein vertippter pH soll nichts anlegen, nicht halb.
+  const ph = _phOf(b.ph);
   db.exec('BEGIN');
   try {
     const sub = b.substrate || {};
@@ -5575,6 +5660,7 @@ function insertBatch(db, b, deltas, userId) {
       sub.coir || 0,
       b.grainKg || 0
     );
+    if (ph != null) db.prepare('UPDATE batches SET ph=? WHERE batch_id=?').run(ph, b.batchId);
     // v67: a Charge portioned out of a mix records which mix and how much,
     // and takes those kilograms out of it here — inside this transaction, so
     // bags and remaining substrate can never disagree.
@@ -7784,7 +7870,7 @@ function getOrderForShipping(db, id) {
 }
 
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn', 'calcium'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -11464,7 +11550,8 @@ function getInventory(db, logLimit) {
       gypsum: inv.stock_gypsum,
       grain: inv.stock_grain,
       coir: inv.stock_coir || 0,
-      corn: inv.stock_corn || 0
+      corn: inv.stock_corn || 0,
+      calcium: inv.stock_calcium || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
@@ -11472,7 +11559,8 @@ function getInventory(db, logLimit) {
       gypsum: { minKg: inv.thresh_gypsum },
       grain: { minKg: inv.thresh_grain },
       coir: { minKg: inv.thresh_coir || 0 },
-      corn: { minKg: inv.thresh_corn || 0 }
+      corn: { minKg: inv.thresh_corn || 0 },
+      calcium: { minKg: inv.thresh_calcium || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -12247,6 +12335,9 @@ const SAFE_ERROR_PREFIXES = [
   'Zielmenge muss',
   'Kleie + Maismehl ergeben ',
   'Restfeuchte zu hoch',
+  // Sterilisierzeit am Ansatz, pH an der Charge: beides eingetippt.
+  'Sterilisierzeit ',
+  'pH ',
   'Zone has ',
   'Rack has ',
   'Zone name ',
@@ -13842,7 +13933,8 @@ function computeProductionDemand(db) {
     wheatbran: inv.stock_wheatbran || 0,
     gypsum: inv.stock_gypsum || 0,
     coir: inv.stock_coir || 0,
-    corn: inv.stock_corn || 0
+    corn: inv.stock_corn || 0,
+    calcium: inv.stock_calcium || 0
   };
 
   return rows
@@ -14228,6 +14320,7 @@ module.exports = {
   setSubstrateMoisture,
   setSubstrateNotes,
   setSubstrateBurstBags,
+  setSubstrateSteriMin,
   writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,
