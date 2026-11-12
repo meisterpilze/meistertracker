@@ -16040,9 +16040,12 @@ async function shelfLogLoad() {
 }
 
 // ── Etikett ──
-// 50 × 30 mm wie alle Etiketten der App (labelDims). Oben der Name, so groß er
-// auf höchstens drei Zeilen passt; unten rechts der QR-Code mit der Nummer aus
-// der Barcode-Liste, unten links dieselbe Nummer zum Abtippen.
+// 50 × 30 mm wie alle Etiketten der App (labelDims). Rechts der QR-Code mit
+// der Nummer aus der Barcode-Liste, 18 mm groß, damit die Kamera ihn vom Regal
+// aus liest; links der Name, so groß er auf höchstens vier Zeilen passt, und
+// darunter dieselbe Nummer zum Abtippen. Eine Größe am Ende des Namens (1 L,
+// 2 kg) steht immer in einer eigenen Zeile.
+const SHELF_SIZE_RE = /^(.*\S)\s+(\d+(?:[.,]\d+)?\s*(?:kg|g|l|ml))$/i;
 function _shelfWrap(ctx, words, maxW) {
   const lines = [];
   let cur = '';
@@ -16072,43 +16075,46 @@ function shelfLabelCanvas(x) {
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#000';
 
-  // QR: ganze Punkte je Modul, sonst franst er aus. 4 Punkte = 0,5 mm.
+  // QR: ganze Punkte je Modul, sonst franst er aus. 7 Punkte ≈ 0,9 mm, bei
+  // einer siebenstelligen Nummer 21 Module = 18 mm. Senkrecht mittig, rechts.
   const val = String(x.barcode || '');
-  let qrSize = 0;
+  let qx = W - MR;
   if (val && typeof QRCode !== 'undefined') {
     const holder = document.createElement('div');
     const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
     const m = q._oQRCode;
     const count = m.getModuleCount();
-    const mod = 4;
-    qrSize = count * mod;
-    const qx = W - MR - qrSize;
-    const qy = H - MB - qrSize;
+    const mod = Math.max(1, Math.min(7, Math.floor((H - MT - MB) / count)));
+    const size = count * mod;
+    qx = W - MR - size;
+    const qy = MT + Math.floor((H - MT - MB - size) / 2);
     for (let r = 0; r < count; r++)
       for (let c = 0; c < count; c++) if (m.isDark(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod);
-    ctx.font = 'bold 24px Consolas, "Courier New", monospace';
+    ctx.font = 'bold 22px Consolas, "Courier New", monospace';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(val, ML, H - MB - 2);
   }
 
-  // Der Name: die größte Schrift, mit der er auf höchstens drei Zeilen über
-  // dem QR-Code Platz hat.
-  const maxW = W - ML - MR;
-  const maxH = H - MB - qrSize - 8 - MT;
-  const words = x.name.split(/\s+/).filter(Boolean);
+  // Der Name links vom QR-Code: die größte Schrift, mit der er auf höchstens
+  // vier Zeilen über der Nummer Platz hat. Die Größe am Ende bleibt eine Zeile.
+  const maxW = qx - 12 - ML;
+  const maxH = H - MB - 26 - MT;
+  const teil = x.name.match(SHELF_SIZE_RE);
+  const words = (teil ? teil[1] : x.name).split(/\s+/).filter(Boolean);
+  const size = teil ? [teil[2]] : [];
   let best = null;
   for (let px = 84; px >= 18; px -= 2) {
     ctx.font = 'bold ' + px + 'px Arial, Helvetica, sans-serif';
-    const lines = _shelfWrap(ctx, words, maxW);
+    const lines = _shelfWrap(ctx, words, maxW).concat(size);
     const lh = Math.round(px * 1.08);
-    if (lines.length <= 3 && lines.length * lh <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) {
+    if (lines.length <= 4 && lines.length * lh <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) {
       best = { px, lines, lh };
       break;
     }
   }
   if (!best) {
     ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-    best = { px: 18, lines: _shelfWrap(ctx, words, maxW).slice(0, 3), lh: 19 };
+    best = { px: 18, lines: _shelfWrap(ctx, words, maxW).concat(size).slice(0, 4), lh: 19 };
   }
   ctx.font = 'bold ' + best.px + 'px Arial, Helvetica, sans-serif';
   ctx.textBaseline = 'top';
