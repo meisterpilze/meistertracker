@@ -10101,3 +10101,197 @@ body:has(#m-camscan.open) .update-bar {
   padding: 0;
   flex: none;
 }
+
+/* ── Regal: fertige Ware, eine Zahl je Artikel ── */
+.shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#shelf-print-all[hidden] {
+  display: none;
+}
+.shelf-help {
+  color: var(--c-text-muted);
+  margin: 4px 0 10px;
+}
+.shelf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* One row per Fach: the name and the count, both large enough to read at arm's length. */
+.shelf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shelf-row:hover {
+  border-color: var(--c-primary);
+}
+.shelf-row-name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.shelf-row-n {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.shelf-null {
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+.shelf-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.shelf-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.shelf-hidden {
+  margin-top: 12px;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.shelf-hidden summary {
+  cursor: pointer;
+  color: var(--c-text-muted);
+}
+.shelf-hidden-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+}
+.shelf-now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+.shelf-now b {
+  font-size: 2.5rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.shelf-amt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.shelf-amt .btn {
+  min-width: 56px;
+  min-height: 56px;
+  font-size: 1.5rem;
+}
+.shelf-amt input {
+  width: 96px;
+  min-height: 56px;
+  font-size: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.shelf-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shelf-acts .btn {
+  min-height: 48px;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+.shelf-preview {
+  margin: 4px 0 8px;
+}
+/* The label exactly as it prints: one canvas pixel per printer dot. */
+.shelf-label-cv {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  image-rendering: pixelated;
+}
+.shelf-more {
+  margin-bottom: 8px;
+}
+.shelf-more summary {
+  cursor: pointer;
+  color: var(--c-primary);
+  padding: 6px 0;
+}
+.shelf-log-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--c-border-light);
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.shelf-log-row small {
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+.shelf-undone span {
+  text-decoration: line-through;
+  color: var(--c-text-muted);
+}
+.shelf-rename {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+.shelf-rename input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* At or under its alarm level: time to make more. */
+.shelf-row.shelf-low {
+  border-color: var(--c-red, #dc2626);
+}
+.shelf-low .shelf-row-n,
+.shelf-now.shelf-low b {
+  color: var(--c-red, #dc2626);
+}
+.shelf-low-tag {
+  display: block;
+  color: var(--c-red, #dc2626);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 600;
+}
+.shelf-alarm {
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.shelf-sub {
+  margin-top: 12px;
+  font-weight: 600;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.shelf-sku-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.shelf-rename input.shelf-per {
+  flex: 0 0 72px;
+}
