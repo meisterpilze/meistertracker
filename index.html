@@ -150,6 +150,115 @@
       </div>
     </div>
 
+    <!-- Ein Regal-Artikel: Bestand, Rein / Raus / Zählen, Etikett (shelfSheetRender) -->
+    <div class="modal-bg" id="m-shelf" role="dialog" aria-modal="true" aria-labelledby="m-shelf-title" hidden>
+      <div class="modal">
+        <h3 id="m-shelf-title"></h3>
+        <div class="shelf-now" id="m-shelf-now">
+          <b id="m-shelf-stock" aria-live="polite">0</b>
+          <span data-i18n="shelf.inShelf">im Regal</span>
+          <small id="m-shelf-alarm" class="shelf-alarm"></small>
+        </div>
+        <div class="shelf-amt">
+          <button type="button" class="btn" data-shelf-step="-1" data-i18n-aria-label="shelf.less" aria-label="Weniger">
+            −
+          </button>
+          <input
+            type="number"
+            id="m-shelf-n"
+            inputmode="numeric"
+            min="0"
+            step="1"
+            value="0"
+            data-i18n-aria-label="shelf.amount"
+            aria-label="Anzahl"
+          />
+          <button type="button" class="btn" data-shelf-step="1" data-i18n-aria-label="shelf.more" aria-label="Mehr">
+            +
+          </button>
+        </div>
+        <div class="shelf-acts">
+          <button type="button" class="btn btn-p" data-shelf-act="in" data-i18n="shelf.in">Add</button>
+          <button type="button" class="btn btn-p" data-shelf-act="out" data-i18n="shelf.out">Remove</button>
+          <button type="button" class="btn" data-shelf-act="count" data-i18n="shelf.count">Das ist der Bestand</button>
+        </div>
+        <p class="fs-meta shelf-help" data-i18n="shelf.sheetHelp">
+          Anzahl eintippen, dann Add oder Remove. Nach dem Zählen: die gezählte Zahl eintippen und „Das ist der
+          Bestand“.
+        </p>
+        <div id="m-shelf-preview" class="shelf-preview"></div>
+        <details id="m-shelf-more" class="shelf-more">
+          <summary data-i18n="shelf.moreTitle">Verlauf und Artikel</summary>
+          <div id="m-shelf-log" class="shelf-log"></div>
+          <!-- Bei diesem Stand geht einmal eine Glocke an alle: nachproduzieren. -->
+          <div class="shelf-sub" data-i18n="shelf.minTitle">Alarm: nachproduzieren bei</div>
+          <div class="shelf-rename">
+            <input
+              type="number"
+              id="m-shelf-min"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              data-i18n-aria-label="shelf.minTitle"
+              aria-label="Alarm: nachproduzieren bei"
+            />
+            <button type="button" class="btn btn-sm" data-shelf-act="min" data-i18n="common.save">Speichern</button>
+          </div>
+          <!-- Shop-SKUs: eine Bestellung damit nimmt den Bestand runter (checkShelf). -->
+          <div class="shelf-sub" data-i18n="shelf.skuTitle">Online-Bestellungen ziehen ab</div>
+          <p class="fs-meta shelf-help" data-i18n="shelf.skuHelp">
+            Trag die SKU aus Billbee ein. Bei einem Mehrfachpack: wie viele Beutel ein Stück sind.
+          </p>
+          <div id="m-shelf-skus"></div>
+          <div class="shelf-rename">
+            <input
+              type="text"
+              id="m-shelf-sku"
+              maxlength="80"
+              autocomplete="off"
+              data-i18n-placeholder="shelf.skuLabel"
+              data-i18n-aria-label="shelf.skuLabel"
+              placeholder="SKU"
+              aria-label="SKU"
+            />
+            <input
+              type="number"
+              id="m-shelf-per"
+              class="shelf-per"
+              inputmode="numeric"
+              min="1"
+              step="1"
+              value="1"
+              data-i18n-aria-label="shelf.perLabel"
+              aria-label="Beutel je Stück"
+            />
+            <button type="button" class="btn btn-sm" data-shelf-act="sku" data-i18n="shelf.skuAdd">Anhängen</button>
+          </div>
+          <div class="shelf-sub" data-i18n="shelf.itemTitle">Artikel</div>
+          <div class="shelf-rename">
+            <input
+              type="text"
+              id="m-shelf-rename"
+              maxlength="60"
+              autocomplete="off"
+              data-i18n-aria-label="shelf.renameLabel"
+              aria-label="Name"
+            />
+            <button type="button" class="btn btn-sm" data-shelf-act="rename" data-i18n="shelf.rename">
+              Umbenennen
+            </button>
+          </div>
+          <button type="button" class="btn btn-sm btn-r" data-shelf-act="hide" data-i18n="shelf.hide">
+            Aus der Liste nehmen
+          </button>
+        </details>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-shelf-act="close" data-i18n="common.close">Schließen</button>
+          <button type="button" class="btn" data-shelf-act="print" data-i18n="shelf.print">Etikett drucken</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Calendar print range modal -->
     <div class="modal-bg" id="m-cal-print" role="dialog" aria-modal="true" aria-labelledby="m-cal-print-title" hidden>
       <div class="modal">
@@ -6424,14 +6533,45 @@
         <!-- ══ INVENTORY ══ -->
         <div class="page" id="p-inv">
           <div class="stabs" data-stab-home="nav.inventory">
-            <button class="stab active" id="st-inv-stock" data-i18n="inv.stock">Stock</button>
+            <button class="stab active" id="st-inv-shelf" data-i18n="shelf.tab">Regal</button>
+            <button class="stab" id="st-inv-stock" data-i18n="inv.stock">Stock</button>
             <button class="stab" id="st-inv-delivery" data-i18n="inv.logDelivery">Log delivery</button>
             <button class="stab" id="st-inv-log" data-i18n="inv.usageLog">Usage log</button>
             <button class="stab" id="st-inv-suppliers" data-i18n="inv.suppliers">Suppliers</button>
           </div>
 
+          <!-- Regal: fertige Ware, eine Zahl je Artikel (renderShelf). Das Etikett
+               am Fach öffnet beim Scannen dasselbe Blatt wie ein Tipp hier. -->
+          <div class="sp active" id="sp-inv-shelf">
+            <div class="card">
+              <div class="shelf-head">
+                <div class="sec" data-i18n="shelf.title">Regal</div>
+                <button type="button" class="btn btn-sm" id="shelf-print-all" data-i18n="shelf.printAll" hidden>
+                  Alle Etiketten drucken
+                </button>
+              </div>
+              <p class="fs-meta shelf-help" data-i18n="shelf.help">
+                Scanne das Etikett am Fach oder tippe einen Artikel an: Add, Remove oder Zählen.
+              </p>
+              <div id="shelf-list" class="shelf-list"></div>
+              <form id="shelf-add" class="shelf-add" autocomplete="off">
+                <input
+                  type="text"
+                  id="shelf-add-name"
+                  maxlength="60"
+                  data-i18n-placeholder="shelf.addPlaceholder"
+                  data-i18n-aria-label="shelf.addPlaceholder"
+                  placeholder="Neuer Artikel"
+                  aria-label="Neuer Artikel"
+                />
+                <button type="submit" class="btn btn-p" data-i18n="shelf.add">Anlegen</button>
+              </form>
+              <div id="shelf-hidden"></div>
+            </div>
+          </div>
+
           <!-- Stock overview -->
-          <div class="sp active" id="sp-inv-stock">
+          <div class="sp" id="sp-inv-stock">
             <div id="inv-cards" class="g3" style="margin-bottom: 10px"></div>
             <div class="card">
               <div class="sec" data-i18n="inv.alertThresholds">Alert thresholds</div>

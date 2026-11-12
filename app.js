@@ -374,6 +374,8 @@ let mushroomStrains = [],
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
 let barcodeRegistry = new Map(),
   barcodeByEntity = new Map();
+// Regal: fertige Ware, eine Zahl je Artikel (renderShelf)
+let shelfItems = [];
 let appUsers = [];
 let calEvSelectedAssignees = [];
 let calTaskSelectedAssignees = [];
@@ -676,6 +678,7 @@ function applyData(d) {
   weekRhythm = d.weekRhythm || {};
   rhythmTasks = d.rhythmTasks || [];
   recurringTasks = d.recurringTasks || [];
+  shelfItems = d.shelf || [];
   datenGeladen = true;
   // Build barcode registry from server data
   barcodeRegistry = new Map();
@@ -872,6 +875,12 @@ function onNotifItemClick(e) {
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
+  } else if (linkType === 'shelf' && linkId) {
+    // "Nachproduzieren" (checkShelf): das Fach unter Lager → Regal, mit seinem Blatt.
+    go('inv', 'n-inv');
+    openStab('inv', 'shelf');
+    renderShelf();
+    shelfSheetOpen(Number(linkId));
   } else if (linkType === 'sale' && linkId) {
     // "Bestellt, aber nicht da" (checkSaleAlerts): the species on the Labor
     // page, with its sheet open. linkId is "<species>/<slot>".
@@ -1428,6 +1437,7 @@ function go(page, btnId) {
   }
   if (page === 'inv') {
     renderInvStock();
+    renderShelf();
   }
   if (page === 'zones') renderZones();
   if (page === 'print') {
@@ -1665,7 +1675,10 @@ function refresh() {
     renderCultures();
     renderGrainBatches();
   }
-  if (id === 'inv') renderInvStock();
+  if (id === 'inv') {
+    renderInvStock();
+    renderShelf();
+  }
   if (id === 'zones') renderZones();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
@@ -15754,6 +15767,475 @@ function estBagsFromMat(mat, stockKg) {
   return { bags, matPerBag, bagKg: c.bagKg, isGrain: false };
 }
 
+// ── Regal: fertige Ware, eine Zahl je Artikel ────────────────
+// Am Regalfach hängt ein Etikett mit QR-Code. Wer es scannt (oder den Artikel
+// unter Lager → Regal antippt), bekommt ein Blatt mit dem Bestand und drei
+// Knöpfen: Rein, Raus, oder "Das ist der Bestand" nach dem Zählen. Die Beutel
+// selbst tragen kein Etikett; gezählt wird das Fach. Welche Artikel es gibt,
+// legt das Team hier an, der Code kennt keinen.
+//
+// Das Etikett wird auf einer Leinwand gezeichnet, auf Schwarz/Weiß gebracht
+// und als Bild (^GFA) an den Zebra geschickt. Die Vorschau im Blatt ist
+// dieselbe Leinwand: was man sieht, druckt er Punkt für Punkt.
+let _shelfSheet = null; // { id } solange das Blatt offen ist
+const shelfById = (id) => shelfItems.find((x) => x.id === Number(id));
+
+// Auf dem Alarm-Stand oder darunter: nachproduzieren (der Server meldet es einmal).
+const _shelfLow = (x) => x.stock <= x.minStock;
+function renderShelf() {
+  const list = document.getElementById('shelf-list');
+  if (!list) return;
+  const aktiv = shelfItems.filter((x) => x.active);
+  list.innerHTML = aktiv.length
+    ? aktiv
+        .map(
+          (x) =>
+            `<button type="button" class="shelf-row${_shelfLow(x) ? ' shelf-low' : ''}" data-shelf-open="${x.id}">` +
+            `<span class="shelf-row-name">${esc(x.name)}` +
+            (_shelfLow(x) ? `<small class="shelf-low-tag">${esc(t('shelf.remake'))}</small>` : '') +
+            `</span><b class="shelf-row-n${x.stock ? '' : ' shelf-null'}">${x.stock}</b></button>`
+        )
+        .join('')
+    : `<p class="fs-meta muted">${esc(t('shelf.empty'))}</p>`;
+  const printAll = document.getElementById('shelf-print-all');
+  if (printAll) printAll.hidden = !aktiv.length;
+  const weg = shelfItems.filter((x) => !x.active);
+  const box = document.getElementById('shelf-hidden');
+  if (box)
+    box.innerHTML = weg.length
+      ? `<details class="shelf-hidden"><summary>${esc(t('shelf.hiddenN', { n: weg.length }))}</summary>` +
+        weg
+          .map(
+            (x) =>
+              `<div class="shelf-hidden-row"><span>${esc(x.name)}</span>` +
+              `<button type="button" class="btn btn-sm" data-shelf-back="${x.id}">${esc(t('shelf.restore'))}</button></div>`
+          )
+          .join('') +
+        '</details>'
+      : '';
+  if (_shelfSheet) shelfSheetRender();
+}
+
+// Ein Artikel kam vom Server zurück: in die Liste, und alles neu zeichnen.
+function _shelfTake(item) {
+  if (!item) return;
+  const i = shelfItems.findIndex((x) => x.id === item.id);
+  if (i >= 0) shelfItems[i] = item;
+  else shelfItems.push(item);
+  if (item.barcode) {
+    barcodeRegistry.set(item.barcode, { type: 'shelf', id: String(item.id) });
+    barcodeByEntity.set('shelf:' + item.id, item.barcode);
+  }
+  renderShelf();
+}
+
+async function shelfAdd(ev) {
+  if (ev) ev.preventDefault();
+  const input = document.getElementById('shelf-add-name');
+  const name = input.value.trim();
+  if (!name) {
+    toast(t('shelf.nameMissing'), 'err');
+    input.focus();
+    return;
+  }
+  const r = await apiPost('/api/shelf', { name });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  input.value = '';
+  _shelfTake(r.item);
+  // Gleich das Blatt: der nächste Schritt ist das Etikett fürs Fach.
+  shelfSheetOpen(r.item.id);
+}
+
+// Vom Scanner: Kamera und Scan-Fenster gehen zu, das Blatt auf.
+function shelfScanned(id) {
+  const x = shelfById(id);
+  if (!x) {
+    setFb('err', t('shelf.scanUnknown'));
+    return;
+  }
+  if (!x.active) {
+    setFb('err', t('shelf.scanHidden', { name: x.name }));
+    return;
+  }
+  const cam = document.getElementById('m-camscan');
+  if (cam && cam.classList.contains('open')) closeCamScan();
+  closeScanModal();
+  shelfSheetOpen(x.id);
+}
+
+function shelfSheetOpen(id) {
+  if (!shelfById(id)) return;
+  _shelfSheet = { id: Number(id) };
+  document.getElementById('m-shelf-n').value = '0';
+  document.getElementById('m-shelf-more').open = false;
+  shelfSheetRender();
+  document.getElementById('m-shelf').classList.add('open');
+  shelfLogLoad();
+}
+function shelfSheetClose() {
+  document.getElementById('m-shelf').classList.remove('open');
+  _shelfSheet = null;
+}
+function shelfSheetRender() {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) {
+    shelfSheetClose();
+    return;
+  }
+  document.getElementById('m-shelf-title').textContent = x.name;
+  document.getElementById('m-shelf-stock').textContent = x.stock;
+  document.getElementById('m-shelf-now').classList.toggle('shelf-low', _shelfLow(x));
+  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: x.minStock });
+  const rn = document.getElementById('m-shelf-rename');
+  if (document.activeElement !== rn) rn.value = x.name;
+  const mn = document.getElementById('m-shelf-min');
+  if (document.activeElement !== mn) mn.value = String(x.minStock);
+  document.getElementById('m-shelf-skus').innerHTML = (x.skus || []).length
+    ? x.skus
+        .map(
+          (s) =>
+            `<div class="shelf-sku-row"><span><b>${esc(s.sku)}</b> · ${esc(tp('shelf.perUnit', s.perUnit))}</span>` +
+            `<button type="button" class="btn btn-sm" data-shelf-unsku="${esc(s.sku)}">${esc(t('shelf.skuRemove'))}</button></div>`
+        )
+        .join('')
+    : `<p class="fs-meta muted">${esc(t('shelf.skuNone'))}</p>`;
+  shelfLabelPreview(x);
+}
+
+async function shelfSaveMin() {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const v = document.getElementById('m-shelf-min').value.trim();
+  const n = Number(v);
+  if (v === '' || !Number.isInteger(n) || n < 0) {
+    toast(t('shelf.minWhole'), 'err');
+    return;
+  }
+  const r = await apiPatch('/api/shelf/' + x.id, { minStock: n });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  _shelfTake(r.item);
+  toast(t('shelf.alarmAt', { n: r.item.minStock }));
+}
+
+// Eine Shop-SKU anhängen (perUnit ab 1) oder abhängen (perUnit 0).
+async function shelfSku(sku, perUnit) {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const r = await apiPost('/api/shelf/' + x.id + '/sku', { sku, perUnit });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  if (perUnit) {
+    document.getElementById('m-shelf-sku').value = '';
+    document.getElementById('m-shelf-per').value = '1';
+  }
+  _shelfTake(r.item);
+}
+function _shelfN() {
+  const v = document.getElementById('m-shelf-n').value.trim();
+  const n = v === '' ? 0 : Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : NaN;
+}
+function shelfStep(d) {
+  const n = _shelfN();
+  document.getElementById('m-shelf-n').value = String(Math.max(0, (Number.isNaN(n) ? 0 : n) + d));
+}
+
+// Rein, Raus oder Zählen. Das Blatt geht zu, unten steht der neue Stand mit
+// Rückgängig: ein Vertipper kostet einen Tipp, keine Rückfrage vorher.
+async function shelfAct(kind) {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const n = _shelfN();
+  if (Number.isNaN(n)) {
+    toast(t('shelf.wholeNumber'), 'err');
+    return;
+  }
+  if (kind !== 'count' && n === 0) {
+    toast(t('shelf.amountMissing'), 'err');
+    return;
+  }
+  const body = kind === 'count' ? { count: n } : { delta: kind === 'in' ? n : -n };
+  const r = await apiPost('/api/shelf/' + x.id + '/stock', body);
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  shelfSheetClose();
+  _shelfTake(r.item);
+  const msg = t('shelf.done.' + kind, { n, name: r.item.name, stock: r.item.stock });
+  showUndoBar(msg, async () => {
+    const u = await apiPost('/api/shelf/log/' + r.logId + '/undo', {});
+    if (!u || u.error) {
+      toast(u && u.error ? u.error : t('shelf.saveFailed'), 'err');
+      return;
+    }
+    _shelfTake(u.item);
+    toast(t('shelf.undone', { name: u.item.name, stock: u.item.stock }));
+  });
+}
+
+async function shelfRename() {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const name = document.getElementById('m-shelf-rename').value.trim();
+  if (name === x.name) return;
+  const r = await apiPatch('/api/shelf/' + x.id, { name });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  _shelfTake(r.item);
+  toast(t('shelf.renamed'));
+}
+
+async function shelfSetActive(id, active) {
+  const r = await apiPatch('/api/shelf/' + id, { active });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  if (!active) shelfSheetClose();
+  _shelfTake(r.item);
+  if (!active) showUndoBar(t('shelf.hidden', { name: r.item.name }), () => shelfSetActive(r.item.id, true));
+}
+
+async function shelfLogLoad() {
+  const box = document.getElementById('m-shelf-log');
+  if (!_shelfSheet || !box) return;
+  const id = _shelfSheet.id;
+  box.textContent = t('common.loading');
+  let entries;
+  try {
+    entries = (await apiGet('/api/shelf/' + id + '/log')).entries || [];
+  } catch {
+    box.textContent = t('shelf.logFailed');
+    return;
+  }
+  if (!_shelfSheet || _shelfSheet.id !== id) return;
+  box.innerHTML = entries.length
+    ? entries
+        .map((e) => {
+          const n = Math.abs(e.delta);
+          const was =
+            e.kind === 'count'
+              ? t('shelf.log.count', { stock: e.running })
+              : e.kind === 'order'
+                ? t(e.delta < 0 ? 'shelf.log.order' : 'shelf.log.cancel', { n, ref: e.ref || '', stock: e.running })
+                : t('shelf.log.' + e.kind, { n, stock: e.running });
+          return (
+            `<div class="shelf-log-row${e.undone ? ' shelf-undone' : ''}"><span>${esc(was)}</span>` +
+            `<small>${esc(fmtDtTime(e.time) + (e.username ? ' · ' + e.username : ''))}</small></div>`
+          );
+        })
+        .join('')
+    : `<p class="fs-meta muted">${esc(t('shelf.logEmpty'))}</p>`;
+}
+
+// ── Etikett ──
+// 50 × 30 mm wie alle Etiketten der App (labelDims). Rechts der QR-Code mit
+// der Nummer aus der Barcode-Liste, 18 mm groß, damit die Kamera ihn vom Regal
+// aus liest; links der Name, so groß er auf höchstens vier Zeilen passt, und
+// darunter dieselbe Nummer zum Abtippen. Eine Größe am Ende des Namens (1 L,
+// 2 kg) steht immer in einer eigenen Zeile.
+const SHELF_SIZE_RE = /^(.*\S)\s+(\d+(?:[.,]\d+)?\s*(?:kg|g|l|ml))$/i;
+function _shelfWrap(ctx, words, maxW) {
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const probe = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(probe).width <= maxW || !cur) cur = probe;
+    else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function shelfLabelCanvas(x) {
+  const W = labelDims.widthDots;
+  const H = labelDims.heightDots;
+  const ML = 12;
+  const MT = 10;
+  const MR = 16;
+  const MB = 12;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+
+  // QR: ganze Punkte je Modul, sonst franst er aus. 7 Punkte ≈ 0,9 mm, bei
+  // einer siebenstelligen Nummer 21 Module = 18 mm. Senkrecht mittig, rechts.
+  const val = String(x.barcode || '');
+  let qx = W - MR;
+  if (val && typeof QRCode !== 'undefined') {
+    const holder = document.createElement('div');
+    const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
+    const m = q._oQRCode;
+    const count = m.getModuleCount();
+    const mod = Math.max(1, Math.min(7, Math.floor((H - MT - MB) / count)));
+    const size = count * mod;
+    qx = W - MR - size;
+    const qy = MT + Math.floor((H - MT - MB - size) / 2);
+    for (let r = 0; r < count; r++)
+      for (let c = 0; c < count; c++) if (m.isDark(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod);
+    ctx.font = 'bold 22px Consolas, "Courier New", monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(val, ML, H - MB - 2);
+  }
+
+  // Der Name links vom QR-Code: die größte Schrift, mit der er auf höchstens
+  // vier Zeilen über der Nummer Platz hat. Die Größe am Ende bleibt eine Zeile.
+  const maxW = qx - 12 - ML;
+  const maxH = H - MB - 26 - MT;
+  const teil = x.name.match(SHELF_SIZE_RE);
+  const words = (teil ? teil[1] : x.name).split(/\s+/).filter(Boolean);
+  const size = teil ? [teil[2]] : [];
+  let best = null;
+  for (let px = 84; px >= 18; px -= 2) {
+    ctx.font = 'bold ' + px + 'px Arial, Helvetica, sans-serif';
+    const lines = _shelfWrap(ctx, words, maxW).concat(size);
+    const lh = Math.round(px * 1.08);
+    if (lines.length <= 4 && lines.length * lh <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) {
+      best = { px, lines, lh };
+      break;
+    }
+  }
+  if (!best) {
+    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
+    best = { px: 18, lines: _shelfWrap(ctx, words, maxW).concat(size).slice(0, 4), lh: 19 };
+  }
+  ctx.font = 'bold ' + best.px + 'px Arial, Helvetica, sans-serif';
+  ctx.textBaseline = 'top';
+  const top = MT + Math.max(0, Math.floor((maxH - best.lines.length * best.lh) / 2));
+  best.lines.forEach((l, i) => ctx.fillText(l, ML, top + i * best.lh));
+
+  // Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 150 ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+// Die Leinwand als ^GFA: je Zeile W/8 Bytes, ein gesetztes Bit druckt schwarz.
+function shelfLabelZPL(cv, qty) {
+  const W = cv.width;
+  const H = cv.height;
+  const d = cv.getContext('2d').getImageData(0, 0, W, H).data;
+  const row = Math.ceil(W / 8);
+  const parts = [];
+  for (let y = 0; y < H; y++) {
+    for (let b = 0; b < row; b++) {
+      let byte = 0;
+      for (let k = 0; k < 8; k++) {
+        const px = b * 8 + k;
+        if (px < W && d[(y * W + px) * 4] === 0) byte |= 0x80 >> k;
+      }
+      parts.push((byte < 16 ? '0' : '') + byte.toString(16).toUpperCase());
+    }
+  }
+  const total = row * H;
+  return (
+    '^XA^PW' +
+    W +
+    '^LL' +
+    H +
+    '^CI28^LH0,0^LT0^LS0^PON^FWN^FO0,0^GFA,' +
+    total +
+    ',' +
+    total +
+    ',' +
+    row +
+    ',' +
+    parts.join('') +
+    '^FS^PQ' +
+    (qty || 1) +
+    '^XZ'
+  );
+}
+function shelfLabelPreview(x) {
+  const box = document.getElementById('m-shelf-preview');
+  if (!box) return;
+  if (typeof QRCode === 'undefined') {
+    loadVendorLibs().then(() => {
+      if (_shelfSheet && _shelfSheet.id === x.id) shelfLabelPreview(x);
+    });
+    return;
+  }
+  box.innerHTML = '';
+  const cv = shelfLabelCanvas(x);
+  cv.className = 'shelf-label-cv';
+  cv.setAttribute('role', 'img');
+  cv.setAttribute('aria-label', t('shelf.labelOf', { name: x.name }));
+  box.appendChild(cv);
+}
+async function shelfPrint(ids) {
+  const items = ids.map(shelfById).filter((x) => x && x.active && x.barcode);
+  if (!items.length) return;
+  if (typeof QRCode === 'undefined') await loadVendorLibs();
+  const zpl = items.map((x) => shelfLabelZPL(shelfLabelCanvas(x), 1)).join('\n');
+  const err = await sendToPrinter(zpl);
+  if (err) toast(t('shelf.printFailed', { err }), 'err');
+  else toast(tp('shelf.printed', items.length));
+}
+
+function shelfWire() {
+  document.getElementById('shelf-add').addEventListener('submit', shelfAdd);
+  document
+    .getElementById('shelf-print-all')
+    .addEventListener('click', () => shelfPrint(shelfItems.filter((x) => x.active).map((x) => x.id)));
+  document.getElementById('sp-inv-shelf').addEventListener('click', (e) => {
+    const open = e.target.closest('[data-shelf-open]');
+    if (open) shelfSheetOpen(open.dataset.shelfOpen);
+    const back = e.target.closest('[data-shelf-back]');
+    if (back) shelfSetActive(Number(back.dataset.shelfBack), true);
+  });
+  const m = document.getElementById('m-shelf');
+  m.addEventListener('click', (e) => {
+    if (e.target === m) {
+      shelfSheetClose();
+      return;
+    }
+    const step = e.target.closest('[data-shelf-step]');
+    if (step) shelfStep(Number(step.dataset.shelfStep));
+    const unsku = e.target.closest('[data-shelf-unsku]');
+    if (unsku) shelfSku(unsku.dataset.shelfUnsku, 0);
+    const act = e.target.closest('[data-shelf-act]');
+    if (!act || !_shelfSheet) return;
+    const a = act.dataset.shelfAct;
+    if (a === 'close') shelfSheetClose();
+    else if (a === 'print') shelfPrint([_shelfSheet.id]);
+    else if (a === 'rename') shelfRename();
+    else if (a === 'hide') shelfSetActive(_shelfSheet.id, false);
+    else if (a === 'min') shelfSaveMin();
+    else if (a === 'sku') {
+      const sku = document.getElementById('m-shelf-sku').value.trim();
+      const per = Number(document.getElementById('m-shelf-per').value || 1);
+      if (!sku) toast(t('shelf.skuMissing'), 'err');
+      else if (!Number.isInteger(per) || per < 1) toast(t('shelf.perWhole'), 'err');
+      else shelfSku(sku, per);
+    }
+    else shelfAct(a);
+  });
+  // Das Feld öffnet mit 0; beim Antippen ist sie markiert, damit die Zahl sie ersetzt.
+  document.getElementById('m-shelf-n').addEventListener('focus', (e) => e.target.select());
+}
+
 function renderInvStock() {
   if (!inventory.stock) inventory.stock = { hardwood: 0, wheatbran: 0, gypsum: 0, grain: 0 };
   if (!inventory.thresholds)
@@ -26471,6 +26953,11 @@ function processScan(raw, opts) {
       val = entry.id; // e.g. "MC-SHI-260101-01"
     } else if (entry.type === 'zone' || entry.type === 'rack') {
       val = entry.id; // e.g. "INC" or "INC_R1"
+    } else if (entry.type === 'shelf') {
+      // Ein Regal-Etikett: das Blatt mit Rein, Raus und Zählen, egal welcher
+      // Vorgang gerade steht. Am Fach gibt es nur diese drei.
+      shelfScanned(entry.id);
+      return;
     }
   } else {
     // ── Legacy barcode fallback ──
@@ -32678,6 +33165,11 @@ function initEventListeners() {
   $('caldav-apppw-list').addEventListener('click', onCaldavAppPwClick);
 
   // Inventory
+  $('st-inv-shelf').addEventListener('click', () => {
+    openStab('inv', 'shelf');
+    renderShelf();
+  });
+  shelfWire();
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
   });

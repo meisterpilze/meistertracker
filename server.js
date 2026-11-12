@@ -1366,6 +1366,7 @@ syringeStock.start();
 const SALE_ALERT_EVERY_MS = 15 * 60 * 1000;
 function checkSaleAlerts() {
   if (WORKTREE_MODE) return;
+  checkShelf();
   try {
     const neu = db.saleAlerts(database);
     if (!neu.length) return;
@@ -1385,6 +1386,40 @@ function checkSaleAlerts() {
     log('info', 'Sale alerts raised', { articles: neu.length });
   } catch (e) {
     log('warn', 'Sale alert check failed', { error: e.message });
+  }
+}
+// Regal: neue Bestellungen aus dem Bestellungen-Hub (Billbee) nehmen den
+// Bestand runter, Stornierungen legen ihn zurück (db.syncShelfOrders). Fällt
+// ein Fach dabei oder von Hand auf seinen Alarm-Stand, bekommt jeder
+// Angemeldete einmal eine Glocke: nachproduzieren. Läuft mit den Verkaufs-
+// Alarmen, also kurz nach jeder Änderung und alle 15 Minuten; eine
+// Worktree-Kopie bucht nichts, wie dort.
+function checkShelf() {
+  try {
+    const moves = db.syncShelfOrders(database);
+    if (moves) log('info', 'Shelf stock booked from orders', { moves });
+    const low = db.shelfLowAlerts(database);
+    if (low.length) {
+      const users = db.listUsers(database);
+      for (const a of low) {
+        for (const u of users) {
+          db.createNotificationOnce(database, {
+            userId: u.id,
+            type: 'shelf_low',
+            title: 'Nachproduzieren: ' + a.name,
+            body: 'Noch ' + a.stock + ' im Regal (Alarm bei ' + a.minStock + ').',
+            linkType: 'shelf',
+            linkId: String(a.id)
+          });
+        }
+      }
+      log('info', 'Shelf low alerts raised', { items: low.length });
+    }
+    // Nur wenn sich etwas bewegt hat, damit offene Seiten die neue Zahl holen.
+    // Der nächste Lauf bucht nichts mehr, also kein Kreis.
+    if (moves || low.length) broadcastSSE();
+  } catch (e) {
+    log('warn', 'Shelf check failed', { error: e.message });
   }
 }
 function scheduleSaleAlerts() {
@@ -3334,8 +3369,15 @@ const ZPL_ALLOWED_COMMANDS = new Set([
   'BY',
   'BC',
   'BQ',
-  'B3'
+  'B3',
+  // A bitmap drawn in place (the Regal label is one). Only the ASCII hex form
+  // passes, checked in checkZpl: binary data could carry a bare ^ or ~, and
+  // ^GF never touches the printer's file system (that is ~DG / ^DG).
+  'GF'
 ]);
+// ^GFA,<bytes>,<bytes>,<bytes per row>,<hex>: every byte two hex digits, and the
+// counts have to agree with the data, so nothing rides along behind it.
+const ZPL_GFA_RE = /^\^GFA,(\d{1,7}),(\d{1,7}),(\d{1,4}),([0-9A-F]*)(?=\^FS)/i;
 // ^A0..^A9 and ^AA..^AZ select a font that lives in firmware. ^A@ loads one from
 // the printer's file system, which is the kind of thing this list exists to keep
 // out, so the character class is deliberately narrow.
@@ -3358,6 +3400,17 @@ function checkZpl(zpl) {
     const lead = zpl[i];
     if (lead !== '^' && lead !== '~') continue;
     const cmd = zpl.slice(i + 1, i + 3).toUpperCase();
+    if (lead === '^' && cmd === 'GF') {
+      const g = zpl.slice(i).match(ZPL_GFA_RE);
+      const bytes = g && g[4].length / 2;
+      if (g && Number(g[1]) === bytes && Number(g[2]) === bytes && Number(g[3]) > 0 && bytes % Number(g[3]) === 0) {
+        i += g[0].length - 1;
+        continue;
+      }
+      rejected.add('^GF');
+      if (rejected.size >= 5) break;
+      continue;
+    }
     // Tilde commands are all device control — none of them draw anything.
     if (lead === '^' && (ZPL_ALLOWED_COMMANDS.has(cmd) || ZPL_FONT_RE.test(cmd))) continue;
     rejected.add(lead + cmd);
@@ -12058,6 +12111,56 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       jsonOk(res, { enabled: db.syringeStockSyncEnabled(database), species: db.labStock(database) });
     } catch (err) {
       safeErr(res, err);
+    }
+    return;
+  }
+  // ── Regal: fertige Ware, eine Zahl je Artikel ──
+  // Anlegen, umbenennen, rein, raus, zählen und die letzte Buchung zurücknehmen
+  // darf jeder Angemeldete: es ist die Arbeit am Regal, nicht die Verwaltung.
+  // Die Liste selbst kommt mit /api/data (shelf).
+  if (req.url === '/api/shelf' || req.url.startsWith('/api/shelf/')) {
+    const sess = checkAuth(req);
+    const userId = sess ? sess.user_id : null;
+    const itemMatch = req.url.match(/^\/api\/shelf\/(\d+)$/);
+    const stockMatch = req.url.match(/^\/api\/shelf\/(\d+)\/stock$/);
+    const logMatch = req.url.match(/^\/api\/shelf\/(\d+)\/log$/);
+    const undoMatch = req.url.match(/^\/api\/shelf\/log\/(\d+)\/undo$/);
+    const skuMatch = req.url.match(/^\/api\/shelf\/(\d+)\/sku$/);
+    // Die Fehler aus db.js sind für die Person gedacht, die tippt.
+    const run = (fn) => {
+      try {
+        const out = fn();
+        broadcastSSE(res);
+        jsonOk(res, out);
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    };
+    const withBody = (fn) =>
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        run(() => fn(data || {}));
+      });
+    if (req.method === 'GET' && req.url === '/api/shelf') {
+      jsonOk(res, { items: db.listShelfItems(database) });
+    } else if (req.method === 'POST' && req.url === '/api/shelf') {
+      withBody((data) => ({ item: db.createShelfItem(database, data.name) }));
+    } else if (req.method === 'PATCH' && itemMatch) {
+      withBody((data) => ({ item: db.updateShelfItem(database, Number(itemMatch[1]), data) }));
+    } else if (req.method === 'POST' && stockMatch) {
+      withBody((data) => db.moveShelfStock(database, Number(stockMatch[1]), data, userId));
+    } else if (req.method === 'GET' && logMatch) {
+      jsonOk(res, { entries: db.listShelfLog(database, Number(logMatch[1]), 10) });
+    } else if (req.method === 'POST' && skuMatch) {
+      // { sku, perUnit }: perUnit 0 haengt die SKU ab.
+      withBody((data) => ({ item: db.setShelfSku(database, Number(skuMatch[1]), data.sku, data.perUnit) }));
+    } else if (req.method === 'POST' && undoMatch) {
+      run(() => ({ item: db.undoShelfMove(database, Number(undoMatch[1]), userId) }));
+    } else {
+      jsonErr(res, 404, 'Not found');
     }
     return;
   }

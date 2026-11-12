@@ -33,6 +33,7 @@ const checkZpl = (() => {
   const pieces = [
     SRC.match(/const ZPL_ALLOWED_COMMANDS = new Set\(\[[\s\S]*?\]\);/),
     SRC.match(/const ZPL_FONT_RE = .*;/),
+    SRC.match(/const ZPL_GFA_RE = .*;/),
     SRC.match(/const ZPL_MAX_CHARS = .*;/),
     SRC.match(/const ZPL_MAX_LABELS = .*;/),
     SRC.match(/function checkZpl\(zpl\) \{[\s\S]*?\n\}/)
@@ -81,7 +82,9 @@ describe('the labels this app prints still print', () => {
       for (const lit of src.match(/'[^'\n]*'/g) || []) {
         if (!lit.includes('^X') && !/\^[A-Z]{2}/.test(lit)) continue;
         for (const m of lit.matchAll(/[\^~]([A-Z][A-Z0-9])/g)) {
-          const probe = '^XA' + m[0] + '^XZ';
+          // ^GF only passes with its data (see the bitmap tests below), so it is
+          // probed as the smallest real one rather than as a bare command.
+          const probe = m[1] === 'GF' ? '^XA^FO0,0^GFA,2,2,1,FF00^FS^XZ' : '^XA' + m[0] + '^XZ';
           assert.equal(checkZpl(probe), null, file + ' emits ' + m[0] + ' but the allowlist rejects it');
         }
       }
@@ -125,6 +128,41 @@ describe('and the ones it does not', () => {
   it('catches a command hidden in what looks like field data', () => {
     // The printer does not know ^FD data from anything else; neither does this.
     assert.ok(checkZpl('^XA^FO0,0^FDharmless^JUS^FS^XZ'));
+  });
+});
+
+describe('a bitmap field', () => {
+  // The Regal label is drawn in the browser and sent as one ^GFA image, so the
+  // print is exactly the preview. Only the ASCII hex form passes.
+  const W = 400;
+  const H = 240;
+  const total = (W / 8) * H;
+  const label = '^XA^PW400^LL240^FO0,0^GFA,' + total + ',' + total + ',50,' + '0F'.repeat(total) + '^FS^PQ1^XZ';
+
+  it('accepts a whole 50 x 30 mm label as hex', () => {
+    assert.equal(checkZpl(label), null);
+  });
+
+  it('accepts several in one job', () => {
+    assert.equal(checkZpl(label + '\n' + label), null);
+  });
+
+  it('refuses the binary form, which could carry a bare ^ or ~', () => {
+    assert.match(checkZpl('^XA^FO0,0^GFB,2,2,1,ab^FS^XZ'), /\^GF/);
+  });
+
+  it('refuses counts that do not match the data', () => {
+    assert.ok(checkZpl('^XA^FO0,0^GFA,4,4,1,FF^FS^XZ'));
+    assert.ok(checkZpl('^XA^FO0,0^GFA,2,2,0,FFFF^FS^XZ'));
+  });
+
+  it('refuses anything that is not hex, or a command hidden in the data', () => {
+    assert.ok(checkZpl('^XA^FO0,0^GFA,2,2,1,FFZZ^FS^XZ'));
+    assert.ok(checkZpl('^XA^FO0,0^GFA,2,2,1,FF^JUS^FS^XZ'));
+  });
+
+  it('still checks what comes after the bitmap', () => {
+    assert.match(checkZpl('^XA^FO0,0^GFA,1,1,1,FF^FS^JUS^XZ'), /\^JU/);
   });
 });
 

@@ -3172,6 +3172,64 @@ const MIGRATIONS = [
       // die Sterilisierzeit den pH verschiebt. NULL heisst: nicht gemessen.
       addCol('batches', 'ph', 'REAL');
     }
+  },
+  {
+    version: 112,
+    description: 'Regal: fertige Ware als gezaehlte Artikel, mit Etikett und Verlauf',
+    fn(db) {
+      // Was fertig im Regal steht und verkauft wird, zaehlt das Team als eine Zahl
+      // je Artikel: kein Beutel hat ein eigenes Etikett, das Regalfach hat eins.
+      // Welche Artikel es gibt, legt das Team in der App an; der Code kennt keinen.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_items (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        stock      INTEGER NOT NULL DEFAULT 0,
+        active     INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        -- Bei diesem Stand oder darunter geht ein Alarm raus: nachproduzieren.
+        -- low_alerted merkt, dass er draussen ist, bis der Stand wieder drueber liegt.
+        min_stock   INTEGER NOT NULL DEFAULT 10,
+        low_alerted INTEGER NOT NULL DEFAULT 0,
+        created    TEXT NOT NULL,
+        updated    TEXT NOT NULL
+      )`);
+      // Jede Bewegung eine Zeile: rein (+), raus (-), gezaehlt (der Unterschied
+      // zum alten Stand), bestellt (order, ref = Bestellnummer). running ist der
+      // Stand danach, damit der Verlauf ihn zeigen kann, ohne nachzurechnen.
+      // undone markiert, was zurueckgenommen ist.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_log (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        time     TEXT NOT NULL,
+        item_id  INTEGER NOT NULL REFERENCES shelf_items(id) ON DELETE CASCADE,
+        kind     TEXT NOT NULL,
+        delta    INTEGER NOT NULL,
+        running  INTEGER NOT NULL,
+        undone   INTEGER NOT NULL DEFAULT 0,
+        ref      TEXT,
+        user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_shelf_log_item ON shelf_log(item_id, id)');
+      // Welche Shop-SKU aus welchem Fach geht, und wie viele Beutel ein Stueck
+      // davon sind (ein 3er-Pack nimmt drei). Kommt eine Bestellung mit dieser
+      // SKU in den Bestellungen-Hub (Billbee), geht der Bestand runter.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_item_skus (
+        sku      TEXT PRIMARY KEY COLLATE NOCASE,
+        item_id  INTEGER NOT NULL REFERENCES shelf_items(id) ON DELETE CASCADE,
+        per_unit INTEGER NOT NULL DEFAULT 1,
+        created  TEXT NOT NULL
+      )`);
+      // Was je Bestellung und SKU schon abgebucht ist. Bestellzeilen bekommen bei
+      // jedem Abgleich neue ids, die Bestellung nicht; daher dieser Schluessel.
+      // Gebucht wird nur der Unterschied: ein Abgleich, der dasselbe noch einmal
+      // bringt, bucht nichts, eine Stornierung bucht zurueck.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_order_booked (
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        sku      TEXT NOT NULL COLLATE NOCASE,
+        item_id  INTEGER NOT NULL REFERENCES shelf_items(id) ON DELETE CASCADE,
+        qty      INTEGER NOT NULL,
+        PRIMARY KEY (order_id, sku)
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3418,6 +3476,307 @@ function lookupBarcode(db, barcode) {
 
 function getAllBarcodes(db) {
   return db.prepare('SELECT barcode, entity_type, entity_id FROM barcodes ORDER BY barcode').all();
+}
+
+// ── Regal: fertige Ware, gezaehlt je Artikel ─────────────────
+// Ein Artikel ist ein Fach im Regal mit einer Zahl. Sein Etikett traegt eine
+// Nummer aus derselben Barcode-Liste wie Beutel und Kulturen (Typ 'shelf'), so
+// erkennt der Scanner es ohne eigenes Format. Fehler hier sind fuer die Person
+// gedacht, die tippt: sie sagen, was nicht geht und was hilft.
+const SHELF_NAME_MAX = 60;
+const SHELF_STEP_MAX = 10000;
+
+function _shelfRow(db, r) {
+  const bc = db.prepare("SELECT barcode FROM barcodes WHERE entity_type='shelf' AND entity_id=?").get(String(r.id));
+  const skus = db
+    .prepare('SELECT sku, per_unit AS perUnit FROM shelf_item_skus WHERE item_id=? ORDER BY sku COLLATE NOCASE')
+    .all(r.id);
+  return {
+    id: r.id,
+    name: r.name,
+    stock: r.stock,
+    minStock: r.min_stock,
+    active: r.active === 1,
+    sortOrder: r.sort_order,
+    barcode: bc ? bc.barcode : null,
+    skus,
+    updated: r.updated
+  };
+}
+
+function listShelfItems(db) {
+  return db
+    .prepare('SELECT * FROM shelf_items ORDER BY active DESC, sort_order, name COLLATE NOCASE, id')
+    .all()
+    .map((r) => _shelfRow(db, r));
+}
+
+function getShelfItem(db, id) {
+  const r = db.prepare('SELECT * FROM shelf_items WHERE id=?').get(Number(id));
+  return r ? _shelfRow(db, r) : null;
+}
+
+function _shelfName(name) {
+  const n = String(name == null ? '' : name)
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!n) throw new Error('Der Artikel braucht einen Namen.');
+  if (n.length > SHELF_NAME_MAX)
+    throw new Error('Der Name ist zu lang fürs Etikett. Höchstens ' + SHELF_NAME_MAX + ' Zeichen.');
+  return n;
+}
+
+function _shelfNameFrei(db, name, exceptId) {
+  const clash = db
+    .prepare('SELECT id FROM shelf_items WHERE active=1 AND lower(name)=lower(?) AND id<>?')
+    .get(name, exceptId || 0);
+  if (clash) throw new Error('„' + name + '“ steht schon im Regal. Nimm den vorhandenen Artikel.');
+}
+
+function createShelfItem(db, name) {
+  const n = _shelfName(name);
+  _shelfNameFrei(db, n, 0);
+  const now = new Date().toISOString();
+  let id;
+  _blockTx(db, () => {
+    const max = db.prepare('SELECT MAX(sort_order) AS m FROM shelf_items').get().m;
+    id = db
+      .prepare('INSERT INTO shelf_items(name, stock, active, sort_order, created, updated) VALUES(?,0,1,?,?,?)')
+      .run(n, (max == null ? 0 : max) + 1, now, now).lastInsertRowid;
+    assignBarcode(db, 'shelf', String(id));
+    incrementDataVersion(db);
+  });
+  return getShelfItem(db, id);
+}
+
+// Name aendern oder aus der Liste nehmen. Geloescht wird nicht: das Etikett
+// haengt vielleicht noch, und ein Scan soll sagen koennen, was es war.
+function updateShelfItem(db, id, patch) {
+  const cur = db.prepare('SELECT * FROM shelf_items WHERE id=?').get(Number(id));
+  if (!cur) throw new Error('Den Artikel gibt es nicht mehr. Lade die Seite neu.');
+  const name = patch.name !== undefined ? _shelfName(patch.name) : cur.name;
+  const active = patch.active !== undefined ? (patch.active ? 1 : 0) : cur.active;
+  let min = cur.min_stock;
+  if (patch.minStock !== undefined) {
+    min = Number(patch.minStock);
+    if (!Number.isInteger(min) || min < 0 || min > SHELF_STEP_MAX)
+      throw new Error('Der Alarm-Stand ist eine ganze Zahl ab 0.');
+  }
+  if (active) _shelfNameFrei(db, name, cur.id);
+  db.prepare('UPDATE shelf_items SET name=?, active=?, min_stock=?, updated=? WHERE id=?').run(
+    name,
+    active,
+    min,
+    new Date().toISOString(),
+    cur.id
+  );
+  incrementDataVersion(db);
+  return getShelfItem(db, cur.id);
+}
+
+// Rein, raus oder gezaehlt. { delta: 5 } legt fuenf dazu, { delta: -2 } nimmt
+// zwei raus, { count: 12 } heisst "es sind jetzt zwoelf". Raus darf nicht mehr
+// nehmen, als da ist: dann stimmt die Zahl schon nicht, und das soll gezaehlt
+// werden statt stumm auf 0 zu fallen.
+function moveShelfStock(db, id, change, userId) {
+  const cur = db.prepare('SELECT * FROM shelf_items WHERE id=?').get(Number(id));
+  if (!cur) throw new Error('Den Artikel gibt es nicht mehr. Lade die Seite neu.');
+  if (!cur.active) throw new Error('„' + cur.name + '“ ist aus der Regal-Liste genommen. Erst wieder aufnehmen.');
+  let kind, delta;
+  if (change && change.count !== undefined && change.count !== null && change.count !== '') {
+    const n = Number(change.count);
+    if (!Number.isInteger(n) || n < 0 || n > SHELF_STEP_MAX) throw new Error('Der Bestand ist eine ganze Zahl ab 0.');
+    kind = 'count';
+    delta = n - cur.stock;
+  } else {
+    const d = Number(change && change.delta);
+    if (!Number.isInteger(d) || d === 0 || Math.abs(d) > SHELF_STEP_MAX)
+      throw new Error('Wie viele? Eine ganze Zahl größer als 0.');
+    if (cur.stock + d < 0)
+      throw new Error(
+        'Es sind nur ' + cur.stock + ' da, ' + -d + ' können nicht raus. Zähle das Fach und trag den Bestand ein.'
+      );
+    kind = d > 0 ? 'in' : 'out';
+    delta = d;
+  }
+  const running = cur.stock + delta;
+  const now = new Date().toISOString();
+  let logId;
+  _blockTx(db, () => {
+    db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?').run(running, now, cur.id);
+    logId = db
+      .prepare('INSERT INTO shelf_log(time, item_id, kind, delta, running, user_id) VALUES(?,?,?,?,?,?)')
+      .run(now, cur.id, kind, delta, running, userId || null).lastInsertRowid;
+    incrementDataVersion(db);
+  });
+  return { item: getShelfItem(db, cur.id), logId: Number(logId) };
+}
+
+// Rueckgaengig: die Bewegung wird umgekehrt gebucht und als zurueckgenommen
+// markiert. Rein, Raus und Bestellungen zaehlen nur dazu oder ab, ihre
+// Reihenfolge ist egal; eine kann also auch zurueck, wenn danach eine
+// Bestellung kam. Nach einem Zaehlen nicht mehr: das Zaehlen hat die Zahl
+// gesetzt, und sie stumm zu verschieben waere falsch.
+function undoShelfMove(db, logId, userId) {
+  const row = db.prepare('SELECT * FROM shelf_log WHERE id=?').get(Number(logId));
+  if (!row || row.kind === 'undo') throw new Error('Diese Buchung gibt es nicht.');
+  if (row.kind === 'order')
+    throw new Error('Eine Bestellung nimmt die App selbst zurück, wenn sie storniert wird. Sonst: Fach zählen.');
+  if (row.undone) throw new Error('Das ist schon zurückgenommen.');
+  const later = db
+    .prepare("SELECT id FROM shelf_log WHERE item_id=? AND id>? AND undone=0 AND kind='count' LIMIT 1")
+    .get(row.item_id, row.id);
+  if (later) throw new Error('Danach wurde schon gezählt. Zähle das Fach und trag den Bestand ein.');
+  const cur = db.prepare('SELECT * FROM shelf_items WHERE id=?').get(row.item_id);
+  const running = cur.stock - row.delta;
+  if (running < 0) throw new Error('Rückgängig ginge unter 0. Zähle das Fach und trag den Bestand ein.');
+  const now = new Date().toISOString();
+  _blockTx(db, () => {
+    db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?').run(running, now, cur.id);
+    db.prepare('UPDATE shelf_log SET undone=1 WHERE id=?').run(row.id);
+    db.prepare(
+      "INSERT INTO shelf_log(time, item_id, kind, delta, running, user_id, undone) VALUES(?,?,'undo',?,?,?,1)"
+    ).run(now, cur.id, -row.delta, running, userId || null);
+    incrementDataVersion(db);
+  });
+  return getShelfItem(db, cur.id);
+}
+
+function listShelfLog(db, itemId, limit) {
+  return db
+    .prepare(
+      `SELECT l.id, l.time, l.kind, l.delta, l.running, l.undone, l.ref, u.username
+         FROM shelf_log l LEFT JOIN users u ON u.id = l.user_id
+        WHERE l.item_id=? AND l.kind<>'undo' ORDER BY l.id DESC LIMIT ?`
+    )
+    .all(Number(itemId), Math.min(Math.max(Number(limit) || 10, 1), 100))
+    .map((r) => ({ ...r, undone: r.undone === 1 }));
+}
+
+// Eine Shop-SKU an ein Fach haengen, oder abhaengen (perUnit 0 / null).
+// Bestellungen, die vor dem Anhaengen kamen, bucht der Abgleich nicht nach:
+// sie sind laengst gepackt, und die Zahl im Regal war da schon gezaehlt.
+function setShelfSku(db, itemId, sku, perUnit) {
+  const item = db.prepare('SELECT id FROM shelf_items WHERE id=?').get(Number(itemId));
+  if (!item) throw new Error('Den Artikel gibt es nicht mehr. Lade die Seite neu.');
+  const s = String(sku == null ? '' : sku).trim();
+  if (!s || s.length > 80 || /\s/.test(s)) throw new Error('Die SKU ist ein Wort ohne Leerzeichen, wie im Shop.');
+  if (perUnit === null || perUnit === 0 || perUnit === '0') {
+    db.prepare('DELETE FROM shelf_item_skus WHERE sku=? AND item_id=?').run(s, item.id);
+    incrementDataVersion(db);
+    return getShelfItem(db, item.id);
+  }
+  const n = perUnit === undefined || perUnit === '' ? 1 : Number(perUnit);
+  if (!Number.isInteger(n) || n < 1 || n > 1000) throw new Error('Beutel je Stück ist eine ganze Zahl ab 1.');
+  const other = db.prepare('SELECT item_id FROM shelf_item_skus WHERE sku=?').get(s);
+  if (other && other.item_id !== item.id) {
+    const o = db.prepare('SELECT name FROM shelf_items WHERE id=?').get(other.item_id);
+    throw new Error('Die SKU ' + s + ' hängt schon an „' + (o ? o.name : '?') + '“. Dort erst abhängen.');
+  }
+  if (other) db.prepare('UPDATE shelf_item_skus SET per_unit=? WHERE sku=?').run(n, s);
+  else
+    db.prepare('INSERT INTO shelf_item_skus(sku, item_id, per_unit, created) VALUES(?,?,?,?)').run(
+      s,
+      item.id,
+      n,
+      new Date().toISOString()
+    );
+  incrementDataVersion(db);
+  return getShelfItem(db, item.id);
+}
+
+// Bestellungen aus dem Bestellungen-Hub (Billbee) gegen das Regal buchen.
+// Je Bestellung und SKU wird nur der Unterschied zum schon Gebuchten gebucht:
+// neu bestellt nimmt raus, storniert legt zurueck, ein zweiter Abgleich mit
+// derselben Bestellung tut nichts. Der Bestand darf dabei unter 0 gehen: dann
+// ist mehr verkauft als da war, und das soll man sehen, nicht wegrunden.
+// Gibt die Zahl der gebuchten Zeilen zurueck.
+function syncShelfOrders(db) {
+  const maps = db.prepare('SELECT sku, item_id, per_unit, created FROM shelf_item_skus').all();
+  if (!maps.length && !db.prepare('SELECT 1 FROM shelf_order_booked LIMIT 1').get()) return 0;
+  const bySku = new Map(maps.map((m) => [m.sku.toLowerCase(), m]));
+  // Was je Bestellung und SKU gebucht sein soll: alles, was in Bestellungen mit
+  // einer zugeordneten SKU steht, und alles, was schon gebucht ist (vielleicht
+  // ist die Zeile oder die Zuordnung inzwischen weg).
+  const ordered = db
+    .prepare(
+      `SELECT o.id AS orderId, o.channel_order_id AS ref, o.status, o.imported, i.channel_sku AS sku, SUM(i.qty) AS n
+         FROM order_items i JOIN orders o ON o.id = i.order_id
+        WHERE i.qty > 0 AND i.channel_sku IS NOT NULL AND i.channel_sku <> ''
+          AND lower(i.channel_sku) IN (SELECT lower(sku) FROM shelf_item_skus)
+        GROUP BY o.id, lower(i.channel_sku)`
+    )
+    .all();
+  const booked = db.prepare('SELECT order_id, sku, item_id, qty FROM shelf_order_booked').all();
+  const key = (orderId, sku) => orderId + '\u0000' + String(sku).toLowerCase();
+  const plan = new Map();
+  for (const b of booked) plan.set(key(b.order_id, b.sku), { orderId: b.order_id, sku: b.sku, booked: b, want: null });
+  for (const r of ordered) {
+    const m = bySku.get(r.sku.toLowerCase());
+    const k = key(r.orderId, r.sku);
+    const p = plan.get(k) || { orderId: r.orderId, sku: r.sku, booked: null };
+    // Vor dem Anhaengen der SKU gekommen und nie gebucht: nicht nachbuchen.
+    if (!p.booked && String(r.imported) < String(m.created)) continue;
+    p.want = { itemId: m.item_id, qty: r.status === 'cancelled' ? 0 : r.n * m.per_unit };
+    p.ref = r.ref;
+    plan.set(k, p);
+  }
+  const refOf = db.prepare('SELECT channel_order_id AS ref FROM orders WHERE id=?');
+  const getItem = db.prepare('SELECT stock FROM shelf_items WHERE id=?');
+  const setStock = db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?');
+  const logIns = db.prepare(
+    "INSERT INTO shelf_log(time, item_id, kind, delta, running, ref) VALUES(?,?,'order',?,?,?)"
+  );
+  const now = new Date().toISOString();
+  let moves = 0;
+  const book = (itemId, delta, ref) => {
+    if (!delta) return;
+    const cur = getItem.get(itemId);
+    if (!cur) return;
+    const running = cur.stock + delta;
+    setStock.run(running, now, itemId);
+    logIns.run(now, itemId, delta, running, ref || null);
+    moves++;
+  };
+  _blockTx(db, () => {
+    for (const p of plan.values()) {
+      const ref = p.ref || (refOf.get(p.orderId) || {}).ref;
+      const want = p.want || { itemId: p.booked.item_id, qty: 0 };
+      if (p.booked && p.booked.item_id !== want.itemId) {
+        // Die SKU haengt jetzt an einem anderen Fach: dem alten zurueck, dem neuen ab.
+        book(p.booked.item_id, p.booked.qty, ref);
+        book(want.itemId, -want.qty, ref);
+      } else {
+        book(want.itemId, (p.booked ? p.booked.qty : 0) - want.qty, ref);
+      }
+      if (want.qty > 0)
+        db.prepare(
+          `INSERT INTO shelf_order_booked(order_id, sku, item_id, qty) VALUES(?,?,?,?)
+           ON CONFLICT(order_id, sku) DO UPDATE SET item_id=excluded.item_id, qty=excluded.qty`
+        ).run(p.orderId, p.sku, want.itemId, want.qty);
+      else if (p.booked) db.prepare('DELETE FROM shelf_order_booked WHERE order_id=? AND sku=?').run(p.orderId, p.sku);
+    }
+    if (moves) incrementDataVersion(db);
+  });
+  return moves;
+}
+
+// Welche Faecher gerade auf ihren Alarm-Stand gefallen sind. Jedes nur einmal,
+// bis es wieder darueber liegt; dann ist der Alarm wieder scharf.
+function shelfLowAlerts(db) {
+  const out = [];
+  _blockTx(db, () => {
+    for (const r of db.prepare('SELECT * FROM shelf_items').all()) {
+      const low = r.active === 1 && r.stock <= r.min_stock;
+      if (low && !r.low_alerted) {
+        db.prepare('UPDATE shelf_items SET low_alerted=1 WHERE id=?').run(r.id);
+        out.push({ id: r.id, name: r.name, stock: r.stock, minStock: r.min_stock });
+      } else if (!low && r.low_alerted) {
+        db.prepare('UPDATE shelf_items SET low_alerted=0 WHERE id=?').run(r.id);
+      }
+    }
+  });
+  return out;
 }
 
 // ── Read All (assembles the JSON shape the client expects) ───
@@ -3775,6 +4134,9 @@ function readAll(db, opts = {}) {
     suppliers,
     pickupLocations,
     barcodes,
+    // Was fertig im Regal steht: eine Zahl je Artikel. Der Scanner braucht sie
+    // sofort, wenn ein Regal-Etikett gelesen wird.
+    shelf: listShelfItems(db),
     experiments: listExperiments(db),
     workPackages: listWorkPackages(db),
     projectNotes: listProjectNotes(db),
@@ -14547,6 +14909,16 @@ module.exports = {
   assignBarcodes,
   lookupBarcode,
   getAllBarcodes,
+  listShelfItems,
+  getShelfItem,
+  createShelfItem,
+  updateShelfItem,
+  moveShelfStock,
+  undoShelfMove,
+  listShelfLog,
+  setShelfSku,
+  syncShelfOrders,
+  shelfLowAlerts,
   snapshotDailyKPIs,
   getKpiSnapshots,
   getContaminationReport,
