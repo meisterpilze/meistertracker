@@ -18919,6 +18919,12 @@ const PRB_ARTEN = ['lc', 'aerial', 'other'];
 const PRB_PRAEFIX = { lc: 'RLC', aerial: 'RAM', other: 'RS' };
 const PRB_ZEILEN = 10;
 const PRB_EINHEITEN = ['g', 'g/L', 'mL', 'L', '%', 'Stk'];
+// Die Namen der Arten. 'other' heisst im Woerterbuch 'misc': ein Schluessel auf
+// .other gilt dort als Mehrzahlform.
+const PRB_ART_TEXT = { lc: 'prb.kind.lc', aerial: 'prb.kind.aerial', other: 'prb.kind.misc' };
+function prbArtName(kind) {
+  return t(PRB_ART_TEXT[kind] || 'prb.kind.misc');
+}
 let prbOffen = null; // die offene Probe (id) oder null: die Liste
 let prbNeu = null; // das Formular "Neue Probe", mit dem, was vorbelegt ist
 let prbSuche = '';
@@ -19051,7 +19057,7 @@ function prbListenzeile(p) {
   const weitergaben = prbWeitergaben(p);
   const ohne = weitergaben.filter((w) => !w.result).length;
   const eltern = p.parentId != null ? prbById(p.parentId) : null;
-  const meta = [t('prb.kind.' + p.kind), eltern ? t('prb.fromCode', { code: eltern.code }) : '', p.species]
+  const meta = [prbArtName(p.kind), eltern ? t('prb.fromCode', { code: eltern.code }) : '', p.species]
     .filter(Boolean)
     .join(' · ');
   return (
@@ -19077,7 +19083,7 @@ function prbListe() {
     .map(
       (a) =>
         `<button type="button" class="prb-chip${prbArt === a ? ' on' : ''}" data-prb-art="${a}" ` +
-        `aria-pressed="${prbArt === a}">${esc(a ? t('prb.kind.' + a) : t('prb.all'))}</button>`
+        `aria-pressed="${prbArt === a}">${esc(a ? prbArtName(a) : t('prb.all'))}</button>`
     )
     .join('');
   return (
@@ -19164,7 +19170,7 @@ function prbRezeptLesen(box) {
 function prbArtAuswahl(wert, attr) {
   return (
     `<select ${attr}>` +
-    PRB_ARTEN.map((a) => `<option value="${a}"${a === wert ? ' selected' : ''}>${esc(t('prb.kind.' + a))}</option>`).join(
+    PRB_ARTEN.map((a) => `<option value="${a}"${a === wert ? ' selected' : ''}>${esc(prbArtName(a))}</option>`).join(
       ''
     ) +
     '</select>'
@@ -19298,7 +19304,7 @@ function prbFormular() {
   const chips = PRB_ARTEN.map(
     (a) =>
       `<button type="button" class="prb-chip${f.kind === a ? ' on' : ''}" data-prb-neuart="${a}" ` +
-      `aria-pressed="${f.kind === a}">${esc(t('prb.kind.' + a))}</button>`
+      `aria-pressed="${f.kind === a}">${esc(prbArtName(a))}</button>`
   ).join('');
   const mitRezept = prbAktiv().filter((x) => x.recipe.length);
   return (
@@ -19612,7 +19618,7 @@ function prbVerlaufWert(feld, wert) {
     const v = pjExp(Number(wert));
     return v ? v.code : '#' + wert;
   }
-  if (feld === 'kind') return t('prb.kind.' + wert);
+  if (feld === 'kind') return prbArtName(wert);
   if (feld === 'made' || feld === 'given' || feld === 'resultDate') return prbTag(wert);
   return wert;
 }
@@ -20337,7 +20343,6 @@ function pjFokus(sel) {
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
 // eine Zeile Nutzen und hundert Anfragen.
 function pjChange(e) {
-  if (prbChange(e)) return;
   if (e.target.dataset && e.target.dataset.pjDocFor) {
     const datei = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -21170,7 +21175,6 @@ function pjClick(e) {
     return;
   }
   if (pjVersuchClick(e)) return;
-  if (prbClick(e)) return;
   if (pjNotizClick(e)) return;
   const importieren = e.target.closest('[data-pj-doc-import]');
   if (importieren) {
@@ -33232,6 +33236,10 @@ function initEventListeners() {
   $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));
   $('p-proj').addEventListener('click', pjClick);
   $('p-proj').addEventListener('change', pjChange);
+  // Die Proben haben eigene Zuhoerer: ihr Feld liegt in der Seite, pjClick
+  // und pjChange kennen es nicht.
+  $('pj-proben').addEventListener('click', prbClick);
+  $('pj-proben').addEventListener('change', prbChange);
   $('p-proj').addEventListener('toggle', pjToggle, true);
   const pickupsSchalter = $('pickups-past-btn');
   if (pickupsSchalter)

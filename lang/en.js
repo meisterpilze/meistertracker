@@ -50,7 +50,7 @@ window.LANG['en'] = {
   'prb.kind': 'Type',
   'prb.kind.lc': 'Liquid culture',
   'prb.kind.aerial': 'Aerial',
-  'prb.kind.other': 'Other',
+  'prb.kind.misc': 'Other',
   'prb.none': 'No samples yet. Create the first one with “New sample”.',
   'prb.noMatch': 'No sample matches the search.',
   'prb.notFound': 'No sample “{q}” found. Check the code or reload the list.',

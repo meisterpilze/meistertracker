@@ -269,7 +269,7 @@ describe('Proben in der App', () => {
       schluessel.add(m[1] + '.one');
       schluessel.add(m[1] + '.other');
     }
-    for (const a of ['lc', 'aerial', 'other']) schluessel.add('prb.kind.' + a);
+    for (const a of ['lc', 'aerial', 'misc']) schluessel.add('prb.kind.' + a);
     for (const e of ['sample', 'handoff'])
       for (const a of ['create', 'remove', 'restore']) schluessel.add(`prb.hist.${e}.${a}`);
     for (const f of ['code', 'kind', 'title', 'made', 'species', 'parentId', 'source', 'experimentId', 'recipe']) {

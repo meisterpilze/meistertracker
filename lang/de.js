@@ -50,7 +50,7 @@ window.LANG['de'] = {
   'prb.kind': 'Art',
   'prb.kind.lc': 'Flüssigkultur',
   'prb.kind.aerial': 'Aerial',
-  'prb.kind.other': 'Sonstige',
+  'prb.kind.misc': 'Sonstige',
   'prb.none': 'Noch keine Probe. Leg die erste mit „Neue Probe“ an.',
   'prb.noMatch': 'Keine Probe passt zur Suche.',
   'prb.notFound': 'Keine Probe „{q}“ gefunden. Code prüfen oder Liste neu laden.',

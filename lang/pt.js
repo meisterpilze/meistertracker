@@ -49,7 +49,7 @@ window.LANG['pt'] = {
   'prb.kind': 'Tipo',
   'prb.kind.lc': 'Cultura líquida',
   'prb.kind.aerial': 'Aéreo',
-  'prb.kind.other': 'Outra',
+  'prb.kind.misc': 'Outra',
   'prb.none': 'Ainda não há amostras. Crie a primeira com “Nova amostra”.',
   'prb.noMatch': 'Nenhuma amostra corresponde à pesquisa.',
   'prb.notFound': 'Nenhuma amostra “{q}” encontrada. Verifique o código ou recarregue a lista.',
