@@ -483,7 +483,8 @@ describe('Billbee: orders in', () => {
     State: 3,
     CreatedAt: '2026-08-19T08:00:00Z',
     Currency: 'EUR',
-    TotalCost: 24.9,
+    // The whole order: 24.90 of items plus 4.90 shipping.
+    TotalCost: 29.8,
     ShippingCost: 4.9,
     ShipWeightKg: 0.75,
     ShippingAddress: {
@@ -509,7 +510,7 @@ describe('Billbee: orders in', () => {
     assert.equal(o.status, 'new');
     assert.equal(o.shipCountry, 'DE');
     assert.equal(o.shipWeightG, 750);
-    assert.equal(o.totalAmount, 29.8, 'TotalCost excludes shipping — it is added back, and rounded');
+    assert.equal(o.totalAmount, 29.8, 'TotalCost already includes shipping — it is not added a second time');
     assert.equal(o.items[0].channelSku, 'MUSTER-250');
     assert.equal(o.items[0].unitPrice, 12.45, 'position total ÷ quantity');
     assert.equal(o.raw.ShopName, 'Shopify', 'which shop it came from survives');
@@ -620,18 +621,30 @@ describe('Billbee: orders in', () => {
   });
 
   it('believes a paid order over the arithmetic', () => {
-    // TotalCost is documented as excluding shipping, and that reading cannot be
-    // checked from here. What the buyer actually paid can be.
+    // What the buyer actually paid is the one figure no reading of the API can get wrong.
     const paid = channels._normalizeBillbee({
       BillBeeOrderId: 3,
-      TotalCost: 24.9,
+      TotalCost: 29.8,
       ShippingCost: 4.9,
       PayedAt: '2026-08-19T09:00:00Z',
-      PaidAmount: 24.9
+      PaidAmount: 27.5
     });
-    assert.equal(paid.totalAmount, 24.9, 'PaidAmount is right whichever way the documentation is meant');
-    const unpaid = channels._normalizeBillbee({ BillBeeOrderId: 4, TotalCost: 24.9, ShippingCost: 4.9 });
-    assert.equal(unpaid.totalAmount, 29.8, 'nothing paid yet — fall back to the documented sum');
+    assert.equal(paid.totalAmount, 27.5, 'PaidAmount wins when Billbee sends it');
+    const unpaid = channels._normalizeBillbee({ BillBeeOrderId: 4, TotalCost: 29.8, ShippingCost: 4.9 });
+    assert.equal(unpaid.totalAmount, 29.8, 'nothing paid yet: TotalCost, shipping already inside');
+  });
+
+  it('never counts the shipping twice', () => {
+    // The case that was wrong: paid, but without PaidAmount (how Shopify orders
+    // arrive through Billbee). Items 20.00, shipping 5.50, the buyer paid 25.50.
+    const o = channels._normalizeBillbee({
+      BillBeeOrderId: 5,
+      TotalCost: 25.5,
+      ShippingCost: 5.5,
+      PayedAt: '2026-11-08T22:46:17Z',
+      OrderItems: [{ Quantity: 2, TotalPrice: 20, Product: { SKU: 'MUSTER-250', Title: 'Muster 250 g' } }]
+    });
+    assert.equal(o.totalAmount, 25.5);
   });
 
   it('reads shipped and cancelled from the timestamp as well as the state id', () => {
