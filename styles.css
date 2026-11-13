@@ -6802,20 +6802,43 @@ body:has(#m-camscan.open) .update-bar {
   flex: 1;
   overflow-y: auto;
 }
+/* Eine Meldung und daneben ihr Erledigt-Knopf. */
+.notif-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.notif-row:last-child {
+  border-bottom: none;
+}
 .notif-item {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 10px 14px;
   border: none;
   background: transparent;
   text-align: left;
   font-family: inherit;
   cursor: pointer;
-  border-bottom: 1px solid var(--c-border-light);
   color: var(--c-text);
 }
-.notif-item:last-child {
-  border-bottom: none;
+.notif-done {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-left: 1px solid var(--c-border-light);
+  background: transparent;
+  color: var(--c-primary);
+  font-family: inherit;
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 600;
+  cursor: pointer;
+}
+.notif-done:hover {
+  background: var(--c-border-light);
 }
 .notif-item:hover {
   background: var(--c-border-light);

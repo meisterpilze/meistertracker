@@ -2499,6 +2499,10 @@ window.LANG['de'] = {
   'notifications.title': 'Benachrichtigungen',
   'notifications.empty': 'Keine Benachrichtigungen',
   'notifications.markAllRead': 'Alle als gelesen markieren',
+  'notifications.done': 'Erledigt',
+  'notifications.doneTitle': 'Erledigt: aus der Liste nehmen',
+  'notifications.doneToast': 'Meldung erledigt',
+  'notifications.saveFailed': 'Nicht gespeichert: der Server ist nicht erreichbar. Prüfe das WLAN und tippe noch einmal.',
   // Alerts
   'alert.filterShowAll': 'Alle anzeigen',
   'alert.filterDueToday': 'Heute fällig oder braucht Aufmerksamkeit',

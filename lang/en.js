@@ -2476,6 +2476,10 @@ window.LANG['en'] = {
   'notifications.title': 'Notifications',
   'notifications.empty': 'No notifications',
   'notifications.markAllRead': 'Mark all as read',
+  'notifications.done': 'Done',
+  'notifications.doneTitle': 'Done: remove from the list',
+  'notifications.doneToast': 'Notification cleared',
+  'notifications.saveFailed': 'Not saved: the server cannot be reached. Check the Wi-Fi and tap again.',
   // Alerts
   'alert.filterShowAll': 'Show all',
   'alert.filterDueToday': 'Due today or needs attention',
