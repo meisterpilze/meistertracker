@@ -355,6 +355,7 @@ let mushroomStrains = [],
   manualTasks = [],
   experiments = [],
   workPackages = [], // Arbeitspakete des Vorhabens, siehe ARBEITSPAKETE
+  researchSamples = [], // Forschungsproben samt Weitergaben, siehe PROBEN
   projectNotes = [],
   projectDocs = null, // Vorhaben-Texte, erst beim Öffnen eines Reiters geladen
   projectDocsStamp = null,
@@ -655,6 +656,7 @@ function applyData(d) {
   manualTasks = d.manualTasks || [];
   experiments = d.experiments || [];
   workPackages = d.workPackages || [];
+  researchSamples = d.researchSamples || [];
   projectNotes = d.projectNotes || [];
   // Die Vorhaben-Texte kommen nicht mit, nur ihre Marke. Hat jemand sie ersetzt,
   // gilt der geladene Stand als veraltet und wird beim nächsten Öffnen eines
@@ -1609,6 +1611,7 @@ function openStab(page, sub) {
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
   if (page === 'proj') {
     if (sub === 'versuch') renderVersuch();
+    else if (sub === 'proben') renderProben();
     else renderProjekte(sub);
   }
   // A phone shows one sub-page at a time, with a back row where the strip was.
@@ -18814,6 +18817,10 @@ function pjVersuchStand() {
 function pjRefresh() {
   const offen = document.querySelector('#p-proj .sp.active > div');
   if (!offen) return;
+  if (offen.id === 'pj-proben') {
+    prbRefresh();
+    return;
+  }
   const versuch = offen.id === 'pj-versuch';
   const leer = !offen.innerHTML;
   const andereSprache = offen.dataset.lang !== currentLang;
@@ -18894,6 +18901,890 @@ async function pjPrintRun(id) {
     printedFb(t('exp.printed', { code: r.code }));
   }
 }
+// ── PROBEN (Forschung) ──────────────────────────────────────
+//
+// Was aus dem Labor an einen Partner geht: eine Flüssigkultur, eine
+// Aerial-Wanne oder etwas anderes. Meldet sich ein Partner zu "RLC-003", tippt
+// oder scannt man den Code und sieht, was das war: Rezept, Bedingungen, woraus
+// sie gemacht wurde und wer wann wie viel bekommen hat.
+//
+// Drei Ansichten in einem Reiter: die Liste mit Suche, eine Probe, und das
+// Formular "Neue Probe". Das Formular endet im Etikett, wie jedes Anlegen in
+// dieser App: keine Probe geht ohne ihren Code aus dem Labor.
+//
+// Das Rezept hat zehn freie Zeilen. Die Zutatenfelder schlagen vor, was schon
+// benutzt wurde; so werden die Namen mit der Zeit gleich, ohne feste Liste.
+// Inhalt (Rezepte, Partner) steht nur in der Datenbank, nie hier.
+const PRB_ARTEN = ['lc', 'aerial', 'other'];
+const PRB_PRAEFIX = { lc: 'RLC', aerial: 'RAM', other: 'RS' };
+const PRB_ZEILEN = 10;
+const PRB_EINHEITEN = ['g', 'g/L', 'mL', 'L', '%', 'Stk'];
+let prbOffen = null; // die offene Probe (id) oder null: die Liste
+let prbNeu = null; // das Formular "Neue Probe", mit dem, was vorbelegt ist
+let prbSuche = '';
+let prbArt = ''; // Filter der Liste: '' alle, sonst eine Art
+let prbGezeigt = null; // prbStand() beim letzten Zeichnen
+let prbGezeichnetFuer; // prbOffen beim letzten Zeichnen
+let prbVerlaufOffen = null;
+let prbUnterwegs = false;
+// Was im Weitergabe-Formular angefangen ist, übersteht das Neuzeichnen.
+const PRB_ANGEFANGEN = ['prb-w-partner', 'prb-w-given', 'prb-w-amount', 'prb-w-purpose'];
+
+function prbById(id) {
+  return researchSamples.find((p) => p.id === id) || null;
+}
+function prbAktiv() {
+  return researchSamples.filter((p) => !p.removedAt);
+}
+function prbWeitergaben(p) {
+  return p.handoffs.filter((w) => !w.removedAt);
+}
+function prbStand() {
+  return JSON.stringify([prbOffen, researchSamples, experiments.map((v) => [v.id, v.code])]);
+}
+// Der nächste freie Code einer Art, wie der Server ihn vergäbe. Er steht als
+// Platzhalter im Feld; wer nichts einträgt, bekommt ihn.
+function prbNaechsterCode(kind) {
+  const praefix = PRB_PRAEFIX[kind] || PRB_PRAEFIX.other;
+  const muster = new RegExp('^' + praefix + '-(\\d+)$', 'i');
+  let max = 0;
+  for (const p of researchSamples) {
+    const m = muster.exec(p.code);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return praefix + '-' + String(max + 1).padStart(3, '0');
+}
+function prbFehler(r) {
+  const text = String((r && r.error) || '');
+  if (text.startsWith('Probe: ')) toast(text.slice(7), 'err');
+  else toast(t('proj.saveErr', { err: text }), 'err');
+}
+function prbTag(tag) {
+  return tag ? fmtDt(parseDateStr(tag)) : '—';
+}
+function prbZahl(wert) {
+  return wert === '' || wert == null ? null : Number(wert);
+}
+
+// Die Vorfahren einer Probe, die älteste zuerst.
+function prbKette(p) {
+  const kette = [];
+  const gesehen = new Set([p.id]);
+  let x = p.parentId != null ? prbById(p.parentId) : null;
+  while (x && !gesehen.has(x.id)) {
+    gesehen.add(x.id);
+    kette.unshift(x);
+    x = x.parentId != null ? prbById(x.parentId) : null;
+  }
+  return kette;
+}
+function prbKinder(p) {
+  return prbAktiv().filter((x) => x.parentId === p.id);
+}
+// Eine Probe und alle, die aus ihr gemacht wurden: keine davon darf ihre
+// Ausgangsprobe werden.
+function prbNachfahren(id) {
+  const aus = new Set([id]);
+  let mehr = true;
+  while (mehr) {
+    mehr = false;
+    for (const x of researchSamples) {
+      if (x.parentId != null && aus.has(x.parentId) && !aus.has(x.id)) {
+        aus.add(x.id);
+        mehr = true;
+      }
+    }
+  }
+  return aus;
+}
+function prbLink(x) {
+  return `<button type="button" class="prb-link" data-prb-open="${x.id}">${esc(x.code)}</button>`;
+}
+
+// Vorschläge für die freien Felder: was schon benutzt wurde.
+function prbDatalists() {
+  const zutaten = new Set();
+  const einheiten = new Set(PRB_EINHEITEN);
+  const partner = new Set();
+  for (const p of researchSamples) {
+    for (const z of p.recipe) {
+      if (z.name) zutaten.add(z.name);
+      if (z.unit) einheiten.add(z.unit);
+    }
+    for (const w of p.handoffs) if (w.partner) partner.add(w.partner);
+  }
+  const arten = new Set(mushroomStrains.map((m) => m.name).filter(Boolean));
+  const liste = (id, werte) =>
+    `<datalist id="${id}">` +
+    [...werte]
+      .sort((a, b) => a.localeCompare(b))
+      .map((w) => `<option value="${esc(w)}">`)
+      .join('') +
+    '</datalist>';
+  return (
+    liste('prb-zutaten', zutaten) +
+    liste('prb-einheiten', einheiten) +
+    liste('prb-partner', partner) +
+    liste('prb-pilzarten', arten)
+  );
+}
+
+// ── Liste ──
+function prbTreffer(p, q) {
+  if (!q) return true;
+  const teile = [
+    p.code,
+    p.title,
+    p.species,
+    p.source,
+    p.barcode,
+    ...p.recipe.map((z) => z.name),
+    ...prbWeitergaben(p).map((w) => w.partner)
+  ];
+  return teile.some((x) => x != null && String(x).toLowerCase().includes(q));
+}
+function prbGefiltert() {
+  const q = prbSuche.trim().toLowerCase();
+  return prbAktiv().filter((p) => (!prbArt || p.kind === prbArt) && prbTreffer(p, q));
+}
+function prbListenzeile(p) {
+  const weitergaben = prbWeitergaben(p);
+  const ohne = weitergaben.filter((w) => !w.result).length;
+  const eltern = p.parentId != null ? prbById(p.parentId) : null;
+  const meta = [t('prb.kind.' + p.kind), eltern ? t('prb.fromCode', { code: eltern.code }) : '', p.species]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    `<button type="button" class="pj-liste-zeile" data-prb-open="${p.id}">` +
+    `<span class="pj-liste-code">${esc(p.code)}</span>` +
+    `<span class="pj-liste-mitte"><span class="pj-liste-titel">${esc(p.title || '—')}</span>` +
+    `<span class="pj-liste-meta">${esc(meta)}</span></span>` +
+    '<span class="pj-liste-rechts">' +
+    `<span class="pj-liste-meta">${esc(weitergaben.length ? tp('prb.given', weitergaben.length) : t('prb.notGiven'))}</span>` +
+    (ohne ? `<span class="prb-offen">${esc(tp('prb.noFeedback', ohne))}</span>` : '') +
+    '</span><span class="pj-liste-pfeil" aria-hidden="true">›</span></button>'
+  );
+}
+function prbZeilen() {
+  const liste = prbGefiltert();
+  if (!liste.length) {
+    return `<p class="pj-empty">${esc(prbAktiv().length ? t('prb.noMatch') : t('prb.none'))}</p>`;
+  }
+  return '<div class="pj-liste">' + liste.map(prbListenzeile).join('') + '</div>';
+}
+function prbListe() {
+  const chips = ['', ...PRB_ARTEN]
+    .map(
+      (a) =>
+        `<button type="button" class="prb-chip${prbArt === a ? ' on' : ''}" data-prb-art="${a}" ` +
+        `aria-pressed="${prbArt === a}">${esc(a ? t('prb.kind.' + a) : t('prb.all'))}</button>`
+    )
+    .join('');
+  return (
+    '<div class="card pj-sec">' +
+    '<div class="prb-kopf">' +
+    `<input id="prb-suche" type="search" enterkeyhint="search" autocomplete="off" value="${esc(prbSuche)}" ` +
+    `placeholder="${esc(t('prb.searchPh'))}" aria-label="${esc(t('prb.search'))}">` +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-neu="1">${esc(t('prb.new'))}</button>` +
+    '</div>' +
+    `<div class="prb-chips" role="group" aria-label="${esc(t('prb.kindFilter'))}">${chips}</div>` +
+    `<div id="prb-liste">${prbZeilen()}</div>` +
+    '</div>'
+  );
+}
+// Die Suche: Enter mit einer Etikettennummer oder einem Code öffnet die Probe
+// gleich. Ein Handscanner tippt die Nummer und drückt Enter.
+function prbSucheEnter() {
+  const roh = prbSuche.trim();
+  if (!roh) return;
+  let treffer = null;
+  if (/^\d{7,}$/.test(roh)) {
+    const eintrag = barcodeRegistry.get(Number(roh));
+    if (eintrag && eintrag.type === 'sample') treffer = prbById(Number(eintrag.id));
+  }
+  if (!treffer) treffer = prbAktiv().find((p) => p.code.toLowerCase() === roh.toLowerCase()) || null;
+  if (!treffer) {
+    const liste = prbGefiltert();
+    if (liste.length === 1) treffer = liste[0];
+  }
+  if (!treffer) {
+    toast(t('prb.notFound', { q: roh }), 'err');
+    return;
+  }
+  prbOeffnen(treffer.id);
+}
+
+// ── Rezept: zehn freie Zeilen ──
+function prbRezeptZeile(z, i) {
+  return (
+    '<div class="prb-rz">' +
+    `<input data-prb-rz="name" list="prb-zutaten" maxlength="80" value="${esc(z.name || '')}" ` +
+    `placeholder="${esc(t('prb.ingredient'))}" aria-label="${esc(t('prb.ingredientN', { n: i + 1 }))}">` +
+    `<input data-prb-rz="amount" inputmode="decimal" maxlength="20" value="${esc(z.amount || '')}" ` +
+    `placeholder="${esc(t('prb.amount'))}" aria-label="${esc(t('prb.amountN', { n: i + 1 }))}">` +
+    `<input data-prb-rz="unit" list="prb-einheiten" maxlength="20" value="${esc(z.unit || '')}" ` +
+    `placeholder="${esc(t('prb.unit'))}" aria-label="${esc(t('prb.unitN', { n: i + 1 }))}">` +
+    '</div>'
+  );
+}
+// Gezeigt werden die gefüllten Zeilen und eine leere, mindestens drei; der
+// Knopf darunter gibt bis zehn weitere frei. Zehn leere Zeilen am Telefon
+// wären zwei Bildschirme, bevor die Bedingungen kommen.
+function prbRezeptHtml(rezept, bearbeiten) {
+  const n = Math.min(PRB_ZEILEN, Math.max(3, rezept.length + 1));
+  let zeilen = '';
+  for (let i = 0; i < n; i++) zeilen += prbRezeptZeile(rezept[i] || {}, i);
+  return (
+    `<div class="prb-rezept"${bearbeiten ? ' data-prb-rezept="1"' : ' id="prb-n-rezept"'}>` +
+    `<div class="prb-rz-zeilen">${zeilen}</div>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-zeile="1"${n >= PRB_ZEILEN ? ' hidden' : ''}>` +
+    `${esc(t('prb.addRow', { n, max: PRB_ZEILEN }))}</button></div>`
+  );
+}
+function prbZeileDazu(box) {
+  const zeilen = box.querySelector('.prb-rz-zeilen');
+  const n = zeilen.children.length;
+  if (n >= PRB_ZEILEN) return;
+  zeilen.insertAdjacentHTML('beforeend', prbRezeptZeile({}, n));
+  const knopf = box.querySelector('[data-prb-zeile]');
+  knopf.textContent = t('prb.addRow', { n: n + 1, max: PRB_ZEILEN });
+  if (n + 1 >= PRB_ZEILEN) knopf.hidden = true;
+  zeilen.lastElementChild.querySelector('input').focus();
+}
+function prbRezeptLesen(box) {
+  return [...box.querySelectorAll('.prb-rz')]
+    .map((z) => {
+      const wert = (k) => z.querySelector(`[data-prb-rz="${k}"]`).value.trim();
+      return { name: wert('name'), amount: wert('amount'), unit: wert('unit') };
+    })
+    .filter((z) => z.name || z.amount || z.unit);
+}
+
+// ── Auswahlen ──
+function prbArtAuswahl(wert, attr) {
+  return (
+    `<select ${attr}>` +
+    PRB_ARTEN.map((a) => `<option value="${a}"${a === wert ? ' selected' : ''}>${esc(t('prb.kind.' + a))}</option>`).join(
+      ''
+    ) +
+    '</select>'
+  );
+}
+function prbHerkunftAuswahl(wert, ausser, attr) {
+  const gesperrt = ausser != null ? prbNachfahren(ausser) : new Set();
+  const angeboten = prbAktiv().filter((x) => !gesperrt.has(x.id) || x.id === wert);
+  return (
+    `<select ${attr}>` +
+    `<option value=""${wert == null ? ' selected' : ''}>${esc(t('prb.noParent'))}</option>` +
+    angeboten
+      .map(
+        (x) =>
+          `<option value="${x.id}"${x.id === wert ? ' selected' : ''}>${esc(x.code + (x.title ? ' · ' + x.title : ''))}</option>`
+      )
+      .join('') +
+    '</select>'
+  );
+}
+function prbVersuchAuswahl(wert, attr) {
+  const angeboten = experiments.filter((v) => !v.archived || v.id === wert);
+  return (
+    `<select ${attr}>` +
+    `<option value=""${wert == null ? ' selected' : ''}>${esc(t('prb.noExp'))}</option>` +
+    angeboten
+      .map((v) => `<option value="${v.id}"${v.id === wert ? ' selected' : ''}>${esc(v.code + ' · ' + v.title)}</option>`)
+      .join('') +
+    '</select>'
+  );
+}
+function prbFeld(label, inhalt, breit) {
+  return `<label class="prb-feld${breit ? ' prb-breit' : ''}"><span>${esc(label)}</span>${inhalt}</label>`;
+}
+
+// ── Eine Probe ──
+function prbWeitergabeHtml(w) {
+  return (
+    `<div class="prb-w" data-prb-wid="${w.id}">` +
+    '<div class="prb-w-kopf">' +
+    `<input data-prb-w="partner" list="prb-partner" maxlength="100" value="${esc(w.partner)}" aria-label="${esc(t('prb.partner'))}">` +
+    `<input type="date" data-prb-w="given" value="${esc(w.given)}" aria-label="${esc(t('prb.givenOn'))}">` +
+    `<input data-prb-w="amount" maxlength="50" value="${esc(w.amount)}" placeholder="${esc(t('prb.amount'))}" ` +
+    `aria-label="${esc(t('prb.amount'))}">` +
+    `<button type="button" class="pj-run-weg" data-prb-wdel="${w.id}" aria-label="${esc(t('prb.removeHandoff', { partner: w.partner }))}" ` +
+    `title="${esc(t('prb.removeHandoff', { partner: w.partner }))}">&times;</button>` +
+    '</div>' +
+    `<input data-prb-w="purpose" maxlength="1000" value="${esc(w.purpose)}" placeholder="${esc(t('prb.purposePh'))}" ` +
+    `aria-label="${esc(t('prb.purpose'))}">` +
+    `<textarea data-prb-w="result" rows="2" maxlength="5000" placeholder="${esc(t('prb.resultPh'))}" ` +
+    `aria-label="${esc(t('prb.result'))}">${esc(w.result)}</textarea>` +
+    (w.result
+      ? `<span class="prb-rueck">${esc(t('prb.resultOn', { d: prbTag(w.resultDate) }))}</span>`
+      : `<span class="prb-offen">${esc(t('prb.waiting'))}</span>`) +
+    '</div>'
+  );
+}
+function prbDetail(p) {
+  const kette = prbKette(p);
+  const kinder = prbKinder(p);
+  const weitergaben = prbWeitergaben(p);
+  const feld = (name) => `data-prb-feld="${name}"`;
+  return (
+    '<div class="card pj-sec prb-detail">' +
+    '<div class="prb-leiste">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-back="1">‹ ${esc(t('prb.back'))}</button>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-label="${p.id}">${esc(t('prb.label'))}</button>` +
+    '</div>' +
+    '<div class="prb-code-zeile">' +
+    `<input class="prb-code" ${feld('code')} maxlength="20" value="${esc(p.code)}" aria-label="${esc(t('prb.code'))}">` +
+    prbArtAuswahl(p.kind, feld('kind') + ` aria-label="${esc(t('prb.kind'))}"`) +
+    '</div>' +
+    (kette.length
+      ? `<p class="prb-herkunft">${esc(t('prb.lineage'))} ${kette.map(prbLink).join(' › ')} › <b>${esc(p.code)}</b></p>`
+      : '') +
+    '<div class="prb-felder">' +
+    prbFeld(t('prb.title'), `<input ${feld('title')} maxlength="200" value="${esc(p.title)}">`, true) +
+    prbFeld(t('prb.species'), `<input ${feld('species')} list="prb-pilzarten" maxlength="100" value="${esc(p.species)}">`) +
+    prbFeld(t('prb.made'), `<input type="date" ${feld('made')} value="${esc(p.made)}">`) +
+    prbFeld(t('prb.parent'), prbHerkunftAuswahl(p.parentId, p.id, feld('parentId'))) +
+    prbFeld(
+      t('prb.source'),
+      `<input ${feld('source')} maxlength="200" value="${esc(p.source)}" placeholder="${esc(t('prb.sourcePh'))}">`
+    ) +
+    prbFeld(t('prb.experiment'), prbVersuchAuswahl(p.experimentId, feld('experimentId')), true) +
+    '</div>' +
+    `<div class="sec">${esc(t('prb.recipe'))}</div>` +
+    prbRezeptHtml(p.recipe, true) +
+    '<div class="prb-felder">' +
+    prbFeld(
+      t('prb.conditions'),
+      `<textarea ${feld('conditions')} rows="2" maxlength="2000" placeholder="${esc(t('prb.conditionsPh'))}">${esc(p.conditions)}</textarea>`,
+      true
+    ) +
+    prbFeld(
+      t('prb.notes'),
+      `<textarea ${feld('notes')} rows="2" maxlength="5000" placeholder="${esc(t('prb.notesPh'))}">${esc(p.notes)}</textarea>`,
+      true
+    ) +
+    '</div>' +
+    `<div class="sec">${esc(t('prb.handoffs', { n: weitergaben.length }))}</div>` +
+    weitergaben.map(prbWeitergabeHtml).join('') +
+    '<div class="prb-w prb-w-neu">' +
+    '<div class="prb-w-kopf">' +
+    `<input id="prb-w-partner" list="prb-partner" maxlength="100" placeholder="${esc(t('prb.partner'))}" aria-label="${esc(t('prb.partner'))}">` +
+    `<input id="prb-w-given" type="date" value="${esc(localDateStr(new Date()))}" aria-label="${esc(t('prb.givenOn'))}">` +
+    `<input id="prb-w-amount" maxlength="50" placeholder="${esc(t('prb.amount'))}" aria-label="${esc(t('prb.amount'))}">` +
+    '</div>' +
+    `<input id="prb-w-purpose" maxlength="1000" placeholder="${esc(t('prb.purposePh'))}" aria-label="${esc(t('prb.purpose'))}">` +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-wadd="${p.id}">${esc(t('prb.handoffAdd'))}</button>` +
+    '</div>' +
+    (kinder.length
+      ? `<div class="sec">${esc(t('prb.children'))}</div><p class="prb-kinder">` +
+        kinder.map((x) => prbLink(x) + (x.title ? ' <span class="pj-count">' + esc(x.title) + '</span>' : '')).join('<br>') +
+        '</p>'
+      : '') +
+    '<div class="prb-leiste prb-unten">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-daraus="${p.id}">${esc(t('prb.fromThis'))}</button>` +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-del="${p.id}">${esc(t('prb.remove'))}</button>` +
+    '</div>' +
+    `<details class="pj-fold prb-verlauf" data-prb-verlauf="${p.id}"${prbVerlaufOffen === p.id ? ' open' : ''}>` +
+    `<summary class="pj-count">${esc(t('prb.history'))}</summary><ul class="pj-hist-liste" id="prb-verlauf-liste"></ul></details>` +
+    prbDatalists() +
+    '</div>'
+  );
+}
+
+// ── Neue Probe ──
+function prbFormular() {
+  const f = prbNeu;
+  const chips = PRB_ARTEN.map(
+    (a) =>
+      `<button type="button" class="prb-chip${f.kind === a ? ' on' : ''}" data-prb-neuart="${a}" ` +
+      `aria-pressed="${f.kind === a}">${esc(t('prb.kind.' + a))}</button>`
+  ).join('');
+  const mitRezept = prbAktiv().filter((x) => x.recipe.length);
+  return (
+    '<div class="card pj-sec prb-detail">' +
+    '<div class="prb-leiste">' +
+    `<button type="button" class="btn btn-sm fs-xs" data-prb-abbrechen="1">‹ ${esc(t('common.cancel'))}</button>` +
+    `<span class="sec">${esc(t('prb.newTitle'))}</span></div>` +
+    `<div class="prb-chips" role="group" aria-label="${esc(t('prb.kind'))}">${chips}</div>` +
+    '<div class="prb-felder">' +
+    prbFeld(
+      t('prb.code'),
+      `<input id="prb-n-code" class="prb-code" maxlength="20" placeholder="${esc(prbNaechsterCode(f.kind))}" ` +
+        `aria-describedby="prb-n-code-hint"><small id="prb-n-code-hint" class="pj-count">${esc(t('prb.codeHint'))}</small>`
+    ) +
+    prbFeld(t('prb.made'), `<input id="prb-n-made" type="date" value="${esc(localDateStr(new Date()))}">`) +
+    prbFeld(t('prb.title'), `<input id="prb-n-title" maxlength="200" placeholder="${esc(t('prb.titlePh'))}">`, true) +
+    prbFeld(
+      t('prb.species'),
+      `<input id="prb-n-species" list="prb-pilzarten" maxlength="100" value="${esc(f.species || '')}">`
+    ) +
+    prbFeld(t('prb.parent'), prbHerkunftAuswahl(f.parentId ?? null, null, 'id="prb-n-parent"')) +
+    prbFeld(t('prb.source'), `<input id="prb-n-source" maxlength="200" placeholder="${esc(t('prb.sourcePh'))}">`) +
+    prbFeld(t('prb.experiment'), prbVersuchAuswahl(f.experimentId ?? null, 'id="prb-n-exp"')) +
+    '</div>' +
+    `<div class="sec">${esc(t('prb.recipe'))}</div>` +
+    (mitRezept.length
+      ? prbFeld(
+          t('prb.copyFrom'),
+          '<select id="prb-n-copy">' +
+            `<option value="">${esc(t('prb.copyNone'))}</option>` +
+            mitRezept
+              .map((x) => `<option value="${x.id}">${esc(x.code + (x.title ? ' · ' + x.title : ''))}</option>`)
+              .join('') +
+            '</select>',
+          true
+        )
+      : '') +
+    prbRezeptHtml(f.recipe || [], false) +
+    '<div class="prb-felder">' +
+    prbFeld(
+      t('prb.conditions'),
+      `<textarea id="prb-n-cond" rows="2" maxlength="2000" placeholder="${esc(t('prb.conditionsPh'))}">${esc(f.conditions || '')}</textarea>`,
+      true
+    ) +
+    '</div>' +
+    '<div class="prb-leiste prb-unten">' +
+    `<button type="button" class="btn btn-sm btn-p" data-prb-anlegen="1">${esc(t('prb.create'))}</button>` +
+    '</div>' +
+    prbDatalists() +
+    '</div>'
+  );
+}
+
+// ── Zeichnen ──
+function renderProben() {
+  const el = document.getElementById('pj-proben');
+  if (!el) return;
+  if (prbOffen != null && !prbById(prbOffen)) prbOffen = null;
+  const p = prbOffen != null ? prbById(prbOffen) : null;
+  const angefangen = {};
+  if (p && prbGezeichnetFuer === prbOffen) {
+    for (const id of PRB_ANGEFANGEN) {
+      const feld = document.getElementById(id);
+      if (feld && feld.value && feld.defaultValue !== feld.value) angefangen[id] = feld.value;
+    }
+  }
+  el.innerHTML = prbNeu ? prbFormular() : p ? prbDetail(p) : prbListe();
+  prbGezeichnetFuer = prbNeu ? undefined : prbOffen;
+  for (const [id, wert] of Object.entries(angefangen)) {
+    const feld = document.getElementById(id);
+    if (feld) feld.value = wert;
+  }
+  const suche = document.getElementById('prb-suche');
+  if (suche) {
+    suche.addEventListener('input', () => {
+      prbSuche = suche.value;
+      document.getElementById('prb-liste').innerHTML = prbZeilen();
+    });
+    suche.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      prbSuche = suche.value;
+      prbSucheEnter();
+    });
+  }
+  el.dataset.lang = currentLang;
+  prbGezeigt = prbStand();
+  if (p && prbVerlaufOffen === p.id) prbVerlaufLaden(p.id);
+}
+// Wie der Versuch: neu gezeichnet, wenn sich an den Proben etwas geändert hat,
+// außer jemand tippt gerade in diesem Reiter. Das Formular "Neue Probe" nie:
+// was darin steht, ist noch nirgends gespeichert.
+function prbRefresh() {
+  const el = document.getElementById('pj-proben');
+  if (!el) return;
+  const leer = !el.innerHTML;
+  const andereSprache = el.dataset.lang !== currentLang;
+  const fokus = document.activeElement;
+  const tippt = !!fokus && el.contains(fokus) && /^(INPUT|TEXTAREA|SELECT)$/.test(fokus.tagName || '');
+  const veraltet = !prbNeu && prbGezeigt !== prbStand() && !tippt;
+  if (leer || andereSprache || veraltet) renderProben();
+}
+function prbOeffnen(id) {
+  prbOffen = id;
+  prbNeu = null;
+  if (prbVerlaufOffen !== id) prbVerlaufOffen = null;
+  renderProben();
+  const el = document.getElementById('pj-proben');
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+}
+
+// ── Etikett ──
+// Dieselbe Vorlage wie die Kulturen: oben der Strichcode mit der Nummer aus der
+// Barcode-Liste (Typ 'sample'), darunter groß der Code. Ein Partner, der das
+// Etikett mit einem fremden Scanner liest, bekommt nur die Nummer; den Code
+// liest er ab und nennt ihn.
+async function prbDrucken(id) {
+  const p = prbById(id);
+  if (!p) return;
+  const nummer = p.barcode || barcodeByEntity.get('sample:' + p.id);
+  if (!nummer) {
+    toast(t('prb.noBarcode'), 'err');
+    return;
+  }
+  const eltern = p.parentId != null ? prbById(p.parentId) : null;
+  const absaetze = [{ text: eltern ? p.code + ' ← ' + eltern.code : p.code, fontH: 24, minH: 18, maxZeilen: 2 }];
+  const info = [p.title, p.species].filter(Boolean).join(' – ');
+  if (info) absaetze.push({ text: info, fontH: 24, maxZeilen: 2, kuerzbar: true });
+  absaetze.push({ text: prbTag(p.made), fontH: 28, minH: 18, bold: true });
+  const zpl = itemsToZPL(labelLayout(String(nummer), false, absaetze, null));
+  const fehler = await sendToPrinter(zpl);
+  if (fehler) {
+    const blob = new Blob([zpl], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = p.code + '_label.zpl';
+    a.click();
+    toast(t('prb.printFailed'), 'err');
+  } else {
+    printedFb(t('prb.printed', { code: p.code }));
+  }
+}
+// Vom Scanner: eine Probe öffnet sich, egal welcher Vorgang gerade steht.
+function prbGescannt(id) {
+  const p = prbById(id);
+  if (!p) {
+    setFb('err', t('prb.scanUnknown'));
+    return;
+  }
+  if (p.removedAt) {
+    setFb('err', t('prb.scanRemoved', { code: p.code }));
+    return;
+  }
+  const cam = document.getElementById('m-camscan');
+  if (cam && cam.classList.contains('open')) closeCamScan();
+  closeScanModal();
+  prbOffen = p.id;
+  prbNeu = null;
+  go('proj', 'n-proj');
+  openStab('proj', 'proben');
+  renderProben();
+}
+
+// ── Speichern ──
+async function prbAnlegen(knopf) {
+  if (prbUnterwegs || !prbNeu) return;
+  const wert = (id) => ((document.getElementById(id) || {}).value || '').trim();
+  const daten = {
+    kind: prbNeu.kind,
+    title: wert('prb-n-title'),
+    made: wert('prb-n-made') || localDateStr(new Date()),
+    species: wert('prb-n-species'),
+    parentId: prbZahl(wert('prb-n-parent')),
+    source: wert('prb-n-source'),
+    experimentId: prbZahl(wert('prb-n-exp')),
+    recipe: prbRezeptLesen(document.getElementById('prb-n-rezept')),
+    conditions: wert('prb-n-cond')
+  };
+  const code = wert('prb-n-code');
+  if (code) daten.code = code;
+  if (daten.recipe.some((z) => !z.name)) {
+    toast(t('prb.rowNoName'), 'err');
+    return;
+  }
+  prbUnterwegs = true;
+  knopf.disabled = true;
+  const r = await apiPost('/api/research-samples', daten);
+  prbUnterwegs = false;
+  if (!r || !r.id) {
+    knopf.disabled = false;
+    prbFehler(r);
+    return;
+  }
+  researchSamples.unshift({
+    notes: '',
+    ...daten,
+    id: r.id,
+    code: r.code,
+    barcode: r.barcode,
+    created: new Date().toISOString(),
+    removedAt: null,
+    handoffs: []
+  });
+  barcodeRegistry.set(r.barcode, { type: 'sample', id: String(r.id) });
+  barcodeByEntity.set('sample:' + r.id, r.barcode);
+  prbNeu = null;
+  prbOeffnen(r.id);
+  prbDrucken(r.id);
+}
+function prbSpeichern(p, feld, wert) {
+  const alt = p[feld];
+  if (JSON.stringify(alt ?? null) === JSON.stringify(wert ?? null)) return;
+  p[feld] = wert;
+  apiPatch('/api/research-samples/' + p.id, { [feld]: wert }).then((r) => {
+    if (r && r.error) {
+      p[feld] = alt;
+      prbFehler(r);
+      renderProben();
+    }
+  });
+}
+function prbWeitergabeSpeichern(w, feld, wert) {
+  if ((w[feld] ?? '') === wert) return;
+  const alt = w[feld];
+  const altTag = w.resultDate;
+  w[feld] = wert;
+  // Die erste Rückmeldung bekommt den heutigen Tag, wie auf dem Server.
+  if (feld === 'result' && wert && !alt && !w.resultDate) w.resultDate = localDateStr(new Date());
+  apiPatch('/api/research-handoffs/' + w.id, { [feld]: wert }).then((r) => {
+    if (r && r.error) {
+      w[feld] = alt;
+      w.resultDate = altTag;
+      prbFehler(r);
+    }
+    renderProben();
+  });
+}
+async function prbWeitergabeDazu(p, knopf) {
+  const wert = (id) => ((document.getElementById(id) || {}).value || '').trim();
+  const daten = {
+    sampleId: p.id,
+    partner: wert('prb-w-partner'),
+    given: wert('prb-w-given') || localDateStr(new Date()),
+    amount: wert('prb-w-amount'),
+    purpose: wert('prb-w-purpose')
+  };
+  if (!daten.partner) {
+    toast(t('prb.needPartner'), 'err');
+    const feld = document.getElementById('prb-w-partner');
+    if (feld) feld.focus();
+    return;
+  }
+  knopf.disabled = true;
+  const r = await apiPost('/api/research-handoffs', daten);
+  if (!r || !r.id) {
+    knopf.disabled = false;
+    prbFehler(r);
+    return;
+  }
+  p.handoffs.push({ id: r.id, ...daten, result: '', resultDate: null, removedAt: null });
+  for (const id of PRB_ANGEFANGEN) {
+    const feld = document.getElementById(id);
+    if (feld) feld.value = '';
+  }
+  renderProben();
+  flashUndoBar(t('prb.handoffAdded', { partner: daten.partner }));
+}
+// Entfernen ohne Rückfrage, mit Rückgängig: die Zeile bleibt auf dem Server.
+function prbEntfernen(pfad, eintrag, meldung) {
+  eintrag.removedAt = new Date().toISOString();
+  renderProben();
+  apiDelete(pfad).then((r) => {
+    if (r && r.error) {
+      eintrag.removedAt = null;
+      prbFehler(r);
+      renderProben();
+      return;
+    }
+    showUndoBar(meldung, () => {
+      eintrag.removedAt = null;
+      renderProben();
+      apiPost(pfad + '/restore').then((z) => {
+        if (z && z.error) {
+          eintrag.removedAt = new Date().toISOString();
+          prbFehler(z);
+          renderProben();
+        }
+      });
+    });
+  });
+}
+
+// ── Verlauf ──
+function prbVerlaufWert(feld, wert) {
+  if (wert == null || wert === '') return '—';
+  if (feld === 'recipe') {
+    let zeilen = [];
+    try {
+      zeilen = JSON.parse(wert);
+    } catch {
+      return wert;
+    }
+    if (!Array.isArray(zeilen) || !zeilen.length) return '—';
+    return zeilen.map((z) => [z.name, z.amount, z.unit].filter(Boolean).join(' ')).join('; ');
+  }
+  if (feld === 'parentId') {
+    const x = prbById(Number(wert));
+    return x ? x.code : '#' + wert;
+  }
+  if (feld === 'experimentId') {
+    const v = pjExp(Number(wert));
+    return v ? v.code : '#' + wert;
+  }
+  if (feld === 'kind') return t('prb.kind.' + wert);
+  if (feld === 'made' || feld === 'given' || feld === 'resultDate') return prbTag(wert);
+  return wert;
+}
+function prbVerlaufZeile(e, p) {
+  const w = e.entity === 'handoff' ? p.handoffs.find((x) => x.id === e.entityId) : null;
+  const partner = (w && w.partner) || (e.record && e.record.partner) || '';
+  let was;
+  let wert = '';
+  if (e.action === 'update') {
+    was = (partner ? partner + ' · ' : '') + t('prb.f.' + e.field);
+    wert =
+      '<div class="pj-hist-wert">' +
+      `<del>${esc(prbVerlaufWert(e.field, e.from))}</del> → <ins>${esc(prbVerlaufWert(e.field, e.to))}</ins></div>`;
+  } else {
+    was = t('prb.hist.' + e.entity + '.' + e.action, { partner });
+  }
+  const wer = e.user ? ' · ' + esc(e.user) + (e.userGone ? ' ' + esc(t('exp.hist.userGone')) : '') : '';
+  return (
+    '<li class="pj-hist">' +
+    `<div class="pj-hist-kopf">${esc(fmtDtTime(e.at))}${wer}</div>` +
+    `<div class="pj-hist-was">${esc(was)}</div>` +
+    wert +
+    '</li>'
+  );
+}
+async function prbVerlaufLaden(id) {
+  const box = document.getElementById('prb-verlauf-liste');
+  const p = prbById(id);
+  if (!box || !p) return;
+  if (!box.innerHTML) box.innerHTML = `<li class="pj-count">${esc(t('common.loading'))}</li>`;
+  let r;
+  try {
+    r = await apiGet('/api/research-samples/' + id + '/history');
+  } catch {
+    r = null;
+  }
+  const jetzt = document.getElementById('prb-verlauf-liste');
+  if (!jetzt || prbOffen !== id) return;
+  if (!r || !Array.isArray(r.history)) {
+    jetzt.innerHTML = `<li class="pj-count">${esc(t('prb.histErr'))}</li>`;
+    return;
+  }
+  jetzt.innerHTML = r.history
+    .slice()
+    .reverse()
+    .map((e) => prbVerlaufZeile(e, p))
+    .join('');
+}
+
+// ── Ereignisse ──
+// Ein Zuhörer für die ganze Vorhaben-Seite (pjClick, pjChange) reicht hierher
+// weiter; true heißt: erledigt.
+function prbClick(e) {
+  const ziel = (sel) => e.target.closest(sel);
+  if (!ziel('#pj-proben')) return false;
+  let x;
+  if ((x = ziel('[data-prb-open]'))) {
+    prbOeffnen(Number(x.dataset.prbOpen));
+  } else if (ziel('[data-prb-back]')) {
+    prbOffen = null;
+    renderProben();
+  } else if (ziel('[data-prb-neu]')) {
+    prbNeu = { kind: prbArt || 'lc' };
+    renderProben();
+  } else if ((x = ziel('[data-prb-art]'))) {
+    prbArt = x.dataset.prbArt;
+    renderProben();
+  } else if ((x = ziel('[data-prb-neuart]'))) {
+    prbNeu.kind = x.dataset.prbNeuart;
+    // Nicht neu zeichnen: was schon getippt ist, bleibt stehen.
+    document.querySelectorAll('[data-prb-neuart]').forEach((b) => {
+      const an = b === x;
+      b.classList.toggle('on', an);
+      b.setAttribute('aria-pressed', String(an));
+    });
+    const code = document.getElementById('prb-n-code');
+    if (code) code.placeholder = prbNaechsterCode(prbNeu.kind);
+  } else if ((x = ziel('[data-prb-anlegen]'))) {
+    prbAnlegen(x);
+  } else if (ziel('[data-prb-abbrechen]')) {
+    prbNeu = null;
+    renderProben();
+  } else if ((x = ziel('[data-prb-zeile]'))) {
+    prbZeileDazu(x.closest('.prb-rezept'));
+  } else if ((x = ziel('[data-prb-label]'))) {
+    prbDrucken(Number(x.dataset.prbLabel));
+  } else if ((x = ziel('[data-prb-daraus]'))) {
+    const p = prbById(Number(x.dataset.prbDaraus));
+    if (!p) return true;
+    prbNeu = {
+      kind: p.kind,
+      parentId: p.id,
+      species: p.species,
+      experimentId: p.experimentId,
+      recipe: p.recipe.map((z) => ({ ...z })),
+      conditions: p.conditions
+    };
+    renderProben();
+  } else if ((x = ziel('[data-prb-del]'))) {
+    const p = prbById(Number(x.dataset.prbDel));
+    if (!p) return true;
+    prbOffen = null;
+    prbEntfernen('/api/research-samples/' + p.id, p, t('prb.removed', { code: p.code }));
+  } else if ((x = ziel('[data-prb-wadd]'))) {
+    const p = prbById(Number(x.dataset.prbWadd));
+    if (p) prbWeitergabeDazu(p, x);
+  } else if ((x = ziel('[data-prb-wdel]'))) {
+    const p = prbById(prbOffen);
+    const w = p && p.handoffs.find((y) => y.id === Number(x.dataset.prbWdel));
+    if (w) prbEntfernen('/api/research-handoffs/' + w.id, w, t('prb.handoffRemoved', { partner: w.partner }));
+  } else if ((x = ziel('[data-prb-verlauf] > summary'))) {
+    // Erst nach dem Umschalten weiß das details, ob es offen ist.
+    const box = x.parentElement;
+    setTimeout(() => {
+      const id = Number(box.dataset.prbVerlauf);
+      prbVerlaufOffen = box.open ? id : null;
+      if (box.open) prbVerlaufLaden(id);
+    }, 0);
+  } else {
+    return false;
+  }
+  return true;
+}
+function prbChange(e) {
+  const el = e.target;
+  if (!el.closest || !el.closest('#pj-proben')) return false;
+  if (el.id === 'prb-n-copy') {
+    const quelle = prbById(Number(el.value));
+    const box = document.getElementById('prb-n-rezept');
+    if (quelle && box) box.outerHTML = prbRezeptHtml(quelle.recipe, false);
+    return true;
+  }
+  const p = prbOffen != null ? prbById(prbOffen) : null;
+  if (!p) return false;
+  if (el.dataset.prbFeld) {
+    const feld = el.dataset.prbFeld;
+    let wert = el.value.trim();
+    if (feld === 'parentId' || feld === 'experimentId') {
+      wert = prbZahl(wert);
+    } else if ((feld === 'code' || feld === 'made') && !wert) {
+      el.value = p[feld];
+      return true;
+    }
+    prbSpeichern(p, feld, wert);
+    return true;
+  }
+  if (el.dataset.prbRz && el.closest('[data-prb-rezept]')) {
+    const zeilen = prbRezeptLesen(el.closest('[data-prb-rezept]'));
+    // Gespeichert wird erst, wenn jede Zeile ihre Zutat hat: eine Menge allein
+    // wäre später nicht mehr zu lesen. Gemeldet wird das nur am Zutatenfeld.
+    if (zeilen.some((z) => !z.name)) {
+      if (el.dataset.prbRz === 'name') toast(t('prb.rowNoName'), 'err');
+      return true;
+    }
+    prbSpeichern(p, 'recipe', zeilen);
+    return true;
+  }
+  if (el.dataset.prbW) {
+    const w = p.handoffs.find((x) => x.id === Number(el.closest('[data-prb-wid]').dataset.prbWid));
+    if (!w) return true;
+    const feld = el.dataset.prbW;
+    const wert = el.value.trim();
+    if ((feld === 'partner' || feld === 'given') && !wert) {
+      el.value = w[feld];
+      return true;
+    }
+    prbWeitergabeSpeichern(w, feld, wert);
+    return true;
+  }
+  return false;
+}
+
 // ── Laborbuch drucken ───────────────────────────────────────
 //
 // Fuer einen Bericht, fuer eine Pruefung und fuers Archiv: ein Versuch oder
@@ -19446,6 +20337,7 @@ function pjFokus(sel) {
 // Ergebnis wird in einem Stueck eingetragen, und ein PATCH je Tastendruck waere
 // eine Zeile Nutzen und hundert Anfragen.
 function pjChange(e) {
+  if (prbChange(e)) return;
   if (e.target.dataset && e.target.dataset.pjDocFor) {
     const datei = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -20278,6 +21170,7 @@ function pjClick(e) {
     return;
   }
   if (pjVersuchClick(e)) return;
+  if (prbClick(e)) return;
   if (pjNotizClick(e)) return;
   const importieren = e.target.closest('[data-pj-doc-import]');
   if (importieren) {
@@ -26999,6 +27892,10 @@ function processScan(raw, opts) {
       val = entry.id; // e.g. "MC-SHI-260101-01"
     } else if (entry.type === 'zone' || entry.type === 'rack') {
       val = entry.id; // e.g. "INC" or "INC_R1"
+    } else if (entry.type === 'sample') {
+      // Eine Forschungsprobe: sie oeffnet sich, egal welcher Vorgang steht.
+      prbGescannt(Number(entry.id));
+      return;
     } else if (entry.type === 'shelf') {
       // Ein Regal-Etikett: das Blatt mit Rein, Raus und Zählen, egal welcher
       // Vorgang gerade steht. Am Fach gibt es nur diese drei.
@@ -32329,6 +33226,7 @@ function initEventListeners() {
   });
   $('n-proj').addEventListener('click', () => go('proj', 'n-proj'));
   $('st-proj-versuch').addEventListener('click', () => openStab('proj', 'versuch'));
+  $('st-proj-proben').addEventListener('click', () => openStab('proj', 'proben'));
   $('st-proj-research').addEventListener('click', () => openStab('proj', 'research'));
   $('st-proj-products').addEventListener('click', () => openStab('proj', 'products'));
   $('st-proj-build').addEventListener('click', () => openStab('proj', 'build'));
