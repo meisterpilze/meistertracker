@@ -2493,6 +2493,10 @@ window.LANG['pt'] = {
   'notifications.title': 'Notifica\u00e7\u00f5es',
   'notifications.empty': 'Sem notifica\u00e7\u00f5es',
   'notifications.markAllRead': 'Marcar todas como lidas',
+  'notifications.done': 'Feito',
+  'notifications.doneTitle': 'Feito: remover da lista',
+  'notifications.doneToast': 'Notificação removida',
+  'notifications.saveFailed': 'Não guardado: o servidor não está acessível. Verifica o Wi-Fi e toca de novo.',
   // Alerts
   'alert.filterShowAll': 'Mostrar todos',
   'alert.filterDueToday': 'Vencem hoje ou precisam de atenção',

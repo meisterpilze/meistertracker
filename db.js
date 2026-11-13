@@ -3230,6 +3230,24 @@ const MIGRATIONS = [
         PRIMARY KEY (order_id, sku)
       )`);
     }
+  },
+  {
+    version: 113,
+    description: 'Glocke: Meldungen als erledigt wegnehmen, mit Rueckgaengig',
+    fn(db) {
+      // Erledigt heisst: aus der Glocke weg. Die Zeile bleibt, damit Rueckgaengig
+      // sie zurueckholen kann; als gelesen faellt sie nach 30 Tagen der Reinigung zu.
+      const has = db
+        .prepare("SELECT COUNT(*) as c FROM pragma_table_info('notifications') WHERE name='dismissed'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE notifications ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0');
+      // Nachproduzieren-Meldungen zu Faechern, die schon wieder ueber dem Alarm
+      // liegen: die gingen bisher nie weg. Ab jetzt raeumt shelfLowAlerts sie selbst.
+      db.exec(`UPDATE notifications SET dismissed = 1, read = 1
+                WHERE type = 'shelf_low' AND link_type = 'shelf'
+                  AND link_id NOT IN (SELECT CAST(id AS TEXT) FROM shelf_items
+                                       WHERE active = 1 AND stock <= min_stock)`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3773,6 +3791,8 @@ function shelfLowAlerts(db) {
         out.push({ id: r.id, name: r.name, stock: r.stock, minStock: r.min_stock });
       } else if (!low && r.low_alerted) {
         db.prepare('UPDATE shelf_items SET low_alerted=0 WHERE id=?').run(r.id);
+        // Nachproduziert: die Meldung in der Glocke ist erledigt, bei allen.
+        dismissNotificationsFor(db, 'shelf_low', 'shelf', String(r.id));
       }
     }
   });
@@ -5062,7 +5082,7 @@ function createNotificationOnce(db, payload) {
     const existing = db
       .prepare(
         `SELECT id FROM notifications
-          WHERE user_id = ? AND type = ? AND read = 0 AND link_type IS ? AND link_id IS ?`
+          WHERE user_id = ? AND type = ? AND read = 0 AND dismissed = 0 AND link_type IS ? AND link_id IS ?`
       )
       .get(userId, type, linkType || null, linkId || null);
     if (existing) return existing.id;
@@ -5078,7 +5098,7 @@ function listNotifications(db, userId, limit = 20) {
       // (notifications inserted in the same millisecond).
       `SELECT id, user_id AS userId, type, title, body, link_type AS linkType, link_id AS linkId, created, read
        FROM notifications
-       WHERE user_id = ?
+       WHERE user_id = ? AND dismissed = 0
        ORDER BY created DESC, id DESC
        LIMIT ?`
     )
@@ -5086,8 +5106,33 @@ function listNotifications(db, userId, limit = 20) {
 }
 
 function countUnreadNotifications(db, userId) {
-  const row = db.prepare('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0').get(userId);
+  const row = db
+    .prepare('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read = 0 AND dismissed = 0')
+    .get(userId);
   return row ? row.c : 0;
+}
+
+// Erledigt: aus der Glocke weg, nur die eigenen. undo=true holt sie zurueck
+// (gelesen bleiben sie, gesehen hat man sie ja). Gibt die Anzahl zurueck.
+function dismissNotifications(db, userId, ids, undo = false) {
+  if (!Array.isArray(ids) || !ids.length) return 0;
+  const placeholders = ids.map(() => '?').join(',');
+  const set = undo ? 'dismissed = 0' : 'dismissed = 1, read = 1';
+  const info = db
+    .prepare(`UPDATE notifications SET ${set} WHERE user_id = ? AND id IN (${placeholders})`)
+    .run(userId, ...ids);
+  return info.changes;
+}
+
+// Die Sache hinter einer Meldung ist erledigt (nachproduziert, gedeckt): bei
+// allen aus der Glocke, nicht nur bei dem, der es getan hat.
+function dismissNotificationsFor(db, type, linkType, linkId) {
+  return db
+    .prepare(
+      `UPDATE notifications SET dismissed = 1, read = 1
+        WHERE type = ? AND link_type IS ? AND link_id IS ? AND dismissed = 0`
+    )
+    .run(type, linkType, linkId).changes;
 }
 
 function markNotificationsRead(db, userId, ids) {
@@ -13994,6 +14039,8 @@ function saleAlerts(db, now = new Date()) {
       });
     }
     if ((alt == null ? null : alt) !== soll) setze.run(soll, r.strainId, type, ml);
+    // Gedeckt: die Meldung in der Glocke ist erledigt, bei allen.
+    if (alt != null && soll == null) dismissNotificationsFor(db, 'sale_uncovered', 'sale', r.strainId + '/' + r.slot);
   }
   return neu;
 }
@@ -14682,6 +14729,8 @@ module.exports = {
   listNotifications,
   countUnreadNotifications,
   markNotificationsRead,
+  dismissNotifications,
+  dismissNotificationsFor,
   countUsers,
   listUsers,
   deleteUser,

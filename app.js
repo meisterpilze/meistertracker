@@ -820,6 +820,7 @@ function renderNotifList(items) {
       const unreadCls = it.read ? '' : 'unread';
       // esc() is the existing HTML-escape helper used throughout app.js
       return (
+        '<div class="notif-row">' +
         '<button type="button" class="notif-item ' +
         unreadCls +
         '" data-nid="' +
@@ -836,7 +837,15 @@ function renderNotifList(items) {
         '<div class="notif-item-time">' +
         esc(rel) +
         '</div>' +
-        '</button>'
+        '</button>' +
+        '<button type="button" class="notif-done" data-nid="' +
+        it.id +
+        '" title="' +
+        esc(t('notifications.doneTitle')) +
+        '">' +
+        esc(t('notifications.done')) +
+        '</button>' +
+        '</div>'
       );
     })
     .join('');
@@ -844,6 +853,43 @@ function renderNotifList(items) {
   for (const el of list.querySelectorAll('.notif-item')) {
     el.addEventListener('click', onNotifItemClick);
   }
+  for (const el of list.querySelectorAll('.notif-done')) {
+    el.addEventListener('click', onNotifDoneClick);
+  }
+}
+
+// Erledigt: ein Tipp nimmt die Meldung aus der Liste, die Leiste unten bietet
+// Rückgängig. Die Liste bleibt offen, damit man mehrere hintereinander abhakt.
+function onNotifDoneClick(e) {
+  // Die Zeile ist gleich weg; ohne das hielte der Außen-Klick-Wächter den
+  // Klick für einen daneben und schlösse die Liste.
+  e.stopPropagation();
+  const id = parseInt(e.currentTarget.getAttribute('data-nid'), 10);
+  const at = _notifItems.findIndex((x) => x.id === id);
+  if (at < 0) return;
+  const item = _notifItems[at];
+  _notifItems = _notifItems.filter((x) => x.id !== id);
+  renderNotifList(_notifItems);
+  const putBack = () => {
+    if (_notifItems.some((x) => x.id === id)) return;
+    _notifItems.splice(Math.min(at, _notifItems.length), 0, { ...item, read: 1 });
+    if (_notifOpen) renderNotifList(_notifItems);
+  };
+  // apiPost wirft nicht, es gibt { error } zurück.
+  apiPost('/api/notifications/dismiss', { ids: [id] }).then((r) => {
+    if (r && r.error) {
+      // Auf dem Server steht sie noch: zurück in die Liste, statt sie nur hier zu verstecken.
+      putBack();
+      toast(t('notifications.saveFailed'), 'err');
+    } else if (r && typeof r.unread === 'number') renderNotifBadge(r.unread);
+  });
+  showUndoBar(t('notifications.doneToast'), () => {
+    putBack();
+    apiPost('/api/notifications/dismiss', { ids: [id], undo: true }).then((r) => {
+      if (r && r.error) toast(t('notifications.saveFailed'), 'err');
+      else if (r && typeof r.unread === 'number') renderNotifBadge(r.unread);
+    });
+  });
 }
 
 function onNotifItemClick(e) {

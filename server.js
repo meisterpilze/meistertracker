@@ -13165,6 +13165,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Erledigt: { ids: [int, ...] } nimmt sie aus der Glocke, { ids, undo: true }
+  // holt sie zurueck. Nur die eigenen des Angemeldeten.
+  if (req.method === 'POST' && url === '/api/notifications/dismiss') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      if (!data || !Array.isArray(data.ids)) {
+        jsonErr(res, 400, 'body must be { ids: [int, ...], undo?: true }');
+        return;
+      }
+      try {
+        const ids = data.ids.filter((n) => typeof n === 'number' && Number.isInteger(n)).slice(0, 500);
+        const changed = db.dismissNotifications(database, req.authUser.user_id, ids, data.undo === true);
+        broadcastSSE(res);
+        jsonOk(res, { changed, unread: db.countUnreadNotifications(database, req.authUser.user_id) });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
 
   // -- Calendar Events --
   if (req.method === 'POST' && req.url === '/api/calendar-events') {
