@@ -3248,6 +3248,48 @@ const MIGRATIONS = [
                   AND link_id NOT IN (SELECT CAST(id AS TEXT) FROM shelf_items
                                        WHERE active = 1 AND stock <= min_stock)`);
     }
+  },
+  {
+    version: 114,
+    description: 'Forschung: Proben mit Rezept und ihre Weitergabe an Partner',
+    fn(db) {
+      // Eine Probe ist, was aus dem Labor an einen Partner geht oder dafuer
+      // gemacht wird: eine Fluessigkultur, eine Aerial-Wanne, etwas anderes.
+      // Ihr Code steht auf dem Etikett; ihre Nummer im Barcode steht in
+      // barcodes (Typ 'sample'). Entfernt, nicht geloescht, wie ein Gefaess.
+      db.exec(`CREATE TABLE IF NOT EXISTS research_samples (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        code          TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        kind          TEXT NOT NULL,
+        title         TEXT NOT NULL DEFAULT '',
+        made          TEXT NOT NULL,
+        species       TEXT NOT NULL DEFAULT '',
+        parent_id     INTEGER REFERENCES research_samples(id),
+        source        TEXT NOT NULL DEFAULT '',
+        experiment_id INTEGER REFERENCES experiments(id),
+        recipe        TEXT NOT NULL DEFAULT '[]',
+        conditions    TEXT NOT NULL DEFAULT '',
+        notes         TEXT NOT NULL DEFAULT '',
+        created       TEXT NOT NULL,
+        removed_at    TEXT,
+        removed_by    INTEGER
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_research_samples_parent ON research_samples(parent_id)');
+      // Wer was wann bekommen hat, wofuer, und was zurueckkam.
+      db.exec(`CREATE TABLE IF NOT EXISTS research_handoffs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        sample_id   INTEGER NOT NULL REFERENCES research_samples(id),
+        partner     TEXT NOT NULL,
+        given       TEXT NOT NULL,
+        amount      TEXT NOT NULL DEFAULT '',
+        purpose     TEXT NOT NULL DEFAULT '',
+        result      TEXT NOT NULL DEFAULT '',
+        result_date TEXT,
+        removed_at  TEXT,
+        removed_by  INTEGER
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_research_handoffs_sample ON research_handoffs(sample_id)');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4159,6 +4201,8 @@ function readAll(db, opts = {}) {
     shelf: listShelfItems(db),
     experiments: listExperiments(db),
     workPackages: listWorkPackages(db),
+    // Forschungsproben samt Weitergaben: der Scanner oeffnet eine Probe sofort.
+    researchSamples: listResearchSamples(db),
     projectNotes: listProjectNotes(db),
     projectDocsStamp: getProjectDocsStamp(db),
     // Ob ein Block gut ist und was zu ihm notiert wurde: das Beutel-Fenster
@@ -8468,6 +8512,7 @@ const ANSATZ_AUSGANG = ['open', 'good', 'contam', 'discarded'];
 // Eine Zeile in lab_history:
 //   at, user_id, username  wann und wer; der Name als Abschrift, siehe v89
 //   entity, entity_id      'experiment' | 'run' | 'photo' | 'work_package'
+//                          | 'sample' | 'handoff' (Forschungsproben, v114)
 //                          und seine id. Dazu zwei ohne Datensatz: 'chain',
 //                          ein Vermerk der Pruefkette (_ketteNachtragen), und
 //                          'database', eine zurueckgespielte Sicherung als
@@ -8659,7 +8704,11 @@ const LABOR = {
   experiment: { tabelle: 'experiments', stand: _versuchStand, versuch: (z) => z.id },
   run: { tabelle: 'experiment_runs', stand: _ansatzStand, versuch: (z) => z.experiment_id },
   photo: { tabelle: 'experiment_photos', stand: _fotoDaten, versuch: (z) => z.experiment_id },
-  work_package: { tabelle: 'work_packages', stand: _arbeitspaketStand, versuch: () => null }
+  work_package: { tabelle: 'work_packages', stand: _arbeitspaketStand, versuch: () => null },
+  // Proben und ihre Weitergaben stehen in keinem Versuchsverlauf, auch wenn
+  // eine Probe auf einen Versuch zeigt: der Verlauf einer Probe ist ihr eigener.
+  sample: { tabelle: 'research_samples', stand: _probeStand, versuch: () => null },
+  handoff: { tabelle: 'research_handoffs', stand: _weitergabeStand, versuch: () => null }
 };
 // Der Eintrag zu einer frisch angelegten Zeile. Gibt die Zeile zurueck.
 function _angelegt(db, wer, art, id) {
@@ -9474,6 +9523,406 @@ function listExperiments(db) {
     .map((e) => ({ id: e.id, ..._versuchStand(e), ...fach(e.id) }));
 }
 
+// ── Forschungsproben ────────────────────────────────────────
+//
+// Was aus dem Labor an einen Partner geht: eine Fluessigkultur, eine
+// Aerial-Wanne oder etwas anderes. Meldet ein Partner sich zu "RLC-003", soll
+// hier in einem Blick stehen, was das war: das Rezept, die Bedingungen, woraus
+// sie gemacht wurde, und wer wann wie viel davon bekommen hat.
+//
+// Das Rezept hat zehn freie Zeilen, Zutat, Menge, Einheit, alles Text. Eine
+// feste Zutatenliste kommt, wenn sich zeigt, welche Namen benutzt werden; bis
+// dahin schlaegt die App die schon benutzten vor.
+//
+// Jede Aenderung geht in lab_history wie die an Versuchen, mit Pruefkette:
+// spaeter laesst sich belegen, wie das Rezept am Tag der Weitergabe aussah.
+// Proben und Weitergaben werden entfernt, nicht geloescht.
+//
+// Die Meldungen sind fuer die Person am Telefon und beginnen mit "Probe:",
+// damit der Server sie als Auskunft durchreicht (SAFE_ERROR_PREFIXES).
+const PROBE_ARTEN = ['lc', 'aerial', 'other'];
+const PROBE_PRAEFIX = { lc: 'RLC', aerial: 'RAM', other: 'RS' };
+const PROBE_REZEPT_ZEILEN = 10;
+// Feld: [hoechstens Zeichen, wie es in einer Meldung heisst]
+const PROBE_LAENGEN = {
+  title: [200, 'Der Titel'],
+  species: [100, 'Die Pilzart'],
+  source: [200, 'Die Herkunft'],
+  conditions: [2000, 'Die Bedingungen'],
+  notes: [5000, 'Die Beobachtungen']
+};
+const WEITERGABE_LAENGEN = {
+  partner: [100, 'Der Partner'],
+  amount: [50, 'Die Menge'],
+  purpose: [1000, 'Wofür'],
+  result: [5000, 'Die Rückmeldung']
+};
+const PROBE_CODE_MUSTER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,19}$/;
+
+function _probeRezept(text) {
+  try {
+    const r = JSON.parse(text || '[]');
+    return Array.isArray(r) ? r : [];
+  } catch {
+    return [];
+  }
+}
+// Die Probe, wie die API und der Verlauf sie zeigen.
+function _probeStand(z) {
+  return {
+    code: z.code,
+    kind: z.kind,
+    title: z.title || '',
+    made: z.made,
+    species: z.species || '',
+    parentId: z.parent_id ?? null,
+    source: z.source || '',
+    experimentId: z.experiment_id ?? null,
+    recipe: _probeRezept(z.recipe),
+    conditions: z.conditions || '',
+    notes: z.notes || ''
+  };
+}
+function _weitergabeStand(z) {
+  return {
+    sampleId: z.sample_id,
+    partner: z.partner,
+    given: z.given,
+    amount: z.amount || '',
+    purpose: z.purpose || '',
+    result: z.result || '',
+    resultDate: z.result_date ?? null
+  };
+}
+function _probeFehler(text) {
+  return new Error('Probe: ' + text);
+}
+function _probeTag(wert, feld) {
+  if (wert == null || wert === '') return null;
+  const s = String(wert);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(Date.parse(s + 'T00:00:00Z'))) {
+    throw _probeFehler(feld + ' ist kein Datum. Bitte als Tag eintragen, zum Beispiel 2026-01-31.');
+  }
+  return s;
+}
+function _probeHeute() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function _probeText(f, feld, max, name) {
+  if (f[feld] == null) return undefined;
+  if (typeof f[feld] !== 'string') throw _probeFehler(name + ' muss Text sein.');
+  const s = f[feld].trim();
+  if (s.length > max) throw _probeFehler(name + ' ist zu lang. Höchstens ' + max + ' Zeichen.');
+  return s;
+}
+// Zehn Zeilen, leere fallen weg. Eine Menge ohne Zutat waere spaeter nicht
+// mehr zu lesen, deshalb wird sie abgelehnt.
+function _probeRezeptPruefen(rezept) {
+  if (rezept == null) return undefined;
+  if (!Array.isArray(rezept)) throw _probeFehler('Das Rezept muss eine Liste von Zeilen sein.');
+  const zeilen = [];
+  rezept.forEach((z, i) => {
+    const feld = (k) => (z && z[k] != null ? String(z[k]).trim() : '');
+    const name = feld('name');
+    const amount = feld('amount');
+    const unit = feld('unit');
+    if (!name && !amount && !unit) return;
+    if (!name) throw _probeFehler('Rezeptzeile ' + (i + 1) + ': die Zutat fehlt.');
+    if (name.length > 80 || amount.length > 20 || unit.length > 20) {
+      throw _probeFehler('Rezeptzeile ' + (i + 1) + ' ist zu lang.');
+    }
+    zeilen.push({ name, amount, unit });
+  });
+  if (zeilen.length > PROBE_REZEPT_ZEILEN) {
+    throw _probeFehler('Das Rezept hat höchstens ' + PROBE_REZEPT_ZEILEN + ' Zeilen.');
+  }
+  return zeilen;
+}
+function _probeCodeFrei(db, code, ausser) {
+  if (!PROBE_CODE_MUSTER.test(code)) {
+    throw _probeFehler(
+      'Der Code darf nur Buchstaben, Ziffern, Punkt, Binde- und Unterstrich haben, höchstens 20 Zeichen.'
+    );
+  }
+  const belegt = db
+    .prepare('SELECT 1 FROM research_samples WHERE code=? COLLATE NOCASE AND id IS NOT ?')
+    .get(code, ausser == null ? null : ausser);
+  if (belegt) throw _probeFehler('Den Code „' + code + '“ gibt es schon. Nimm einen anderen oder lass das Feld leer.');
+}
+// Der naechste freie Code einer Art: RLC-001, RLC-002 ... Gezaehlt wird ab der
+// hoechsten Nummer, auch ueber entfernte Proben: ein Code kommt nie zweimal.
+function nextResearchSampleCode(db, kind) {
+  const praefix = PROBE_PRAEFIX[kind] || PROBE_PRAEFIX.other;
+  let max = 0;
+  for (const z of db.prepare('SELECT code FROM research_samples WHERE code LIKE ?').all(praefix + '-%')) {
+    const m = new RegExp('^' + praefix + '-(\\d+)$', 'i').exec(z.code);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return praefix + '-' + String(max + 1).padStart(3, '0');
+}
+function _probeVersuchPruefen(db, id) {
+  if (id == null) return null;
+  if (!Number.isInteger(id) || !db.prepare('SELECT 1 FROM experiments WHERE id=?').get(id)) {
+    throw _probeFehler('Diesen Versuch gibt es nicht. Lade die Seite neu.');
+  }
+  return id;
+}
+// Eine Probe stammt aus einer anderen, die es gibt, und nie aus sich selbst
+// oder einer, die aus ihr gemacht wurde.
+function _probeHerkunftPruefen(db, parentId, id) {
+  if (parentId == null) return null;
+  if (!Number.isInteger(parentId) || !db.prepare('SELECT 1 FROM research_samples WHERE id=?').get(parentId)) {
+    throw _probeFehler('Die Ausgangsprobe gibt es nicht. Lade die Seite neu.');
+  }
+  if (id != null) {
+    const eltern = db.prepare('SELECT parent_id FROM research_samples WHERE id=?');
+    let x = parentId;
+    for (let n = 0; x != null && n < 10000; n++) {
+      if (x === id) throw _probeFehler('Eine Probe kann nicht aus sich selbst oder ihren eigenen Folgeproben stammen.');
+      x = eltern.get(x).parent_id;
+    }
+  }
+  return parentId;
+}
+// Alle Proben mit ihren Weitergaben und der Barcode-Nummer, auch entfernte:
+// die App blendet sie aus und braucht sie fuer Rueckgaengig.
+function listResearchSamples(db) {
+  const jeProbe = new Map();
+  for (const w of db.prepare('SELECT * FROM research_handoffs ORDER BY given, id').all()) {
+    if (!jeProbe.has(w.sample_id)) jeProbe.set(w.sample_id, []);
+    jeProbe.get(w.sample_id).push({ id: w.id, ..._weitergabeStand(w), removedAt: w.removed_at || null });
+  }
+  const nummern = new Map(
+    db
+      .prepare("SELECT barcode, entity_id FROM barcodes WHERE entity_type='sample'")
+      .all()
+      .map((b) => [Number(b.entity_id), b.barcode])
+  );
+  return db
+    .prepare('SELECT * FROM research_samples ORDER BY made DESC, id DESC')
+    .all()
+    .map((z) => ({
+      id: z.id,
+      ..._probeStand(z),
+      barcode: nummern.get(z.id) ?? null,
+      created: z.created,
+      removedAt: z.removed_at || null,
+      handoffs: jeProbe.get(z.id) || []
+    }));
+}
+// Legt eine Probe an und gibt { id, code, barcode } zurueck. Ohne Code bekommt
+// sie den naechsten ihrer Art.
+function insertResearchSample(db, f, wer) {
+  f = f || {};
+  const kind = f.kind == null ? 'other' : f.kind;
+  if (!PROBE_ARTEN.includes(kind)) throw _probeFehler('Diese Art von Probe gibt es nicht.');
+  const texte = {};
+  for (const [feld, [max, name]] of Object.entries(PROBE_LAENGEN)) {
+    texte[feld] = _probeText(f, feld, max, name) || '';
+  }
+  const rezept = _probeRezeptPruefen(f.recipe) || [];
+  const made = _probeTag(f.made, 'Das Datum') || _probeHeute();
+  const parentId = _probeHerkunftPruefen(db, f.parentId ?? null, null);
+  const experimentId = _probeVersuchPruefen(db, f.experimentId ?? null);
+  let code = f.code == null ? '' : String(f.code).trim();
+  if (!code) code = nextResearchSampleCode(db, kind);
+  _probeCodeFrei(db, code);
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'INSERT INTO research_samples(code,kind,title,made,species,parent_id,source,experiment_id,recipe,conditions,notes,created) ' +
+          'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)'
+      )
+      .run(
+        code,
+        kind,
+        texte.title,
+        made,
+        texte.species,
+        parentId,
+        texte.source,
+        experimentId,
+        JSON.stringify(rezept),
+        texte.conditions,
+        texte.notes,
+        new Date().toISOString()
+      );
+    const id = Number(info.lastInsertRowid);
+    _angelegt(db, wer, 'sample', id);
+    const barcode = assignBarcode(db, 'sample', String(id));
+    return { id, code, barcode };
+  });
+}
+// Aendert, was mitgeschickt wurde und anders ist. Gibt true zurueck, wenn sich
+// etwas geaendert hat. Das Rezept zaehlt als ein Feld und steht im Verlauf als
+// ganze Liste, vorher und nachher.
+function updateResearchSample(db, id, f, wer) {
+  const zeile = db.prepare('SELECT * FROM research_samples WHERE id=?').get(id);
+  if (!zeile) throw _probeFehler('Diese Probe gibt es nicht mehr. Lade die Seite neu.');
+  f = f || {};
+  const neu = {};
+  if (f.code != null) {
+    const code = String(f.code).trim();
+    if (!code) throw _probeFehler('Eine Probe braucht einen Code.');
+    neu.code = code;
+  }
+  if (f.kind != null) {
+    if (!PROBE_ARTEN.includes(f.kind)) throw _probeFehler('Diese Art von Probe gibt es nicht.');
+    neu.kind = f.kind;
+  }
+  for (const [feld, [max, name]] of Object.entries(PROBE_LAENGEN)) {
+    const s = _probeText(f, feld, max, name);
+    if (s !== undefined) neu[feld] = s;
+  }
+  if (f.made !== undefined) {
+    neu.made = _probeTag(f.made, 'Das Datum');
+    if (!neu.made) throw _probeFehler('Eine Probe braucht ein Datum.');
+  }
+  if (f.parentId !== undefined) neu.parentId = _probeHerkunftPruefen(db, f.parentId, id);
+  if (f.experimentId !== undefined) neu.experimentId = _probeVersuchPruefen(db, f.experimentId);
+  const rezept = _probeRezeptPruefen(f.recipe);
+  if (rezept !== undefined) neu.recipe = JSON.stringify(rezept);
+  const vorher = { ..._probeStand(zeile), recipe: zeile.recipe || '[]' };
+  // null fuer Ausgangsprobe und Versuch heisst: keine. _aenderungen sieht
+  // undefined als nicht geschickt, null als leer.
+  const aenderungen = _aenderungen(vorher, neu, [
+    'code',
+    'kind',
+    'title',
+    'made',
+    'species',
+    'parentId',
+    'source',
+    'experimentId',
+    'recipe',
+    'conditions',
+    'notes'
+  ]);
+  if (!aenderungen.length) return false;
+  const neuerCode = aenderungen.find((a) => a.feld === 'code');
+  if (neuerCode) _probeCodeFrei(db, neuerCode.neu, id);
+  const spalte = { parentId: 'parent_id', experimentId: 'experiment_id' };
+  _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'UPDATE research_samples SET ' +
+          aenderungen.map((a) => (spalte[a.feld] || a.feld) + '=?').join(',') +
+          ' WHERE id=?'
+      )
+      .run(...aenderungen.map((a) => (a.neu === undefined ? null : a.neu)), id);
+    _nurMitZeile(info, 'sample');
+    _geaendert(db, wer, 'sample', zeile, aenderungen);
+  });
+  return true;
+}
+function removeResearchSample(db, id, wer) {
+  return _entfernen(db, 'sample', id, wer, true);
+}
+function restoreResearchSample(db, id, wer) {
+  const zeile = db.prepare('SELECT * FROM research_samples WHERE id=?').get(id);
+  // Traegt inzwischen eine andere Probe den Code, haette die App danach zwei.
+  if (zeile && zeile.removed_at) _probeCodeFrei(db, zeile.code, id);
+  return _entfernen(db, 'sample', id, wer, false);
+}
+
+function _weitergabeFelder(f, neu) {
+  const aus = {};
+  for (const [feld, [max, name]] of Object.entries(WEITERGABE_LAENGEN)) {
+    const s = _probeText(f, feld, max, name);
+    if (s !== undefined) aus[feld] = s;
+  }
+  if (neu || aus.partner !== undefined) {
+    if (!aus.partner) throw _probeFehler('Trag ein, wer die Probe bekommt.');
+  }
+  if (f.given !== undefined) aus.given = _probeTag(f.given, 'Das Datum');
+  if (f.resultDate !== undefined) aus.resultDate = _probeTag(f.resultDate, 'Das Datum der Rückmeldung');
+  return aus;
+}
+function insertResearchHandoff(db, f, wer) {
+  f = f || {};
+  const probe = Number.isInteger(f.sampleId)
+    ? db.prepare('SELECT * FROM research_samples WHERE id=?').get(f.sampleId)
+    : null;
+  if (!probe) throw _probeFehler('Diese Probe gibt es nicht mehr. Lade die Seite neu.');
+  if (probe.removed_at) throw _probeFehler('Die Probe ist entfernt. Hol sie erst zurück.');
+  const w = _weitergabeFelder(f, true);
+  return _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'INSERT INTO research_handoffs(sample_id,partner,given,amount,purpose,result,result_date) VALUES(?,?,?,?,?,?,?)'
+      )
+      .run(
+        probe.id,
+        w.partner,
+        w.given || _probeHeute(),
+        w.amount || '',
+        w.purpose || '',
+        w.result || '',
+        w.resultDate || (w.result ? _probeHeute() : null)
+      );
+    const id = Number(info.lastInsertRowid);
+    _angelegt(db, wer, 'handoff', id);
+    return id;
+  });
+}
+// Kommt eine Rueckmeldung zum ersten Mal, bekommt sie den heutigen Tag, wenn
+// keiner mitgeschickt wurde: wann sie kam, gehoert zu ihr.
+function updateResearchHandoff(db, id, f, wer) {
+  const zeile = db.prepare('SELECT * FROM research_handoffs WHERE id=?').get(id);
+  if (!zeile) throw _probeFehler('Diese Weitergabe gibt es nicht mehr. Lade die Seite neu.');
+  const neu = _weitergabeFelder(f || {}, false);
+  if (neu.given === null) throw _probeFehler('Eine Weitergabe braucht ein Datum.');
+  if (neu.result && !zeile.result && neu.resultDate === undefined && !zeile.result_date) {
+    neu.resultDate = _probeHeute();
+  }
+  const aenderungen = _aenderungen(_weitergabeStand(zeile), neu, [
+    'partner',
+    'given',
+    'amount',
+    'purpose',
+    'result',
+    'resultDate'
+  ]);
+  if (!aenderungen.length) return false;
+  _mitVerlauf(db, () => {
+    const info = db
+      .prepare(
+        'UPDATE research_handoffs SET ' +
+          aenderungen.map((a) => (a.feld === 'resultDate' ? 'result_date' : a.feld) + '=?').join(',') +
+          ' WHERE id=?'
+      )
+      .run(...aenderungen.map((a) => (a.neu === undefined ? null : a.neu)), id);
+    _nurMitZeile(info, 'handoff');
+    _geaendert(db, wer, 'handoff', zeile, aenderungen);
+  });
+  return true;
+}
+function removeResearchHandoff(db, id, wer) {
+  return _entfernen(db, 'handoff', id, wer, true);
+}
+function restoreResearchHandoff(db, id, wer) {
+  return _entfernen(db, 'handoff', id, wer, false);
+}
+// Der Verlauf einer Probe samt ihren Weitergaben, aeltester Eintrag zuerst.
+function listResearchSampleHistory(db, id) {
+  const weitergaben = db
+    .prepare('SELECT id FROM research_handoffs WHERE sample_id=?')
+    .all(id)
+    .map((w) => w.id);
+  return db
+    .prepare(
+      'SELECT h.*, u.username AS konto FROM lab_history h LEFT JOIN users u ON u.id = h.user_id ' +
+        "WHERE (h.entity='sample' AND h.entity_id=?)" +
+        (weitergaben.length
+          ? " OR (h.entity='handoff' AND h.entity_id IN (" + weitergaben.map(() => '?').join(',') + '))'
+          : '') +
+        ' ORDER BY h.id'
+    )
+    .all(id, ...weitergaben)
+    .map(_verlaufEintrag);
+}
+
 // ── Laborbuch zum Drucken ───────────────────────────────────
 //
 // Was ein Pruefer sehen will, wenn er nachfragt, und was Jahre spaeter noch
@@ -9930,7 +10379,7 @@ function _entfernen(db, art, id, wer, weg) {
     _verlauf(db, wer, {
       entity: art,
       entityId: zeile.id,
-      experimentId: zeile.experiment_id,
+      experimentId: LABOR[art].versuch(zeile),
       action: weg ? 'remove' : 'restore',
       old: weg ? datensatz : null,
       new: weg ? null : datensatz
@@ -12796,7 +13245,9 @@ const SAFE_ERROR_PREFIXES = [
   'Stamm:',
   // Laborbuch — Versuche, Gefäße und Notizen. Ein Code, den es schon gibt, oder
   // ein Ausgang, den es nicht gibt, ist eine Auskunft, kein Serverfehler.
-  'lab:'
+  'lab:',
+  // Forschungsproben: jede Meldung sagt in Worten, was nicht geht.
+  'Probe:'
 ];
 
 const SAFE_ERROR_BARE = new Set([
@@ -14833,6 +15284,17 @@ module.exports = {
   updateLabThresholds,
   updateRhythmStart,
   listExperiments,
+  listResearchSamples,
+  nextResearchSampleCode,
+  insertResearchSample,
+  updateResearchSample,
+  removeResearchSample,
+  restoreResearchSample,
+  insertResearchHandoff,
+  updateResearchHandoff,
+  removeResearchHandoff,
+  restoreResearchHandoff,
+  listResearchSampleHistory,
   addExperimentPhoto,
   getExperimentPhotoByUuid,
   getExperimentPhotoById,

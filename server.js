@@ -11231,6 +11231,156 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // ── Forschungsproben ───────────────────────────────────────
+  //
+  // Proben fuer Partner, ihr Rezept, und wer was davon bekommen hat. Geprueft
+  // wird in db.js; die Meldungen dort sind fuer die Person am Telefon. Wie bei
+  // den Gefaessen nimmt DELETE heraus und /restore holt zurueck.
+  const probeTreffer = url.match(/^\/api\/research-samples\/(\d+)(\/restore|\/history)?$/);
+  const weitergabeTreffer = url.match(/^\/api\/research-handoffs\/(\d+)(\/restore)?$/);
+  const PROBE_TYPEN = {
+    code: 'string',
+    kind: 'string',
+    title: 'string',
+    made: 'string',
+    species: 'string',
+    source: 'string',
+    recipe: 'array',
+    conditions: 'string',
+    notes: 'string'
+  };
+  const WEITERGABE_TYPEN = {
+    partner: 'string',
+    given: 'string',
+    amount: 'string',
+    purpose: 'string',
+    result: 'string',
+    resultDate: 'string'
+  };
+  if (req.method === 'POST' && url === '/api/research-samples') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vt = validateTypes(data || {}, { ...PROBE_TYPEN, parentId: 'number', experimentId: 'number' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      try {
+        const neu = db.insertResearchSample(database, data, req.authUser);
+        broadcastSSE(res);
+        jsonOk(res, neu);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (probeTreffer) {
+    const id = parseInt(probeTreffer[1], 10);
+    const zusatz = probeTreffer[2] || '';
+    if (req.method === 'GET' && zusatz === '/history') {
+      try {
+        jsonOk(res, { history: db.listResearchSampleHistory(database, id) });
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+    if (req.method === 'PATCH' && !zusatz) {
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        const vt = validateTypes(data || {}, { ...PROBE_TYPEN, parentId: 'number', experimentId: 'number' });
+        if (vt) {
+          jsonErr(res, 400, vt);
+          return;
+        }
+        try {
+          if (db.updateResearchSample(database, id, data, req.authUser)) broadcastSSE(res);
+          jsonOk(res);
+        } catch (err) {
+          safeErr(res, err);
+        }
+      });
+      return;
+    }
+    if ((req.method === 'DELETE' && !zusatz) || (req.method === 'POST' && zusatz === '/restore')) {
+      try {
+        const geaendert =
+          req.method === 'DELETE'
+            ? db.removeResearchSample(database, id, req.authUser)
+            : db.restoreResearchSample(database, id, req.authUser);
+        if (geaendert) broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+  }
+  if (req.method === 'POST' && url === '/api/research-handoffs') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vt = validateTypes(data || {}, { ...WEITERGABE_TYPEN, sampleId: 'number' });
+      if (vt) {
+        jsonErr(res, 400, vt);
+        return;
+      }
+      try {
+        const id = db.insertResearchHandoff(database, data, req.authUser);
+        broadcastSSE(res);
+        jsonOk(res, { id });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (weitergabeTreffer) {
+    const id = parseInt(weitergabeTreffer[1], 10);
+    const zurueck = !!weitergabeTreffer[2];
+    if (req.method === 'PATCH' && !zurueck) {
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        const vt = validateTypes(data || {}, WEITERGABE_TYPEN);
+        if (vt) {
+          jsonErr(res, 400, vt);
+          return;
+        }
+        try {
+          if (db.updateResearchHandoff(database, id, data, req.authUser)) broadcastSSE(res);
+          jsonOk(res);
+        } catch (err) {
+          safeErr(res, err);
+        }
+      });
+      return;
+    }
+    if ((req.method === 'DELETE' && !zurueck) || (req.method === 'POST' && zurueck)) {
+      try {
+        const geaendert = zurueck
+          ? db.restoreResearchHandoff(database, id, req.authUser)
+          : db.removeResearchHandoff(database, id, req.authUser);
+        if (geaendert) broadcastSSE(res);
+        jsonOk(res);
+      } catch (err) {
+        safeErr(res, err);
+      }
+      return;
+    }
+  }
+
   // ── Vorhaben-Texte ─────────────────────────────────────────
   //
   // Die Unterlagen hinter Forschung, Produkte und Bau. Lesen darf, wer die Seite
