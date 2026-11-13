@@ -825,21 +825,20 @@ function _normalizeBillbee(o) {
         unitPrice: li.TotalPrice != null && qty ? Math.round((Number(li.TotalPrice) / qty) * 10000) / 10000 : null
       };
     });
-  // TotalCost is documented as the total *without* shipping, unlike the other
-  // three channels' totals, so the shipping cost is added back — otherwise the
-  // hub under-reports every Billbee order by its postage.
+  // TotalCost is the whole order, shipping included, like the other three
+  // channels' totals. ShippingCost is a part of it, not something to add.
   //
-  // ⚠️ That reading is the API documentation's, and it cannot be checked from
-  // here; several Billbee clients treat TotalCost as the whole order. Read the
-  // wrong way it would *over*-report every order by its postage instead, and
-  // nothing about the number would look wrong. So a paid order is believed over
-  // the arithmetic: PaidAmount is what the buyer actually handed over, and it is
-  // right whichever way the documentation is meant.
+  // This used to add ShippingCost on top, on one reading of the API docs. A live
+  // order settled it (checked against the shop's own order page, Nov 2026): the
+  // shop said items + shipping = paid, and the hub had stored paid + shipping, so
+  // every Billbee order was over-reported by its postage and nothing about the
+  // number looked wrong. Billbee's own order view agrees, and the Wix push below
+  // already sends the full total as TotalCost.
   //
-  // Rounded because it is money and this is the one channel where two figures are
-  // added: 0.10 + 0.70 lands on 0.7999999999999999 in binary floating point.
-  const summed =
-    o.TotalCost != null ? Number(o.TotalCost) + (o.ShippingCost != null ? Number(o.ShippingCost) : 0) : null;
+  // A paid order is still believed first: PaidAmount is what the buyer actually
+  // handed over. Shopify orders arrive through Billbee without it, so TotalCost
+  // is what most orders use.
+  const summed = o.TotalCost != null ? Number(o.TotalCost) : null;
   const paid = o.PayedAt && o.PaidAmount != null ? Number(o.PaidAmount) : null;
   const chosen = paid != null && paid > 0 ? paid : summed;
   const total = chosen != null && Number.isFinite(chosen) ? Math.round(chosen * 100) / 100 : null;
