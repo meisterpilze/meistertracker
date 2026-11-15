@@ -1062,6 +1062,79 @@ function validateMushroomStrain(data) {
   }
   return null;
 }
+// What POST /api/tasks checks, for the fields a PATCH names. The times are
+// shown in the calendar's week and day views and written into the .ics files,
+// so they must be the HH:MM the time inputs send.
+function validateTaskFields(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'Request body must be a JSON object';
+  if (data.text !== undefined && !data.text) return 'Missing required field: text';
+  const vt = validateTypes(data, {
+    text: 'string',
+    priority: 'string',
+    assignee: 'string',
+    description: 'string',
+    recurrence: 'string',
+    dueDate: 'string',
+    dueTime: 'string',
+    dueEndTime: 'string',
+    recurrenceUntil: 'string',
+    caldavUid: 'string',
+    caldavSynced: 'string'
+  });
+  if (vt) return vt;
+  const vlen = validateLengths(data, { text: 2000, description: 10000, assignee: 200, caldavUid: 255 });
+  if (vlen) return vlen;
+  const ve = validateEnum(data.priority, ['low', 'med', 'high'], 'priority');
+  if (ve) return ve;
+  if (data.recurrence) {
+    const vr = validateEnum(data.recurrence, ['daily', 'weekly', 'monthly'], 'recurrence');
+    if (vr) return vr;
+  }
+  for (const f of ['dueDate', 'recurrenceUntil', 'caldavSynced']) {
+    const vd = validateDate(data[f], f);
+    if (vd) return vd;
+  }
+  for (const f of ['dueTime', 'dueEndTime']) {
+    const vtod = validateTimeOfDay(data[f], f);
+    if (vtod) return vtod;
+  }
+  if (data.caldavUid && /[\r\n]/.test(data.caldavUid)) return 'caldavUid must be a single line';
+  return null;
+}
+// Bag ids and bag weights as the batch and contamination routes take them. A
+// bag id is shown in the batch dialogs, the location lists and on labels, so
+// it gets the charset every other id has; a weight goes into stock bookings and
+// is shown as a number, so it has to be one.
+function validateBagId(v, field) {
+  if (typeof v !== 'string' || !v || v.length > 100 || !ID_CHARSET_RE.test(v)) {
+    return field + ' must be alphanumeric with - _ @ . : (max 100 chars)';
+  }
+  return null;
+}
+function validateBagKg(v, field) {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1000) {
+    return field + ' must be a number of kilograms (max 1000)';
+  }
+  return null;
+}
+// A list of bags: each entry the id itself, or { id, bagKg } as the grain form
+// sends it.
+function validateBagList(bags, field) {
+  if (bags === undefined || bags === null) return null;
+  if (!Array.isArray(bags)) return field + ' must be an array';
+  if (bags.length > 10000) return field + ': at most 10000 bags';
+  for (let i = 0; i < bags.length; i++) {
+    const b = bags[i];
+    const name = field + '[' + i + ']';
+    const v =
+      b && typeof b === 'object'
+        ? validateBagId(b.id, name + '.id') || validateBagKg(b.bagKg, name + '.bagKg')
+        : validateBagId(b, name);
+    if (v) return v;
+  }
+  return null;
+}
 const SCAN_ACTIONS = ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'CONTAM'];
 function validateScanEntries(entries) {
   if (!Array.isArray(entries)) return 'entries must be an array';
@@ -8953,6 +9026,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'batchId must be alphanumeric with - _ @ . : (max 100 chars)');
         return;
       }
+      const vbag =
+        (Number.isInteger(data.qty) ? null : 'qty must be a whole number') ||
+        validateBagKg(data.bagKg, 'bagKg') ||
+        validateBagList(data.bags, 'bags');
+      if (vbag) {
+        jsonErr(res, 400, vbag);
+        return;
+      }
       // Eine Charge, die schon stand, bevor sie in der App war (Inventur), bringt
       // ihr Datum mit. Ohne Angabe gilt jetzt, wie bisher.
       const vd = validateDate(data.created, 'created');
@@ -9034,6 +9115,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vbt);
         return;
       }
+      const vbag =
+        (Number.isInteger(data.qty) ? null : 'qty must be a whole number') ||
+        validateBagKg(data.bagKg, 'bagKg') ||
+        validateBagList(data.bags, 'bags');
+      if (vbag) {
+        jsonErr(res, 400, vbag);
+        return;
+      }
       let vd = validateDate(data.created, 'created');
       if (vd) {
         jsonErr(res, 400, vd);
@@ -9106,7 +9195,20 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             return;
           }
         }
-        const result = db.addBagsToBatch(database, id, data.add || [], data.newQty, bagKg, userId);
+        // The new bags are plain ids here, and the count goes straight into the
+        // batch row, so both are checked like the ones a new batch brings.
+        const add = data.add == null ? [] : data.add;
+        const vadd =
+          validateBagList(add, 'add') ||
+          (add.some((b) => typeof b !== 'string') ? 'add must be a list of bag ids' : null) ||
+          (data.newQty == null || (Number.isInteger(data.newQty) && data.newQty >= 0 && data.newQty <= 100000)
+            ? null
+            : 'newQty must be a whole number');
+        if (vadd) {
+          jsonErr(res, 400, vadd);
+          return;
+        }
+        const result = db.addBagsToBatch(database, id, add, data.newQty, bagKg, userId);
         broadcastSSE(res);
         jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
       } catch (err) {
@@ -9411,8 +9513,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         return;
       }
       const targets = contamReportTargets(data);
+      // The bag goes into the scan log with the automatic move and is shown in
+      // the location lists from there, so it gets the charset a scanned bag has.
       const vbl = targets
-        .map((tg) => validateLengths(tg, { bag_id: 100, batch_id: 100, report_uuid: 100 }))
+        .map(
+          (tg) =>
+            validateLengths(tg, { bag_id: 100, batch_id: 100, report_uuid: 100 }) ||
+            (tg.bag_id == null ? null : validateBagId(tg.bag_id, 'bag_id')) ||
+            (tg.batch_id == null ? null : validateBagId(tg.batch_id, 'batch_id'))
+        )
         .find(Boolean);
       if (vbl) {
         jsonErr(res, 400, vbl);
@@ -10452,6 +10561,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     jsonBody(req, res, (e, data) => {
       if (e) {
         jsonErr(res, 400, e.message);
+        return;
+      }
+      const vf = validateTaskFields(data);
+      if (vf) {
+        jsonErr(res, 400, vf);
         return;
       }
       try {
