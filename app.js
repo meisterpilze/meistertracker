@@ -422,6 +422,15 @@ function esc(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+// A value for a quoted JavaScript string inside an inline handler:
+// onclick="f('${escJs(id)}')". esc() is not enough there. The browser decodes
+// the attribute first, so &#39; is a quote again by the time the handler runs.
+// Everything but a few plain characters becomes a \uXXXX escape, which no
+// attribute decoding touches and which JavaScript reads back as the character.
+function escJs(s) {
+  if (s == null) return '';
+  return String(s).replace(/[^A-Za-z0-9 _.,:@#+/-]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
 // Parse a user-entered decimal that may use a German comma as the decimal
 // separator ("1,5" → 1.5, "1.234,5" → 1234.5). The app's default language is
 // German and the quantity inputs are type=text inputmode=decimal, so mobile
@@ -4885,7 +4894,7 @@ function renderRackSection(zone, racks, filtered) {
         <div class="batch-card-chips">${d.bags
           .map((bg) => {
             const sel = selectedLocBags.has(bg.id);
-            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
           })
           .join('')}</div>
       </div>`;
@@ -4979,7 +4988,7 @@ function renderFruitingSection(fruitingZones, filtered) {
         <div class="batch-card-chips">${d.bags
           .map((bg) => {
             const sel = selectedLocBags.has(bg.id);
-            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
           })
           .join('')}</div>
       </div>`;
@@ -5110,7 +5119,7 @@ function renderSimpleZoneSection(zone, filtered) {
       <div class="batch-card-chips">${d.bags
         .map((bg) => {
           const sel = selectedLocBags.has(bg.id);
-          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
         })
         .join('')}</div>
     </div>`;
@@ -5163,7 +5172,7 @@ function renderContamSection(zone, filtered) {
       <div class="batch-card-chips">${d.bags
         .map((bg) => {
           const sel = selectedLocBags.has(bg.id);
-          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${bg.id.split('-').pop()}</span>`;
+          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
         })
         .join('')}</div>
     </div>`;
@@ -11516,9 +11525,9 @@ async function openSubstrateInfo(subId) {
             '</td><td style="padding:4px 8px 4px 0">' +
             esc(b.species) +
             '</td><td style="padding:4px 8px 4px 0;white-space:nowrap">' +
-            b.qty +
+            esc(b.qty) +
             ' × ' +
-            b.bagKg +
+            esc(b.bagKg) +
             ' kg</td><td style="padding:4px 8px 4px 0;white-space:nowrap;font-weight:600">' +
             b.substrateKg.toFixed(1) +
             ' kg</td><td style="padding:4px 0;white-space:nowrap;color:var(--c-text-sec)">' +
@@ -12520,7 +12529,7 @@ function _bagChipsHtml(b) {
     plaetze
       .get(loc)
       .knoepfe.push(
-        `<button type="button" class="bag-open-chip fs-micro" onclick="openBagInfo('${esc(bag)}','${esc(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-family:monospace;padding:3px 8px;border-radius:5px;background:#fff;border:1px solid var(--c-border);cursor:pointer${raus ? ';text-decoration:line-through;opacity:.5' : ''}">${esc(bag.split('-').pop())}${wTag}</button>`
+        `<button type="button" class="bag-open-chip fs-micro" onclick="openBagInfo('${escJs(bag)}','${escJs(b.batchId)}')" title="${esc(t('bagInfo.openHint'))}" style="font-family:monospace;padding:3px 8px;border-radius:5px;background:#fff;border:1px solid var(--c-border);cursor:pointer${raus ? ';text-decoration:line-through;opacity:.5' : ''}">${esc(bag.split('-').pop())}${wTag}</button>`
       );
   }
   return (
@@ -26614,7 +26623,7 @@ function renderLabList() {
     ? rows
         .map(
           (c) =>
-            `<label class="fs-meta" style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id) ? 'checked' : ''} onchange="toggleLabId('${esc(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type === 'MC' ? 'badge-mc' : c.type === 'PD' ? 'badge-pd' : 'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain ? ' / ' + esc(c.strain) : ''}</span></label>`
+            `<label class="fs-meta" style="display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;border-bottom:0.5px solid #f0ede8"><input type="checkbox" ${selectedLabIds.has(c.id) ? 'checked' : ''} onchange="toggleLabId('${escJs(c.id)}',this.checked)" style="width:14px;height:14px;margin:0" /><span style="font-family:monospace;font-weight:500">${esc(c.id)}</span><span class="badge ${c.type === 'MC' ? 'badge-mc' : c.type === 'PD' ? 'badge-pd' : 'badge-lc'}">${esc(c.type)}</span><span style="color:var(--c-text-muted)">${esc(c.species)}${c.strain ? ' / ' + esc(c.strain) : ''}</span></label>`
         )
         .join('')
     : '<div class="fs-meta" style="color:var(--c-text-muted);padding:6px">No cultures match.</div>';
@@ -30017,7 +30026,10 @@ function renderCalWeek() {
             ' <span class="cal-ev-assignees">' + e.assignees.map((a) => esc(a.username)).join(', ') + '</span>';
         if (height >= 48 && e.startTime)
           wkContent +=
-            '<div class="fs-micro" style="opacity:.8">' + e.startTime + (e.endTime ? ' — ' + e.endTime : '') + '</div>';
+            '<div class="fs-micro" style="opacity:.8">' +
+            esc(e.startTime) +
+            (e.endTime ? ' — ' + esc(e.endTime) : '') +
+            '</div>';
         if (height >= 72 && e.description)
           wkContent += '<div class="fs-micro" style="opacity:.7;margin-top:1px">' + esc(e.description) + '</div>';
         el.innerHTML = wkContent;
@@ -30137,8 +30149,8 @@ function renderCalDay() {
       if (e.startTime)
         dayContent +=
           '<div class="fs-xs" style="opacity:.8;margin-top:2px">' +
-          e.startTime +
-          (e.endTime ? ' — ' + e.endTime : '') +
+          esc(e.startTime) +
+          (e.endTime ? ' — ' + esc(e.endTime) : '') +
           '</div>';
       if (height >= 72 && e.description)
         dayContent += '<div class="fs-micro" style="opacity:.7;margin-top:2px">' + esc(e.description) + '</div>';
@@ -34440,7 +34452,7 @@ function wkfRenderPick() {
     '<div class="wkf-list">' +
     rows
       .map(
-        (r) => `<button type="button" class="wkf-row" onclick="wkfPickBatch('${esc(r.batch.batchId)}')">
+        (r) => `<button type="button" class="wkf-row" onclick="wkfPickBatch('${escJs(r.batch.batchId)}')">
         <span class="wkf-row-id">${esc(r.batch.batchId)}</span>
         <span class="wkf-row-meta">${esc(r.batch.species || '')} &middot; ${r.live} ${esc(t('work.bags'))}</span>
         <span class="wkf-row-zone">${esc(r.zoneName)}</span>
@@ -34670,7 +34682,7 @@ function wkfRenderMove() {
     targets
       .map(
         (z) => `<button type="button" class="wkf-zone${WKF.dest === z.id ? ' sel' : ''}"
-          onclick="WKF.dest='${esc(z.id)}'; wkfRender()">
+          onclick="WKF.dest='${escJs(z.id)}'; wkfRender()">
           <span class="wkf-zone-dot" style="background:${esc(z.color || '#94a3b8')}"></span>
           <span class="wkf-zone-n">${esc(z.name || z.id)}</span>
         </button>`
