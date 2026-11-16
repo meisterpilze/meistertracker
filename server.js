@@ -3734,6 +3734,148 @@ function unfoldIcs(text) {
   return text.replace(/\r?\n[ \t]/g, '');
 }
 
+// ── Calendar objects, read line by line ─────────────────────
+//
+// A CalDAV body used to be read with one regular expression per property, each
+// run over the whole text. The patterns matched anywhere, inside a longer
+// property name or in a VALARM, so two readers of one body could disagree
+// about the UID it carried. Several could also run across line ends, and their
+// time grew with the square of the body. This reads the unfolded text once:
+// each content line is NAME[;PARAM=…]:VALUE, and each property belongs to the
+// component it stands in.
+
+// What a single calendar object may weigh, as a PUT body and as a file the
+// import reads. A task or an event is a few hundred bytes.
+const CALDAV_MAX_ICS_BYTES = 256 * 1024;
+
+// One content line: the property name in upper case, its parameters, and the
+// value. A quoted parameter value may hold ':' and ';' (RFC 5545 §3.1). null
+// for a line that is not a property.
+function parseIcsLine(line) {
+  const nameRe = /[A-Za-z0-9-]+/y;
+  const n = nameRe.exec(line);
+  if (!n) return null;
+  let i = nameRe.lastIndex;
+  const params = {};
+  const paramRe = /;([A-Za-z0-9-]+)=/y;
+  const valueRe = /"[^"]*"|[^";:,]*/y;
+  while (line.charCodeAt(i) === 59 /* ; */) {
+    paramRe.lastIndex = i;
+    const p = paramRe.exec(line);
+    if (!p) return null;
+    i = paramRe.lastIndex;
+    const values = [];
+    for (;;) {
+      valueRe.lastIndex = i;
+      const v = valueRe.exec(line)[0];
+      values.push(v.startsWith('"') ? v.slice(1, -1) : v);
+      i = valueRe.lastIndex;
+      if (line.charCodeAt(i) !== 44 /* , */) break;
+      i++;
+    }
+    params[p[1].toUpperCase()] = values.join(',');
+  }
+  if (line.charCodeAt(i) !== 58 /* : */) return null;
+  return { name: n[0].toUpperCase(), params, value: line.slice(i + 1) };
+}
+
+// The components of an unfolded calendar text, nested as they stand. null when
+// an END names another component than the one open, or the nesting goes deeper
+// than any real object does. A component still open at the end of the text is
+// taken as ending there, and a byte-order mark in front is dropped: some
+// clients send both.
+function parseIcsComponents(unfolded) {
+  const root = { name: '', props: [], children: [] };
+  const stack = [root];
+  for (const raw of String(unfolded).replace(/^﻿/, '').split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    const p = line ? parseIcsLine(line) : null;
+    if (!p) continue;
+    const top = stack[stack.length - 1];
+    if (p.name === 'BEGIN') {
+      if (stack.length > 8) return null;
+      const c = { name: p.value.trim().toUpperCase(), props: [], children: [] };
+      top.children.push(c);
+      stack.push(c);
+    } else if (p.name === 'END') {
+      if (stack.length === 1 || top.name !== p.value.trim().toUpperCase()) return null;
+      stack.pop();
+    } else {
+      top.props.push(p);
+    }
+  }
+  return root;
+}
+
+// The one object a CalDAV resource holds (RFC 4791 §4.1): one kind of
+// component, VEVENT or VTODO, and every one of them with the same single UID.
+// That UID is what the S-24 guard judges and what every writer below acts on,
+// so there is one place that reads it. { error } when the body is not such an
+// object; uid is null when it holds no event or task at all.
+const ICS_ITEM_COMPONENTS = ['VEVENT', 'VTODO', 'VJOURNAL'];
+function readCalendarObject(unfolded) {
+  const root = parseIcsComponents(unfolded);
+  if (!root) return { error: 'BEGIN and END do not pair up' };
+  const cals = root.children.filter((c) => c.name === 'VCALENDAR');
+  if (cals.length > 1) return { error: 'more than one VCALENDAR' };
+  const items = cals.length ? cals[0].children.filter((c) => ICS_ITEM_COMPONENTS.includes(c.name)) : [];
+  if (new Set(items.map((c) => c.name)).size > 1) return { error: 'more than one kind of component' };
+  let uid = null;
+  for (const item of items) {
+    const uids = item.props.filter((p) => p.name === 'UID');
+    if (uids.length !== 1 || !uids[0].value.trim()) return { error: item.name + ' needs exactly one UID' };
+    if (uid !== null && uids[0].value.trim() !== uid) return { error: 'more than one UID' };
+    uid = uids[0].value.trim();
+  }
+  return { uid, items };
+}
+
+// The first property of that name in a component, and its trimmed value.
+function icsProp(component, name) {
+  return (component && component.props.find((p) => p.name === name)) || null;
+}
+function icsValue(component, name) {
+  const p = icsProp(component, name);
+  return p ? p.value.trim() : null;
+}
+
+// The component a resource is about: the one without RECURRENCE-ID, which is
+// the series or the only one there is, else the first. A client may list a
+// changed occurrence before the series it belongs to.
+function icsMaster(obj, name) {
+  const all = obj.items.filter((c) => !name || c.name === name);
+  return all.find((c) => !icsProp(c, 'RECURRENCE-ID')) || all[0] || null;
+}
+// The X-MEISTERPILZE-TYPE the app writes into its own files, from the series
+// or, failing that, from any occurrence that kept it.
+function icsAppType(obj) {
+  const master = icsMaster(obj);
+  return (
+    icsValue(master, 'X-MEISTERPILZE-TYPE') ||
+    obj.items.map((c) => icsValue(c, 'X-MEISTERPILZE-TYPE')).find(Boolean) ||
+    null
+  );
+}
+
+// A calendar file over CALDAV_MAX_ICS_BYTES is named in the log once per
+// process, not on every visit to the calendar that reads it.
+const _icsTooBigLogged = new Set();
+
+// DTSTART, DTEND or DUE as a day and, unless it is a whole day, a clock time.
+// The clock is read as written, the way the sync-back always has. null when
+// the property is missing or is neither a DATE nor a DATE-TIME.
+function icsDateTime(component, name) {
+  const p = icsProp(component, name);
+  if (!p) return null;
+  const v = p.value.trim();
+  const tag = /^(\d{4})(\d{2})(\d{2})$/.exec(v);
+  if (tag) return { date: tag[1] + '-' + tag[2] + '-' + tag[3], time: null, allDay: true, value: v };
+  if (p.params.VALUE === 'DATE') return null;
+  const zeit = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?Z?$/.exec(v);
+  if (!zeit) return null;
+  return { date: zeit[1] + '-' + zeit[2] + '-' + zeit[3], time: zeit[4] + ':' + zeit[5], allDay: false, value: v };
+}
+
 function generateUID() {
   return 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
@@ -4187,12 +4329,6 @@ const KNOWN_CATEGORIES = { custom: 1, meeting: 1, delivery: 1, maintenance: 1, p
 // Supported CalDAV report set XML (used in PROPFIND responses)
 const SUPPORTED_REPORT_SET =
   '<d:supported-report-set><d:supported-report><d:report><c:calendar-multiget/></d:report></d:supported-report><d:supported-report><d:report><c:calendar-query/></d:report></d:supported-report><d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report></d:supported-report-set>';
-
-// Extract the VEVENT block from ICS content (avoids parsing VTIMEZONE properties)
-function extractVeventBlock(ics) {
-  const m = ics.match(/BEGIN:VEVENT([\s\S]*?)END:VEVENT/);
-  return m ? m[1] : '';
-}
 
 // Convert a task object to VTODO .ics content
 function taskToVTODO(task) {
@@ -5575,16 +5711,15 @@ function handleMkcalendar(parts, body, req, res) {
 // Anything the UID does not resolve to a row for is allowed through: creating a
 // new task from a calendar client is a normal thing to do, and it takes nothing
 // from anyone.
-function caldavRecordAllowed(req, ics) {
-  // ⚠️ **Anchored, and that is not tidiness.** `/UID:(.*)/` matches inside any
-  // property whose name ends in UID — `X-DECOY-UID:harmless` in the first line
-  // fed this guard a name that resolves to nothing, so it waved the request
-  // through while the sync-back below read the real UID out of the VEVENT and
-  // wrote it. One header line walked around the whole check. The text arrives
-  // unfolded, so a line anchor is the same thing the writers see.
-  const uidMatch = String(ics || '').match(/^UID:(.*)$/m);
-  if (!uidMatch) return true;
-  const uid = uidMatch[1].trim();
+//
+// ⚠️ **The UID comes from readCalendarObject, and so does every writer's.** This
+// guard once read the UID with its own pattern while the sync-back read it with
+// others, and every difference between the two was a way past it: a property
+// whose name merely ends in UID, or a second component further down with a
+// different UID. The caller now reads the object once, refuses one that carries
+// more than one UID, and hands the same value to this guard and to the writers.
+function caldavRecordAllowed(req, uid) {
+  if (!uid) return true;
   const isAdmin = !!(req.caldavUser && req.caldavUser.role === 'admin');
   // A custom calendar event. Matched before the -event suffix is stripped, or
   // an event id that ends in "-event" would be mangled into a different one.
@@ -5602,19 +5737,29 @@ function caldavRecordAllowed(req, ics) {
   // meetings, deliveries and maintenance away from everyone over CalDAV — the
   // exact opposite of what its own commit said it did. What is being protected
   // is the shop's collection times, not the calendar.
-  const ereignis = db.readCalendarEventByCaldavUid(database, uid);
-  if (ereignis) return ereignis.category === 'pickup' ? isAdmin : true;
+  //
+  // ⚠️ **Every row the UID reaches, not the first one found.** This used to
+  // answer from the first match: a calendar row carrying the UID decided, and
+  // the tasks were never asked. But the VTODO writers act on the task with
+  // this UID, and the due-date writers on the task with it minus "-event",
+  // whatever else carries it, and a calendar row can carry any UID a client
+  // or a request gave it. So every one of them has to allow it.
+  const ereignisse = database.prepare('SELECT category FROM calendar_events WHERE caldav_uid = ?').all(uid);
+  if (!isAdmin && ereignisse.some((e) => e.category === 'pickup')) return false;
   // A task, either by its own uid or by its companion due-date event's.
-  const taskUid = uid.replace(/-event$/, '');
+  //
   // ⚠️ **No charset pre-check here.** There was one, and it failed open on
   // exactly the values it rejected: isValidCaldavUid caps a uid at 120
   // characters, the sync-back's own regex does not, so a 150-character uid was
   // waved through by this guard and then happily resolved to a row and written.
   // The lookup answers the only question that matters — does this name a row? —
   // and cannot disagree with anything.
-  const task = db.readTaskByCaldavUid(database, taskUid);
-  if (!task) return true;
-  return db.canUserModifyTask(database, req.caldavUser && req.caldavUser.username, task.id, isAdmin);
+  const wer = req.caldavUser && req.caldavUser.username;
+  for (const taskUid of new Set([uid, uid.replace(/-event$/, '')])) {
+    const tasks = database.prepare('SELECT id FROM manual_tasks WHERE caldav_uid = ?').all(taskUid);
+    if (tasks.some((t) => !db.canUserModifyTask(database, wer, t.id, isAdmin))) return false;
+  }
+  return true;
 }
 
 function handlePut(parts, body, req, res) {
@@ -5624,6 +5769,18 @@ function handlePut(parts, body, req, res) {
     if (!checkCalendarAccess(req, calName)) {
       res.writeHead(403);
       res.end('Forbidden');
+      return;
+    }
+    const bytes = Buffer.byteLength(body, 'utf8');
+    if (bytes > CALDAV_MAX_ICS_BYTES) {
+      log('warn', 'CalDAV PUT: refused a body over the size cap', {
+        calendar: calName,
+        file: parts[2],
+        bytes,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(413);
+      res.end('Request body too large');
       return;
     }
     const fileName = parts[2];
@@ -5653,11 +5810,25 @@ function handlePut(parts, body, req, res) {
 
     // Bidirectional sync: parse incoming content and update DB
     const unfolded = unfoldIcs(body);
+    const obj = readCalendarObject(unfolded);
+    if (obj.error) {
+      log('warn', 'CalDAV PUT: refused a body that is not one calendar object', {
+        calendar: calName,
+        file: fileName,
+        reason: obj.error,
+        actor: req.caldavUser && req.caldavUser.username
+      });
+      res.writeHead(400);
+      res.end('Bad Request');
+      return;
+    }
+    const todo = icsMaster(obj, 'VTODO');
+    const vevent = icsMaster(obj, 'VEVENT');
 
     // S-24: asked before the write, not after it. The sync-back below is what
     // touches the row, but a refusal that still left the caller's .ics sitting
     // in a shared calendar would be a refusal in name only.
-    if (!caldavRecordAllowed(req, unfolded)) {
+    if (!caldavRecordAllowed(req, obj.uid)) {
       log('warn', 'CalDAV PUT: refused a record the caller may not modify', {
         calendar: calName,
         file: fileName,
@@ -5673,102 +5844,76 @@ function handlePut(parts, body, req, res) {
     recordChange(calName, fileName, 'changed');
 
     // ── VTODO sync-back: task text, priority, completion, due date ──
-    if (unfolded.includes('VTODO')) {
+    // Every value below is the VTODO's own property, read by readCalendarObject;
+    // the UID is the one the guard above was asked about.
+    if (todo) {
       try {
-        const uidMatch = unfolded.match(/UID:(.*)/);
-        if (uidMatch) {
-          const uid = uidMatch[1].trim();
-          if (/^[A-Za-z0-9\-_.@]+$/.test(uid)) {
-            const task = db.readTaskByCaldavUid(database, uid);
-            if (task) {
-              const fields = {};
-              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
-              if (sumMatch) {
-                const t = sumMatch[1].trim().replace(/\\n/g, '\n');
-                if (t !== task.text) fields.text = t;
+        const uid = obj.uid;
+        if (/^[A-Za-z0-9\-_.@]+$/.test(uid)) {
+          const task = db.readTaskByCaldavUid(database, uid);
+          const summary = icsValue(todo, 'SUMMARY');
+          const prio = icsValue(todo, 'PRIORITY');
+          const status = icsValue(todo, 'STATUS');
+          const due = icsDateTime(todo, 'DUE');
+          const desc = icsValue(todo, 'DESCRIPTION');
+          if (task) {
+            const fields = {};
+            if (summary !== null) {
+              const t = summary.replace(/\\n/g, '\n');
+              if (t !== task.text) fields.text = t;
+            }
+            if (prio !== null && /^\d+$/.test(prio)) {
+              const p = CALDAV_PRIO_MAP[prio] || 'med';
+              if (p !== task.priority) fields.priority = p;
+            }
+            if (status !== null) {
+              const done = status === 'COMPLETED';
+              if (done !== task.done) fields.done = done;
+            }
+            if (due && !due.allDay) {
+              if (due.date !== (task.dueDate || '').slice(0, 10)) fields.dueDate = due.date;
+              if (due.time !== (task.dueTime || '')) fields.dueTime = due.time;
+            } else if (due) {
+              if (due.date !== (task.dueDate || '').slice(0, 10)) fields.dueDate = due.date;
+              if (task.dueTime) {
+                fields.dueTime = null;
+                fields.dueEndTime = null;
               }
-              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
-              if (prioMatch) {
-                const p = CALDAV_PRIO_MAP[prioMatch[1]] || 'med';
-                if (p !== task.priority) fields.priority = p;
+            } else if (!icsProp(todo, 'DUE') && task.dueDate) {
+              fields.dueDate = null;
+              if (task.dueTime) {
+                fields.dueTime = null;
+                fields.dueEndTime = null;
               }
-              const statusMatch = unfolded.match(/STATUS:(.*)/);
-              if (statusMatch) {
-                const done = statusMatch[1].trim() === 'COMPLETED';
-                if (done !== task.done) fields.done = done;
-              }
-              const dueDateTimeMatch = unfolded.match(/DUE(?:;[^:]*)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?/);
-              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              if (dueDateTimeMatch) {
-                const d = dueDateTimeMatch[1] + '-' + dueDateTimeMatch[2] + '-' + dueDateTimeMatch[3];
-                const t = dueDateTimeMatch[4] + ':' + dueDateTimeMatch[5];
-                if (d !== (task.dueDate || '').slice(0, 10)) fields.dueDate = d;
-                if (t !== (task.dueTime || '')) fields.dueTime = t;
-              } else if (dueMatch) {
-                const d = dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3];
-                if (d !== (task.dueDate || '').slice(0, 10)) fields.dueDate = d;
-                if (task.dueTime) {
-                  fields.dueTime = null;
-                  fields.dueEndTime = null;
-                }
-              } else if (!unfolded.includes('DUE') && task.dueDate) {
-                fields.dueDate = null;
-                if (task.dueTime) {
-                  fields.dueTime = null;
-                  fields.dueEndTime = null;
-                }
-              }
-              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
-              if (descMatch) {
-                const d = descMatch[1].trim().replace(/\\n/g, '\n');
-                if (d !== (task.description || '')) fields.description = d;
-              }
-              const assigneeMatch = unfolded.match(/X-MEISTERPILZE-ASSIGNEE:(.*)/);
-              if (assigneeMatch) {
-                const a = assigneeMatch[1].trim();
-                if (a !== (task.assignee || '')) fields.assignee = a;
-              }
+            }
+            if (desc !== null) {
+              const d = desc.replace(/\\n/g, '\n');
+              if (d !== (task.description || '')) fields.description = d;
+            }
+            const assignee = icsValue(todo, 'X-MEISTERPILZE-ASSIGNEE');
+            if (assignee !== null && assignee !== (task.assignee || '')) fields.assignee = assignee;
 
-              if (Object.keys(fields).length > 0) {
-                db.updateTaskById(database, task.id, fields);
-                // Re-read and push to all calendars for consistency
-                const updated = db.readTaskById(database, task.id);
-                if (updated) autoPushTaskCaldav(updated);
-                broadcastSSE();
-              }
-            } else {
-              // New task created from external CalDAV client
-              const sumMatch = unfolded.match(/SUMMARY:(.*)/);
-              const text = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
-              const prioMatch = unfolded.match(/PRIORITY:(\d+)/);
-              const priority = prioMatch ? CALDAV_PRIO_MAP[prioMatch[1]] || 'med' : 'med';
-              const statusMatch = unfolded.match(/STATUS:(.*)/);
-              const done = statusMatch ? statusMatch[1].trim() === 'COMPLETED' : false;
-              const dueDateTimeMatch2 = unfolded.match(/DUE(?:;[^:]*)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?/);
-              const dueMatch = unfolded.match(/DUE;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              let dueDate = null;
-              let dueTime = null;
-              if (dueDateTimeMatch2) {
-                dueDate = dueDateTimeMatch2[1] + '-' + dueDateTimeMatch2[2] + '-' + dueDateTimeMatch2[3];
-                dueTime = dueDateTimeMatch2[4] + ':' + dueDateTimeMatch2[5];
-              } else if (dueMatch) {
-                dueDate = dueMatch[1] + '-' + dueMatch[2] + '-' + dueMatch[3];
-              }
-              const descMatch = unfolded.match(/DESCRIPTION:(.*)/);
-              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
-              db.insertTask(database, {
-                text,
-                priority,
-                done,
-                created: new Date().toISOString(),
-                dueDate,
-                dueTime,
-                description,
-                caldavUid: uid,
-                caldavSynced: new Date().toISOString()
-              });
+            if (Object.keys(fields).length > 0) {
+              db.updateTaskById(database, task.id, fields);
+              // Re-read and push to all calendars for consistency
+              const updated = db.readTaskById(database, task.id);
+              if (updated) autoPushTaskCaldav(updated);
               broadcastSSE();
             }
+          } else {
+            // New task created from external CalDAV client
+            db.insertTask(database, {
+              text: summary !== null ? summary.replace(/\\n/g, '\n') : '(kein Titel)',
+              priority: prio !== null && /^\d+$/.test(prio) ? CALDAV_PRIO_MAP[prio] || 'med' : 'med',
+              done: status === 'COMPLETED',
+              created: new Date().toISOString(),
+              dueDate: due ? due.date : null,
+              dueTime: due ? due.time : null,
+              description: desc !== null ? desc.replace(/\\n/g, '\n') : null,
+              caldavUid: uid,
+              caldavSynced: new Date().toISOString()
+            });
+            broadcastSSE();
           }
         }
       } catch (e) {
@@ -5777,20 +5922,19 @@ function handlePut(parts, body, req, res) {
     }
 
     // ── VEVENT sync-back: batch due dates, task due dates, custom events ──
-    if (unfolded.includes('VEVENT')) {
+    // The series VEVENT's own properties: a VTIMEZONE or a VALARM in the same
+    // body has DTSTART and DESCRIPTION lines of its own.
+    if (vevent) {
       try {
-        const veventBlock = extractVeventBlock(unfolded);
-        const typeMatch = veventBlock.match(/X-MEISTERPILZE-TYPE:(.*)/);
-        const evType = typeMatch ? typeMatch[1].trim() : null;
+        const evType = icsAppType(obj);
 
         if (evType === 'batch-due' || evType === 'task-due') {
-          const dtMatch = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-          if (dtMatch) {
-            const newDate = dtMatch[1] + '-' + dtMatch[2] + '-' + dtMatch[3];
+          const dt = icsDateTime(vevent, 'DTSTART');
+          if (dt && dt.allDay) {
+            const newDate = dt.date;
             if (evType === 'batch-due') {
-              const batchMatch = veventBlock.match(/X-MEISTERPILZE-BATCH:(.*)/);
-              if (batchMatch) {
-                const batchId = batchMatch[1].trim();
+              const batchId = icsValue(vevent, 'X-MEISTERPILZE-BATCH');
+              if (batchId !== null) {
                 if (/^[A-Za-z0-9\-_.]+$/.test(batchId)) {
                   db.updateBatchDue(database, batchId, newDate + 'T12:00:00.000Z');
                   broadcastSSE();
@@ -5799,159 +5943,135 @@ function handlePut(parts, body, req, res) {
                 }
               }
             } else {
-              const uidMatch = veventBlock.match(/UID:(.*)/);
-              if (uidMatch) {
-                const taskUid = uidMatch[1].trim().replace(/-event$/, '');
-                if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
-                  db.updateTaskDueDate(database, taskUid, newDate);
-                  broadcastSSE();
-                } else {
-                  log('warn', 'CalDAV PUT rejected invalid taskUid', { taskUid });
-                }
+              const taskUid = obj.uid.replace(/-event$/, '');
+              if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
+                db.updateTaskDueDate(database, taskUid, newDate);
+                broadcastSSE();
+              } else {
+                log('warn', 'CalDAV PUT rejected invalid taskUid', { taskUid });
               }
             }
           }
         } else if (evType === 'custom-event') {
           // Custom event edited from external CalDAV client
-          const uidMatch = veventBlock.match(/UID:(.*)/);
-          if (uidMatch) {
-            const uid = uidMatch[1].trim();
-            const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
-            if (idMatch) {
-              const fields = {};
-              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
-              if (sumMatch) fields.title = sumMatch[1].trim().replace(/\\n/g, '\n');
-              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
-              if (descMatch) fields.description = descMatch[1].trim().replace(/\\n/g, '\n');
-              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
-              if (catMatch) {
-                const cat = catMatch[1].trim().toLowerCase();
-                if (KNOWN_CATEGORIES[cat]) fields.category = cat;
-              }
-              // Parse DTSTART from VEVENT block only (avoids VTIMEZONE false matches)
-              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-              if (dtAllDay) {
-                fields.startDate = dtAllDay[1] + '-' + dtAllDay[2] + '-' + dtAllDay[3];
-                fields.allDay = true;
-                fields.startTime = null;
-              } else if (dtTimed) {
-                fields.startDate = dtTimed[1] + '-' + dtTimed[2] + '-' + dtTimed[3];
-                fields.startTime = dtTimed[4] + ':' + dtTimed[5];
-                fields.allDay = false;
-              }
-              // Parse DTEND from VEVENT block only
-              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-              if (deAllDay) {
-                // RFC 5545: DTEND for all-day is exclusive, so the last day is the one before
-                fields.endDate = _allDayLastDate(deAllDay[1], deAllDay[2], deAllDay[3]);
-                fields.endTime = null;
-              } else if (deTimed) {
-                fields.endDate = deTimed[1] + '-' + deTimed[2] + '-' + deTimed[3];
-                fields.endTime = deTimed[4] + ':' + deTimed[5];
-              }
-              if (Object.keys(fields).length > 0) {
-                db.updateCalendarEvent(database, idMatch[1], fields);
-                broadcastSSE();
-              }
+          const idMatch = obj.uid.match(/^cev-(.+)@meisterpilze$/);
+          if (idMatch) {
+            const fields = {};
+            const summary = icsValue(vevent, 'SUMMARY');
+            if (summary !== null) fields.title = summary.replace(/\\n/g, '\n');
+            const desc = icsValue(vevent, 'DESCRIPTION');
+            if (desc !== null) fields.description = desc.replace(/\\n/g, '\n');
+            const cat = (icsValue(vevent, 'CATEGORIES') || '').toLowerCase();
+            if (Object.hasOwn(KNOWN_CATEGORIES, cat)) fields.category = cat;
+            const start = icsDateTime(vevent, 'DTSTART');
+            if (start && start.allDay) {
+              fields.startDate = start.date;
+              fields.allDay = true;
+              fields.startTime = null;
+            } else if (start) {
+              fields.startDate = start.date;
+              fields.startTime = start.time;
+              fields.allDay = false;
+            }
+            const end = icsDateTime(vevent, 'DTEND');
+            if (end && end.allDay) {
+              // RFC 5545: DTEND for all-day is exclusive, so the last day is the one before
+              fields.endDate = _allDayLastDate(end.value.slice(0, 4), end.value.slice(4, 6), end.value.slice(6, 8));
+              fields.endTime = null;
+            } else if (end) {
+              fields.endDate = end.date;
+              fields.endTime = end.time;
+            }
+            if (Object.keys(fields).length > 0) {
+              db.updateCalendarEvent(database, idMatch[1], fields);
+              broadcastSSE();
             }
           }
         } else if (!evType && calName === 'meisterpilze') {
           // New VEVENT from external CalDAV client — create as calendar event
-          const uidMatch = veventBlock.match(/UID:(.*)/);
-          if (uidMatch) {
-            const uid = uidMatch[1].trim();
-            // Check it doesn't already exist in DB
-            const existing = db.readCalendarEventByCaldavUid(database, uid);
-            if (!existing) {
-              const sumMatch = veventBlock.match(/SUMMARY:(.*)/);
-              const title = sumMatch ? sumMatch[1].trim().replace(/\\n/g, '\n') : '(kein Titel)';
-              const descMatch = veventBlock.match(/DESCRIPTION:(.*)/);
-              const description = descMatch ? descMatch[1].trim().replace(/\\n/g, '\n') : null;
-              const catMatch = veventBlock.match(/CATEGORIES:(.*)/);
-              let category = 'custom';
-              if (catMatch) {
-                const c = catMatch[1].trim().toLowerCase();
-                if (KNOWN_CATEGORIES[c]) category = c;
-              }
-              // The second door to the same thing. Any user may mint a CalDAV
-              // app password, and checkCalendarAccess lets everyone write into
-              // the shared calendar — so without this, the permission asked for
-              // on POST /api/calendar-events is answered by putting the same
-              // event in an .ics instead. Editing an existing one this way was
-              // already admin-only: caldavRecordAllowed returns isAdmin for any
-              // cev-…@meisterpilze UID. Only creating a fresh one was open.
-              //
-              // The already-parsed `category` is used rather than reading
-              // CATEGORIES a third time: two spellings of the same rule is how
-              // one of them stops matching, and the loose one would read the
-              // whole file instead of this VEVENT block.
-              if (category === 'pickup' && req.caldavUser.role !== 'admin') {
-                log('warn', 'CalDAV PUT: refused a pickup window from a non-admin', {
-                  calendar: calName,
-                  actor: req.caldavUser.username
-                });
-                res.writeHead(403);
-                res.end('Forbidden');
-                return;
-              }
-
-              let startDate = null,
-                endDate = null,
-                startTime = null,
-                endTime = null,
-                allDay = true;
-              const dtAllDay = veventBlock.match(/DTSTART;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const dtTimed = veventBlock.match(/DTSTART(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-              if (dtAllDay) {
-                startDate = dtAllDay[1] + '-' + dtAllDay[2] + '-' + dtAllDay[3];
-              } else if (dtTimed) {
-                startDate = dtTimed[1] + '-' + dtTimed[2] + '-' + dtTimed[3];
-                startTime = dtTimed[4] + ':' + dtTimed[5];
-                allDay = false;
-              }
-              if (!startDate) startDate = new Date().toISOString().split('T')[0];
-
-              const deAllDay = veventBlock.match(/DTEND;VALUE=DATE:(\d{4})(\d{2})(\d{2})/);
-              const deTimed = veventBlock.match(/DTEND(?:;TZID=[^:]+)?:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-              if (deAllDay) {
-                endDate = _allDayLastDate(deAllDay[1], deAllDay[2], deAllDay[3]);
-              } else if (deTimed) {
-                endDate = deTimed[1] + '-' + deTimed[2] + '-' + deTimed[3];
-                endTime = deTimed[4] + ':' + deTimed[5];
-              }
-
-              const eventId = 'cev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-              const caldavUid = uid;
-              db.insertCalendarEvent(
-                database,
-                {
-                  id: eventId,
-                  title,
-                  description,
-                  startDate,
-                  endDate,
-                  allDay,
-                  startTime,
-                  endTime,
-                  category,
-                  caldavUid,
-                  caldavSynced: new Date().toISOString()
-                },
-                null
-              );
-              // Re-write .ics with X-MEISTERPILZE-TYPE marker so future syncs recognize it
-              const ev = db.readCalendarEventByCaldavUid(database, caldavUid);
-              if (ev) {
-                ev.assignees = [];
-                const { ics } = customEventToVEVENT(ev);
-                fs.writeFileSync(filePath, ics, 'utf8');
-                invalidateCtag(calName);
-                recordChange(calName, fileName, 'changed');
-              }
-              broadcastSSE();
+          const uid = obj.uid;
+          // Check it doesn't already exist in DB
+          const existing = db.readCalendarEventByCaldavUid(database, uid);
+          if (!existing) {
+            const summary = icsValue(vevent, 'SUMMARY');
+            const title = summary !== null ? summary.replace(/\\n/g, '\n') : '(kein Titel)';
+            const desc = icsValue(vevent, 'DESCRIPTION');
+            const description = desc !== null ? desc.replace(/\\n/g, '\n') : null;
+            const cat = (icsValue(vevent, 'CATEGORIES') || '').toLowerCase();
+            const category = Object.hasOwn(KNOWN_CATEGORIES, cat) ? cat : 'custom';
+            // The second door to the same thing. Any user may mint a CalDAV
+            // app password, and checkCalendarAccess lets everyone write into
+            // the shared calendar — so without this, the permission asked for
+            // on POST /api/calendar-events is answered by putting the same
+            // event in an .ics instead. Editing an existing one this way was
+            // already admin-only: caldavRecordAllowed returns isAdmin for any
+            // cev-…@meisterpilze UID. Only creating a fresh one was open.
+            //
+            // The already-parsed `category` is used rather than reading
+            // CATEGORIES again: two spellings of the same rule is how one of
+            // them stops matching.
+            if (category === 'pickup' && req.caldavUser.role !== 'admin') {
+              log('warn', 'CalDAV PUT: refused a pickup window from a non-admin', {
+                calendar: calName,
+                actor: req.caldavUser.username
+              });
+              res.writeHead(403);
+              res.end('Forbidden');
+              return;
             }
+
+            let startDate = null,
+              endDate = null,
+              startTime = null,
+              endTime = null,
+              allDay = true;
+            const start = icsDateTime(vevent, 'DTSTART');
+            if (start && start.allDay) {
+              startDate = start.date;
+            } else if (start) {
+              startDate = start.date;
+              startTime = start.time;
+              allDay = false;
+            }
+            if (!startDate) startDate = new Date().toISOString().split('T')[0];
+
+            const end = icsDateTime(vevent, 'DTEND');
+            if (end && end.allDay) {
+              endDate = _allDayLastDate(end.value.slice(0, 4), end.value.slice(4, 6), end.value.slice(6, 8));
+            } else if (end) {
+              endDate = end.date;
+              endTime = end.time;
+            }
+
+            const eventId = 'cev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            const caldavUid = uid;
+            db.insertCalendarEvent(
+              database,
+              {
+                id: eventId,
+                title,
+                description,
+                startDate,
+                endDate,
+                allDay,
+                startTime,
+                endTime,
+                category,
+                caldavUid,
+                caldavSynced: new Date().toISOString()
+              },
+              null
+            );
+            // Re-write .ics with X-MEISTERPILZE-TYPE marker so future syncs recognize it
+            const ev = db.readCalendarEventByCaldavUid(database, caldavUid);
+            if (ev) {
+              ev.assignees = [];
+              const { ics } = customEventToVEVENT(ev);
+              fs.writeFileSync(filePath, ics, 'utf8');
+              invalidateCtag(calName);
+              recordChange(calName, fileName, 'changed');
+            }
+            broadcastSSE();
           }
         }
       } catch (e) {
@@ -6039,10 +6159,17 @@ function handleDelete(parts, req, res) {
       content = unfoldIcs(fs.readFileSync(filePath, 'utf8'));
     } catch {}
 
+    // Read the way PUT reads a body. A stored file that is not one object with
+    // one UID (written before PUT refused those) goes as a file only: which row
+    // it names is exactly what cannot be told.
+    const obj = readCalendarObject(content);
+    const items = obj.error ? [] : obj.items;
+    const uid = obj.error ? null : obj.uid;
+
     // S-24: the calendar guards above allow deleting from your own calendar.
     // What is deleted from the *database* is decided by the UID inside the
     // file, which the caller put there — so the row gets its own question.
-    if (!caldavRecordAllowed(req, content)) {
+    if (!caldavRecordAllowed(req, uid)) {
       log('warn', 'CalDAV DELETE: refused a record the caller may not modify', {
         calendar: calName,
         file: fileName,
@@ -6053,16 +6180,14 @@ function handleDelete(parts, req, res) {
       return;
     }
 
-    const typeMatch = content.match(/X-MEISTERPILZE-TYPE:(.*)/);
-    const evType = typeMatch ? typeMatch[1].trim() : null;
+    const evType = items.length ? icsAppType(obj) : null;
 
     if (evType === 'batch-due') {
       // Batch due dates are mandatory — ignore delete, autoSync will recreate the file
     } else if (evType === 'task-due') {
       // Clear task due date (don't delete the task)
-      const uidMatch = content.match(/UID:(.*)/);
-      if (uidMatch) {
-        const taskUid = uidMatch[1].trim().replace(/-event$/, '');
+      if (uid) {
+        const taskUid = uid.replace(/-event$/, '');
         if (/^[A-Za-z0-9\-_.@]+$/.test(taskUid)) {
           try {
             db.updateTaskDueDate(database, taskUid, null);
@@ -6074,9 +6199,7 @@ function handleDelete(parts, req, res) {
       }
     } else if (evType === 'custom-event') {
       // Delete custom calendar event from DB
-      const uidMatch = content.match(/UID:(.*)/);
-      if (uidMatch) {
-        const uid = uidMatch[1].trim();
+      if (uid) {
         const idMatch = uid.match(/^cev-(.+)@meisterpilze$/);
         if (idMatch) {
           try {
@@ -6087,11 +6210,9 @@ function handleDelete(parts, req, res) {
           }
         }
       }
-    } else if (!evType && content.includes('VTODO')) {
+    } else if (!evType && items.some((c) => c.name === 'VTODO')) {
       // Task VTODO — delete the task from DB
-      const uidMatch = content.match(/UID:(.*)/);
-      if (uidMatch) {
-        const uid = uidMatch[1].trim();
+      if (uid) {
         const task = db.readTaskByCaldavUid(database, uid);
         if (task) {
           try {
@@ -14613,38 +14734,39 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           const files = fs.readdirSync(path.join(CAL_DIR, dir)).filter((f) => f.endsWith('.ics'));
           for (const f of files) {
             try {
-              const content = fs.readFileSync(path.join(CAL_DIR, dir, f), 'utf8');
+              // Read with the PUT path's parser, and only what a PUT may write.
+              // This route runs every time the calendar opens, over every file
+              // of the shared calendars, so a file it cannot read cheaply is
+              // skipped rather than tried again on each visit.
+              const file = path.join(CAL_DIR, dir, f);
+              const size = fs.statSync(file).size;
+              if (size > CALDAV_MAX_ICS_BYTES) {
+                if (!_icsTooBigLogged.has(file)) {
+                  _icsTooBigLogged.add(file);
+                  log('warn', 'CalDAV import: skipped a file over the size cap', {
+                    calendar: dir,
+                    file: f,
+                    bytes: size
+                  });
+                }
+                continue;
+              }
+              const obj = readCalendarObject(unfoldIcs(fs.readFileSync(file, 'utf8')));
+              if (obj.error || !obj.items.length) continue;
               // Skip meistertracker-generated events
-              if (content.includes('X-MEISTERPILZE-TYPE')) continue;
-              if (!content.includes('VEVENT') && !content.includes('VTODO')) continue;
-              const uid = (content.match(/UID:(.*)/) || [])[1]?.trim() || f;
-              const summary = (content.match(/SUMMARY:(.*)/) || [])[1]?.trim() || '(kein Titel)';
-              const dtRaw = (content.match(/DTSTART[^:]*:([\dT]+)/) || [])[1] || '';
-              let date = '',
-                startTime = null,
-                allDay = true;
-              if (dtRaw.length === 8) {
-                date = dtRaw.slice(0, 4) + '-' + dtRaw.slice(4, 6) + '-' + dtRaw.slice(6, 8);
-              } else if (dtRaw.length >= 15) {
-                date = dtRaw.slice(0, 4) + '-' + dtRaw.slice(4, 6) + '-' + dtRaw.slice(6, 8);
-                startTime = dtRaw.slice(9, 11) + ':' + dtRaw.slice(11, 13);
-                allDay = false;
-              }
-              if (!date) continue;
-              const dtEndRaw = (content.match(/DTEND[^:]*:([\dT]+)/) || [])[1] || '';
-              let endTime = null;
-              if (dtEndRaw.length >= 15) {
-                endTime = dtEndRaw.slice(9, 11) + ':' + dtEndRaw.slice(11, 13);
-              }
-              const desc = (content.match(/DESCRIPTION:(.*)/) || [])[1]?.trim() || null;
+              if (icsAppType(obj)) continue;
+              const item = icsMaster(obj);
+              const start = icsDateTime(item, 'DTSTART');
+              if (!start) continue;
+              const end = icsDateTime(item, 'DTEND');
               imported.push({
-                uid,
-                summary: summary.replace(/\\n/g, ' '),
-                date,
-                startTime,
-                endTime,
-                allDay,
-                description: desc,
+                uid: obj.uid || f,
+                summary: (icsValue(item, 'SUMMARY') || '(kein Titel)').replace(/\\n/g, ' '),
+                date: start.date,
+                startTime: start.time,
+                endTime: end ? end.time : null,
+                allDay: start.allDay,
+                description: icsValue(item, 'DESCRIPTION') || null,
                 calendar: dir
               });
             } catch (e) {
