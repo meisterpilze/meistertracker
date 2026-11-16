@@ -85,12 +85,128 @@ describe('Startseite — Wo steht was', () => {
   });
 });
 
-describe('Startseite — Wo steht was, jede Zone', () => {
-  it('draws a label for every zone and none of the chips it replaced', () => {
+describe('Startseite — Wo steht was, eine Zone zur Zeit', () => {
+  // One zone at a time, picked from a chip per zone, as the farm built it
+  // (#646). The redesign drew every zone at once: a small demo carried that, a
+  // full farm did not; a single incubation room filled screens of rows.
+  const chosen = (stored, bagsByZone) =>
+    new Function('localStorage', 'getZoneBags', '_wkTentFold', `${lift('_wkZoneChosen')}\nreturn _wkZoneChosen;`)(
+      { getItem: () => stored },
+      (id) => bagsByZone[id] || {},
+      { open: new Set(), zone: null }
+    );
+  const list = [{ id: 'FRA' }, { id: 'FRB' }, { id: 'INK' }];
+
+  it('shows the zone picked on this device while it exists', () => {
+    assert.equal(chosen('INK', {})(list), 'INK');
+  });
+
+  it('falls back to the first zone with bags in it, then to the first zone', () => {
+    assert.equal(chosen('WEG', { INK: { 'B-01': {} } })(list), 'INK');
+    assert.equal(chosen('', {})(list), 'FRA');
+  });
+
+  it('draws a chip per zone, marks the one on show, keeps the pick, and draws the rows of that one only', () => {
     const fn = lift('renderWorkTents');
-    assert.match(fn, /list\s*\.map\(\(z\) =>/, 'the zones are no longer all drawn');
-    assert.match(fn, /class="wk-zone-kopf"/);
-    assert.doesNotMatch(APP, /wk-zchip/, 'the one-zone-at-a-time chips are back');
+    assert.match(fn, /class="wk-zchip" data-wk-zone="/);
+    assert.match(fn, /aria-pressed="' \+\s*\(z === chosen\)/);
+    assert.match(fn, /localStorage\.setItem\('mp-work-zone'/);
+    assert.match(fn, /_wkZoneRowsHtml\(chosen, /);
+    assert.doesNotMatch(fn, /list\s*\.map\(\(z\) =>\s*\{\s*const bags = getZoneBags/, 'every zone is drawn again');
+  });
+});
+
+describe('Startseite — Was ansteht, nach Arbeit', () => {
+  // A full farm's day has many times the rows of a demo. As a list capped at six
+  // it showed notices and hid the moves due that morning. By job it is one
+  // row per kind of work, with how many and how many of them are late, and a
+  // tap opens the job's own rows. Run for real, against stubs of the plan.
+  const box = { innerHTML: '', dataset: { bound: '1' } };
+  const offen = new Set();
+  const decl = APP.match(/^const WK_AN_GRUPPEN = \[[\s\S]*?\n\];/m);
+  assert.ok(decl, 'WK_AN_GRUPPEN not found in app.js');
+  const render = new Function(
+    'document',
+    'zones',
+    'planKind',
+    'esc',
+    't',
+    'tp',
+    'loc',
+    '_wkAnRowHtml',
+    '_wkNoticeRowsHtml',
+    '_wkAnOffen',
+    `const WK_AN_CHEV = '<svg/>';\n${decl[0]}\n${lift('_wkAnGruppeHtml')}\n${lift('renderWorkDue')}\nreturn renderWorkDue;`
+  )(
+    { getElementById: () => box, querySelector: () => null },
+    [],
+    (it) => ({ alert: { rank: -10 } })[it.kind] || { rank: null },
+    (x) => String(x),
+    (k) => k,
+    (k, n) => k + ':' + n,
+    () => 'de-DE',
+    (it) => '<row ' + it.kind + ' ' + it.label + '>',
+    () => '<notice>',
+    offen
+  );
+  const day = (items) => [{ items }];
+
+  it('draws one row per job, in the order of the chain, with its count and how many are late', () => {
+    render(
+      day([
+        { kind: 'alert', label: 'A1', overdue: true },
+        { kind: 'alert', label: 'A2', overdue: true },
+        { kind: 'fruiting', label: 'C1', overdue: true },
+        { kind: 'fruiting', label: 'C2', overdue: false },
+        { kind: 'fruiting', label: 'C3', overdue: true },
+        { kind: 'harvest', label: 'H1', overdue: false },
+        { kind: 'harvest', label: 'H2', overdue: false }
+      ])
+    );
+    const h = box.innerHTML;
+    assert.ok(h.indexOf('data-wk-gruppe="move"') < h.indexOf('data-wk-gruppe="harvest"'));
+    assert.ok(h.indexOf('data-wk-gruppe="harvest"') < h.indexOf('data-wk-gruppe="alert"'));
+    assert.match(
+      h,
+      /data-wk-gruppe="move" aria-expanded="false"><span class="wk-an-was">work\.grp\.move<span class="wk-an-wer"><span class="rot">work\.grp\.late:2<\/span> · work\.grp\.today:1<\/span><\/span><span class="wk-an-zahl">3<\/span>/
+    );
+    assert.doesNotMatch(h, /<row fruiting/, 'a closed job shows its rows');
+    assert.ok(h.endsWith('<notice>'), 'the notices are no longer last');
+  });
+
+  it('opens a job to its own rows, and a job of one piece of work is that row', () => {
+    offen.add('move');
+    render(
+      day([
+        { kind: 'fruiting', label: 'C1', overdue: true },
+        { kind: 'fruiting', label: 'C2' },
+        { kind: 'harvest', label: 'H1' }
+      ])
+    );
+    assert.match(
+      box.innerHTML,
+      /aria-expanded="true">[^]*?<div class="wk-an-teil"><row fruiting C1><row fruiting C2><\/div>/
+    );
+    assert.match(box.innerHTML, /<row harvest H1>/);
+    assert.doesNotMatch(box.innerHTML, /data-wk-gruppe="harvest"/);
+    offen.clear();
+  });
+
+  it('calls stock alarms urgent, not late', () => {
+    render(
+      day([
+        { kind: 'alert', label: 'A1', overdue: true },
+        { kind: 'alert', label: 'A2', overdue: false }
+      ])
+    );
+    assert.match(box.innerHTML, /data-wk-gruppe="alert"[^]*?<span class="rot">work\.grp\.urgent:1<\/span>/);
+    assert.doesNotMatch(box.innerHTML, /work\.grp\.late/);
+  });
+
+  it('leaves out what is done, and says so when nothing is left', () => {
+    render(day([{ kind: 'fruiting', label: 'C1', done: true }]));
+    assert.doesNotMatch(box.innerHTML, /<row/);
+    assert.match(box.innerHTML, /work\.todayNone/);
   });
 });
 
@@ -151,6 +267,23 @@ describe('Startseite — Was ansteht', () => {
     assert.doesNotMatch(html, /style=/, 'the button of the week brought its inline style along');
   });
 
+  it('leads with the Sorte in the ink inside an opened job, whose heading already says how many are late', () => {
+    const html = row(
+      {
+        kind: 'fruiting',
+        label: 'TA-1',
+        batchId: 'TA-1',
+        species: 'Testart Alpha',
+        zone: 'INK',
+        bags: 6,
+        overdue: true
+      },
+      true
+    );
+    assert.match(html, /class="wk-an-was">Testart Alpha<span class="wk-an-wer">TA-1 · Zone INK · 6 Beutel<\/span>/);
+    assert.match(html, /data-action="open-move-modal" data-batch="TA-1"/, 'the row lost what a tap on it does');
+  });
+
   it('keeps the button on work that is ticked off', () => {
     const html = row({ kind: 'manual', label: 'Raum putzen', taskId: 7, overdue: false });
     assert.match(html, /^<div class="wk-an-zeile wk-an-haken">/);
@@ -160,7 +293,7 @@ describe('Startseite — Was ansteht', () => {
   it('is drawn with the week, and its taps reach the handler of the week', () => {
     assert.match(lift('renderDashBatchTasks'), /renderWorkDue\(week\);/);
     assert.match(APP, /\$\('wk-an'\)\.addEventListener\('click', dashTaskCardClick\);/);
-    assert.match(lift('renderWorkDue'), /PLAN_CATS\.flatMap/, 'the rows no longer follow the order of the open day');
+    assert.match(lift('renderWorkDue'), /for \(const g of WK_AN_GRUPPEN\)/, 'the rows are no longer drawn by job');
   });
 
   it('opens the week from the heading of the list', () => {

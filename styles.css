@@ -4786,10 +4786,11 @@ tr:hover td {
     box-shadow: var(--shadow);
   }
 }
+/* Late is the word and the edge, not the whole card: when most Chargen are
+   late, a wall of pink said nothing about any of them. */
 .batch-card.batch-overdue {
-  border-color: #fecaca;
   border-left-color: var(--c-red);
-  background: #fff5f5;
+  background: var(--c-surface);
 }
 .batch-card-header {
   display: flex;
@@ -9339,21 +9340,10 @@ body:has(#m-camscan.open) .update-bar {
   }
 }
 
-/* Wo steht was: a label per zone, its bag count at the right, and on it a row
-   per species and move-in day that unfolds to the batches and bag numbers. The
-   date line is the reason the label exists, so it is set in the reading tone
-   and not muted. */
-.wk-zonen {
-  display: grid;
-  gap: 8px;
-}
-@media (min-width: 1024px) {
-  .wk-zonen {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    align-items: start;
-  }
-}
+/* Wo steht was: the label of the zone picked, and on it a row per species
+   and move-in day that unfolds to the batches and bag numbers. The date line
+   is the reason the label exists, so it is set in the reading tone and not
+   muted. */
 .wk-zone {
   padding: 4px 16px;
   border: 1px solid var(--c-border);
@@ -9380,7 +9370,6 @@ body:has(#m-camscan.open) .update-bar {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 12px;
   padding: 8px 0;
-  border-top: 1px solid var(--c-border);
   cursor: pointer;
   list-style: none;
 }
@@ -9413,9 +9402,82 @@ body:has(#m-camscan.open) .update-bar {
   color: var(--c-text-muted);
 }
 .wk-zone-leer {
-  padding: 0 0 12px;
+  padding: 12px 0;
   font-size: var(--fs-sm);
   color: var(--c-text-sec);
+}
+/* A chip per zone with its bag count; the zone picked is drawn below them.
+   The pick is marked the way a chosen Charge is: a heavier edge in ink. */
+.wk-zwahl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wk-zchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--b-tap);
+  padding: 8px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-label);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.wk-zchip b {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+}
+.wk-zchip[aria-pressed='true'] {
+  border-color: var(--c-text);
+  box-shadow: inset 0 0 0 1px var(--c-text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .wk-zchip[aria-pressed='false']:hover {
+    background: var(--c-well);
+  }
+}
+/* In a hand the chips are one line that scrolls sideways, edge to edge:
+   wrapped, a handful of zones took several lines of chips before the first
+   row of the zone. */
+@media (max-width: 768px) {
+  .wk-zwahl {
+    flex-wrap: nowrap;
+    margin: 0 -16px 10px;
+    padding: 0 16px;
+    overflow-x: auto;
+    scroll-padding: 0 16px;
+    scrollbar-width: none;
+  }
+  .wk-zwahl::-webkit-scrollbar {
+    display: none;
+  }
+  .wk-zchip {
+    flex: none;
+  }
+}
+/* The rows of the zone on show, in two columns where the label is wide
+   enough for two. A rule under each row rather than over it, so no column
+   starts with a line. */
+.wk-zone {
+  column-width: 280px;
+  column-gap: 28px;
+}
+.wk-zone > .wk-zone-kopf {
+  column-span: all;
+  border-bottom: 1px solid var(--c-border);
+}
+.wk-tent-row {
+  break-inside: avoid;
+  border-bottom: 1px solid var(--c-border);
+}
+.wk-tent-row:last-child {
+  border-bottom: 0;
 }
 
 /* Was ansteht: one white label, a row per piece of work. The first line says
@@ -9469,6 +9531,41 @@ button.wk-an-zeile:active {
 }
 .wk-an-zeile > svg {
   flex: none;
+}
+/* A job: its name, how many, and under it how many of them are late. The count
+   is the figure the row exists for; the chevron turns down while it is open. */
+.wk-an-gruppe {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.wk-an-zahl {
+  font-family: var(--ff-mono);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.wk-an-wer .rot {
+  color: var(--rot);
+  font-weight: 600;
+}
+.wk-an-gruppe > svg {
+  transition: transform 0.15s ease;
+}
+.wk-an-gruppe[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
+}
+.wk-an-teil {
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+.wk-an-teil > .wk-an-zeile {
+  padding-left: 28px;
+}
+.wk-an-teil > .wk-an-zeile:first-child {
+  border-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-an-gruppe > svg {
+    transition: none;
+  }
 }
 .wk-an-leer {
   padding: 16px;
@@ -12349,5 +12446,90 @@ button.wk-an-zeile:active {
   .cam-fab:active,
   .notif-fab:active {
     transform: none;
+  }
+}
+
+/* The filters over the contamination list: one row that wraps as a row. A
+   select is as wide as its column everywhere else, and here that stacked the
+   four under each other beside an empty half of the card. */
+.cl-filter {
+  flex: 1 1 480px;
+  justify-content: flex-end;
+}
+.cl-filter select,
+.cl-filter input {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 140px;
+}
+
+/* How many Chargen of a closed room are late, in the heading beside its count. */
+.location-section-late {
+  margin-left: auto;
+  color: var(--rot);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.location-section-late + .location-section-count {
+  margin-left: 12px;
+}
+/* In a hand the late count is a line of its own under the room's name: beside
+   it, name, count, bags and the button were four things in one narrow row. */
+@media (max-width: 768px) {
+  .location-section-header:has(.location-section-late) {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .location-section-title {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .location-section-late {
+    order: 5;
+    flex-basis: 100%;
+    margin-left: 0;
+    padding-left: 34px;
+  }
+  .location-section-late + .location-section-count {
+    margin-left: 0;
+  }
+}
+
+/* One rack that holds the room: its Chargen in as many columns as fit. */
+.rack-grid.rack-grid-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rack-grid-1 .rack-card-batches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+.rack-empty-line {
+  margin-top: 10px;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+}
+
+/* Heute packen, on a wide desk: the parcels two abreast in the order of the
+   list, so a full day is half as long to scroll. Parcels that go out together
+   keep the full width of their frame. */
+@media (min-width: 1280px) {
+  #ob-pack {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 10px;
+    align-items: start;
+  }
+  #ob-pack > .ob-order,
+  #ob-pack > .ob-group {
+    margin-top: 0;
+  }
+  #ob-pack > .ob-group {
+    grid-column: 1 / -1;
+  }
+  #ob-pack > .ob-empty {
+    grid-column: 1 / -1;
   }
 }

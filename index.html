@@ -4070,7 +4070,10 @@
                 "
               >
                 <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                  <button class="oh-fchip active" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">
+                  <button class="oh-fchip active" data-action="oh-filter" data-filter="open" data-i18n="orders.filterOpen">
+                    Offen
+                  </button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">
                     Alle
                   </button>
                   <button class="oh-fchip" data-action="oh-filter" data-filter="new" data-i18n="orders.status.new">
@@ -4529,34 +4532,43 @@
             </svg>
             <span data-i18n="lab.logWork">Log work</span>
           </button>
-          <!-- What is missing, per species, first; shown only while something is
-               (renderNachproduzieren). Same figures as the list below. -->
-          <div class="card" id="np-card" hidden>
-            <div class="sec" data-i18n="np.title">Nachproduzieren</div>
-            <div id="np-rows"></div>
-            <div class="np-foot" data-i18n="np.foot">
-              Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
-              einem Tipp auf sie unten.
-            </div>
-          </div>
-          <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
-               grain spawn. Replaces the tiles per culture type and the sales stock
-               card (renderLabStock). -->
-          <div class="card" id="lb-card" hidden>
-            <div class="sec" data-i18n="lb.title">Laborbestand</div>
-            <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
-            <div id="lb-list"></div>
-            <div class="vb-legend">
-              <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
-              <span data-i18n="lb.legendShop">Punkt = im Shop</span>
-            </div>
-            <div class="vb-bb" id="lb-bb" hidden></div>
-          </div>
           <div class="stabs" data-stab-home="nav.lab">
+            <button class="stab active" id="st-lab-stock" data-i18n="lab.stock">Bestand</button>
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
-            <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
+            <button class="stab" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
             <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
             <button class="stab" id="st-lab-contam" data-i18n="lab.contam">Kontaminationen</button>
+          </div>
+          <!-- Bestand: what is missing and what is there, per species. The view
+               Labor opens on, so the lab still starts with its stock. It stood
+               above the strip, outside every view, while the strip stood above
+               the views; with the views in the navigation, every one of them
+               opened under the same two cards, and the one somebody picked began
+               a few screens down. -->
+          <div class="sp active" id="sp-lab-stock">
+            <!-- What is missing, per species, first; shown only while something is
+                 (renderNachproduzieren). Same figures as the list below. -->
+            <div class="card" id="np-card" hidden>
+              <div class="sec" data-i18n="np.title">Nachproduzieren</div>
+              <div id="np-rows"></div>
+              <div class="np-foot" data-i18n="np.foot">
+                Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
+                einem Tipp auf sie unten.
+              </div>
+            </div>
+            <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
+                 grain spawn. Replaces the tiles per culture type and the sales stock
+                 card (renderLabStock). -->
+            <div class="card" id="lb-card" hidden>
+              <div class="sec" data-i18n="lb.title">Laborbestand</div>
+              <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
+              <div id="lb-list"></div>
+              <div class="vb-legend">
+                <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
+                <span data-i18n="lb.legendShop">Punkt = im Shop</span>
+              </div>
+              <div class="vb-bb" id="lb-bb" hidden></div>
+            </div>
           </div>
           <!-- Körnerbrut — grain spawn batches. Same columns as the batch
                  table so both lists share batchRowHtml. -->
@@ -4577,7 +4589,7 @@
             </div>
           </div>
           <!-- Cultures -->
-          <div class="sp active" id="sp-lab-cultures">
+          <div class="sp" id="sp-lab-cultures">
             <!-- Kulturbibliothek on the Sortenliste: one row per Sorte with what is
                  in stock; a tap opens its cultures by type, oldest first; a tap
                  on a culture opens the same sheet a scan does (renderCultures). -->
@@ -4825,7 +4837,7 @@
                 "
               >
                 <div class="sec" style="margin: 0" data-i18n="contam.listTitle">Kontaminationsberichte</div>
-                <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                <div class="cl-filter" style="display: flex; gap: 6px; flex-wrap: wrap">
                   <select id="cl-type-filter" data-i18n-aria-label="contam.type" aria-label="Type filter">
                     <option value="" data-i18n="contam.allTypes">Alle Typen</option>
                   </select>
