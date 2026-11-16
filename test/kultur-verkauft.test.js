@@ -43,8 +43,10 @@ describe('Kultur-Fenster: Verkauft', () => {
   it('eine gelagerte Petrischale auch', () => {
     assert.ok(knoepfe({ id: 'PD-TST-081026-01', type: 'PD', status: 'stored' }).includes('ci-sold'));
   });
-  it('eine Flüssigkultur im Glas nicht — die geht nicht in den Versand', () => {
-    assert.ok(!knoepfe({ id: 'LC-TST-081026-01', type: 'LC', status: 'active' }).includes('ci-sold'));
+  it('eine Flüssigkultur im Glas auch, aber unter "Raus" — sie geht seltener in den Versand', () => {
+    const k = knoepfe({ id: 'LC-TST-081026-01', type: 'LC', status: 'active' });
+    assert.ok(k.includes('ci-sold'));
+    assert.ok(k.indexOf('ci-out') < k.indexOf('ci-sold'));
   });
   it('eine schon verkaufte Spritze bietet nichts mehr zum Rausnehmen', () => {
     const k = knoepfe({ id: 'SY-TST-081026-02', type: 'SY', status: 'sold' });
