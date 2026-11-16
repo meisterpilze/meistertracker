@@ -2543,6 +2543,8 @@ window.LANG['de'] = {
   'server.updateStatus': 'Server wird aktualisiert und neugestartet\u2026',
   'server.waitReconnect': 'Server startet neu. Warte auf Verbindung\u2026',
   'server.noResponse': 'Server antwortet nicht. Bitte manuell pr\u00fcfen.',
+  'server.updateQueued': 'Ein anderes Update l\u00e4uft noch. Dieses kommt danach dran\u2026',
+  'server.updateFailed': 'Update abgebrochen bei \u201e{step}\u201c: {err}',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
   'server.codeLabel': 'Code-Stand',

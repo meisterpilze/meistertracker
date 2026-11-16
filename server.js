@@ -13158,18 +13158,38 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   }
 
   // -- Server Restart --
+  // "Update & restart" is the webhook's deploy, started by hand: fetch,
+  // snapshot, update, install, preflight, pm2 restart (scripts/deploy-runner.js).
+  //
+  // ⚠️ It used to spawn START.bat or update_server.sh as a child of this
+  // process. Both run `pm2 delete` before `pm2 start`, and pm2 stops the whole
+  // process tree of the app it deletes, the script with it, so the start never
+  // came and the server stayed down until someone started it at the machine.
+  // The deploy chain ends in `pm2 restart`, which the pm2 daemon carries out
+  // on its own, and it brings the lock, the snapshot, the preflight and the
+  // rollback with it. Never start a script that deletes or restarts the pm2
+  // app from inside this process's tree.
+  //
+  // Answered once the runner has said what it did: 'started' (the chain runs
+  // and restarts the server at its end), 'queued' (behind a running deploy or
+  // a restore), or 'stopped' (fetch or snapshot failed, nothing changed).
   if (req.method === 'POST' && req.url === '/api/server/restart') {
     if (requireAdmin(req, res)) return;
-    log('info', 'Server restart requested via web UI', { actor: req.authUser.username });
-    jsonOk(res, { ok: true, message: 'Server is restarting...' });
-    setTimeout(() => {
-      const scriptDir = path.resolve(__dirname);
-      if (process.platform === 'win32') {
-        spawn('cmd.exe', ['/c', 'START.bat'], { cwd: scriptDir, detached: true, stdio: 'ignore' }).unref();
-      } else {
-        spawn('bash', ['update_server.sh'], { cwd: scriptDir, detached: true, stdio: 'ignore' }).unref();
-      }
-    }, 500);
+    // The chain resets the checkout to origin/main, which in a worktree would
+    // throw away the branch being worked on. The webhook refuses for the same
+    // reason.
+    if (WORKTREE_MODE) {
+      jsonErr(res, 409, 'not available in worktree mode');
+      return;
+    }
+    log('info', 'Server update and restart requested via web UI', { actor: req.authUser.username });
+    deploys
+      .deliver({ sha: 'manual', sender: req.authUser.username })
+      .then((result) => jsonOk(res, { ok: result !== 'stopped', result, deploy: readDeployState() }))
+      .catch((e) => {
+        log('error', 'Deploy runner failed', { error: e.message });
+        jsonErr(res, 500, 'the update could not be started');
+      });
     return;
   }
 

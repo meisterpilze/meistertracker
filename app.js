@@ -15307,44 +15307,75 @@ function restartServer() {
   confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
     const btn = document.getElementById('btn-server-restart');
     const status = document.getElementById('server-restart-status');
+    const zeige = (text) => {
+      status.textContent = text;
+      status.style.color = 'var(--c-text-muted)';
+    };
+    const zurueck = (text) => {
+      status.textContent = text;
+      status.style.color = 'var(--c-red-dark)';
+      btn.disabled = false;
+      btn.textContent = t('server.updateBtn');
+    };
+    const fehlgeschlagen = (dep, sonst) =>
+      t('server.updateFailed', { step: (dep && dep.step) || '?', err: (dep && dep.error) || sonst || '' });
     btn.disabled = true;
     btn.textContent = t('server.restarting');
     status.style.display = 'block';
-    status.style.color = 'var(--c-text-muted)';
-    status.textContent = t('server.updateStatus');
+    zeige(t('server.updateStatus'));
+    // The server runs the webhook's deploy and answers once it has started it,
+    // queued it, or stopped before changing anything.
+    let antwort;
     try {
-      await authFetch('/api/server/restart', {
+      const r = await authFetch('/api/server/restart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}'
       });
-      status.textContent = t('server.waitReconnect');
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        try {
-          const r = await fetch('/api/health');
-          if (r.ok) {
-            clearInterval(poll);
-            window.location.reload();
-          }
-        } catch (e) {
-          /* still down */
-        }
-        if (attempts > 60) {
-          clearInterval(poll);
-          status.textContent = t('server.noResponse');
-          status.style.color = 'var(--c-red-dark)';
-          btn.disabled = false;
-          btn.textContent = t('server.updateBtn');
-        }
-      }, 3000);
+      antwort = await r.json().catch(() => ({}));
+      if (!r.ok || !antwort.ok) {
+        zurueck(fehlgeschlagen(antwort.deploy, antwort.error || 'HTTP ' + r.status));
+        return;
+      }
     } catch (e) {
-      status.textContent = t('common.error') + ': ' + e.message;
-      status.style.color = 'var(--c-red-dark)';
-      btn.disabled = false;
-      btn.textContent = t('server.updateBtn');
+      zurueck(t('common.error') + ': ' + e.message);
+      return;
     }
+    // Install and preflight come before the restart and take a while, and the
+    // old server answers all that time. So an answer counts only from a
+    // process younger than this click; until then, the deploy record says
+    // whether the deploy stopped at a step, in which case nothing restarts.
+    zeige(antwort.result === 'queued' ? t('server.updateQueued') : t('server.waitReconnect'));
+    const seit = Date.now();
+    const eigener = antwort.result === 'started' && antwort.deploy ? antwort.deploy.started : null;
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        const h = r.ok ? await r.json() : null;
+        if (h && typeof h.uptime === 'number' && h.uptime * 1000 < Date.now() - seit) {
+          clearInterval(poll);
+          window.location.reload();
+          return;
+        }
+        if (h && eigener && attempts % 3 === 0) {
+          const voll = await authFetch('/api/health/full').then((x) => (x.ok ? x.json() : null));
+          const dep = voll && voll.deploy;
+          if (dep && dep.started === eigener && dep.status === 'failed') {
+            clearInterval(poll);
+            zurueck(fehlgeschlagen(dep));
+            return;
+          }
+        }
+      } catch (e) {
+        /* down while it restarts */
+      }
+      if (attempts > 200) {
+        clearInterval(poll);
+        zurueck(t('server.noResponse'));
+      }
+    }, 3000);
   });
 }
 

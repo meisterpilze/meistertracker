@@ -2520,6 +2520,8 @@ window.LANG['en'] = {
   'server.updateStatus': 'Updating and restarting server\u2026',
   'server.waitReconnect': 'Server restarting. Waiting for connection\u2026',
   'server.noResponse': 'Server not responding. Please check manually.',
+  'server.updateQueued': 'Another update is still running. This one follows it…',
+  'server.updateFailed': 'Update stopped at “{step}”: {err}',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
   'server.codeLabel': 'Code version',
