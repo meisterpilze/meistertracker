@@ -959,8 +959,15 @@ async function main() {
       // the closed drawer" — so it walked 7 of the 12 pages and the report
       // looked complete. A button in a closed drawer still clicks, and the page
       // it opens is still a page.
+      //
+      // The pages, not their views: a page's views stand under its entry in
+      // the sidebar as well (.sb-sub-btn), and each of them forwards to a tab
+      // this run opens below anyway. Walking them as pages measured every view
+      // once per sibling and gave each finding a name no ratchet line knows.
       const ids = await page.evaluate(() =>
-        [...document.querySelectorAll('.sb-nav .sb-btn, .sb-footer .sb-btn')].filter((b) => b.id).map((b) => b.id)
+        [...document.querySelectorAll('.sb-nav .sb-btn:not(.sb-sub-btn), .sb-footer .sb-btn')]
+          .filter((b) => b.id)
+          .map((b) => b.id)
       );
       // ⚠️ **Ein Untertab ist eine Oberfläche, und zwei Drittel davon hat
       // dieser Stand nie gesehen.** measureLive() misst, was sichtbar ist, und
