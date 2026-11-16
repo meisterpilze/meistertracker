@@ -30,11 +30,27 @@ const db = require('../db.js');
 const ROOT = path.join(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 
-/** Lift caldavRecordAllowed and give it the two globals it closes over. */
+/**
+ * Lift caldavRecordAllowed and the reader that hands it the UID, and ask them
+ * the way handlePut and handleDelete do: read the object once, refuse one that
+ * is not a single object with a single UID, judge the UID it carries.
+ */
 function lift(database) {
-  const m = SRC.match(/function caldavRecordAllowed\(req, ics\) \{[\s\S]*?\n\}/);
+  const m = SRC.match(/function caldavRecordAllowed\(req, uid\) \{[\s\S]*?\n\}/);
   assert.ok(m, 'caldavRecordAllowed has moved');
-  return new Function('db', 'database', m[0] + '\nreturn caldavRecordAllowed;')(db, database);
+  const leser = ['parseIcsLine', 'parseIcsComponents', 'readCalendarObject'].map((name) => {
+    const f = SRC.match(new RegExp('^function ' + name + '\\([\\s\\S]*?\\n\\}', 'm'));
+    assert.ok(f, name + ' has moved');
+    return f[0];
+  });
+  const items = SRC.match(/^const ICS_ITEM_COMPONENTS = .*$/m);
+  assert.ok(items, 'ICS_ITEM_COMPONENTS has moved');
+  return new Function(
+    'db',
+    'database',
+    [items[0], ...leser, m[0]].join('\n') +
+      '\nreturn (req, ics) => { const o = readCalendarObject(ics); return !o.error && caldavRecordAllowed(req, o.uid); };'
+  )(db, database);
 }
 
 const req = (username, role) => ({ caldavUser: { username, role } });
@@ -105,6 +121,49 @@ describe('a CalDAV write is judged on the record it names', () => {
     assert.equal(erlaubt(req('anton', 'user'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR'), true);
   });
 
+  it('reads the UID of the component, not one in a longer name or a VALARM', () => {
+    const vor =
+      'BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nX-A-UID:' +
+      uidEigen +
+      '\r\nUID:' +
+      uidFremd +
+      '\r\nBEGIN:VALARM\r\nUID:' +
+      uidEigen +
+      '\r\nEND:VALARM\r\nEND:VTODO\r\nEND:VCALENDAR';
+    assert.equal(erlaubt(req('anton', 'user'), vor), false);
+  });
+
+  it('refuses an object that carries a second UID further down', () => {
+    // The writers act on every component of the body, the guard on one UID.
+    // A body that names two rows therefore gets no answer at all.
+    const zwei = (a, b, typB) =>
+      'BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:' +
+      a +
+      '\r\nEND:VTODO\r\nBEGIN:' +
+      typB +
+      '\r\nUID:' +
+      b +
+      '\r\nEND:' +
+      typB +
+      '\r\nEND:VCALENDAR';
+    assert.equal(erlaubt(req('anton', 'user'), zwei(uidEigen, uidFremd + '-event', 'VEVENT')), false);
+    assert.equal(erlaubt(req('anton', 'user'), zwei(uidEigen, uidFremd, 'VTODO')), false);
+    assert.equal(erlaubt(req('chef', 'admin'), zwei(uidEigen, uidFremd, 'VTODO')), false, 'not even for an admin');
+    // Two components with the same UID are one object: a recurring series and
+    // its exceptions look like this.
+    assert.equal(erlaubt(req('anton', 'user'), zwei(uidEigen, uidEigen, 'VTODO')), true);
+  });
+
+  it('refuses a component with no UID or two, and a body whose BEGIN and END do not pair', () => {
+    const anton = req('anton', 'user');
+    assert.equal(erlaubt(anton, 'BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nSUMMARY:x\r\nEND:VTODO\r\nEND:VCALENDAR'), false);
+    assert.equal(
+      erlaubt(anton, 'BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:a\r\nUID:b\r\nEND:VTODO\r\nEND:VCALENDAR'),
+      false
+    );
+    assert.equal(erlaubt(anton, 'BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:' + uidEigen + '\r\nEND:VCALENDAR'), false);
+  });
+
   it('is not fooled by a property whose name merely ends in UID', () => {
     // ⚠️ The guard matched /UID:(.*)/, which finds `X-DECOY-UID:` too. One
     // header line therefore fed it a name that resolves to nothing — so it
@@ -119,6 +178,31 @@ describe('a CalDAV write is judged on the record it names', () => {
 
   it('lets through a UID that could never name a row', () => {
     assert.equal(erlaubt(req('anton', 'user'), ics('../../etc/passwd')), true);
+  });
+
+  // The writers do not stop at the first row that carries a UID: the VTODO
+  // writers act on the task with it, the due-date writers on the task with it
+  // minus "-event". So the guard asks every row a writer can reach.
+  it('is not answered by a calendar row that carries a task UID too', () => {
+    db.insertCalendarEvent(d, {
+      id: 'cev-gleich',
+      title: 'Teamsitzung',
+      startDate: '2026-11-20',
+      category: 'meeting',
+      caldavUid: uidFremd
+    });
+    assert.equal(erlaubt(req('anton', 'user'), ics(uidFremd)), false);
+    assert.equal(erlaubt(req('chef', 'admin'), ics(uidFremd)), true);
+  });
+
+  it('asks the task with the UID as it stands, not only without "-event"', () => {
+    db.insertTask(d, {
+      text: 'Von außen',
+      assignee: 'britta',
+      created: '2026-08-19T00:00:00Z',
+      caldavUid: 'C0FFEE-event'
+    });
+    assert.equal(erlaubt(req('anton', 'user'), ics('C0FFEE-event')), false);
   });
 });
 
