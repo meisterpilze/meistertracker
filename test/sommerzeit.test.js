@@ -248,8 +248,11 @@ describe('Ein ganztägiger Termin aus dem Kalender über eine Umstellung', () =>
 
   it('wird an beiden Stellen benutzt, an denen der Server ein DTEND liest', () => {
     // Die Bearbeitung eines eigenen Termins und das Anlegen eines neuen.
-    const aufrufe = SERVER.match(/_allDayLastDate\(deAllDay\[1\], deAllDay\[2\], deAllDay\[3\]\)/g) || [];
+    const aufrufe =
+      SERVER.match(
+        /_allDayLastDate\(end\.value\.slice\(0, 4\), end\.value\.slice\(4, 6\), end\.value\.slice\(6, 8\)\)/g
+      ) || [];
     assert.equal(aufrufe.length, 2);
-    assert.doesNotMatch(SERVER, /new Date\(deAllDay\[1\]/, 'ein DTEND wird wieder über new Date() gelesen');
+    assert.doesNotMatch(SERVER, /new Date\(end\.value/, 'ein DTEND wird wieder über new Date() gelesen');
   });
 });

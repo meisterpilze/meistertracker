@@ -110,12 +110,16 @@ describe('the HTTP door', () => {
 
 describe('the CalDAV doors', () => {
   it('refuses a non-admin creating a pickup VEVENT, using the category it already parsed', () => {
-    const i = SRC.indexOf('const catMatch = veventBlock.match(/CATEGORIES:(.*)/);', SRC.indexOf('// Check it doesn'));
+    const i = SRC.indexOf(
+      "const cat = (icsValue(vevent, 'CATEGORIES') || '').toLowerCase();",
+      SRC.indexOf('// Check it doesn')
+    );
+    assert.ok(i > 0, 'the branch reads CATEGORIES somewhere else now');
     const zweig = SRC.slice(i, i + 3500);
     vor(zweig, "category === 'pickup'", 'db.insertCalendarEvent', 'refused before the row is written');
-    // Not a third spelling of the same parse: the loose one would read the
-    // whole file rather than this VEVENT block.
-    assert.equal((zweig.match(/CATEGORIES:/g) || []).length, 1, 'the category is parsed once in this branch');
+    // Not a second reading of the same property: one of two spellings of a rule
+    // is the one that stops matching.
+    assert.equal((zweig.match(/'CATEGORIES'/g) || []).length, 1, 'the category is read once in this branch');
   });
 
   it('leaves ordinary calendar entries to everyone over CalDAV', () => {
@@ -123,7 +127,7 @@ describe('the CalDAV doors', () => {
     // calendar row that carried a caldav_uid — meetings, deliveries,
     // maintenance — which is the opposite of what its own commit claimed. What
     // is protected is the shop's collection times, not the calendar.
-    const fn = SRC.match(/function caldavRecordAllowed\(req, ics\) \{[\s\S]*?\n\}/);
+    const fn = SRC.match(/function caldavRecordAllowed\(req, uid\) \{[\s\S]*?\n\}/);
     assert.ok(fn, 'caldavRecordAllowed has moved');
     assert.match(fn[0], /ereignis\.category === 'pickup' \? isAdmin : true/, 'the category has to decide');
   });
@@ -134,7 +138,7 @@ describe('the CalDAV doors', () => {
     // client's UID, and the pattern walks straight past it — which left the
     // withdraw direction open for exactly the windows an admin created from
     // their own calendar app.
-    const fn = SRC.match(/function caldavRecordAllowed\(req, ics\) \{[\s\S]*?\n\}/);
+    const fn = SRC.match(/function caldavRecordAllowed\(req, uid\) \{[\s\S]*?\n\}/);
     assert.ok(fn, 'caldavRecordAllowed has moved');
     assert.match(fn[0], /db\.readCalendarEventByCaldavUid\(database, uid\)/);
     vor(fn[0], 'readCalendarEventByCaldavUid', 'readTaskByCaldavUid', 'events are decided before tasks');
