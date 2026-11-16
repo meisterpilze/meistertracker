@@ -1938,7 +1938,10 @@ function refresh() {
 // initEventListeners, so these top-level render functions need their own.
 const $ = (id) => document.getElementById(id);
 let _ordersCache = [];
-let _ordersFilter = '';
+// The inbox opens on what is still to do. "Alle" was the default, and the open
+// orders stood among every order that had ever left.
+const ORDERS_DONE = ['shipped', 'delivered', 'cancelled'];
+let _ordersFilter = 'open';
 
 function _ohEmpty(cols, msg) {
   return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
@@ -2014,7 +2017,9 @@ function renderOrders() {
 function _renderOrdersInbox() {
   const body = $('orders-body');
   if (!body) return;
-  const rows = _ordersCache.filter((o) => !_ordersFilter || o.status === _ordersFilter);
+  const rows = _ordersCache.filter((o) =>
+    _ordersFilter === 'open' ? !ORDERS_DONE.includes(o.status) : !_ordersFilter || o.status === _ordersFilter
+  );
   if (!rows.length) {
     body.innerHTML = _ohEmpty(6, t('orders.none'));
     return;
@@ -2661,20 +2666,32 @@ function eraseCustomer(id, name) {
 }
 
 // ── Versand: order list + buy-label modal ──
+// Without shipping set up there is no label to buy, so there is no list of
+// buttons to buy one with: the notice alone. With it, the orders still to go
+// out come first and the ones that left, which can be labelled again, after.
 function renderOrdersVersand() {
   const body = $('versand-orders-body');
   if (!body) return;
   body.innerHTML = _ohEmpty(5, t('common.loading'));
+  const table = body.closest('table');
   authFetch('/api/ship/config')
     .then((r) => r.json())
+    .catch(() => null)
     .then((cfg) => {
+      const ready = !!(cfg && cfg.enabled && cfg.publicKey);
       const warn = $('versand-config-warn');
-      if (warn) warn.style.display = cfg && cfg.enabled && cfg.publicKey ? 'none' : 'block';
-    })
-    .catch(() => {});
+      if (warn) warn.style.display = ready ? 'none' : 'block';
+      if (table) table.hidden = !ready;
+      if (ready) _versandOrders(body);
+      else body.innerHTML = '';
+    });
+}
+function _versandOrders(body) {
   apiGet('/api/orders?limit=500')
     .then((d) => {
-      const rows = (d.items || []).filter((o) => o.status !== 'cancelled');
+      const rows = (d.items || [])
+        .filter((o) => o.status !== 'cancelled')
+        .sort((a, b) => (a.status === 'shipped') - (b.status === 'shipped'));
       if (!rows.length) {
         body.innerHTML = _ohEmpty(5, t('orders.none'));
         return;
@@ -5046,6 +5063,38 @@ function renderStatus() {
   updateActionBar();
 }
 
+// Which rooms of Standorte are open, kept per device. Every room starts closed
+// with its bag count and how many of its Chargen are late in the heading, and
+// a search opens them all. A room used to open by itself when anything in it
+// was late; once Chargen pile up that is every room, and the view ran to
+// screen after screen of cards.
+let _locOpen = null;
+function _locIsOpen(key) {
+  if (!_locOpen) {
+    _locOpen = new Set();
+    try {
+      for (const k of JSON.parse(localStorage.getItem('mp-loc-open') || '[]')) _locOpen.add(String(k));
+    } catch {
+      // Nothing kept, or nothing readable: every room starts closed.
+    }
+  }
+  return _locOpen.has(key);
+}
+function _locRemember(key, open) {
+  _locIsOpen(key);
+  _locOpen[open ? 'add' : 'delete'](key);
+  try {
+    localStorage.setItem('mp-loc-open', JSON.stringify([..._locOpen]));
+  } catch {
+    // Kept until the next reload.
+  }
+}
+function _locSectionClass(key, q) {
+  return 'location-section' + (q || _locIsOpen(key) ? '' : ' collapsed');
+}
+function _locLateHtml(n) {
+  return n ? `<span class="location-section-late">${esc(tp('work.grp.late', n))}</span>` : '';
+}
 function renderRackSection(zone, racks, filtered) {
   const color = ZONE_COLORS[zone];
   const zoneObj = zones.find((z) => z.id === zone);
@@ -5054,7 +5103,12 @@ function renderRackSection(zone, racks, filtered) {
   racks.forEach((r) => (totalBags += Object.keys(getRackBags(r)).length));
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
 
-  const rackCards = racks
+  // Racks with nothing on them are named in one line under the ones that hold
+  // something, not drawn as columns that say "Leer": when one rack holds a
+  // whole room, the empty columns beside it took the width from it.
+  const emptyRacks = racks.filter((r) => !Object.keys(getRackBags(r)).length);
+  const shownRacks = q || emptyRacks.length === racks.length ? racks : racks.filter((r) => !emptyRacks.includes(r));
+  const rackCards = shownRacks
     .map((rackId) => {
       const bags = getRackBags(rackId);
       const count = Object.keys(bags).length;
@@ -5107,29 +5161,30 @@ function renderRackSection(zone, racks, filtered) {
     })
     .join('');
 
-  const rackCount = racks.length;
-  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : 'rack-grid';
+  const rackCount = shownRacks.length;
+  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : rackCount === 1 ? 'rack-grid rack-grid-1' : 'rack-grid';
+  const emptyLine =
+    shownRacks.length < racks.length
+      ? `<div class="rack-empty-line">${esc(t('dash.empty'))}: ${emptyRacks.map((r) => esc(rackLabel(r))).join(', ')}</div>`
+      : '';
   const capHtml = cap
     ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
       <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags > cap ? '#ef4444' : color};width:${Math.min(100, Math.round((totalBags / cap) * 100))}%;border-radius:3px"></div></div>
       <span class="fs-xs" style="color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
     </div>`
     : '';
-  const zoneHasUrgent = filtered.some(
-    (d) => d.ov && Object.keys(d.c).some((zid) => zid === zone || racks.includes(zid))
-  );
-  // Open when there is something to see. This used to read `dashMode === 'farm' &&`
-  // — a toggle on the Dashboard silently deciding how the Chargen page looked, so
-  // switching to Übersicht once left every zone here collapsed with no visible cause.
-  const sectionClass = 'location-section' + (zoneHasUrgent ? '' : ' collapsed');
-  return `<div class="${sectionClass}" data-zone="${esc(zone)}">
+  const late = filtered.filter(
+    (d) => d.ov && Object.keys(d.c).some((zid) => (zid === zone || racks.includes(zid)) && d.c[zid] > 0)
+  ).length;
+  return `<div class="${_locSectionClass(zone, q)}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
+      ${_locLateHtml(late)}
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
       <button class="fs-xs" type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
     </div>
     <div class="location-section-body">${capHtml}
-      <div class="${gridClass}">${rackCards}</div>
+      <div class="${gridClass}">${rackCards}</div>${emptyLine}
     </div>
   </div>`;
 }
@@ -5201,8 +5256,7 @@ function renderFruitingSection(fruitingZones, filtered) {
     })
     .join('');
 
-  const fruitSectionClass = 'location-section' + (totalBags > 0 ? '' : ' collapsed');
-  return `<div class="${fruitSectionClass}" data-zone="fruiting">
+  return `<div class="${_locSectionClass('fruiting', q)}" data-zone="fruiting">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags', totalBags)}</span>
@@ -5306,9 +5360,11 @@ function renderSimpleZoneSection(zone, filtered) {
   const cards = batchEntries
     .map(([bid, d]) => {
       d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      return `<div class="batch-card" onclick="this.classList.toggle('expanded')">
+      const bd = filtered.find((f) => f.b.batchId === bid);
+      const ov = !!(bd && bd.ov);
+      return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
-      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span></div>
+      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span>${ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}</div>
       <div class="batch-card-chips">${d.bags
         .map((bg) => {
           const sel = selectedLocBags.has(bg.id);
@@ -5326,12 +5382,16 @@ function renderSimpleZoneSection(zone, filtered) {
       <span class="fs-xs" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
     </div>`
     : '';
-  return `<div class="location-section">
-    <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
+  const late = filtered.filter((d) => d.ov && (d.c[zone.id] || 0) > 0).length;
+  return `<div class="${_locSectionClass(zone.id, q)}" data-zone="${esc(zone.id)}">
+    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
+      ${_locLateHtml(late)}
       <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
-    </div>${capHtml}
-    <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
+    </div>
+    <div class="location-section-body">${capHtml}
+      <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
+    </div>
   </div>`;
 }
 
@@ -7174,15 +7234,17 @@ function _dashLeftBehindRows(splits) {
 // look at. The dates are the point: how long a block has been fruiting is what
 // the team works from. Batches and bag numbers fold away under each row.
 //
-// Every zone at once, fruiting zones first, then spawn run and incubation. It
-// was one zone at a time behind a row of chips, because the full list stood
-// above the day's work and pushed it off a phone; the day's work stands above
-// this now, so the list may be as long as the farm is.
+// One zone at a time, picked from a row of chips that carry each zone's bag
+// count, fruiting zones first, then spawn run and incubation; the choice is
+// kept per device. That is how it was built in #646. The redesign drew every
+// zone at once, which a small demo carried and a full farm did not: a single
+// incubation room filled screens of rows, and the start page ran long on a
+// phone.
 //
 // Drawn with the day's tasks, so it refreshes whenever they do — which includes
 // the 30-second tick, so what someone unfolded is kept here rather than reset
 // under their thumb.
-const _wkTentFold = { open: new Set() };
+const _wkTentFold = { open: new Set(), zone: null };
 function _wkZoneList() {
   return fruitingZones().concat(zones.filter((z) => z.role === 'spawn' || z.role === 'incubation'));
 }
@@ -7247,6 +7309,22 @@ function _wkZoneRowsHtml(z, bags) {
     })
     .join('');
 }
+// The zone on show: the one picked on this device, while it exists; else the
+// first one with bags in it.
+function _wkZoneChosen(list) {
+  if (_wkTentFold.zone == null) {
+    let saved = '';
+    try {
+      saved = localStorage.getItem('mp-work-zone') || '';
+    } catch {
+      saved = '';
+    }
+    _wkTentFold.zone = saved;
+  }
+  if (list.some((z) => z.id === _wkTentFold.zone)) return _wkTentFold.zone;
+  const full = list.find((z) => Object.keys(getZoneBags(z.id)).length);
+  return (full || list[0]).id;
+}
 function renderWorkTents() {
   const card = document.getElementById('wk-tents');
   if (!card) return;
@@ -7254,24 +7332,53 @@ function renderWorkTents() {
   card.hidden = !list.length;
   if (!list.length) return;
   const box = document.getElementById('wk-tents-list');
+  const bags = new Map(list.map((z) => [z.id, getZoneBags(z.id)]));
+  const n = (z) => Object.keys(bags.get(z.id)).length.toLocaleString(loc());
+  const chosen = list.find((z) => z.id === _wkZoneChosen(list));
+  const rows = _wkZoneRowsHtml(chosen, bags.get(chosen.id));
+  // A farm with one zone has nothing to pick: the label carries its name.
+  const head =
+    list.length < 2
+      ? '<div class="wk-zone-kopf"><span>' +
+        esc(zoneDisplayName(chosen.id)) +
+        '</span><span class="wk-zone-n">' +
+        n(chosen) +
+        '</span></div>'
+      : '<div class="wk-zwahl">' +
+        list
+          .map(
+            (z) =>
+              '<button type="button" class="wk-zchip" data-wk-zone="' +
+              esc(z.id) +
+              '" aria-pressed="' +
+              (z === chosen) +
+              '"><span>' +
+              esc(zoneDisplayName(z.id)) +
+              '</span><b>' +
+              n(z) +
+              '</b></button>'
+          )
+          .join('') +
+        '</div>';
+  // On a phone the chips are a line that scrolls sideways. Drawing it anew puts
+  // it back to its start, so where it stood is carried over; drawn the first
+  // time, it is moved so the zone on show is in sight.
+  const was = box.querySelector('.wk-zwahl');
+  const left = was ? was.scrollLeft : null;
   box.innerHTML =
-    '<div class="wk-zonen">' +
-    list
-      .map((z) => {
-        const bags = getZoneBags(z.id);
-        const rows = _wkZoneRowsHtml(z, bags);
-        return (
-          '<div class="wk-zone"><div class="wk-zone-kopf"><span>' +
-          esc(zoneDisplayName(z.id)) +
-          '</span><span class="wk-zone-n">' +
-          Object.keys(bags).length.toLocaleString(loc()) +
-          '</span></div>' +
-          (rows || '<p class="wk-zone-leer">' + esc(t('work.tentEmpty')) + '</p>') +
-          '</div>'
-        );
-      })
-      .join('') +
+    (list.length < 2 ? '' : head) +
+    '<div class="wk-zone">' +
+    (list.length < 2 ? head : '') +
+    (rows || '<p class="wk-zone-leer">' + esc(t('work.tentEmpty')) + '</p>') +
     '</div>';
+  const strip = box.querySelector('.wk-zwahl');
+  if (strip) {
+    if (left != null) strip.scrollLeft = left;
+    const on = strip.querySelector('[aria-pressed="true"]');
+    const from = on ? on.offsetLeft - strip.offsetLeft : 0;
+    if (on && (from < strip.scrollLeft || from + on.offsetWidth > strip.scrollLeft + strip.clientWidth))
+      strip.scrollLeft = Math.max(0, from - 16);
+  }
   if (!box.dataset.bound) {
     box.dataset.bound = '1';
     // toggle does not bubble; capture catches it for every <details> in the box.
@@ -7283,6 +7390,17 @@ function renderWorkTents() {
       },
       true
     );
+    box.addEventListener('click', (ev) => {
+      const chip = ev.target.closest('[data-wk-zone]');
+      if (!chip) return;
+      _wkTentFold.zone = chip.dataset.wkZone;
+      try {
+        localStorage.setItem('mp-work-zone', _wkTentFold.zone);
+      } catch {
+        // A browser that keeps nothing still shows the zone until the next reload.
+      }
+      renderWorkTents();
+    });
   }
 }
 // The week, folded away behind "Woche" in the heading of the list: every day's
@@ -7358,8 +7476,6 @@ function renderWorkSummary(week) {
 //
 // Six rows and the rest on a tap, like the open day: on a busy morning the list
 // would otherwise push where things stand off a phone.
-const WK_AN_CAP = 6;
-let _wkAnAll = false;
 const WK_AN_CHEV =
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 // The button the week draws for a row, taken apart: its data attributes and its
@@ -7371,7 +7487,11 @@ function _wkAnBtn(it) {
   const m = all[all.length - 1];
   return { attrs: (m[1].match(/\sdata-[a-z-]+="[^"]*"/g) || []).join(''), label: m[2].trim() };
 }
-function _wkAnRowHtml(it) {
+// Inside an opened job the job is already named above the rows, and how many
+// are late with it, so a row leads with its Sorte in the ink, names the Charge
+// after it, and leaves its lateness to its own words ("Fällig vor 12 Tagen"):
+// a column of rows in red said nothing the heading did not.
+function _wkAnRowHtml(it, inJob) {
   const btn = _wkAnBtn(it);
   const room = it.zone ? zoneDisplayName(it.zone) : '';
   const meta = [room, it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean);
@@ -7379,7 +7499,11 @@ function _wkAnRowHtml(it) {
   let was = esc(it.label);
   let wer = meta;
   let ton = it.overdue ? ' rot' : '';
-  if (it.kind === 'supply') {
+  if (inJob && it.batchId && it.species) {
+    was = esc(it.species);
+    wer = [it.label].concat(meta);
+    ton = '';
+  } else if (it.kind === 'supply') {
     // A gap in the supply: the verdict the Chargen list gives the Sorte.
     was = esc(t('batch.supply.' + ((it.task && it.task.supply) || 'now')));
     wer = [it.label].concat(meta);
@@ -7428,11 +7552,63 @@ function _wkNoticeRowsHtml() {
   }
   return html;
 }
+// What is due today, by job: one row per kind of work, with how many there are
+// and how many of them are late, in the order of the chain above it (Labor,
+// Körnerbrut, Beimpfen, Umziehen, Ernte). A tap opens the job's own rows under
+// it, and they stay open through the 30-second refresh. A job with a single
+// piece of work, and a chore that is ticked off on its own, stand as their row.
+//
+// It was the open day's rows, six of them and "+ n weitere". A demo day has a
+// handful; a full farm's day has many times that, and the six shown were
+// notices while the moves due that morning waited behind "+ n weitere".
+const WK_AN_GRUPPEN = [
+  { key: 'lab', kinds: ['labgroup', 'labmin'], label: 'work.grp.lab' },
+  { key: 'supply', kinds: ['supply'], label: 'work.grp.supply', names: true },
+  { key: 'grain', kinds: ['grain'], label: 'work.grp.grain', today: true },
+  { key: 'move', kinds: ['fruiting'], label: 'work.grp.move', today: true },
+  { key: 'harvest', kinds: ['harvest'], label: 'work.grp.harvest', today: true },
+  { key: 'left', kinds: ['left'], label: 'work.grp.left' },
+  { key: 'manual', kinds: ['manual'], label: 'work.grp.manual', today: true },
+  { key: 'chore', kinds: ['chore'], label: null },
+  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert' }
+];
+const _wkAnOffen = new Set();
+function _wkAnGruppeHtml(g, items) {
+  const late = items.filter((it) => it.overdue).length;
+  const wer = [];
+  if (late) wer.push('<span class="rot">' + esc(tp('work.grp.late', late)) + '</span>');
+  if (g.today && items.length > late) wer.push(esc(tp('work.grp.today', items.length - late)));
+  if (g.names) {
+    const names = items.map((it) => it.label).filter(Boolean);
+    wer.push(esc(names.slice(0, 3).join(', ') + (names.length > 3 ? ' …' : '')));
+  } else if (!g.today) {
+    // Rows that say the same thing about different Chargen ("noch in
+    // Inkubation") say it once on their job.
+    const same = items[0].detail || items[0].instruction || '';
+    if (same && items.every((it) => (it.detail || it.instruction || '') === same)) wer.push(esc(same));
+  }
+  const offen = _wkAnOffen.has(g.key);
+  return (
+    '<button type="button" class="wk-an-zeile wk-an-gruppe" data-wk-gruppe="' +
+    g.key +
+    '" aria-expanded="' +
+    offen +
+    '"><span class="wk-an-was">' +
+    esc(t(g.label)) +
+    (wer.length ? '<span class="wk-an-wer">' + wer.join(' · ') + '</span>' : '') +
+    '</span><span class="wk-an-zahl">' +
+    items.length.toLocaleString(loc()) +
+    '</span>' +
+    WK_AN_CHEV +
+    '</button>' +
+    (offen ? '<div class="wk-an-teil">' + items.map((it) => _wkAnRowHtml(it, true)).join('') + '</div>' : '')
+  );
+}
 function renderWorkDue(week) {
   const box = document.getElementById('wk-an');
   if (!box) return;
   const day = week && week[0] ? week[0] : { items: [] };
-  // The open day's order: what to start before setting off, then the walk.
+  // Within a job, the walk: what to start before setting off, then zone by zone.
   const order = {};
   zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
   const rank = (it) => {
@@ -7441,28 +7617,33 @@ function renderWorkDue(week) {
     return it.zone && order[it.zone] != null ? order[it.zone] : 999;
   };
   const open = day.items.filter((it) => !it.done).sort((a, b) => rank(a) - rank(b));
-  const items = PLAN_CATS.flatMap((c) => open.filter((x) => planCategory(x) === c));
-  const shown = _wkAnAll ? items : items.slice(0, WK_AN_CAP);
-  const hidden = items.length - shown.length;
-  const notices = _wkNoticeRowsHtml();
-  let html = notices + shown.map(_wkAnRowHtml).join('');
-  if (hidden > 0) {
-    html +=
-      '<button type="button" class="wk-an-zeile wk-an-mehr" data-wk-more="1"><span class="wk-an-wer">+ ' +
-      esc(t('dash.moreRows', { n: hidden })) +
-      '</span></button>';
+  let html = '';
+  for (const g of WK_AN_GRUPPEN) {
+    const items = open.filter((it) => g.kinds.includes(it.kind));
+    if (!items.length) continue;
+    html += items.length === 1 || !g.label ? items.map((it) => _wkAnRowHtml(it)).join('') : _wkAnGruppeHtml(g, items);
   }
+  // A kind of work no job above names yet still shows, as its rows.
+  const known = new Set(WK_AN_GRUPPEN.flatMap((g) => g.kinds));
+  html += open
+    .filter((it) => !known.has(it.kind))
+    .map((it) => _wkAnRowHtml(it))
+    .join('');
+  // The notices last: what is due comes first, and on a desk they are the
+  // strip's four above the jobs, drawn here as rows.
+  html += _wkNoticeRowsHtml();
   // With nothing due the label says so. A desk may still have a notice above
   // it, a phone shows the notices elsewhere, so the sentence is always written
   // and the stylesheet takes it away where a notice already fills the label.
-  if (!shown.length) html += '<p class="wk-an-leer">' + esc(t('work.todayNone')) + '</p>';
+  if (!open.length) html += '<p class="wk-an-leer">' + esc(t('work.todayNone')) + '</p>';
   box.innerHTML = html;
   if (box.dataset.bound) return;
   box.dataset.bound = '1';
   box.addEventListener('click', (ev) => {
-    const more = ev.target.closest('[data-wk-more]');
-    if (more) {
-      _wkAnAll = true;
+    const g = ev.target.closest('[data-wk-gruppe]');
+    if (g) {
+      const k = g.dataset.wkGruppe;
+      _wkAnOffen[_wkAnOffen.has(k) ? 'delete' : 'add'](k);
       renderWorkDue(buildWeekPlan());
       return;
     }
@@ -9595,6 +9776,13 @@ document.getElementById('dash-locations').addEventListener('click', function (e)
     e.preventDefault();
     e.stopPropagation();
     openZoneCheck(zc.dataset.zoneCheck);
+    return;
+  }
+  // The heading's own handler has turned the room already; keep what it is now.
+  const head = e.target.closest('.location-section-header');
+  if (head && head.parentElement.dataset.zone) {
+    const sec = head.parentElement;
+    _locRemember(sec.dataset.zone, !sec.classList.contains('collapsed'));
     return;
   }
   const chip = e.target.closest('.bag-chip[data-bag]');
@@ -34111,6 +34299,7 @@ function initEventListeners() {
   // delegated rather than carrying inline handlers.
   $('wk-np').addEventListener('click', () => {
     go('lab', 'n-lab');
+    openStab('lab', 'stock');
     const card = document.getElementById('np-card');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -34255,6 +34444,9 @@ function initEventListeners() {
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
+  $('st-lab-stock').addEventListener('click', () => {
+    openStab('lab', 'stock');
+  });
   $('st-lab-cultures').addEventListener('click', () => {
     openStab('lab', 'cultures');
   });
