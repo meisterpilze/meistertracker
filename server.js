@@ -3648,11 +3648,14 @@ function parseIcsLine(line) {
 }
 
 // The components of an unfolded calendar text, nested as they stand. null when
-// BEGIN and END do not pair up, or nest deeper than any real object does.
+// an END names another component than the one open, or the nesting goes deeper
+// than any real object does. A component still open at the end of the text is
+// taken as ending there, and a byte-order mark in front is dropped: some
+// clients send both.
 function parseIcsComponents(unfolded) {
   const root = { name: '', props: [], children: [] };
   const stack = [root];
-  for (const raw of String(unfolded).split('\n')) {
+  for (const raw of String(unfolded).replace(/^﻿/, '').split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     const p = line ? parseIcsLine(line) : null;
     if (!p) continue;
@@ -3669,7 +3672,7 @@ function parseIcsComponents(unfolded) {
       top.props.push(p);
     }
   }
-  return stack.length === 1 ? root : null;
+  return root;
 }
 
 // The one object a CalDAV resource holds (RFC 4791 §4.1): one kind of
@@ -3703,6 +3706,28 @@ function icsValue(component, name) {
   const p = icsProp(component, name);
   return p ? p.value.trim() : null;
 }
+
+// The component a resource is about: the one without RECURRENCE-ID, which is
+// the series or the only one there is, else the first. A client may list a
+// changed occurrence before the series it belongs to.
+function icsMaster(obj, name) {
+  const all = obj.items.filter((c) => !name || c.name === name);
+  return all.find((c) => !icsProp(c, 'RECURRENCE-ID')) || all[0] || null;
+}
+// The X-MEISTERPILZE-TYPE the app writes into its own files, from the series
+// or, failing that, from any occurrence that kept it.
+function icsAppType(obj) {
+  const master = icsMaster(obj);
+  return (
+    icsValue(master, 'X-MEISTERPILZE-TYPE') ||
+    obj.items.map((c) => icsValue(c, 'X-MEISTERPILZE-TYPE')).find(Boolean) ||
+    null
+  );
+}
+
+// A calendar file over CALDAV_MAX_ICS_BYTES is named in the log once per
+// process, not on every visit to the calendar that reads it.
+const _icsTooBigLogged = new Set();
 
 // DTSTART, DTEND or DUE as a day and, unless it is a whole day, a clock time.
 // The clock is read as written, the way the sync-back always has. null when
@@ -5572,19 +5597,29 @@ function caldavRecordAllowed(req, uid) {
   // meetings, deliveries and maintenance away from everyone over CalDAV — the
   // exact opposite of what its own commit said it did. What is being protected
   // is the shop's collection times, not the calendar.
-  const ereignis = db.readCalendarEventByCaldavUid(database, uid);
-  if (ereignis) return ereignis.category === 'pickup' ? isAdmin : true;
+  //
+  // ⚠️ **Every row the UID reaches, not the first one found.** This used to
+  // answer from the first match: a calendar row carrying the UID decided, and
+  // the tasks were never asked. But the VTODO writers act on the task with
+  // this UID, and the due-date writers on the task with it minus "-event",
+  // whatever else carries it, and a calendar row can carry any UID a client
+  // or a request gave it. So every one of them has to allow it.
+  const ereignisse = database.prepare('SELECT category FROM calendar_events WHERE caldav_uid = ?').all(uid);
+  if (!isAdmin && ereignisse.some((e) => e.category === 'pickup')) return false;
   // A task, either by its own uid or by its companion due-date event's.
-  const taskUid = uid.replace(/-event$/, '');
+  //
   // ⚠️ **No charset pre-check here.** There was one, and it failed open on
   // exactly the values it rejected: isValidCaldavUid caps a uid at 120
   // characters, the sync-back's own regex does not, so a 150-character uid was
   // waved through by this guard and then happily resolved to a row and written.
   // The lookup answers the only question that matters — does this name a row? —
   // and cannot disagree with anything.
-  const task = db.readTaskByCaldavUid(database, taskUid);
-  if (!task) return true;
-  return db.canUserModifyTask(database, req.caldavUser && req.caldavUser.username, task.id, isAdmin);
+  const wer = req.caldavUser && req.caldavUser.username;
+  for (const taskUid of new Set([uid, uid.replace(/-event$/, '')])) {
+    const tasks = database.prepare('SELECT id FROM manual_tasks WHERE caldav_uid = ?').all(taskUid);
+    if (tasks.some((t) => !db.canUserModifyTask(database, wer, t.id, isAdmin))) return false;
+  }
+  return true;
 }
 
 function handlePut(parts, body, req, res) {
@@ -5596,7 +5631,14 @@ function handlePut(parts, body, req, res) {
       res.end('Forbidden');
       return;
     }
-    if (Buffer.byteLength(body, 'utf8') > CALDAV_MAX_ICS_BYTES) {
+    const bytes = Buffer.byteLength(body, 'utf8');
+    if (bytes > CALDAV_MAX_ICS_BYTES) {
+      log('warn', 'CalDAV PUT: refused a body over the size cap', {
+        calendar: calName,
+        file: parts[2],
+        bytes,
+        actor: req.caldavUser && req.caldavUser.username
+      });
       res.writeHead(413);
       res.end('Request body too large');
       return;
@@ -5640,8 +5682,8 @@ function handlePut(parts, body, req, res) {
       res.end('Bad Request');
       return;
     }
-    const todo = obj.items.find((c) => c.name === 'VTODO') || null;
-    const vevent = obj.items.find((c) => c.name === 'VEVENT') || null;
+    const todo = icsMaster(obj, 'VTODO');
+    const vevent = icsMaster(obj, 'VEVENT');
 
     // S-24: asked before the write, not after it. The sync-back below is what
     // touches the row, but a refusal that still left the caller's .ics sitting
@@ -5740,11 +5782,11 @@ function handlePut(parts, body, req, res) {
     }
 
     // ── VEVENT sync-back: batch due dates, task due dates, custom events ──
-    // The first VEVENT's own properties: a VTIMEZONE or a VALARM in the same
+    // The series VEVENT's own properties: a VTIMEZONE or a VALARM in the same
     // body has DTSTART and DESCRIPTION lines of its own.
     if (vevent) {
       try {
-        const evType = icsValue(vevent, 'X-MEISTERPILZE-TYPE');
+        const evType = icsAppType(obj);
 
         if (evType === 'batch-due' || evType === 'task-due') {
           const dt = icsDateTime(vevent, 'DTSTART');
@@ -5998,7 +6040,7 @@ function handleDelete(parts, req, res) {
       return;
     }
 
-    const evType = items.length ? icsValue(items[0], 'X-MEISTERPILZE-TYPE') : null;
+    const evType = items.length ? icsAppType(obj) : null;
 
     if (evType === 'batch-due') {
       // Batch due dates are mandatory — ignore delete, autoSync will recreate the file
@@ -14493,12 +14535,23 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               // of the shared calendars, so a file it cannot read cheaply is
               // skipped rather than tried again on each visit.
               const file = path.join(CAL_DIR, dir, f);
-              if (fs.statSync(file).size > CALDAV_MAX_ICS_BYTES) continue;
+              const size = fs.statSync(file).size;
+              if (size > CALDAV_MAX_ICS_BYTES) {
+                if (!_icsTooBigLogged.has(file)) {
+                  _icsTooBigLogged.add(file);
+                  log('warn', 'CalDAV import: skipped a file over the size cap', {
+                    calendar: dir,
+                    file: f,
+                    bytes: size
+                  });
+                }
+                continue;
+              }
               const obj = readCalendarObject(unfoldIcs(fs.readFileSync(file, 'utf8')));
               if (obj.error || !obj.items.length) continue;
-              const item = obj.items[0];
               // Skip meistertracker-generated events
-              if (icsProp(item, 'X-MEISTERPILZE-TYPE')) continue;
+              if (icsAppType(obj)) continue;
+              const item = icsMaster(obj);
               const start = icsDateTime(item, 'DTSTART');
               if (!start) continue;
               const end = icsDateTime(item, 'DTEND');

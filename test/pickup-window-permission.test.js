@@ -129,7 +129,11 @@ describe('the CalDAV doors', () => {
     // is protected is the shop's collection times, not the calendar.
     const fn = SRC.match(/function caldavRecordAllowed\(req, uid\) \{[\s\S]*?\n\}/);
     assert.ok(fn, 'caldavRecordAllowed has moved');
-    assert.match(fn[0], /ereignis\.category === 'pickup' \? isAdmin : true/, 'the category has to decide');
+    assert.match(
+      fn[0],
+      /if \(!isAdmin && ereignisse\.some\(\(e\) => e\.category === 'pickup'\)\) return false;/,
+      'the category has to decide'
+    );
   });
 
   it('recognises an event by its stored uid, not only by the cev- shape', () => {
@@ -140,8 +144,8 @@ describe('the CalDAV doors', () => {
     // their own calendar app.
     const fn = SRC.match(/function caldavRecordAllowed\(req, uid\) \{[\s\S]*?\n\}/);
     assert.ok(fn, 'caldavRecordAllowed has moved');
-    assert.match(fn[0], /db\.readCalendarEventByCaldavUid\(database, uid\)/);
-    vor(fn[0], 'readCalendarEventByCaldavUid', 'readTaskByCaldavUid', 'events are decided before tasks');
+    assert.match(fn[0], /FROM calendar_events WHERE caldav_uid = \?'\)\.all\(uid\)/);
+    vor(fn[0], 'FROM calendar_events', 'FROM manual_tasks', 'events are asked before tasks');
   });
 });
 

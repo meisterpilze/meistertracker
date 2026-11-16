@@ -179,6 +179,31 @@ describe('a CalDAV write is judged on the record it names', () => {
   it('lets through a UID that could never name a row', () => {
     assert.equal(erlaubt(req('anton', 'user'), ics('../../etc/passwd')), true);
   });
+
+  // The writers do not stop at the first row that carries a UID: the VTODO
+  // writers act on the task with it, the due-date writers on the task with it
+  // minus "-event". So the guard asks every row a writer can reach.
+  it('is not answered by a calendar row that carries a task UID too', () => {
+    db.insertCalendarEvent(d, {
+      id: 'cev-gleich',
+      title: 'Teamsitzung',
+      startDate: '2026-11-20',
+      category: 'meeting',
+      caldavUid: uidFremd
+    });
+    assert.equal(erlaubt(req('anton', 'user'), ics(uidFremd)), false);
+    assert.equal(erlaubt(req('chef', 'admin'), ics(uidFremd)), true);
+  });
+
+  it('asks the task with the UID as it stands, not only without "-event"', () => {
+    db.insertTask(d, {
+      text: 'Von außen',
+      assignee: 'britta',
+      created: '2026-08-19T00:00:00Z',
+      caldavUid: 'C0FFEE-event'
+    });
+    assert.equal(erlaubt(req('anton', 'user'), ics('C0FFEE-event')), false);
+  });
 });
 
 describe('and it is asked before anything happens', () => {

@@ -30,6 +30,8 @@ const LESER = [
   'readCalendarObject',
   'icsProp',
   'icsValue',
+  'icsMaster',
+  'icsAppType',
   'icsDateTime'
 ];
 
@@ -208,6 +210,53 @@ describe('CalDAV PUT and DELETE act on the one UID the guard was asked about', (
     assert.ok(aufgabe('uid-erika'));
     assert.ok(aufgabe('uid-max-2'));
   });
+
+  it("does not let a calendar entry with a colleague's task UID open that task", () => {
+    // A calendar row can carry any UID: the routes and the CalDAV create branch
+    // store the one they are given. The task with the same UID is still the
+    // colleague's, for PUT and for DELETE.
+    db.insertCalendarEvent(d, { id: 'cev-gleich', title: 'Treffen', startDate: '2026-11-20', caldavUid: 'uid-erika' });
+    const body = ics(...vtodo('UID:uid-erika', 'SUMMARY:Geändert', 'STATUS:COMPLETED'));
+    assert.equal(put('gleich.ics', body), 403);
+    assert.equal(aufgabe('uid-erika').text, 'Autoklav prüfen');
+    fs.writeFileSync(path.join(DIR, 'max', 'gleich.ics'), body);
+    assert.equal(del('gleich.ics'), 403);
+    assert.ok(aufgabe('uid-erika'));
+  });
+
+  it('reads past a byte-order mark and a missing last END', () => {
+    db.insertTask(d, { text: 'Dritte', assignee: 'max', created: '2026-11-16T08:00:00Z', caldavUid: 'uid-max-3' });
+    assert.equal(put('bom.ics', '﻿' + ics(...vtodo('UID:uid-max-3', 'SUMMARY:Mit Marke'))), 201);
+    assert.equal(aufgabe('uid-max-3').text, 'Mit Marke');
+    const ohneEnde = ics(...vtodo('UID:uid-max-3', 'SUMMARY:Ohne Ende')).replace(/END:VCALENDAR\r\n$/, '');
+    assert.equal(put('bom.ics', ohneEnde), 204);
+    assert.equal(aufgabe('uid-max-3').text, 'Ohne Ende');
+  });
+
+  it('takes the series, not an occurrence listed in front of it', () => {
+    db.insertTask(d, { text: 'Vierte', assignee: 'max', created: '2026-11-16T08:00:00Z', caldavUid: 'uid-max-4' });
+    db.updateTaskDueDate(d, 'uid-max-4', '2026-11-25');
+    // The app's due-date event for the task, with a changed occurrence first
+    // that a client wrote without the app's marker.
+    fs.writeFileSync(
+      path.join(DIR, 'max', 'uid-max-4-event.ics'),
+      ics(
+        'BEGIN:VEVENT',
+        'UID:uid-max-4-event',
+        'RECURRENCE-ID;VALUE=DATE:20261202',
+        'DTSTART;VALUE=DATE:20261203',
+        'END:VEVENT',
+        'BEGIN:VEVENT',
+        'UID:uid-max-4-event',
+        'X-MEISTERPILZE-TYPE:task-due',
+        'DTSTART;VALUE=DATE:20261125',
+        'END:VEVENT'
+      )
+    );
+    assert.equal(del('uid-max-4-event.ics'), 204);
+    assert.equal(aufgabe('uid-max-4').due_date, null, 'the due date went with its event');
+    assert.ok(aufgabe('uid-max-4'), 'the task itself stays');
+  });
 });
 
 describe('the import reads calendar files the same way', () => {
@@ -216,7 +265,7 @@ describe('the import reads calendar files the same way', () => {
     von: '// GET /api/caldav/import',
     bis: '// GET /api/printer-status',
     helfer: LESER,
-    konstanten: ['CAL_DIR', 'CALDAV_MAX_ICS_BYTES', 'ICS_ITEM_COMPONENTS'],
+    konstanten: ['CAL_DIR', 'CALDAV_MAX_ICS_BYTES', 'ICS_ITEM_COMPONENTS', '_icsTooBigLogged'],
     literale: ['CALDAV_CATEGORY_CALS']
   };
   let r;
@@ -238,6 +287,23 @@ describe('the import reads calendar files the same way', () => {
         'SUMMARY:Lieferung',
         'DTSTART;TZID=Europe/Berlin:20261120T090000',
         'DTEND;TZID=Europe/Berlin:20261120T093000',
+        'END:VEVENT'
+      )
+    );
+    // The app's own event, with a changed occurrence first that lost the marker.
+    fs.writeFileSync(
+      path.join(dir, 'eigen.ics'),
+      ics(
+        'BEGIN:VEVENT',
+        'UID:cev-7@meisterpilze',
+        'RECURRENCE-ID:20261127T090000',
+        'DTSTART:20261127T100000',
+        'END:VEVENT',
+        'BEGIN:VEVENT',
+        'UID:cev-7@meisterpilze',
+        'X-MEISTERPILZE-TYPE:custom-event',
+        'DTSTART:20261120T090000',
+        'RRULE:FREQ=WEEKLY',
         'END:VEVENT'
       )
     );
