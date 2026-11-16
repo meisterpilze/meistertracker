@@ -4522,7 +4522,15 @@ function autoSyncCalendarEvent(ev) {
       caldavUid: ev.caldavUid || ev.caldav_uid,
       // Both spellings arrive here: readAll() hands out camelCase, while the
       // PATCH route re-reads the raw row and passes that.
-      locationId: ev.locationId != null ? ev.locationId : ev.location_id
+      locationId: ev.locationId != null ? ev.locationId : ev.location_id,
+      // The series, its exceptions, the SEQUENCE clients compare and the color.
+      // Left out, every edit through PATCH rewrote a recurring event as a
+      // single one, with SEQUENCE 0, in every subscribed calendar.
+      recurrence: ev.recurrence || null,
+      recurrenceUntil: ev.recurrenceUntil || ev.recurrence_until || null,
+      exceptionDates: ev.exceptionDates != null ? ev.exceptionDates : ev.exception_dates,
+      sequence: ev.sequence,
+      color: ev.color
     };
     const aMap = db.getAllCalendarEventAssignees(database);
     normalized.assignees = aMap.get(ev.id) || [];
@@ -13428,6 +13436,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, vf);
         return;
       }
+      // A new event's caldavUid is the one the server builds for it, or none.
+      // The CalDAV guard looks rows up by UID, so a row must not carry one
+      // that names something else.
+      if (data.caldavUid && data.caldavUid !== 'cev-' + data.id + '@meisterpilze') {
+        jsonErr(res, 400, "caldavUid must be the event's own");
+        return;
+      }
       try {
         const assignees = deriveEffectiveAssignees(data);
         db.insertCalendarEvent(database, data, assignees);
@@ -13473,15 +13488,40 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // usually names no category, and one that sets `category: 'meeting'`
         // takes a published window off the shop without mentioning pickup.
         if (touchesPickupWindow(id, data) && requireAdmin(req, res)) return;
-        if (!db.getCalendarEventById(database, id)) {
+        const stored = db.getCalendarEventById(database, id);
+        if (!stored) {
           jsonErr(res, 404, 'event not found');
+          return;
+        }
+        // The UID the event already has, or the one the server builds for it.
+        // The app writes back what the CalDAV push answered, which is one of
+        // the two.
+        if (
+          data.caldavUid &&
+          data.caldavUid !== stored.caldav_uid &&
+          data.caldavUid !== 'cev-' + id + '@meisterpilze'
+        ) {
+          jsonErr(res, 400, "caldavUid must be the event's own");
           return;
         }
         // The event row and its assignees together or not at all. node:sqlite
         // has no transaction() helper; this called one that did not exist, so
         // every edit failed with a TypeError before anything was written.
         const effectiveAssignees = deriveEffectiveAssignees(data);
-        const prevAssignees = db.getCalendarEventAssignees(database, id);
+        let prevAssignees = db.getCalendarEventAssignees(database, id);
+        // The entry form creates an event with `assignees: []` beside its
+        // teamAssignees, so its people stand only in team_assignees until the
+        // first edit fills the table. They are not new to the event then, and
+        // are not told they were just assigned.
+        if (!prevAssignees.length && stored.team_assignees) {
+          let namen = [];
+          try {
+            namen = JSON.parse(stored.team_assignees);
+          } catch {
+            /* not a list: nobody was on it */
+          }
+          prevAssignees = resolveUsernamesToIds(Array.isArray(namen) ? namen : []);
+        }
         db.withSavepoint(database, 'mt_calendar_event', () => {
           db.updateCalendarEvent(database, id, data);
           if (effectiveAssignees) {
