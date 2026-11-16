@@ -2703,6 +2703,8 @@ window.LANG['pt'] = {
   'work.grp.alert': 'Repor',
   'work.grp.late.one': '{n} atrasada',
   'work.grp.late.other': '{n} atrasadas',
+  'work.grp.urgent.one': '{n} urgente',
+  'work.grp.urgent.other': '{n} urgentes',
   'work.grp.today.one': '{n} hoje',
   'work.grp.today.other': '{n} hoje',
   'work.alertFull': '{zone} cheia ({n}/{cap})',

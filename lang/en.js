@@ -2686,6 +2686,8 @@ window.LANG['en'] = {
   'work.grp.alert': 'Reorder',
   'work.grp.late.one': '{n} overdue',
   'work.grp.late.other': '{n} overdue',
+  'work.grp.urgent.one': '{n} urgent',
+  'work.grp.urgent.other': '{n} urgent',
   'work.grp.today.one': '{n} today',
   'work.grp.today.other': '{n} today',
   'work.alertFull': '{zone} full ({n}/{cap})',

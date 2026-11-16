@@ -2669,20 +2669,26 @@ function eraseCustomer(id, name) {
 // Without shipping set up there is no label to buy, so there is no list of
 // buttons to buy one with: the notice alone. With it, the orders still to go
 // out come first and the ones that left, which can be labelled again, after.
+//
+// Only an admin can read the setup. Somebody who may ship without being one
+// gets no answer here, so for them it is unknown, and they get the list as
+// before: hiding it would take the labels away from exactly the people who buy
+// them.
 function renderOrdersVersand() {
   const body = $('versand-orders-body');
   if (!body) return;
   body.innerHTML = _ohEmpty(5, t('common.loading'));
   const table = body.closest('table');
   authFetch('/api/ship/config')
-    .then((r) => r.json())
+    .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
     .then((cfg) => {
       const ready = !!(cfg && cfg.enabled && cfg.publicKey);
       const warn = $('versand-config-warn');
       if (warn) warn.style.display = ready ? 'none' : 'block';
-      if (table) table.hidden = !ready;
-      if (ready) _versandOrders(body);
+      const list = ready || !cfg;
+      if (table) table.hidden = !list;
+      if (list) _versandOrders(body);
       else body.innerHTML = '';
     });
 }
@@ -7474,8 +7480,7 @@ function renderWorkSummary(week) {
 // carries the attributes of the button the week would draw for it (_planBtn),
 // so there is one wiring per kind of work and not two.
 //
-// Six rows and the rest on a tap, like the open day: on a busy morning the list
-// would otherwise push where things stand off a phone.
+// Grouped by job (renderWorkDue): one row per kind of work, its rows on a tap.
 const WK_AN_CHEV =
   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 // The button the week draws for a row, taken apart: its data attributes and its
@@ -7570,13 +7575,14 @@ const WK_AN_GRUPPEN = [
   { key: 'left', kinds: ['left'], label: 'work.grp.left' },
   { key: 'manual', kinds: ['manual'], label: 'work.grp.manual', today: true },
   { key: 'chore', kinds: ['chore'], label: null },
-  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert' }
+  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert', late: 'work.grp.urgent' }
 ];
 const _wkAnOffen = new Set();
 function _wkAnGruppeHtml(g, items) {
   const late = items.filter((it) => it.overdue).length;
   const wer = [];
-  if (late) wer.push('<span class="rot">' + esc(tp('work.grp.late', late)) + '</span>');
+  // A stock alarm is not late, it is urgent: "überfällig" is for work with a date.
+  if (late) wer.push('<span class="rot">' + esc(tp(g.late || 'work.grp.late', late)) + '</span>');
   if (g.today && items.length > late) wer.push(esc(tp('work.grp.today', items.length - late)));
   if (g.names) {
     const names = items.map((it) => it.label).filter(Boolean);

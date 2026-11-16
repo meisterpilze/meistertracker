@@ -2709,6 +2709,8 @@ window.LANG['de'] = {
   'work.grp.alert': 'Nachbestellen',
   'work.grp.late.one': '{n} überfällig',
   'work.grp.late.other': '{n} überfällig',
+  'work.grp.urgent.one': '{n} dringend',
+  'work.grp.urgent.other': '{n} dringend',
   'work.grp.today.one': '{n} heute',
   'work.grp.today.other': '{n} heute',
   'work.alertFull': '{zone} voll ({n}/{cap})',

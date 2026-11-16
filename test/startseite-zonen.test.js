@@ -192,6 +192,17 @@ describe('Startseite — Was ansteht, nach Arbeit', () => {
     offen.clear();
   });
 
+  it('calls stock alarms urgent, not late', () => {
+    render(
+      day([
+        { kind: 'alert', label: 'A1', overdue: true },
+        { kind: 'alert', label: 'A2', overdue: false }
+      ])
+    );
+    assert.match(box.innerHTML, /data-wk-gruppe="alert"[^]*?<span class="rot">work\.grp\.urgent:1<\/span>/);
+    assert.doesNotMatch(box.innerHTML, /work\.grp\.late/);
+  });
+
   it('leaves out what is done, and says so when nothing is left', () => {
     render(day([{ kind: 'fruiting', label: 'C1', done: true }]));
     assert.doesNotMatch(box.innerHTML, /<row/);
