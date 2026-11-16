@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Meistertracker</title>
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Meistertracker" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="stylesheet" href="/styles.css" />
@@ -1747,8 +1747,14 @@
             <path d="M12 13v5M8 21h8M9 3c0 0-2-2-2-3M15 3c0 0 2-2 2-3" /></svg
           ><span class="sb-logo-text">Meistertracker</span>
         </div>
+        <!-- On a phone this list is the sheet "Mehr" opens, so its head says so
+             and the button beside it closes the sheet (styles.css swaps the
+             two marks); on a desk the head is the app's name and the button
+             folds the sidebar to its icons. -->
+        <span class="sb-sheet-title" data-i18n="nav.more">Mehr</span>
         <button class="sb-toggle" id="sb-toggle" data-i18n-aria-label="aria.toggleSidebar" aria-label="Toggle sidebar">
           <svg
+            class="sb-toggle-fold"
             width="18"
             height="18"
             viewBox="0 0 24 24"
@@ -1758,6 +1764,18 @@
             stroke-linecap="round"
           >
             <path d="M3 12h18M3 6h18M3 18h18" />
+          </svg>
+          <svg
+            class="sb-toggle-close"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M6 6l12 12M18 6 6 18" />
           </svg>
         </button>
       </div>
@@ -1786,7 +1804,7 @@
           >
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" /></svg
-          ><span data-i18n="search.open">Suchen</span
+          ><span data-i18n="search.placeholder">Suchen oder scannen</span
           ><kbd class="sb-search-key" id="sb-search-key" data-i18n="search.keyCtrl" aria-hidden="true">Strg K</kbd>
         </button>
       </div>
@@ -2255,7 +2273,35 @@
           ><span data-i18n="nav.admin">Admin</span>
         </button>
         <div class="sb-sync">
-          <span class="sync-dot" id="sync-dot" data-i18n-title="aria.clickToSync" title="Click to sync"></span>
+          <!-- The state of the connection is the words beside this, never a coloured
+               dot: green as "all is well" says nothing a person acts on, and the
+               label already says it. This is the button that fetches a fresh copy. -->
+          <button
+            class="sync-dot"
+            id="sync-dot"
+            type="button"
+            data-i18n-title="aria.clickToSync"
+            data-i18n-aria-label="aria.clickToSync"
+            title="Click to sync"
+            aria-label="Click to sync"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+          </button>
           <span id="sync-label" class="sb-sync-label"></span>
           <select id="lang-sel" class="sb-lang-sel">
             <option value="de">DE</option>
@@ -2266,32 +2312,15 @@
       </div>
     </aside>
 
-    <!-- Mobile topbar (hamburger) -->
+    <!-- The phone's top bar: the page's name, the magnifier and the bell. A
+         phone has no sidebar to read the highlight off, so the bar says where
+         this is: go() writes the name here from the nav entry it was handed
+         (setPageTitle), and data-i18n goes with it, so a language switch
+         reaches it through translatePage() like any other string. The menu is
+         not here: it is "Mehr" in the bottom bar, in reach of the thumb. -->
     <div class="mobile-topbar no-print" id="mobile-topbar">
-      <button id="tgl-17" class="sb-toggle" data-i18n-aria-label="aria.openMenu" aria-label="Open menu">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <path d="M3 12h18M3 6h18M3 18h18" />
-        </svg>
-      </button>
-      <!-- The page's name, not the app's. A phone has no sidebar to read the
-           highlight off, and the bottom bar covers five of the twelve pages — open
-           the drawer, tap Abholungen, watch it close, and nothing on the screen said
-           where you landed. go() writes the label here from the nav entry it was
-           handed, so the two cannot drift; data-i18n goes with it, so a language
-           switch reaches it through translatePage() like any other string. -->
       <div class="sb-logo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="8" r="5" />
-          <path d="M12 13v5M8 21h8" /></svg
-        ><span class="sb-logo-text" id="topbar-title" data-i18n="nav.workSteps">Arbeitsgänge</span>
+        <span class="sb-logo-text" id="topbar-title" data-i18n="work.title">Was hast du gemacht?</span>
       </div>
       <!-- The phone has no sidebar to hold the field, so the topbar holds the
            magnifier instead — next to the bell, in the corner the thumb already
@@ -2334,22 +2363,51 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-          <path
-            d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
-          />
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
         <span class="bell-badge" id="bell-badge-m" hidden>0</span>
       </button>
-      <span class="sync-dot" id="sync-dot-m"></span>
+      <!-- Shown only while syncing or after an error (styles.css, .sync-dot):
+           a phone bar has no room for a label, and a mark that is always there
+           is one nobody reads. The drawer carries the label and the button. -->
+      <button
+        class="sync-dot"
+        id="sync-dot-m"
+        type="button"
+        data-i18n-aria-label="aria.clickToSync"
+        aria-label="Click to sync"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M8 16H3v5" />
+        </svg>
+      </button>
     </div>
 
     <!-- Sidebar overlay for mobile -->
     <div class="sb-overlay" id="sb-overlay"></div>
 
-    <!-- Mobile bottom navigation — the five most-used pages, thumb-reach zone.
-         Visible only on touch + narrow viewport; the sidebar remains the
-         single source of truth for active state and routing. -->
+    <!-- The phone's bottom bar: the three places the work happens in, "Mehr"
+         for everything else, and the scanner at the trailing end. Scanning is
+         how this app is searched on a phone, so the button sits where a thumb
+         looks for it and inside the bar, not floating over the page where it
+         covered whatever stood in that corner. "Mehr" opens the navigation
+         (toggleSidebar), which lists every other page and, under the page that
+         is open, that page's views. The sidebar stays the one source of the
+         active state and of the routing: each place here clicks its entry. -->
     <nav class="bottom-nav no-print" id="bottom-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation">
       <button class="bottom-nav-btn" id="bn-work" type="button" data-page="work">
         <svg
@@ -2367,25 +2425,7 @@
           <path d="m3.5 12 1 1 2-2" />
           <path d="m3.5 18 1 1 2-2" />
         </svg>
-        <span data-i18n="nav.workSteps">Arbeitsgänge</span>
-      </button>
-      <button class="bottom-nav-btn" id="bn-dash" type="button" data-page="dash">
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <rect x="3" y="3" width="7" height="7" rx="1" />
-          <rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" />
-          <rect x="14" y="14" width="7" height="7" rx="1" />
-        </svg>
-        <span data-i18n="nav.dashboard">Dashboard</span>
+        <span data-i18n="nav.workBar">Arbeiten</span>
       </button>
       <button class="bottom-nav-btn" id="bn-batch" type="button" data-page="batch">
         <svg
@@ -2406,27 +2446,6 @@
         </svg>
         <span data-i18n="nav.batches">Batches</span>
       </button>
-      <button class="bottom-nav-btn" id="bn-lab" type="button" data-page="lab">
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M9 3h6v7l4 9H5l4-9V3z" />
-          <line x1="9" y1="3" x2="15" y2="3" />
-        </svg>
-        <span data-i18n="nav.lab">Lab</span>
-      </button>
-      <!-- Bestellungen, not Kalender: orders are looked at many times a day, the
-           calendar rarely, and the drawer was the only way in. Kalender stays in
-           the drawer. Its own short label, like Arbeitsgänge: at the 13px phone
-           floor "Bestellungen" is 24px wider than "Kalender", and the bar had 7px
-           to spare at 320px (see .bottom-nav-btn). -->
       <button class="bottom-nav-btn" id="bn-orders" type="button" data-page="orders">
         <svg
           width="22"
@@ -2443,7 +2462,46 @@
             d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
           />
         </svg>
-        <span data-i18n="nav.ordersBar">Aufträge</span>
+        <span data-i18n="nav.packBar">Packen</span>
+      </button>
+      <button class="bottom-nav-btn" id="tgl-17" type="button" aria-haspopup="true">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="5" cy="12" r="1.4" />
+          <circle cx="12" cy="12" r="1.4" />
+          <circle cx="19" cy="12" r="1.4" />
+        </svg>
+        <span data-i18n="nav.more">Mehr</span>
+      </button>
+      <button
+        class="bottom-nav-scan"
+        id="bn-scan"
+        type="button"
+        data-i18n-aria-label="aria.openCameraScanner"
+        aria-label="Open camera scanner"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" />
+          <path d="M8 8v8M11 8v8M14 8v8M17 8v8" stroke-width="1.6" />
+        </svg>
+        <span data-i18n="scan.fabLabel">Scannen</span>
       </button>
     </nav>
 
@@ -2685,6 +2743,16 @@
       </div>
 
       <div class="main">
+        <!-- The page's name, the day, and room for the inbox button that floats
+             in this corner. A desk had no title at all: the sidebar highlight
+             was the only thing that said where you were. go() writes the name
+             here from the nav entry it was handed, the same way it names the
+             phone's top bar; on Arbeitsgänge it writes the question the page
+             asks instead. Hidden on a phone, where the top bar does this. -->
+        <header class="page-head no-print" id="page-head">
+          <h1 class="page-head-t" id="page-head-title" data-i18n="work.title">Was hast du gemacht?</h1>
+          <span class="page-head-date" id="page-head-date"></span>
+        </header>
         <!-- ══ ARBEITSGÄNGE ══
              The launcher: the seven things that actually get done, in the order
              they happen. Every tile opens a flow that works by clicking — the
@@ -2695,8 +2763,10 @@
                öffnet auf einer Liste, und die Kacheln, deretwegen man sie
                aufgemacht hat, liegen unter dem Falz. Jetzt ist das Erste im
                Bild das, was man gleich tut; was ansteht, folgt darunter. Die
-               Überschrift gilt nur für die Kacheln, und die Liste trägt ihre
-               eigene. -->
+               Frage der Seite steht ganz oben als ihr Name (setPageTitle). -->
+          <!-- The notices stand in one row of their own, so the page below can be
+               laid out as a grid without each of them taking a line. -->
+          <div class="wk-alerts">
           <!-- Nur wenn etwas nicht stimmt: Überfälliges, ein volles Zelt.
                Gefüllt von renderWorkSummary(); tippen öffnet die Aufgaben. -->
           <button type="button" class="wk-alert" id="wk-alert" hidden></button>
@@ -2711,16 +2781,10 @@
           <!-- Admins only, beside the line above and not instead of it: the
                recovery key has not been confirmed as put away yet. -->
           <button type="button" class="wk-usb wk-usb-key" id="wk-usb-key" hidden></button>
-          <div class="wk-head">
-            <div>
-              <div class="sec" style="margin: 0" data-i18n="work.title">Was hast du gemacht?</div>
-              <div class="wk-sub" data-i18n="work.sub">
-                Wähle den Arbeitsgang — die App fragt den Rest ab.
-              </div>
-            </div>
           </div>
           <div class="wk-tiles" id="wk-tiles">
             <button type="button" class="wk-tile" id="wk-t-move" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
+              <span class="wk-nr" aria-hidden="true">4</span>
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="44" y="20" width="54" height="34" rx="7" fill="currentColor" opacity=".22"/>
@@ -2733,8 +2797,10 @@
               </span>
               <span class="wk-tile-t" data-i18n="work.move">Umziehen</span>
               <span class="wk-tile-when" data-i18n="work.moveWhen">Inkubation → Zelt → Lager</span>
+              <span class="wk-stand" id="wk-n-move" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-harvest" style="--wk-c: var(--c-amber-dark); --wk-cl: var(--c-amber-light)">
+              <span class="wk-nr" aria-hidden="true">5</span>
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M30 60c0-17 15-28 32-28s30 11 30 23c0 6-6 9-15 9H43c-9 0-13-2-13-4z" fill="currentColor" opacity=".16"/>
@@ -2745,8 +2811,10 @@
               </span>
               <span class="wk-tile-t" data-i18n="work.harvest">Ernte erfassen</span>
               <span class="wk-tile-when" data-i18n="work.harvestWhen">Gramm pro Beutel, nach dem Ernten</span>
+              <span class="wk-stand" id="wk-n-harvest" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-batch" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
+              <span class="wk-nr" aria-hidden="true">3</span>
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M36 46h58v48a9 9 0 0 1-9 9H45a9 9 0 0 1-9-9z" fill="currentColor" opacity=".16"/>
@@ -2766,8 +2834,10 @@
               </span>
               <span class="wk-tile-t" data-i18n="work.tileBatch">Beutel beimpfen</span>
               <span class="wk-tile-when" data-i18n="work.batchWhen">wenn Körnerbrut durchgewachsen ist</span>
+              <span class="wk-stand" id="wk-n-batch" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
+              <span class="wk-nr" aria-hidden="true">1</span>
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="18" y="8" width="112" height="60" rx="5" fill="currentColor" opacity=".13"/>
@@ -2783,8 +2853,10 @@
               </span>
               <span class="wk-tile-t" data-i18n="work.lab">Labor</span>
               <span class="wk-tile-when" data-i18n="work.labWhen">Slant, Petri, Flüssigkultur, Spritzen, Korn-zu-Korn</span>
+              <span class="wk-stand" id="wk-n-lab" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-grain" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
+              <span class="wk-nr" aria-hidden="true">2</span>
               <span class="wk-tile-art" aria-hidden="true">
                 <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M42 32h54v56a9 9 0 0 1-9 9H51a9 9 0 0 1-9-9z" fill="currentColor" opacity=".10"/>
@@ -2803,6 +2875,7 @@
               </span>
               <span class="wk-tile-t" data-i18n="work.grain">Körnerbrut</span>
               <span class="wk-tile-when" data-i18n="work.grainWhen">wenn eine Flüssigkultur fertig ist</span>
+              <span class="wk-stand" id="wk-n-grain" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-sub" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
               <span class="wk-tile-art" aria-hidden="true">
@@ -2841,49 +2914,49 @@
               <span class="wk-tile-when" data-i18n="work.contamWhen">sobald du sie siehst, nicht später</span>
             </button>
           </div>
-          <!-- Die Reihenfolge der Kacheln stellt jeder selbst ein; gemerkt wird sie
-               je Benutzer auf diesem Gerät (applyWkTileOrder). -->
-          <div class="wk-order-bar">
-            <button type="button" class="wk-order-link" id="wk-order-btn" aria-controls="wk-order" aria-expanded="false" data-i18n="work.orderEdit">Reihenfolge ändern</button>
-          </div>
-          <div class="card wk-order" id="wk-order" hidden>
-            <ol class="wk-order-list" id="wk-order-list"></ol>
-            <div class="wk-order-actions">
-              <button type="button" class="btn btn-sm" id="wk-order-reset" data-i18n="work.orderReset">Standard</button>
-              <button type="button" class="btn btn-sm btn-p" id="wk-order-done" data-i18n="work.orderDone">Fertig</button>
-            </div>
-          </div>
-          <!-- Was in welchem Zelt und welcher Inkubation steht, nach Sorte und Einzugstag. Gefüllt von
-               renderWorkTents(); ohne solche Zonen bleibt die Karte weg. -->
-          <div class="card wk-tents" id="wk-tents" hidden>
-            <div class="sec" style="margin: 0 0 6px" data-i18n="work.tentsTitle">Wo steht was</div>
-            <div id="wk-tents-list"></div>
-          </div>
-          <!-- What is due, below the seven jobs that do it. This lived on the
-               Dashboard, and the two screens pointed at each other: a strip here read
-               "Weißt du nicht, was ansteht?" and sent you there, and the first thing
-               there was two buttons that came straight back — the same redundancy the
-               speed-dial FAB was deleted for. One screen answers both halves now, and
-               the Dashboard keeps what only it has. The list sat above the tiles at
-               first; on a phone that opened the app on a list and put the seven jobs
-               below the fold, so the halves swapped. -->
-          <div class="dash-top-row">
-            <!-- Batch tasks — what is due, under the seven jobs -->
-            <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
-              <!-- No All/Urgent-only filter: the urgency sections below ARE the
-                   filter, and "urgent only" hid the sections it duplicated. -->
-              <button type="button" class="wk-today" id="wk-today" aria-expanded="false" aria-controls="dash-batch-tasks">
-                <span class="sec" style="margin: 0" data-i18n="todo.batchTasks">Batch tasks</span>
-                <span class="wk-today-sum" id="wk-today-sum"></span>
-                <span class="wk-today-chev" aria-hidden="true">▾</span>
-              </button>
-              <div id="dash-batch-tasks"></div>
-            </div>
+          <!-- Below the jobs: what is due, and where things stand. In a hand the
+               two follow each other, what is due first; on a desk they stand
+               side by side (.wk-unten in styles.css).
 
-            <!-- Split batches (bags of the same batch across multiple stages) used
-                 to be its own card here. It is now the LIEGENGEBLIEBEN section of
-                 the Batch tasks card: same data (getSplitBatches), but read as an
-                 instruction alongside the dated work instead of a separate table. -->
+               What is due is a short list (renderWorkDue): today's open work
+               from the week plan, one row each, and a tap does what the row's
+               button in the week does. The week itself, with its seven days and
+               the rhythm behind them, opens under the list from "Woche"
+               (#wk-today); it lived on the Dashboard once and came here so that
+               one screen answers both "what now" and "how". -->
+          <div class="wk-unten">
+            <section class="wk-teil wk-teil-an">
+              <div class="wk-teil-kopf">
+                <h2 class="wk-teil-t" data-i18n="todo.batchTasks">Was ansteht</h2>
+                <button type="button" class="wk-today" id="wk-today" aria-expanded="false" aria-controls="dash-batch-tasks-card">
+                  <span data-i18n="dash.viewWeek">Woche</span>
+                  <!-- Drawn by the stylesheet (.wk-today-chev); no character in it,
+                       so no text of size zero stands in the page. -->
+                  <span class="wk-today-chev" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="wk-an" id="wk-an"></div>
+            </section>
+            <div class="dash-top-row">
+              <!-- The week: every day's work, the rhythm, and the day that is open.
+                   No All/Urgent-only filter: the urgency sections ARE the
+                   filter, and "urgent only" hid the sections it duplicated.
+                   Split batches (bags of the same batch across multiple stages)
+                   are its LIEGENGEBLIEBEN section: same data (getSplitBatches),
+                   read as an instruction alongside the dated work. -->
+              <div class="card" id="dash-batch-tasks-card" style="padding: 12px 16px; flex: 1; min-width: 0">
+                <div id="dash-batch-tasks"></div>
+              </div>
+            </div>
+            <!-- What stands in which tent and which incubation room, by Sorte and
+                 the day it moved in: one label per zone (renderWorkTents).
+                 Without such zones the section is not there. -->
+            <section class="wk-teil wk-teil-wo" id="wk-tents" hidden>
+              <div class="wk-teil-kopf">
+                <h2 class="wk-teil-t" data-i18n="work.tentsTitle">Wo steht was</h2>
+              </div>
+              <div id="wk-tents-list"></div>
+            </section>
           </div>
           <!-- Aufs Handy legen. Steht nur da, wenn der Browser die Installation
                anbietet oder Safari sie von Hand verlangt — und nie, wenn die App
@@ -3042,33 +3115,6 @@
 
         <!-- ══ BATCHES ══ -->
         <div class="page" id="p-batch">
-          <!-- Making a Charge is not a fifth place to look. The four tabs below
-               show what exists — every Charge, where the bags are, the substrate
-               mixes, the harvests — and this is where something new starts, so it
-               reads as a different kind of control and sits above them, the same
-               way Laborarbeit does one section over.
-               It opens the guided flow (wkbOpen), the same one the Arbeitsgänge
-               tile opens: there is one way to make a Charge, not a long form
-               here and a wizard there. sp-batch-new stays below as that flow's
-               backing form — createBatch() still reads its fields — but nothing
-               sends a person to it any more. -->
-          <button class="btn btn-p btn-lead" id="btn-batch-new">
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span data-i18n="batch.newBatch">New batch</span>
-          </button>
           <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
             <!-- "Where does everything stand" used to sit on top of the batch
@@ -3086,20 +3132,37 @@
           <!-- All batches -->
           <div class="sp active" id="sp-batch-list">
             <!-- Chargen on the Sortenliste, the same list as the Kulturbibliothek:
-                 one row per Sorte with its bags by phase; a tap opens its Chargen,
-                 the most due first; a tap on a Charge opens its window
-                 (renderBatches). -->
-            <div class="card">
+                 one row per Sorte with its bags by phase and a bar that shows
+                 them to scale; a tap opens its Chargen, the most due first
+                 (renderBatches). The open Sorte stands beside the list on a
+                 wide screen and comes up as a sheet on a narrow one; a tap on a
+                 Charge selects it, and the buttons under the Chargen move it,
+                 open its window or its note.
+
+                 One row of controls. Making a Charge is where work starts, so
+                 it stands first and is the one filled button; it opens the
+                 guided flow (wkbOpen), the same one the Arbeitsgänge stop
+                 opens: there is one way to make a Charge. sp-batch-new stays
+                 below as that flow's backing form (createBatch() still reads
+                 its fields), but nothing sends a person to it.
+
+                 The card is drawn without its box (.sl-frei in styles.css):
+                 here the list is the white label. The legend names the colours
+                 of the stage bar every row carries. -->
+            <div class="card sl-frei">
               <div class="sl-head">
                 <div class="sec" data-i18n="ch.title">Chargen</div>
                 <span class="sl-count" id="ch-count"></span>
               </div>
               <div class="sl-tools">
-                <button type="button" id="ch-scan" class="btn btn-p" data-i18n="ch.scan">Charge scannen</button>
+                <button type="button" id="btn-batch-new" class="btn btn-p btn-lead" data-i18n="ch.new">Neue Charge</button>
+                <button type="button" id="ch-scan" class="btn" data-i18n="ch.scan">Charge scannen</button>
                 <button type="button" id="ch-archiv" class="btn" aria-pressed="false"></button>
               </div>
-              <p class="lb-tap" data-i18n="ch.help">
-                Tipp auf eine Sorte, dann auf eine Charge: umziehen, Beutel, Notiz, löschen.
+              <p class="sl-legende">
+                <span><i class="sl-farbe sl-farbe-korn"></i><span data-i18n="sl.ch.legGrain">Körner in kg</span></span>
+                <span><i class="sl-farbe sl-farbe-ink"></i><span data-i18n="stage.incubation">Inkubation</span></span>
+                <span><i class="sl-farbe sl-farbe-fr"></i><span data-i18n="stage.fruiting">Fruchtung</span></span>
               </p>
               <div id="ch-list"></div>
             </div>
@@ -3917,7 +3980,7 @@
                desk, a drill-down index in a hand. It was hidden while the five views were
                top-level sidebar entries, which cost the sidebar more room than it had. -->
           <div class="stabs" data-stab-home="nav.orders">
-            <button class="stab active" id="st-orders-pack" data-i18n="orders.packTab">Packen</button>
+            <button class="stab active" id="st-orders-pack" data-i18n="orders.packTab" data-page-title>Packen</button>
             <button class="stab" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
             <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
@@ -3930,47 +3993,60 @@
                (order-board.js); no customer data is in it. -->
           <div class="sp active" id="sp-orders-pack">
             <div id="ob-sync" class="ob-sync" role="status" style="display: none"></div>
-            <div class="card">
-              <div class="ob-head">
-                <div class="sec" data-i18n="orders.board.totalsTitle">Alles zusammen</div>
+            <!-- The board. In a hand it is one column in the order the work is
+                 done: fetch everything, pack, make, what waits, what is done. On
+                 a desk the shelf list and the make list stay on the left while
+                 the parcels scroll on the right; .ob-links and .ob-rechts are
+                 those two columns and dissolve on a phone (styles.css, .ob-brett).
+                 The sections keep the card class and lose its box there: here
+                 every parcel is a label of its own. -->
+            <div class="ob-brett">
+              <div class="ob-links">
+                <div class="card ob-teil ob-teil-totals">
+                  <div class="ob-head">
+                    <div class="sec" data-i18n="orders.board.totalsTitle">Alles zusammen</div>
+                  </div>
+                  <div class="ob-hint" data-i18n="orders.board.totalsHint">
+                    Erst alles aus dem Regal holen, dann Bestellung für Bestellung packen.
+                  </div>
+                  <div id="ob-totals" class="ob-etikett"></div>
+                </div>
+                <div class="card ob-teil ob-teil-make">
+                  <div class="ob-head">
+                    <div class="sec" data-i18n="orders.board.makeTitle">Herstellen</div>
+                  </div>
+                  <div class="ob-hint" data-i18n="orders.board.makeHint">Wird frisch nach Bestellung gemacht.</div>
+                  <div id="ob-make" class="ob-etikett"></div>
+                </div>
               </div>
-              <div class="muted fs-meta ob-hint" data-i18n="orders.board.totalsHint">
-                Alle offenen Bestellungen, einmal gezählt: erst alles aus dem Regal holen, dann Bestellung für Bestellung
-                packen.
+              <div class="ob-rechts">
+                <div class="card ob-teil ob-teil-pack">
+                  <div class="ob-head">
+                    <div class="sec" data-i18n="orders.board.packTitle">Heute packen</div>
+                    <span id="ob-pack-count" class="ob-count"></span>
+                  </div>
+                  <div id="ob-pack"></div>
+                </div>
+                <div class="card ob-teil ob-teil-later" id="ob-later-card" style="display: none">
+                  <div class="ob-head">
+                    <div class="sec" data-i18n="orders.board.laterTitle">Wartet auf Herstellung</div>
+                    <span id="ob-later-count" class="ob-count"></span>
+                  </div>
+                  <!-- Said here, where the button it names is. -->
+                  <div class="ob-hint" data-i18n="orders.board.laterHint">
+                    Ist eine Bestellung fertig, auf „Hergestellt“ tippen, dann steht sie unter Heute packen.
+                  </div>
+                  <div id="ob-later"></div>
+                </div>
+                <details class="card ob-done-list">
+                  <summary class="ob-head">
+                    <span class="sec" data-i18n="orders.board.doneTitle">Erledigt heute</span>
+                    <span id="ob-done-count" class="ob-count"></span>
+                  </summary>
+                  <div id="ob-done"></div>
+                </details>
               </div>
-              <div id="ob-totals"></div>
             </div>
-            <div class="card">
-              <div class="ob-head">
-                <div class="sec" data-i18n="orders.board.packTitle">Heute packen</div>
-                <span id="ob-pack-count" class="ob-count"></span>
-              </div>
-              <div id="ob-pack"></div>
-            </div>
-            <div class="card">
-              <div class="ob-head">
-                <div class="sec" data-i18n="orders.board.makeTitle">Herstellen</div>
-              </div>
-              <div class="muted fs-meta ob-hint" data-i18n="orders.board.makeHint">
-                Wird frisch nach Bestellung gemacht. Ist eine Bestellung fertig, unten auf „Hergestellt" tippen, dann
-                steht sie unter Heute packen.
-              </div>
-              <div id="ob-make"></div>
-            </div>
-            <div class="card" id="ob-later-card" style="display: none">
-              <div class="ob-head">
-                <div class="sec" data-i18n="orders.board.laterTitle">Wartet auf Herstellung</div>
-                <span id="ob-later-count" class="ob-count"></span>
-              </div>
-              <div id="ob-later"></div>
-            </div>
-            <details class="card ob-done-list">
-              <summary class="ob-head">
-                <span class="sec" data-i18n="orders.board.doneTitle">Erledigt heute</span>
-                <span id="ob-done-count" class="ob-count"></span>
-              </summary>
-              <div id="ob-done"></div>
-            </details>
           </div>
 
           <!-- Inbox -->
@@ -3994,7 +4070,10 @@
                 "
               >
                 <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                  <button class="oh-fchip active" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">
+                  <button class="oh-fchip active" data-action="oh-filter" data-filter="open" data-i18n="orders.filterOpen">
+                    Offen
+                  </button>
+                  <button class="oh-fchip" data-action="oh-filter" data-filter="" data-i18n="orders.filterAll">
                     Alle
                   </button>
                   <button class="oh-fchip" data-action="oh-filter" data-filter="new" data-i18n="orders.status.new">
@@ -4453,34 +4532,43 @@
             </svg>
             <span data-i18n="lab.logWork">Log work</span>
           </button>
-          <!-- What is missing, per species, first; shown only while something is
-               (renderNachproduzieren). Same figures as the list below. -->
-          <div class="card" id="np-card" hidden>
-            <div class="sec" data-i18n="np.title">Nachproduzieren</div>
-            <div id="np-rows"></div>
-            <div class="np-foot" data-i18n="np.foot">
-              Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
-              einem Tipp auf sie unten.
-            </div>
-          </div>
-          <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
-               grain spawn. Replaces the tiles per culture type and the sales stock
-               card (renderLabStock). -->
-          <div class="card" id="lb-card" hidden>
-            <div class="sec" data-i18n="lb.title">Laborbestand</div>
-            <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
-            <div id="lb-list"></div>
-            <div class="vb-legend">
-              <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
-              <span data-i18n="lb.legendShop">Punkt = im Shop</span>
-            </div>
-            <div class="vb-bb" id="lb-bb" hidden></div>
-          </div>
           <div class="stabs" data-stab-home="nav.lab">
+            <button class="stab active" id="st-lab-stock" data-i18n="lab.stock">Bestand</button>
             <button class="stab" id="st-lab-grain" data-i18n="lab.grain">Körnerbrut</button>
-            <button class="stab active" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
+            <button class="stab" id="st-lab-cultures" data-i18n="lab.cultures">Cultures</button>
             <button class="stab" id="st-lab-lineage" data-i18n="lab.lineage">Lineage</button>
             <button class="stab" id="st-lab-contam" data-i18n="lab.contam">Kontaminationen</button>
+          </div>
+          <!-- Bestand: what is missing and what is there, per species. The view
+               Labor opens on, so the lab still starts with its stock. It stood
+               above the strip, outside every view, while the strip stood above
+               the views; with the views in the navigation, every one of them
+               opened under the same two cards, and the one somebody picked began
+               a few screens down. -->
+          <div class="sp active" id="sp-lab-stock">
+            <!-- What is missing, per species, first; shown only while something is
+                 (renderNachproduzieren). Same figures as the list below. -->
+            <div class="card" id="np-card" hidden>
+              <div class="sec" data-i18n="np.title">Nachproduzieren</div>
+              <div id="np-rows"></div>
+              <div class="np-foot" data-i18n="np.foot">
+                Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
+                einem Tipp auf sie unten.
+              </div>
+            </div>
+            <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
+                 grain spawn. Replaces the tiles per culture type and the sales stock
+                 card (renderLabStock). -->
+            <div class="card" id="lb-card" hidden>
+              <div class="sec" data-i18n="lb.title">Laborbestand</div>
+              <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
+              <div id="lb-list"></div>
+              <div class="vb-legend">
+                <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
+                <span data-i18n="lb.legendShop">Punkt = im Shop</span>
+              </div>
+              <div class="vb-bb" id="lb-bb" hidden></div>
+            </div>
           </div>
           <!-- Körnerbrut — grain spawn batches. Same columns as the batch
                  table so both lists share batchRowHtml. -->
@@ -4493,7 +4581,7 @@
                 <span class="sl-count" id="gr-count"></span>
               </div>
               <div class="sl-tools">
-                <button type="button" id="gr-scan" class="btn btn-p" data-i18n="gr.scan">Glas scannen</button>
+                <button type="button" id="gr-scan" class="btn" data-i18n="gr.scan">Glas scannen</button>
                 <button type="button" id="gr-archiv" class="btn" aria-pressed="false"></button>
               </div>
               <p class="lb-tap" data-i18n="gr.help">Tipp auf eine Sorte, dann auf eine Charge: Beutel, Notiz, löschen.</p>
@@ -4501,7 +4589,7 @@
             </div>
           </div>
           <!-- Cultures -->
-          <div class="sp active" id="sp-lab-cultures">
+          <div class="sp" id="sp-lab-cultures">
             <!-- Kulturbibliothek on the Sortenliste: one row per Sorte with what is
                  in stock; a tap opens its cultures by type, oldest first; a tap
                  on a culture opens the same sheet a scan does (renderCultures). -->
@@ -4511,7 +4599,7 @@
                 <span class="sl-count" id="kb-count"></span>
               </div>
               <div class="sl-tools">
-                <button type="button" id="kb-scan" class="btn btn-p" data-i18n="kb.scan">Kultur scannen</button>
+                <button type="button" id="kb-scan" class="btn" data-i18n="kb.scan">Kultur scannen</button>
                 <!-- Lab stocktake: scan the shelf, mark what's gone as used up -->
                 <button type="button" id="lab-check-btn" class="btn" data-i18n="zoneCheck.btn">Prüfen</button>
                 <button type="button" id="kb-archiv" class="btn" aria-pressed="false"></button>
@@ -4749,7 +4837,7 @@
                 "
               >
                 <div class="sec" style="margin: 0" data-i18n="contam.listTitle">Kontaminationsberichte</div>
-                <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                <div class="cl-filter" style="display: flex; gap: 6px; flex-wrap: wrap">
                   <select id="cl-type-filter" data-i18n-aria-label="contam.type" aria-label="Type filter">
                     <option value="" data-i18n="contam.allTypes">Alle Typen</option>
                   </select>
@@ -6994,7 +7082,7 @@
     <div id="print-sheet"></div>
     <div id="ref-print-sheet"></div>
 
-    <!-- Floating notifications inbox (top-right) -->
+    <!-- The bell, in the corner beside the date (top right on a desk) -->
     <button
       class="notif-fab no-print"
       id="n-notif"
@@ -7012,11 +7100,8 @@
         stroke-linecap="round"
         stroke-linejoin="round"
       >
-        <!-- Inbox tray: angled opening on top, flat base -->
-        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-        <path
-          d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
-        />
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
       </svg>
       <span class="bell-badge" id="bell-badge" hidden>0</span>
     </button>

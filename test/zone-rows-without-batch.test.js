@@ -30,7 +30,7 @@ describe('Wo steht was — bags without a batch', () => {
         'BO-1-02': { batchId: null, species: 'Blue Oyster', since: today }
       }
     );
-    assert.match(html, /2 Beutel/);
+    assert.match(html, /<b>2<\/b> Beutel/);
     assert.match(html, /BO-1<\/span> 01/);
     assert.match(html, /—<\/span> 02/);
   });
@@ -44,7 +44,7 @@ describe('Wo steht was — bags without a batch', () => {
         'BO-3-01': { batchId: 'BO-3', species: 'Blue Oyster', since: today }
       }
     );
-    assert.match(html, /3 Beutel/);
+    assert.match(html, /<b>3<\/b> Beutel/);
     assert.ok(html.indexOf('>—</span>') < html.indexOf('>BO-2</span>'), 'the unnamed batch sorts first');
     assert.ok(html.indexOf('>BO-2</span>') < html.indexOf('>BO-3</span>'));
   });
