@@ -15317,8 +15317,19 @@ function restartServer() {
       btn.disabled = false;
       btn.textContent = t('server.updateBtn');
     };
-    const fehlgeschlagen = (dep, sonst) =>
-      t('server.updateFailed', { step: (dep && dep.step) || '?', err: (dep && dep.error) || sonst || '' });
+    // Why a deploy stopped. The runner writes `error` for its own steps, the
+    // chain `detail` (the step's last lines of output) and, from the update
+    // step on, whether it put the running commit back.
+    const fehlgeschlagen = (dep) => {
+      const zeilen = String(dep.error || dep.detail || '')
+        .split('\n')
+        .filter((z) => z.trim());
+      let text = t('server.updateFailed', { step: dep.step || '?' });
+      if (zeilen.length) text += ' ' + zeilen[zeilen.length - 1].trim().slice(0, 300);
+      if (dep.rolledBack === true) text += ' ' + t('server.updateRolledBack');
+      if (dep.rolledBack === false) text += ' ' + t('server.updateNotRolledBack');
+      return text;
+    };
     btn.disabled = true;
     btn.textContent = t('server.restarting');
     status.style.display = 'block';
@@ -15334,7 +15345,11 @@ function restartServer() {
       });
       antwort = await r.json().catch(() => ({}));
       if (!r.ok || !antwort.ok) {
-        zurueck(fehlgeschlagen(antwort.deploy, antwort.error || 'HTTP ' + r.status));
+        zurueck(
+          antwort.result === 'stopped' && antwort.deploy
+            ? fehlgeschlagen(antwort.deploy)
+            : t('common.error') + ': ' + (antwort.error || 'HTTP ' + r.status)
+        );
         return;
       }
     } catch (e) {
@@ -15347,33 +15362,40 @@ function restartServer() {
     // whether the deploy stopped at a step, in which case nothing restarts.
     zeige(antwort.result === 'queued' ? t('server.updateQueued') : t('server.waitReconnect'));
     const seit = Date.now();
-    const eigener = antwort.result === 'started' && antwort.deploy ? antwort.deploy.started : null;
+    // The record of this deploy, by its start. A queued one has none yet: it
+    // is the first record that turns up with another start than the one there
+    // was at the click.
+    const vorher = antwort.deploy ? antwort.deploy.started : null;
+    let eigener = antwort.result === 'started' ? vorher : null;
+    let erreichbar = false;
     let attempts = 0;
     const poll = setInterval(async () => {
       attempts++;
       try {
         const r = await fetch('/api/health', { cache: 'no-store' });
         const h = r.ok ? await r.json() : null;
+        erreichbar = !!h;
         if (h && typeof h.uptime === 'number' && h.uptime * 1000 < Date.now() - seit) {
           clearInterval(poll);
           window.location.reload();
           return;
         }
-        if (h && eigener && attempts % 3 === 0) {
+        if (h && attempts % 3 === 0) {
           const voll = await authFetch('/api/health/full').then((x) => (x.ok ? x.json() : null));
           const dep = voll && voll.deploy;
-          if (dep && dep.started === eigener && dep.status === 'failed') {
+          if (!eigener && dep && dep.started && dep.started !== vorher) eigener = dep.started;
+          if (dep && eigener && dep.started === eigener && dep.status === 'failed') {
             clearInterval(poll);
             zurueck(fehlgeschlagen(dep));
             return;
           }
         }
       } catch (e) {
-        /* down while it restarts */
+        erreichbar = false;
       }
       if (attempts > 200) {
         clearInterval(poll);
-        zurueck(t('server.noResponse'));
+        zurueck(erreichbar ? t('server.updateNoRestart') : t('server.noResponse'));
       }
     }, 3000);
   });

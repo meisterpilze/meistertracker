@@ -2544,7 +2544,12 @@ window.LANG['de'] = {
   'server.waitReconnect': 'Server startet neu. Warte auf Verbindung\u2026',
   'server.noResponse': 'Server antwortet nicht. Bitte manuell pr\u00fcfen.',
   'server.updateQueued': 'Ein anderes Update l\u00e4uft noch. Dieses kommt danach dran\u2026',
-  'server.updateFailed': 'Update abgebrochen bei \u201e{step}\u201c: {err}',
+  'server.updateFailed': 'Update abgebrochen bei \u201e{step}\u201c.',
+  'server.updateRolledBack': 'Der bisherige Stand l\u00e4uft weiter.',
+  'server.updateNotRolledBack':
+    'Der bisherige Stand lie\u00df sich nicht zur\u00fcckholen. Bitte am Server-PC pr\u00fcfen.',
+  'server.updateNoRestart':
+    'Der Server l\u00e4uft, hat aber nicht neu gestartet. Bitte den Deploy-Stand pr\u00fcfen.',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
   'server.codeLabel': 'Code-Stand',

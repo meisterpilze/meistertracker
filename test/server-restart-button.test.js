@@ -106,7 +106,7 @@ describe('POST /api/server/restart', () => {
 describe('the page after the click', () => {
   // restartServer from app.js, with the network, the clock and the timer
   // replaced. Every tick of the poll is driven by hand.
-  function seite({ antwort, gesundheit, voll }) {
+  function seite({ antwort, gesundheit, voll, code = 200 }) {
     let uhr = 1_000_000;
     let tick = null;
     let neuGeladen = false;
@@ -132,7 +132,7 @@ describe('the page after the click', () => {
       (key, p) => key + (p ? ' ' + JSON.stringify(p) : ''),
       { getElementById: (id) => (id === 'btn-server-restart' ? knopf : status) },
       async (url) => {
-        if (url === '/api/server/restart') return { ok: true, status: 200, json: async () => antwort };
+        if (url === '/api/server/restart') return { ok: code < 400, status: code, json: async () => antwort };
         if (url === '/api/health/full') return { ok: true, json: async () => voll() };
         throw new Error('unexpected ' + url);
       },
@@ -186,28 +186,100 @@ describe('the page after the click', () => {
     assert.equal(s.neuGeladen(), true);
   });
 
-  it('shows the step when the deploy stopped, and gives the button back', async () => {
+  // A record as deploy-chain.js writes it when a step fails: no `error`, the
+  // step's last lines of output in `detail`, and whether it rolled back.
+  const kette = (started, extra) => ({
+    started,
+    status: 'failed',
+    step: 'preflight',
+    exitCode: 1,
+    rolledBack: true,
+    detail: 'Migration v120 wird geprüft\nError: no such column: beispiel',
+    log: 'data/deploy.log',
+    ...extra
+  });
+
+  it('shows why the chain stopped and that the old version runs, and gives the button back', async () => {
     const s = seite({
       antwort: { ok: true, result: 'started', deploy: { started: 'S2', status: 'in_progress' } },
       gesundheit: () => ({ status: 'ok', uptime: 86400 }),
-      voll: () => ({ deploy: { started: 'S2', status: 'failed', step: 'preflight', error: 'migration v120' } })
+      voll: () => ({ deploy: kette('S2') })
     });
     await s.klick();
     for (let i = 0; i < 3; i++) await s.weiter(3000);
     assert.equal(s.laeuft(), false);
     assert.equal(s.neuGeladen(), false);
-    assert.match(s.status.textContent, /server\.updateFailed.*preflight/);
+    assert.match(
+      s.status.textContent,
+      /server\.updateFailed.*preflight.*no such column: beispiel server\.updateRolledBack$/
+    );
     assert.equal(s.knopf.disabled, false);
   });
 
-  it('shows the refusal when the deploy could not start', async () => {
+  it('says so when the old version could not be put back', async () => {
     const s = seite({
-      antwort: { ok: false, result: 'stopped', deploy: { started: 'S3', status: 'failed', step: 'fetch', error: 'x' } },
+      antwort: { ok: true, result: 'started', deploy: { started: 'S4', status: 'in_progress' } },
+      gesundheit: () => ({ status: 'ok', uptime: 86400 }),
+      voll: () => ({ deploy: kette('S4', { step: 'install', rolledBack: false }) })
+    });
+    await s.klick();
+    for (let i = 0; i < 3; i++) await s.weiter(3000);
+    assert.match(s.status.textContent, /install.*server\.updateNotRolledBack$/);
+  });
+
+  it("shows the runner's own refusal with its reason", async () => {
+    const s = seite({
+      antwort: {
+        ok: false,
+        result: 'stopped',
+        deploy: { started: 'S3', status: 'failed', step: 'fetch', error: 'could not reach origin' }
+      },
       gesundheit: () => ({ status: 'ok', uptime: 86400 }),
       voll: () => ({})
     });
     await s.klick();
     assert.equal(s.laeuft(), false);
-    assert.match(s.status.textContent, /server\.updateFailed.*fetch/);
+    assert.match(s.status.textContent, /server\.updateFailed.*fetch.* could not reach origin$/);
+  });
+
+  it('shows a refused request as an error, not as a deploy step', async () => {
+    const s = seite({
+      code: 409,
+      antwort: { error: 'not available in worktree mode' },
+      gesundheit: () => ({ status: 'ok', uptime: 86400 }),
+      voll: () => ({})
+    });
+    await s.klick();
+    assert.equal(s.status.textContent, 'common.error: not available in worktree mode');
+    assert.equal(s.knopf.disabled, false);
+  });
+
+  it('follows a queued update by the record that starts after the click', async () => {
+    let dep = { started: 'S0', status: 'success' };
+    const s = seite({
+      antwort: { ok: true, result: 'queued', deploy: dep },
+      gesundheit: () => ({ status: 'ok', uptime: 86400 }),
+      voll: () => ({ deploy: dep })
+    });
+    await s.klick();
+    assert.equal(s.status.textContent, 'server.updateQueued');
+    for (let i = 0; i < 3; i++) await s.weiter(3000);
+    assert.equal(s.laeuft(), true, 'the record from before the click decides nothing');
+    dep = kette('S5', { step: 'install' });
+    for (let i = 0; i < 3; i++) await s.weiter(3000);
+    assert.equal(s.laeuft(), false);
+    assert.match(s.status.textContent, /install/);
+  });
+
+  it('says the server runs but did not restart, once it has waited ten minutes', async () => {
+    const s = seite({
+      antwort: { ok: true, result: 'started', deploy: { started: 'S6', status: 'in_progress' } },
+      gesundheit: () => ({ status: 'ok', uptime: 86400 }),
+      voll: () => ({ deploy: { started: 'S6', status: 'in_progress' } })
+    });
+    await s.klick();
+    for (let i = 0; i < 201; i++) await s.weiter(3000);
+    assert.equal(s.laeuft(), false);
+    assert.equal(s.status.textContent, 'server.updateNoRestart');
   });
 });
