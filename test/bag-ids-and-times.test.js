@@ -93,6 +93,18 @@ describe('batch routes: bag ids, weights and counts', () => {
     assert.equal(beutel('T-0002').length, 2);
   });
 
+  it('takes the bags of a batch whose id is as long as a batch id may be', async () => {
+    // A bag id is its batch id with "-NN" behind it, so it may run past 100.
+    const lang = 'T-' + 'X'.repeat(97);
+    const a = await r.anfrage(
+      'POST',
+      '/api/batches',
+      charge({ batchId: lang, qty: 2, bags: [lang + '-01', lang + '-02'] })
+    );
+    assert.equal(a.status, 200, JSON.stringify(a.json));
+    assert.equal(beutel(lang).length, 2);
+  });
+
   it('checks the bags added to a batch, and the new count', async () => {
     const pfad = '/api/batches/T-0001/bags';
     for (const body of [

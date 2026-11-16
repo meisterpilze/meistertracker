@@ -1105,9 +1105,11 @@ function validateTaskFields(data) {
 // bag id is shown in the batch dialogs, the location lists and on labels, so
 // it gets the charset every other id has; a weight goes into stock bookings and
 // is shown as a number, so it has to be one.
+// 120 rather than the 100 of a batch id: a bag id is its batch id with "-NN"
+// behind it.
 function validateBagId(v, field) {
-  if (typeof v !== 'string' || !v || v.length > 100 || !ID_CHARSET_RE.test(v)) {
-    return field + ' must be alphanumeric with - _ @ . : (max 100 chars)';
+  if (typeof v !== 'string' || !v || v.length > 120 || !ID_CHARSET_RE.test(v)) {
+    return field + ' must be alphanumeric with - _ @ . : (max 120 chars)';
   }
   return null;
 }
@@ -9499,7 +9501,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, ve);
         return;
       }
-      const vl = validateLengths(data, { notes: 2000, bag_id: 100, batch_id: 100, zone_id: 100, report_uuid: 100 });
+      const vl = validateLengths(data, { notes: 2000, bag_id: 120, batch_id: 100, zone_id: 100, report_uuid: 100 });
       if (vl) {
         jsonErr(res, 400, vl);
         return;
@@ -9518,7 +9520,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const vbl = targets
         .map(
           (tg) =>
-            validateLengths(tg, { bag_id: 100, batch_id: 100, report_uuid: 100 }) ||
+            validateLengths(tg, { bag_id: 120, batch_id: 100, report_uuid: 100 }) ||
             (tg.bag_id == null ? null : validateBagId(tg.bag_id, 'bag_id')) ||
             (tg.batch_id == null ? null : validateBagId(tg.batch_id, 'batch_id'))
         )
