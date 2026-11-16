@@ -18,6 +18,7 @@ const ABSCHNITT = {
     'validateTypes',
     'validateEnum',
     'validateLengths',
+    'validateBagId',
     'contamReportTargets',
     '_ensurePhotoDirSize',
     '_ensurePhotoSpace',
@@ -33,7 +34,8 @@ const ABSCHNITT = {
     'PHOTO_SIZE_REFRESH_MS',
     'PHOTO_SPACE_LOG_MS',
     '_photoSpaceLoggedAt',
-    'CONTAM_MAX_TARGETS'
+    'CONTAM_MAX_TARGETS',
+    'ID_CHARSET_RE'
   ],
   // Der Abschnitt liest nur req.url.
   liestUrl: false

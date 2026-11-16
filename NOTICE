@@ -55,6 +55,20 @@ Copyright: (c) Kazuhiko Arase
 The MIT License terms reproduced under "MIT License" below apply.
 
 ================================================================================
+Atkinson Hyperlegible Next, Atkinson Hyperlegible Mono  —  lib/atkinson-hyperlegible-*.woff2
+================================================================================
+Source:    https://github.com/googlefonts/atkinson-hyperlegible-next
+           https://github.com/googlefonts/atkinson-hyperlegible-next-mono
+           (Latin and Latin Extended subsets, variable weight, as packaged by
+           Fontsource)
+License:   SIL Open Font License, Version 1.1
+Copyright: 2020-2024 The Atkinson Hyperlegible Next Project Authors
+           2020-2024 The Atkinson Hyperlegible Mono Project Authors
+
+The license texts are redistributed beside the font files:
+lib/OFL-Atkinson-Hyperlegible-Next.txt and lib/OFL-Atkinson-Hyperlegible-Mono.txt.
+
+================================================================================
 MIT License
 ================================================================================
 

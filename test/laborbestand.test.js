@@ -536,13 +536,29 @@ describe('Laborbestand: ansetzen und das Soll', () => {
 });
 
 describe('Laborbestand: wo es steht', () => {
-  it('die zwei Karten oben auf der Laborseite, außerhalb der Reiter; die Kacheln sind weg', () => {
+  // Sie standen über den Reitern, außerhalb jeder Ansicht, solange die Reiter
+  // über den Ansichten standen: das Labor fing mit seinem Bestand an, und wer
+  // eine Ansicht wählte, sah sie direkt darunter. Seit die Ansichten in der
+  // Navigation stehen, begann jede unter denselben zwei Karten, und die gewählte
+  // erst Bildschirme weiter unten. Jetzt sind die zwei eine eigene Ansicht, die
+  // erste, auf der die Seite aufgeht: der Anfang bleibt der Bestand.
+  it('die zwei Karten sind die Ansicht "Bestand", die erste und die, auf der das Labor aufgeht; die Kacheln sind weg', () => {
     const np = HTML.indexOf('id="np-card"');
     const lb = HTML.indexOf('id="lb-card"');
     const reiter = HTML.indexOf('<div class="stabs" data-stab-home="nav.lab">');
-    assert.ok(np > 0 && np < lb && lb < reiter);
+    const ansicht = HTML.indexOf('<div class="sp active" id="sp-lab-stock">');
+    const naechste = HTML.indexOf('id="sp-lab-grain"');
+    assert.ok(reiter > 0 && reiter < ansicht && ansicht < np && np < lb && lb < naechste);
+    const leiste = HTML.slice(reiter, HTML.indexOf('</div>', reiter));
+    assert.match(leiste, /^<div class="stabs"[^>]*>\s*<button class="stab active" id="st-lab-stock"/);
+    assert.equal((leiste.match(/class="stab active"/g) || []).length, 1);
     assert.equal(HTML.indexOf('id="dash-lab-stock"'), -1);
     assert.equal(HTML.indexOf('id="vb-card"'), -1);
+  });
+
+  it('der Hinweis "unter Labor-Minimum" öffnet die Ansicht Bestand, nicht die zuletzt gewählte', () => {
+    const i = APP.indexOf("$('wk-np').addEventListener");
+    assert.match(APP.slice(i, i + 300), /go\('lab', 'n-lab'\);\s*openStab\('lab', 'stock'\);/);
   });
 
   it('ein Tipp in der Glocke öffnet die Sorte', () => {
