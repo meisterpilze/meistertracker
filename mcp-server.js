@@ -26,6 +26,50 @@ function safeErrResult(e) {
   return errResult(db.isSafeError(msg) ? msg : 'Internal error');
 }
 
+// ── Field checks the REST routes make ──────────────────────
+// An MCP token is something any user can mint, so a tool takes nothing a route
+// would refuse. Ids get the charset of ID_CHARSET_RE in server.js, because the
+// app shows them in its lists and dialogs and prints them on labels; times are
+// the HH:MM of the time inputs; dates are what the routes' date check reads.
+const ID_RE = /^[A-Za-z0-9_\-@.:]{1,100}$/;
+const CULTURE_ID_RE = /^[A-Za-z0-9_\-@.:]{1,200}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const CULTURE_STATUSES = ['active', 'stored', 'used', 'sold', 'contam'];
+
+// A day, or a day with a time as toISOString() writes it. Nothing after it:
+// V8's date parser skips a trailing comment in parentheses, so a looser check
+// would let text ride along on a valid date.
+function isDate(v) {
+  return (
+    typeof v === 'string' &&
+    /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(v) &&
+    !isNaN(new Date(v).getTime())
+  );
+}
+
+// The first problem with a set of fields, or null. checks: [value, test, message]
+// for every field that is present; an absent field (undefined, null or '') is
+// not checked.
+function firstProblem(checks) {
+  for (const [v, ok, msg] of checks) {
+    if (v === undefined || v === null || v === '') continue;
+    if (!ok(v)) return msg;
+  }
+  return null;
+}
+const maxLen = (n) => (v) => typeof v === 'string' && v.length <= n;
+
+// validateMushroomStrain in server.js, for the strain tools: the kuerzel goes
+// into species names and batch ids.
+function strainProblem(s) {
+  return firstProblem([
+    [s.name, maxLen(200), 'name exceeds max length of 200'],
+    [s.kuerzel, maxLen(16), 'kuerzel exceeds max length of 16'],
+    [s.kuerzel, (v) => /^[A-Za-z0-9_-]+$/.test(v), 'kuerzel must be alphanumeric with - or _'],
+    [s.description, maxLen(2000), 'description exceeds max length of 2000']
+  ]);
+}
+
 // Build a map of bagId → current location by replaying scan log
 function buildBagLocationMap(scanLog) {
   const map = new Map();
@@ -1018,6 +1062,20 @@ function createMcpServer(database, onWrite, printer) {
     async (params) => {
       try {
         const { batchId, ...fields } = params;
+        if (!db.readBatchById(database, batchId)) return errResult('Batch not found: ' + batchId);
+        // The ranges create_batch holds days to, and a due date that is a date.
+        const problem = firstProblem([
+          [
+            fields.days,
+            (v) => Number.isInteger(v) && v >= 1 && v <= 3650,
+            'days must be a whole number from 1 to 3650'
+          ],
+          [fields.due, isDate, 'due must be a date (YYYY-MM-DD) or an ISO timestamp'],
+          [fields.notes, maxLen(10000), 'notes exceeds max length of 10000'],
+          [fields.species, maxLen(200), 'species exceeds max length of 200'],
+          [fields.strain, maxLen(200), 'strain exceeds max length of 200']
+        ]);
+        if (problem) return errResult(problem);
         const updates = {};
         for (const [k, v] of Object.entries(fields)) {
           if (v !== undefined) updates[k] = v;
@@ -1053,6 +1111,14 @@ function createMcpServer(database, onWrite, printer) {
       description: z.string().optional().describe('Additional details')
     },
     async (params) => {
+      const problem = firstProblem([
+        [params.text, maxLen(2000), 'text exceeds max length of 2000'],
+        [params.assignee, maxLen(200), 'assignee exceeds max length of 200'],
+        [params.description, maxLen(10000), 'description exceeds max length of 10000'],
+        [params.dueDate, isDate, 'dueDate must be a date (YYYY-MM-DD)']
+      ]);
+      if (problem) return errResult(problem);
+      if (!params.text) return errResult('text is required');
       try {
         const id = db.insertTask(database, {
           text: params.text,
@@ -1086,6 +1152,23 @@ function createMcpServer(database, onWrite, printer) {
     async (params) => {
       try {
         const { id, ...fields } = params;
+        // The question PATCH /api/tasks/:id and the CalDAV sync-back ask before
+        // they change a task: one assigned to other people is theirs, unless
+        // the caller is an admin. canUserModifyTask also says no to an id that
+        // does not exist, so nothing reports success for a task that is not
+        // there.
+        if (!db.canUserModifyTask(database, auth.username, id, isAdminCaller())) {
+          return errResult('You are not allowed to modify this task');
+        }
+        if (!db.readTaskById(database, id)) return errResult('Task not found: ' + id);
+        const problem = firstProblem([
+          [fields.text, maxLen(2000), 'text exceeds max length of 2000'],
+          [fields.assignee, maxLen(200), 'assignee exceeds max length of 200'],
+          [fields.description, maxLen(10000), 'description exceeds max length of 10000'],
+          [fields.dueDate, isDate, 'dueDate must be a date (YYYY-MM-DD)']
+        ]);
+        if (problem) return errResult(problem);
+        if (fields.text !== undefined && !fields.text) return errResult('text cannot be empty');
         const updates = {};
         for (const [k, v] of Object.entries(fields)) {
           if (v !== undefined) updates[k] = v;
@@ -1138,6 +1221,23 @@ function createMcpServer(database, onWrite, printer) {
         const adminErr = requireAdminRole();
         if (adminErr) return adminErr;
       }
+      // Dates, times, category and color in the shape the app's entry form
+      // gives them. The times are shown in the calendar's week and day views
+      // and go into the .ics files.
+      const problem =
+        (isDate(params.startDate) ? null : 'startDate must be a date (YYYY-MM-DD)') ||
+        firstProblem([
+          [params.title, maxLen(500), 'title exceeds max length of 500'],
+          [params.description, maxLen(10000), 'description exceeds max length of 10000'],
+          [params.endDate, isDate, 'endDate must be a date (YYYY-MM-DD)'],
+          [params.recurrenceUntil, isDate, 'recurrenceUntil must be a date (YYYY-MM-DD)'],
+          [params.startTime, (v) => TIME_RE.test(v), 'startTime must be a HH:MM time'],
+          [params.endTime, (v) => TIME_RE.test(v), 'endTime must be a HH:MM time'],
+          [params.category, (v) => /^[a-z][a-z0-9_-]{0,39}$/.test(v), 'category must be a short lowercase name'],
+          [params.color, (v) => /^#[0-9A-Fa-f]{3,8}$/.test(v), 'color must be a hex color']
+        ]);
+      if (problem) return errResult(problem);
+      if (!params.title) return errResult('title is required');
       try {
         const id = 'ev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
         const unknownAssigneeNames = [];
@@ -1234,6 +1334,24 @@ function createMcpServer(database, onWrite, printer) {
       strain: z.string().optional().describe('Auto-filled from batch if omitted')
     },
     async (params) => {
+      // The ranges of POST /api/harvests, and the id charset for batch and bag.
+      const problem =
+        (Number.isFinite(params.grams) && params.grams >= 0 && params.grams <= 1000000
+          ? null
+          : 'grams must be between 0 and 1000000') ||
+        (ID_RE.test(params.batch) ? null : 'batch must be alphanumeric with - _ @ . : (max 100 chars)') ||
+        firstProblem([
+          [params.bag, (v) => ID_RE.test(v), 'bag must be alphanumeric with - _ @ . : (max 100 chars)'],
+          [
+            params.flush,
+            (v) => Number.isInteger(v) && v >= 1 && v <= 100,
+            'flush must be a whole number from 1 to 100'
+          ],
+          [params.notes, maxLen(2000), 'notes exceeds max length of 2000'],
+          [params.species, maxLen(200), 'species exceeds max length of 200'],
+          [params.strain, maxLen(200), 'strain exceeds max length of 200']
+        ]);
+      if (problem) return errResult(problem);
       try {
         let species = params.species;
         let strain = params.strain;
@@ -1306,6 +1424,28 @@ function createMcpServer(database, onWrite, printer) {
         .describe('Required true for REMOVE actions. Safety confirmation for destructive operations.')
     },
     async ({ entries, confirm }) => {
+      // What validateScanEntries in server.js asks of POST /api/scan-log: the
+      // ids land in the scan log and are shown from there in every location
+      // list, so they get the id charset.
+      if (entries.length > 1000) return errResult('too many entries (max 1000 per call)');
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        const problem =
+          (ID_RE.test(e.batch)
+            ? null
+            : 'entries[' + i + '].batch must be alphanumeric with - _ @ . : (max 100 chars)') ||
+          (ID_RE.test(e.bag) ? null : 'entries[' + i + '].bag must be alphanumeric with - _ @ . : (max 100 chars)') ||
+          firstProblem([
+            [
+              e.from,
+              (v) => ID_RE.test(v),
+              'entries[' + i + '].from must be alphanumeric with - _ @ . : (max 100 chars)'
+            ],
+            [e.to, (v) => ID_RE.test(v), 'entries[' + i + '].to must be alphanumeric with - _ @ . : (max 100 chars)'],
+            [e.reason, maxLen(2000), 'entries[' + i + '].reason exceeds max length of 2000']
+          ]);
+        if (problem) return errResult(problem);
+      }
       try {
         const hasRemove = entries.some((e) => e.action === 'REMOVE');
         if (hasRemove && confirm !== true) {
@@ -1379,7 +1519,10 @@ function createMcpServer(database, onWrite, printer) {
     "Update a mushroom culture's metadata: status, notes, Pilzsorte (strainId), species, strain, or source. For status changes like 'contam' use this. NOT for physical bag handling (→ move_bags). Pass strainId to switch Pilzsorte — species/strain auto-update.",
     {
       id: z.string().describe('Culture ID'),
-      status: z.string().optional().describe('New status (e.g. active, archived, contaminated)'),
+      status: z
+        .enum(['active', 'stored', 'used', 'sold', 'contam'])
+        .optional()
+        .describe('New status: active, stored, used, sold or contam'),
       notes: z.string().optional(),
       strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
       species: z.string().optional(),
@@ -1390,6 +1533,15 @@ function createMcpServer(database, onWrite, printer) {
     async (params) => {
       try {
         const { id, ...fields } = params;
+        if (!db.getCultureById(database, id)) return errResult('Culture not found: ' + id);
+        const problem = firstProblem([
+          [fields.status, (v) => CULTURE_STATUSES.includes(v), 'status must be one of: ' + CULTURE_STATUSES.join(', ')],
+          [fields.notes, maxLen(10000), 'notes exceeds max length of 10000'],
+          [fields.species, maxLen(200), 'species exceeds max length of 200'],
+          [fields.strain, maxLen(200), 'strain exceeds max length of 200'],
+          [fields.source, maxLen(500), 'source exceeds max length of 500']
+        ]);
+        if (problem) return errResult(problem);
         const updates = {};
         for (const [k, v] of Object.entries(fields)) {
           if (v !== undefined) updates[k] = v;
@@ -1435,6 +1587,25 @@ function createMcpServer(database, onWrite, printer) {
         if (!params.strainId && !params.species) {
           return errResult('Either strainId or species is required');
         }
+        // The id charset POST /api/cultures asks for. And a new culture is new:
+        // insertCultures writes over a row with the same id, so an existing one
+        // is refused here rather than rewritten, lineage included.
+        const problem =
+          (CULTURE_ID_RE.test(params.id) ? null : 'id must be alphanumeric with - _ @ . : (max 200 chars)') ||
+          firstProblem([
+            [
+              params.parentId,
+              (v) => CULTURE_ID_RE.test(v),
+              'parentId must be alphanumeric with - _ @ . : (max 200 chars)'
+            ],
+            [params.created, isDate, 'created must be a date or an ISO timestamp'],
+            [params.species, maxLen(200), 'species exceeds max length of 200'],
+            [params.strain, maxLen(200), 'strain exceeds max length of 200'],
+            [params.source, maxLen(500), 'source exceeds max length of 500'],
+            [params.notes, maxLen(10000), 'notes exceeds max length of 10000']
+          ]);
+        if (problem) return errResult(problem);
+        if (db.getCultureById(database, params.id)) return errResult('Culture already exists: ' + params.id);
         db.insertCultures(database, [
           {
             id: params.id,
@@ -1481,6 +1652,8 @@ function createMcpServer(database, onWrite, printer) {
       description: z.string().optional().describe('Free-text description')
     },
     async (params) => {
+      const problem = strainProblem(params);
+      if (problem) return errResult(problem);
       try {
         const id = db.createMushroomStrain(database, {
           name: params.name,
@@ -1507,6 +1680,8 @@ function createMcpServer(database, onWrite, printer) {
     async (params) => {
       try {
         const { id, ...fields } = params;
+        const problem = strainProblem(fields);
+        if (problem) return errResult(problem);
         const updates = {};
         for (const [k, v] of Object.entries(fields)) {
           if (v !== undefined) updates[k] = v;
@@ -1817,6 +1992,11 @@ function createMcpServer(database, onWrite, printer) {
       entityId: z.string().describe('Entity ID')
     },
     async (params) => {
+      // The barcode list shows the id, and it is the id of a bag, culture, zone
+      // or rack, so it gets their charset.
+      if (!CULTURE_ID_RE.test(params.entityId)) {
+        return errResult('entityId must be alphanumeric with - _ @ . : (max 200 chars)');
+      }
       try {
         const barcode = db.assignBarcode(database, params.entityType, params.entityId);
         notify();
@@ -2090,6 +2270,16 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
+      const problem =
+        (/^[a-z0-9_-]{1,50}$/i.test(params.type) ? null : 'type must be a short name of letters, digits, _ or -') ||
+        firstProblem([
+          [params.assetId, maxLen(100), 'assetId exceeds max length of 100'],
+          [params.zoneId, (v) => ID_RE.test(v), 'zoneId must be alphanumeric with - _ @ . : (max 100 chars)'],
+          [params.scheduledDate, isDate, 'scheduledDate must be a date (YYYY-MM-DD)'],
+          [params.description, maxLen(2000), 'description exceeds max length of 2000'],
+          [params.notes, maxLen(10000), 'notes exceeds max length of 10000']
+        ]);
+      if (problem) return errResult(problem);
       try {
         if (!params.assetId && !params.zoneId) {
           return errResult('Either assetId or zoneId is required');
@@ -2120,8 +2310,17 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Completion notes')
     },
     async (params) => {
+      // Who did it is the token's user. Only an admin may name somebody else,
+      // say for work done by someone without access; the static token has no
+      // user of its own and keeps naming one as before.
+      const who = isAdminCaller() ? params.completedBy || auth.username || null : auth.username || null;
+      const problem = firstProblem([
+        [who, maxLen(200), 'completedBy exceeds max length of 200'],
+        [params.notes, maxLen(10000), 'notes exceeds max length of 10000']
+      ]);
+      if (problem) return errResult(problem);
       try {
-        db.completeMaintenance(database, params.id, params.completedBy || null, params.notes || null);
+        db.completeMaintenance(database, params.id, who, params.notes || null);
         notify();
         return json({ success: true, id: params.id });
       } catch (e) {
