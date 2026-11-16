@@ -109,7 +109,14 @@ function setLang(lang) {
     })
     .catch((err) => console.error('Locale load failed:', err));
 }
+// The day beside the page's name on a desk: "Montag, 16. November". Written on
+// every page change and every language switch, so it is never yesterday's.
+function setPageHeadDate() {
+  const el = document.getElementById('page-head-date');
+  if (el) el.textContent = new Date().toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' });
+}
 function translatePage() {
+  setPageHeadDate();
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     el.textContent = t(el.dataset.i18n);
   });
@@ -969,14 +976,22 @@ async function markAllNotifRead() {
 
 // The label is one line and clips rather than wraps, because a second line
 // moved the Admin button above it. The title carries whatever did not fit.
-function setSyncLabel(text) {
+//
+// A fixed phrase is handed over with its key. The connection usually opens
+// before the language file has arrived, and until then t() answers with the
+// bare key; the key on the element lets translatePage() fill the words in when
+// they come, and the label stays empty rather than showing "sync.connected".
+function setSyncLabel(text, key) {
   const el = document.getElementById('sync-label');
+  if (key) el.dataset.i18n = key;
+  else delete el.dataset.i18n;
+  if (key && text === key) text = '';
   el.textContent = text;
   el.title = text;
 }
-function setSyncStatus(cls, msg) {
+function setSyncStatus(cls, msg, key) {
   document.getElementById('sync-dot').className = 'sync-dot ' + cls;
-  setSyncLabel(msg);
+  setSyncLabel(msg, key);
   const m = document.getElementById('sync-dot-m');
   if (m) m.className = 'sync-dot ' + cls;
   if (cls === 'ok') lastSyncTime = Date.now();
@@ -1226,7 +1241,7 @@ function connectSSE() {
     _sse = new EventSource('/api/events');
     _sse.onopen = function () {
       _sseRetryDelay = 1000; // Reset backoff on successful connection
-      setSyncStatus('ok', 'Connected');
+      setSyncStatus('ok', t('sync.connected'), 'sync.connected');
       // Nach dem Wiederverbinden: was in der Lücke geändert wurde, kam als
       // Ereignis nie an. Einmal nachfragen, statt auf den nächsten Takt zu warten.
       if (_sseOpenedOnce) scheduleSsePoll();
@@ -1239,7 +1254,7 @@ function connectSSE() {
         // The stick backup announces itself; loadUsbBackup asks only for admins.
         if (msg.type === 'usb-backup') loadUsbBackup();
         if (msg.type === 'connected') {
-          setSyncStatus('ok', 'Connected');
+          setSyncStatus('ok', t('sync.connected'), 'sync.connected');
           // Nach einem Deploy startet der Server neu, und hier kommt als Erstes
           // sein Stand an — noch bevor die nächste Abfrage fällig wäre.
           noteServerBuild(msg.build);
@@ -1269,6 +1284,78 @@ function connectSSE() {
   }
 }
 
+// ─── A SHEET FOLLOWS THE FINGER ─────────────────────────────
+// A sheet that came up from the bottom edge goes back down under a thumb. While
+// the finger is down the sheet is the finger: its position is written straight
+// to the element, with no easing. On release it closes if it was flung (speed)
+// or pulled far (distance) and goes back up otherwise. Pulled past its top it
+// follows with rising resistance instead of stopping dead.
+//
+// `root` takes the pointer events, so a sheet that is redrawn while it is open
+// keeps its handlers. o.grip names the part that can be taken hold of; controls
+// inside it stay controls. o.on() says whether there is a sheet at all, since
+// the same element is a sidebar or a panel on a desk.
+function sheetDrag(root, o) {
+  if (!root) return;
+  let pull = null;
+  const rubber = (over, size) => (over * size * 0.55) / (size + 0.55 * Math.abs(over));
+  root.addEventListener('pointerdown', (e) => {
+    if (pull || !o.on() || !e.target.closest(o.grip) || e.target.closest('button, a, input, select')) return;
+    const sheet = o.sheet();
+    if (!sheet) return;
+    const m = new window.DOMMatrixReadOnly(window.getComputedStyle(sheet).transform);
+    pull = {
+      id: e.pointerId,
+      sheet,
+      scrim: o.scrim ? o.scrim() : null,
+      y0: e.clientY - m.m42,
+      h: sheet.offsetHeight,
+      trail: [{ t: e.timeStamp, y: e.clientY }]
+    };
+    root.setPointerCapture(e.pointerId);
+    sheet.style.transition = 'none';
+    if (pull.scrim) pull.scrim.style.transition = 'none';
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (!pull || e.pointerId !== pull.id) return;
+    let y = e.clientY - pull.y0;
+    if (y < 0) y = -rubber(-y, pull.h);
+    pull.sheet.style.transform = 'translateY(' + y + 'px)';
+    if (pull.scrim) pull.scrim.style.opacity = String(Math.max(0, Math.min(1, 1 - y / pull.h)));
+    pull.trail.push({ t: e.timeStamp, y: e.clientY });
+    if (pull.trail.length > 8) pull.trail.shift();
+  });
+  const release = (e) => {
+    if (!pull || e.pointerId !== pull.id) return;
+    // Speed over the last tenth of a second only: a finger that stopped and
+    // then lifted has no speed, however fast it moved before it stopped.
+    const fresh = pull.trail.filter((p) => e.timeStamp - p.t <= 100);
+    const a = fresh[0];
+    const b = fresh[fresh.length - 1];
+    const speed = fresh.length > 1 && b.t > a.t ? (b.y - a.y) / (b.t - a.t) : 0;
+    const y = e.clientY - pull.y0;
+    const away = speed > 0.11 || (y > pull.h * 0.4 && speed > -0.11);
+    const { sheet, scrim } = pull;
+    pull = null;
+    sheet.style.transition = '';
+    if (scrim) scrim.style.transition = '';
+    const settle = () => {
+      sheet.style.transform = '';
+      if (scrim) scrim.style.opacity = '';
+    };
+    if (!away) return settle();
+    // Down and out from where the finger let go, then closed for real.
+    sheet.style.transform = 'translateY(100%)';
+    if (scrim) scrim.style.opacity = '0';
+    setTimeout(() => {
+      settle();
+      o.close();
+    }, 240);
+  };
+  root.addEventListener('pointerup', release);
+  root.addEventListener('pointercancel', release);
+}
+
 // ─── SIDEBAR ────────────────────────────────────────────────
 //
 // Two arrangements behind one button, and the button asks the window which one
@@ -1294,6 +1381,8 @@ function toggleSidebar() {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
+    // The sheet opens at its top, where the open page and its views stand.
+    if (sb.classList.contains('sb-open')) sb.scrollTop = 0;
   } else {
     sb.classList.toggle('sb-collapsed');
     document.body.classList.toggle('sb-is-collapsed');
@@ -1452,18 +1541,25 @@ function go(page, btnId) {
   document.getElementById('p-' + page).classList.add('active');
   const navBtn = document.getElementById(btnId);
   navBtn.classList.add('active');
-  // The mobile topbar says which page this is. Read off the entry that opened it
-  // rather than a second table of names: a page added to the sidebar is named
-  // here without anyone remembering to, and a renamed one is renamed once.
-  const title = document.getElementById('topbar-title');
-  const label = navBtn.querySelector('[data-i18n]');
-  if (title && label) {
-    title.dataset.i18n = label.dataset.i18n;
-    title.textContent = label.textContent;
-  }
+  // The top of the page says where this is: the phone's bar and the desk's page
+  // head, both written by setPageTitle() from the entry that opened the page.
+  setPageTitle(page, navBtn);
+  setPageHeadDate();
   // Mirror active state onto the mobile bottom nav for the four pages it covers.
   const bnBtn = document.querySelector('.bottom-nav-btn[data-page="' + page + '"]');
   if (bnBtn) bnBtn.classList.add('active');
+  // go() took the mark off every entry of the list above, the views under this
+  // page included. Put it back on the one that is showing, and bring the entry
+  // and its views into sight: on a short window the list scrolls, and the page
+  // somebody just opened must not be the part of it below the edge.
+  const subList = navBtn.nextElementSibling;
+  if (subList && subList.classList.contains('sb-sub')) {
+    const shown = document.querySelector('#p-' + page + ' > .stabs .stab.active');
+    const mark = shown && document.getElementById('sn-' + shown.id.slice(3));
+    if (mark) mark.classList.add('active');
+    if (subList.scrollIntoView) subList.scrollIntoView({ block: 'nearest' });
+  }
+  if (navBtn.scrollIntoView) navBtn.scrollIntoView({ block: 'nearest' });
   // The pipeline strip and the "where is everything" list live on the Chargen
   // page now, and lab stock on Labor — each section carries its own overview
   // instead of the dashboard carrying all of them. renderStatus fills both
@@ -1549,12 +1645,15 @@ function openStab(page, sub) {
   if (stEl) stEl.classList.add('active');
   const spEl = document.getElementById(`sp-${page}-${sub}`);
   if (spEl) spEl.classList.add('active');
-  // The sidebar list and the sub-tab strip show the same selection — the
-  // sidebar on a desktop, the strip on a phone. Marking both here keeps them
-  // in step whichever one was clicked. A no-op for pages without a sidebar list.
-  document.querySelectorAll('.sb-admin-nav .sb-btn').forEach((b) => b.classList.remove('active'));
+  // The navigation and the sub-tab strip show the same selection. Admin's list
+  // (.sb-admin-nav) and the list under an open page (.sb-sub, sbSubInit) are
+  // both made of `sn-<page>-<sub>` entries, so one lookup marks either.
+  document
+    .querySelectorAll('.sb-admin-nav .sb-btn, .sb-sub[data-page="' + page + '"] .sb-btn')
+    .forEach((b) => b.classList.remove('active'));
   const snEl = document.getElementById(`sn-${page}-${sub}`);
   if (snEl) snEl.classList.add('active');
+  setPageTitle(page);
   if (page === 'batch' && sub === 'list') {
     renderBatches();
   }
@@ -1661,6 +1760,10 @@ function stabDrillInit() {
     // the last, and its five views were sidebar entries at the time.
     if (strip.style.display === 'none') return;
     const page = strip.parentElement;
+    // Every other page has its views in the navigation (sbSubInit), under the
+    // page's own entry, so there is no index on the page to go back to. Admin is
+    // the exception on a phone: thirteen views, and a list of its own.
+    if (page.id !== 'p-settings') return;
     const home = strip.dataset.stabHome;
     const back = document.createElement('button');
     back.type = 'button';
@@ -1691,6 +1794,90 @@ function stabDrillInit() {
     if (stabLandable(strip.querySelector('.stab.active'))) page.classList.add('stab-drilled');
   });
 }
+// ── Sub-views in the navigation ─────────────────────────────────────────────
+// A page with more than one view carried a strip of tabs above its content, and
+// on a phone an index with a back row. Both took the top of the page, which is
+// where the page's own work belongs. The views are entries of the navigation
+// now, under the page they belong to and only while that page is open: in the
+// sidebar on a desk, in the same list behind "Mehr" on a phone. Admin already
+// worked this way on a desk (.sb-admin-nav) and keeps its own list.
+//
+// The list is read off the strip in the markup, which stays where it is and
+// keeps every handler. An entry here forwards its click to its tab, the way the
+// admin list does, so one click still runs exactly one loader and a view added
+// to a strip is in the navigation without anyone remembering to add it.
+function sbSubInit() {
+  document.querySelectorAll('.page > .stabs').forEach((strip) => {
+    const page = strip.parentElement.id.slice(2);
+    if (page === 'settings' || strip.style.display === 'none') return;
+    const nav = document.getElementById('n-' + page);
+    if (!nav) return;
+    const box = document.createElement('div');
+    box.className = 'sb-sub';
+    box.dataset.page = page;
+    // The view a page opens on, as the markup says it. setPageTitle() names the
+    // page by its own name there and by the view's name everywhere else.
+    const first = strip.querySelector('.stab.active');
+    if (first) strip.dataset.stabDefault = first.id;
+    strip.querySelectorAll('.stab').forEach((stab) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sb-btn sb-sub-btn' + (stab.classList.contains('active') ? ' active' : '');
+      b.id = 'sn-' + stab.id.slice(3);
+      const label = document.createElement('span');
+      if (stab.dataset.i18n) label.dataset.i18n = stab.dataset.i18n;
+      label.textContent = stab.textContent.trim();
+      b.appendChild(label);
+      if (stab.style.display === 'none') b.style.display = 'none';
+      box.appendChild(b);
+    });
+    nav.insertAdjacentElement('afterend', box);
+    // styles.css takes a strip off the page once the navigation carries it.
+    strip.classList.add('stabs-nav');
+  });
+  const list = document.querySelector('.sb-nav');
+  if (!list) return;
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sb-sub-btn');
+    if (!btn) return;
+    const stab = document.getElementById('st-' + btn.id.slice(3));
+    if (stab) stab.click();
+    sbCloseMobile();
+  });
+}
+
+// The name at the top of the page: the phone's bar and the desk's page head.
+// A page is named by its entry in the navigation, read off that entry rather
+// than a second table of names, so a page added to the sidebar is named here
+// without anyone remembering to and a renamed one is renamed once. Inside a
+// view other than the one the page opens on, the view's own name stands there
+// instead: that is where the person is. Two pages say something else where
+// they open: Arbeitsgänge asks its question, and Bestellungen opens on the
+// packing board and says so in the markup (data-page-title on that tab).
+function setPageTitle(page, navBtn) {
+  const nav = navBtn || document.getElementById('n-' + page);
+  const label = nav && nav.querySelector('[data-i18n]');
+  if (!label) return;
+  let key = label.dataset.i18n;
+  let text = label.textContent;
+  if (page === 'work') {
+    key = 'work.title';
+    text = t(key);
+  }
+  const strip = document.querySelector('#p-' + page + ' > .stabs.stabs-nav');
+  const stab = strip && strip.querySelector('.stab.active');
+  if (stab && stab.dataset.i18n && (stab.id !== strip.dataset.stabDefault || stab.dataset.pageTitle !== undefined)) {
+    key = stab.dataset.i18n;
+    text = t(key);
+  }
+  for (const id of ['topbar-title', 'page-head-title']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.dataset.i18n = key;
+    el.textContent = text;
+  }
+}
+
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
   // belt-and-braces — applyData() also clears it on incoming data — but
@@ -1751,7 +1938,10 @@ function refresh() {
 // initEventListeners, so these top-level render functions need their own.
 const $ = (id) => document.getElementById(id);
 let _ordersCache = [];
-let _ordersFilter = '';
+// The inbox opens on what is still to do. "Alle" was the default, and the open
+// orders stood among every order that had ever left.
+const ORDERS_DONE = ['shipped', 'delivered', 'cancelled'];
+let _ordersFilter = 'open';
 
 function _ohEmpty(cols, msg) {
   return `<tr><td class="empty" colspan="${cols}" style="text-align:center;padding:16px;color:var(--c-text-muted)">${esc(msg)}</td></tr>`;
@@ -1827,7 +2017,9 @@ function renderOrders() {
 function _renderOrdersInbox() {
   const body = $('orders-body');
   if (!body) return;
-  const rows = _ordersCache.filter((o) => !_ordersFilter || o.status === _ordersFilter);
+  const rows = _ordersCache.filter((o) =>
+    _ordersFilter === 'open' ? !ORDERS_DONE.includes(o.status) : !_ordersFilter || o.status === _ordersFilter
+  );
   if (!rows.length) {
     body.innerHTML = _ohEmpty(6, t('orders.none'));
     return;
@@ -1952,12 +2144,13 @@ function _obItems(items) {
         (it) =>
           // Quantity and SKU, nothing else: the SKU is what is on the shelf.
           // A line without one shows its title instead, so it is not lost.
-          `<li${it.title ? ` title="${esc(it.title)}"` : ''}><span class="ob-qty">${esc(it.qty)}×</span> ` +
+          `<li${it.title ? ` title="${esc(it.title)}"` : ''}><span class="ob-qty">${esc(_obNum(it.qty))} ×</span> ` +
+          '<span class="ob-was">' +
           (it.sku
             ? `<span class="ob-line-sku">${esc(it.sku)}</span>`
             : `<span class="ob-title">${esc(it.title || '—')}</span>`) +
           (it.madeToOrder ? ` <span class="ob-tag ob-tag-make">${esc(t('orders.board.madeTag'))}</span>` : '') +
-          '</li>'
+          '</span></li>'
       )
       .join('') +
     '</ul>'
@@ -1977,12 +2170,13 @@ function _obPlan(o) {
   return `<span class="ob-plan${o.labelDue ? ' is-due' : ''}">${esc(t('orders.board.labelOn', { day: _obDay(o.plannedLabelDay) }))}</span>`;
 }
 function _obOrderCard(o, mode) {
-  // The person first, so the parcel can be matched to a label at a glance.
-  const who = o.customer ? `<div class="ob-customer">${esc(o.customer)}</div>` : '';
+  // The person first, so the parcel can be matched to a label at a glance, and
+  // the order number beside the name as the small tag it is on the paper.
   const top =
-    who +
+    '<div class="ob-order-head">' +
+    `<div class="ob-customer">${o.customer ? esc(o.customer) : ''}</div>` +
+    `<span class="ob-num">${esc(o.number)}</span></div>` +
     `<div class="ob-order-top">${_obShop(o)}` +
-    `<span class="ob-num">${esc(o.number)}</span>` +
     `<span class="ob-when">${esc(_obDay(o.orderDay))}</span>` +
     _obBillbee(o) +
     (o.webUrl
@@ -2001,7 +2195,9 @@ function _obOrderCard(o, mode) {
       : '';
     foot = `<div class="ob-order-foot">${_obPlan(o)}${made}${_obMarkBtn(o, 'packed', true, true)}</div>`;
   } else if (mode === 'later') {
-    const btn = o.needsMaking ? _obMarkBtn(o, 'made', true, true) : '';
+    // Not the green one: "Hergestellt" moves a parcel to Heute packen, it does
+    // not finish it. Green stays with "Gepackt", the last tap on a parcel.
+    const btn = o.needsMaking ? _obMarkBtn(o, 'made', true, false) : '';
     foot = `<div class="ob-order-foot">${_obPlan(o)}${btn}</div>`;
   } else if (mode === 'done') {
     foot =
@@ -2068,6 +2264,10 @@ function _obSize(sz) {
   if (sz.grams >= 1000) return (sz.grams / 1000).toLocaleString(loc(), { maximumFractionDigits: 2 }) + ' kg';
   return sz.grams + ' g';
 }
+// A count as it is read across a table: 1.284, not 1284.
+function _obNum(n) {
+  return Number.isFinite(Number(n)) ? Number(n).toLocaleString(loc()) : String(n);
+}
 // Alles zusammen: every open order counted once, per product — the list to
 // pull from the shelf before packing order by order.
 function _obTotals(totals) {
@@ -2076,17 +2276,23 @@ function _obTotals(totals) {
     .map((tt) => {
       const sizes = tt.sizes
         .filter((sz) => sz.size != null)
-        .map((sz) => `<span class="ob-size">${esc(sz.pieces)} × ${esc(_obSize(sz))}</span>`)
+        .map((sz) => `<span class="ob-size">${esc(_obNum(sz.pieces))} × ${esc(_obSize(sz))}</span>`)
         .join('');
-      const skus = tt.skus.map((x) => `${esc(x.qty)}× ${esc(x.sku)}`).join(' · ');
+      // Which articles the figure is made of ("3× …-3x1750") is not a line of
+      // its own: the sizes above it already say what to take off the shelf,
+      // piece by piece, and every parcel names its articles. It stays on the
+      // row for whoever wants to check a count, as the row's title.
+      const skus = tt.skus.map((x) => `${_obNum(x.qty)}× ${x.sku}`).join(' · ');
+      // The figure and the name share the first line; sizes and the number of
+      // orders run below at the full width.
       return (
-        `<div class="ob-total">` +
-        `<div class="ob-total-top"><span class="ob-total-n">${esc(tt.pieces)}</span>` +
-        `<span class="ob-total-name">${esc(tt.product || tt.title || '—')}</span>` +
+        `<div class="ob-total"${skus ? ` title="${esc(skus)}"` : ''}>` +
+        `<span class="ob-total-n">${esc(_obNum(tt.pieces))}</span>` +
+        `<span class="ob-total-name">${esc(tt.product || tt.title || '—')}` +
         (tt.madeToOrder ? ` <span class="ob-tag ob-tag-make">${esc(t('orders.board.madeTag'))}</span>` : '') +
-        `<span class="ob-total-orders">${esc(t(tt.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: tt.orders }))}</span></div>` +
+        '</span>' +
         (sizes ? `<div class="ob-sizes">${sizes}</div>` : '') +
-        (skus ? `<div class="ob-total-skus">${skus}</div>` : '') +
+        `<div class="ob-total-orders">${esc(t(tt.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: tt.orders }))}</div>` +
         '</div>'
       );
     })
@@ -2097,18 +2303,19 @@ function _obMakeList(make) {
   return make
     .map(
       (m) =>
-        `<div class="ob-make${m.overdue ? ' is-late' : ''}">` +
-        `<div class="ob-make-top"><span class="ob-make-qty">${esc(m.qty)}×</span>` +
-        `<span class="ob-line-sku"${m.title ? ` title="${esc(m.title)}"` : ''}>${esc(m.sku)}</span></div>` +
-        `<div class="ob-make-meta">${esc(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }))}</div>` +
+        `<div class="ob-total ob-make${m.overdue ? ' is-late' : ''}">` +
+        `<span class="ob-total-n">${esc(_obNum(m.qty))}</span>` +
+        `<span class="ob-total-name"${m.title ? ` title="${esc(m.title)}"` : ''}>${esc(m.sku)}</span>` +
         '<div class="ob-make-days">' +
         m.byDay
           .map(
             (d) =>
-              `<span class="ob-day${d.day <= _obBoard.today ? ' is-late' : ''}">${esc(t('orders.board.labelOnQty', { qty: d.qty, day: _obDay(d.day) }))}</span>`
+              `<span class="ob-day${d.day <= _obBoard.today ? ' is-late' : ''}">${esc(t('orders.board.labelOnQty', { qty: _obNum(d.qty), day: _obDay(d.day) }))}</span>`
           )
           .join('') +
-        '</div></div>'
+        '</div>' +
+        `<div class="ob-total-orders">${esc(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }))}</div>` +
+        '</div>'
     )
     .join('');
 }
@@ -2459,20 +2666,38 @@ function eraseCustomer(id, name) {
 }
 
 // ── Versand: order list + buy-label modal ──
+// Without shipping set up there is no label to buy, so there is no list of
+// buttons to buy one with: the notice alone. With it, the orders still to go
+// out come first and the ones that left, which can be labelled again, after.
+//
+// Only an admin can read the setup. Somebody who may ship without being one
+// gets no answer here, so for them it is unknown, and they get the list as
+// before: hiding it would take the labels away from exactly the people who buy
+// them.
 function renderOrdersVersand() {
   const body = $('versand-orders-body');
   if (!body) return;
   body.innerHTML = _ohEmpty(5, t('common.loading'));
+  const table = body.closest('table');
   authFetch('/api/ship/config')
-    .then((r) => r.json())
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
     .then((cfg) => {
+      const ready = !!(cfg && cfg.enabled && cfg.publicKey);
       const warn = $('versand-config-warn');
-      if (warn) warn.style.display = cfg && cfg.enabled && cfg.publicKey ? 'none' : 'block';
-    })
-    .catch(() => {});
+      if (warn) warn.style.display = ready ? 'none' : 'block';
+      const list = ready || !cfg;
+      if (table) table.hidden = !list;
+      if (list) _versandOrders(body);
+      else body.innerHTML = '';
+    });
+}
+function _versandOrders(body) {
   apiGet('/api/orders?limit=500')
     .then((d) => {
-      const rows = (d.items || []).filter((o) => o.status !== 'cancelled');
+      const rows = (d.items || [])
+        .filter((o) => o.status !== 'cancelled')
+        .sort((a, b) => (a.status === 'shipped') - (b.status === 'shipped'));
       if (!rows.length) {
         body.innerHTML = _ohEmpty(5, t('orders.none'));
         return;
@@ -4844,6 +5069,38 @@ function renderStatus() {
   updateActionBar();
 }
 
+// Which rooms of Standorte are open, kept per device. Every room starts closed
+// with its bag count and how many of its Chargen are late in the heading, and
+// a search opens them all. A room used to open by itself when anything in it
+// was late; once Chargen pile up that is every room, and the view ran to
+// screen after screen of cards.
+let _locOpen = null;
+function _locIsOpen(key) {
+  if (!_locOpen) {
+    _locOpen = new Set();
+    try {
+      for (const k of JSON.parse(localStorage.getItem('mp-loc-open') || '[]')) _locOpen.add(String(k));
+    } catch {
+      // Nothing kept, or nothing readable: every room starts closed.
+    }
+  }
+  return _locOpen.has(key);
+}
+function _locRemember(key, open) {
+  _locIsOpen(key);
+  _locOpen[open ? 'add' : 'delete'](key);
+  try {
+    localStorage.setItem('mp-loc-open', JSON.stringify([..._locOpen]));
+  } catch {
+    // Kept until the next reload.
+  }
+}
+function _locSectionClass(key, q) {
+  return 'location-section' + (q || _locIsOpen(key) ? '' : ' collapsed');
+}
+function _locLateHtml(n) {
+  return n ? `<span class="location-section-late">${esc(tp('work.grp.late', n))}</span>` : '';
+}
 function renderRackSection(zone, racks, filtered) {
   const color = ZONE_COLORS[zone];
   const zoneObj = zones.find((z) => z.id === zone);
@@ -4852,7 +5109,12 @@ function renderRackSection(zone, racks, filtered) {
   racks.forEach((r) => (totalBags += Object.keys(getRackBags(r)).length));
   const q = (document.getElementById('status-q')?.value || '').toLowerCase();
 
-  const rackCards = racks
+  // Racks with nothing on them are named in one line under the ones that hold
+  // something, not drawn as columns that say "Leer": when one rack holds a
+  // whole room, the empty columns beside it took the width from it.
+  const emptyRacks = racks.filter((r) => !Object.keys(getRackBags(r)).length);
+  const shownRacks = q || emptyRacks.length === racks.length ? racks : racks.filter((r) => !emptyRacks.includes(r));
+  const rackCards = shownRacks
     .map((rackId) => {
       const bags = getRackBags(rackId);
       const count = Object.keys(bags).length;
@@ -4905,29 +5167,30 @@ function renderRackSection(zone, racks, filtered) {
     })
     .join('');
 
-  const rackCount = racks.length;
-  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : 'rack-grid';
+  const rackCount = shownRacks.length;
+  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : rackCount === 1 ? 'rack-grid rack-grid-1' : 'rack-grid';
+  const emptyLine =
+    shownRacks.length < racks.length
+      ? `<div class="rack-empty-line">${esc(t('dash.empty'))}: ${emptyRacks.map((r) => esc(rackLabel(r))).join(', ')}</div>`
+      : '';
   const capHtml = cap
     ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
       <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags > cap ? '#ef4444' : color};width:${Math.min(100, Math.round((totalBags / cap) * 100))}%;border-radius:3px"></div></div>
       <span class="fs-xs" style="color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
     </div>`
     : '';
-  const zoneHasUrgent = filtered.some(
-    (d) => d.ov && Object.keys(d.c).some((zid) => zid === zone || racks.includes(zid))
-  );
-  // Open when there is something to see. This used to read `dashMode === 'farm' &&`
-  // — a toggle on the Dashboard silently deciding how the Chargen page looked, so
-  // switching to Übersicht once left every zone here collapsed with no visible cause.
-  const sectionClass = 'location-section' + (zoneHasUrgent ? '' : ' collapsed');
-  return `<div class="${sectionClass}" data-zone="${esc(zone)}">
+  const late = filtered.filter(
+    (d) => d.ov && Object.keys(d.c).some((zid) => (zid === zone || racks.includes(zid)) && d.c[zid] > 0)
+  ).length;
+  return `<div class="${_locSectionClass(zone, q)}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
+      ${_locLateHtml(late)}
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
       <button class="fs-xs" type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
     </div>
     <div class="location-section-body">${capHtml}
-      <div class="${gridClass}">${rackCards}</div>
+      <div class="${gridClass}">${rackCards}</div>${emptyLine}
     </div>
   </div>`;
 }
@@ -4999,8 +5262,7 @@ function renderFruitingSection(fruitingZones, filtered) {
     })
     .join('');
 
-  const fruitSectionClass = 'location-section' + (totalBags > 0 ? '' : ' collapsed');
-  return `<div class="${fruitSectionClass}" data-zone="fruiting">
+  return `<div class="${_locSectionClass('fruiting', q)}" data-zone="fruiting">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
       <span class="location-section-count">${tp('dash.bags', totalBags)}</span>
@@ -5104,9 +5366,11 @@ function renderSimpleZoneSection(zone, filtered) {
   const cards = batchEntries
     .map(([bid, d]) => {
       d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      return `<div class="batch-card" onclick="this.classList.toggle('expanded')">
+      const bd = filtered.find((f) => f.b.batchId === bid);
+      const ov = !!(bd && bd.ov);
+      return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
       <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
-      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span></div>
+      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span>${ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}</div>
       <div class="batch-card-chips">${d.bags
         .map((bg) => {
           const sel = selectedLocBags.has(bg.id);
@@ -5124,12 +5388,16 @@ function renderSimpleZoneSection(zone, filtered) {
       <span class="fs-xs" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
     </div>`
     : '';
-  return `<div class="location-section">
-    <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
+  const late = filtered.filter((d) => d.ov && (d.c[zone.id] || 0) > 0).length;
+  return `<div class="${_locSectionClass(zone.id, q)}" data-zone="${esc(zone.id)}">
+    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
+      ${_locLateHtml(late)}
       <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
-    </div>${capHtml}
-    <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
+    </div>
+    <div class="location-section-body">${capHtml}
+      <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
+    </div>
   </div>`;
 }
 
@@ -6965,21 +7233,23 @@ function _dashLeftBehindRows(splits) {
     };
   });
 }
-// Where things are, on the screen the app opens on: one chip per zone with its
-// bag count, and under the chosen one what is in it — a species with the day
-// it went in and how long it has been there ("Blue Oyster, 4 Beutel, seit
-// 30.09. · heute"), oldest first, because the bags that have been in longest
-// are the ones to look at. The dates are the point of the card: how long a
-// block has been fruiting is what the team works from. Batches and bag numbers
-// fold away under each row.
+// Where things are, on the screen the app opens on: one label per zone with its
+// bag count, and on it what is in the zone — a species with the day it went in
+// and how long it has been there ("Blue Oyster, 4 Beutel, seit 30.09. · heute"),
+// oldest first, because the bags that have been in longest are the ones to
+// look at. The dates are the point: how long a block has been fruiting is what
+// the team works from. Batches and bag numbers fold away under each row.
 //
-// One zone at a time. Listing every zone with its rows ran every fruiting,
-// spawn and incubation zone (a lot of bags) down the page and pushed the
-// day's tasks off the phone. Fruiting zones first, then spawn run and incubation.
+// One zone at a time, picked from a row of chips that carry each zone's bag
+// count, fruiting zones first, then spawn run and incubation; the choice is
+// kept per device. That is how it was built in #646. The redesign drew every
+// zone at once, which a small demo carried and a full farm did not: a single
+// incubation room filled screens of rows, and the start page ran long on a
+// phone.
 //
 // Drawn with the day's tasks, so it refreshes whenever they do — which includes
-// the 30-second tick, so the chosen zone and what someone unfolded are kept
-// here rather than reset under their thumb. The zone also survives a reload.
+// the 30-second tick, so what someone unfolded is kept here rather than reset
+// under their thumb.
 const _wkTentFold = { open: new Set(), zone: null };
 function _wkZoneList() {
   return fruitingZones().concat(zones.filter((z) => z.role === 'spawn' || z.role === 'incubation'));
@@ -7035,7 +7305,7 @@ function _wkZoneRowsHtml(z, bags) {
         '<span class="wk-tent-sp">' +
         esc(g.species) +
         '</span><span class="wk-tent-n">' +
-        esc(tp('dash.bags', n)) +
+        esc(tp('dash.bags', n)).replace(/^[\d.,\s]*\d/, '<b>$&</b>') +
         '</span>' +
         (when ? '<span class="wk-tent-when">' + esc(when) + '</span>' : '') +
         '</summary><div class="wk-tent-detail">' +
@@ -7045,66 +7315,78 @@ function _wkZoneRowsHtml(z, bags) {
     })
     .join('');
 }
+// The zone on show: the one picked on this device, while it exists; else the
+// first one with bags in it.
+function _wkZoneChosen(list) {
+  if (_wkTentFold.zone == null) {
+    let saved = '';
+    try {
+      saved = localStorage.getItem('mp-work-zone') || '';
+    } catch {
+      saved = '';
+    }
+    _wkTentFold.zone = saved;
+  }
+  if (list.some((z) => z.id === _wkTentFold.zone)) return _wkTentFold.zone;
+  const full = list.find((z) => Object.keys(getZoneBags(z.id)).length);
+  return (full || list[0]).id;
+}
 function renderWorkTents() {
   const card = document.getElementById('wk-tents');
   if (!card) return;
   const list = _wkZoneList();
   card.hidden = !list.length;
   if (!list.length) return;
-  const bagsBy = {};
-  for (const z of list) bagsBy[z.id] = getZoneBags(z.id);
-  if (_wkTentFold.zone === null) {
-    try {
-      _wkTentFold.zone = localStorage.getItem('mp-work-zone') || '';
-    } catch (_) {
-      _wkTentFold.zone = '';
-    }
-  }
-  // The remembered zone if it still exists; otherwise the first tent with bags
-  // in it, since an empty tent is the least useful thing to open on.
-  let sel = list.find((z) => z.id === _wkTentFold.zone);
-  if (!sel) sel = list.find((z) => z.role === 'fruiting' && Object.keys(bagsBy[z.id]).length) || list[0];
-  const chips = list
-    .map((z) => {
-      const on = z.id === sel.id;
-      return (
-        '<button type="button" class="wk-zchip" data-wk-zone="' +
-        esc(z.id) +
-        '" aria-pressed="' +
-        on +
-        '"><span class="zone-dot" style="background:' +
-        esc(z.color || ZONE_ROLE_COLOR[z.role] || ZONE_ROLE_COLOR.fruiting) +
-        '"></span><span class="wk-zchip-name">' +
-        esc(zoneDisplayName(z.id)) +
-        '</span><span class="wk-zchip-n">' +
-        Object.keys(bagsBy[z.id]).length +
-        '</span></button>'
-      );
-    })
-    .join('');
-  const rows = _wkZoneRowsHtml(sel, bagsBy[sel.id]);
   const box = document.getElementById('wk-tents-list');
+  const bags = new Map(list.map((z) => [z.id, getZoneBags(z.id)]));
+  const n = (z) => Object.keys(bags.get(z.id)).length.toLocaleString(loc());
+  const chosen = list.find((z) => z.id === _wkZoneChosen(list));
+  const rows = _wkZoneRowsHtml(chosen, bags.get(chosen.id));
+  // A farm with one zone has nothing to pick: the label carries its name.
+  const head =
+    list.length < 2
+      ? '<div class="wk-zone-kopf"><span>' +
+        esc(zoneDisplayName(chosen.id)) +
+        '</span><span class="wk-zone-n">' +
+        n(chosen) +
+        '</span></div>'
+      : '<div class="wk-zwahl">' +
+        list
+          .map(
+            (z) =>
+              '<button type="button" class="wk-zchip" data-wk-zone="' +
+              esc(z.id) +
+              '" aria-pressed="' +
+              (z === chosen) +
+              '"><span>' +
+              esc(zoneDisplayName(z.id)) +
+              '</span><b>' +
+              n(z) +
+              '</b></button>'
+          )
+          .join('') +
+        '</div>';
+  // On a phone the chips are a line that scrolls sideways. Drawing it anew puts
+  // it back to its start, so where it stood is carried over; drawn the first
+  // time, it is moved so the zone on show is in sight.
+  const was = box.querySelector('.wk-zwahl');
+  const left = was ? was.scrollLeft : null;
   box.innerHTML =
-    '<div class="wk-zchips" role="group" aria-label="' +
-    esc(t('work.tentsTitle')) +
-    '">' +
-    chips +
-    '</div><div class="wk-zone-rows">' +
-    (rows || '<div class="wk-tent-empty">' + esc(t('work.tentEmpty')) + '</div>') +
+    (list.length < 2 ? '' : head) +
+    '<div class="wk-zone">' +
+    (list.length < 2 ? head : '') +
+    (rows || '<p class="wk-zone-leer">' + esc(t('work.tentEmpty')) + '</p>') +
     '</div>';
+  const strip = box.querySelector('.wk-zwahl');
+  if (strip) {
+    if (left != null) strip.scrollLeft = left;
+    const on = strip.querySelector('[aria-pressed="true"]');
+    const from = on ? on.offsetLeft - strip.offsetLeft : 0;
+    if (on && (from < strip.scrollLeft || from + on.offsetWidth > strip.scrollLeft + strip.clientWidth))
+      strip.scrollLeft = Math.max(0, from - 16);
+  }
   if (!box.dataset.bound) {
     box.dataset.bound = '1';
-    box.addEventListener('click', (ev) => {
-      const chip = ev.target.closest('[data-wk-zone]');
-      if (!chip) return;
-      _wkTentFold.zone = chip.dataset.wkZone;
-      try {
-        localStorage.setItem('mp-work-zone', _wkTentFold.zone);
-      } catch (_) {
-        /* the choice just lasts until the page reloads */
-      }
-      renderWorkTents();
-    });
     // toggle does not bubble; capture catches it for every <details> in the box.
     box.addEventListener(
       'toggle',
@@ -7114,15 +7396,23 @@ function renderWorkTents() {
       },
       true
     );
+    box.addEventListener('click', (ev) => {
+      const chip = ev.target.closest('[data-wk-zone]');
+      if (!chip) return;
+      _wkTentFold.zone = chip.dataset.wkZone;
+      try {
+        localStorage.setItem('mp-work-zone', _wkTentFold.zone);
+      } catch {
+        // A browser that keeps nothing still shows the zone until the next reload.
+      }
+      renderWorkTents();
+    });
   }
 }
-// Today in one line, above the task list: "Heute: 3 Umziehen · 2 Ernten". The
-// list itself folds away behind it, so the start screen shows the tiles, where
-// things are and what today asks for without scrolling; a tap opens the week.
-// Open or closed is remembered per device.
-//
-// The strip above the tiles only appears when something is wrong: work that is
-// overdue, or a zone past its capacity. On a normal day it takes no room.
+// The week, folded away behind "Woche" in the heading of the list: every day's
+// work, the rhythm, the day that is open. The start screen shows the jobs, what
+// is due today and where things stand; a tap opens the week under the list.
+// Open or closed is remembered per device, and it starts closed.
 let _wkTasksOpen = null;
 function _wkTasksAreOpen() {
   if (_wkTasksOpen === null) {
@@ -7146,15 +7436,14 @@ function setWorkTasksOpen(open) {
   const btn = document.getElementById('wk-today');
   if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
+// The strip above the jobs only appears when something is wrong: work that is
+// overdue, or a zone past its capacity. On a normal day it takes no room. On a
+// desk the same notices are the first rows of the list (_wkNoticeRowsHtml), so
+// the zones past their capacity are kept apart from the count of what is late:
+// the list shows the late work itself and would say it twice.
 function renderWorkSummary(week) {
   const todayItems = (week && week[0] ? week[0].items : []).filter((it) => !it.done);
-  const counts = countByCategory(todayItems);
   const overdue = todayItems.reduce((n, i) => n + planOverdue(i), 0);
-  const sum = document.getElementById('wk-today-sum');
-  if (sum) {
-    const parts = PLAN_CATS.filter((c) => counts[c]).map((c) => counts[c] + ' ' + t(PLAN_CAT_LABEL[c]));
-    sum.textContent = parts.length ? parts.join(' · ') : t('work.todayNone');
-  }
   setWorkTasksOpen(_wkTasksAreOpen());
   const btn = document.getElementById('wk-today');
   if (btn && !btn.dataset.bound) {
@@ -7171,22 +7460,253 @@ function renderWorkSummary(week) {
       if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
-  const msgs = [];
-  if (overdue) msgs.push(t('cat.overdue', { n: overdue }));
+  const full = [];
   for (const z of zones) {
     if (!z.maxCapacity) continue;
     const n = Object.keys(getZoneBags(z.id)).length;
-    if (n > z.maxCapacity) msgs.push(t('work.alertFull', { zone: zoneDisplayName(z.id), n: n, cap: z.maxCapacity }));
+    if (n > z.maxCapacity) full.push(t('work.alertFull', { zone: zoneDisplayName(z.id), n: n, cap: z.maxCapacity }));
   }
+  const msgs = (overdue ? [t('cat.overdue', { n: overdue })] : []).concat(full);
   alert.hidden = !msgs.length;
   alert.textContent = msgs.length ? '⚠ ' + msgs.join(' · ') : '';
+  alert.dataset.full = full.join(' · ');
+}
+
+// ── "Was ansteht" on the start page ─────────────────────────────────────────
+// Today's open work as a short list: what to do in the first line, what it is
+// about in the second, and a tap on the row does what the row's button in the
+// week does. The rows are the week plan's own (buildWeekPlan), in the order the
+// open day shows them, so the list and the week cannot disagree, and each row
+// carries the attributes of the button the week would draw for it (_planBtn),
+// so there is one wiring per kind of work and not two.
+//
+// Grouped by job (renderWorkDue): one row per kind of work, its rows on a tap.
+const WK_AN_CHEV =
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+// The button the week draws for a row, taken apart: its data attributes and its
+// words. A due move has two, the one-tap one and the picker; a row is tapped by
+// a thumb in passing, so it takes the picker, which asks before it moves.
+function _wkAnBtn(it) {
+  const all = [..._planBtn(it).matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)];
+  if (!all.length) return null;
+  const m = all[all.length - 1];
+  return { attrs: (m[1].match(/\sdata-[a-z-]+="[^"]*"/g) || []).join(''), label: m[2].trim() };
+}
+// Inside an opened job the job is already named above the rows, and how many
+// are late with it, so a row leads with its Sorte in the ink, names the Charge
+// after it, and leaves its lateness to its own words ("Fällig vor 12 Tagen"):
+// a column of rows in red said nothing the heading did not.
+function _wkAnRowHtml(it, inJob) {
+  const btn = _wkAnBtn(it);
+  const room = it.zone ? zoneDisplayName(it.zone) : '';
+  const meta = [room, it.bags ? tp('dash.bags', it.bags) : '', it.detail].filter(Boolean);
+  const k = planKind(it);
+  let was = esc(it.label);
+  let wer = meta;
+  let ton = it.overdue ? ' rot' : '';
+  if (inJob && it.batchId && it.species) {
+    was = esc(it.species);
+    wer = [it.label].concat(meta);
+    ton = '';
+  } else if (it.kind === 'supply') {
+    // A gap in the supply: the verdict the Chargen list gives the Sorte.
+    was = esc(t('batch.supply.' + ((it.task && it.task.supply) || 'now')));
+    wer = [it.label].concat(meta);
+    if (!it.overdue) ton = ' bernstein';
+  } else if (it.batchId && btn) {
+    // Work on a Charge: what to do with it first, which one second.
+    was = btn.label;
+    wer = [it.label].concat(meta);
+  }
+  const text =
+    '<span class="wk-an-was' +
+    ton +
+    '">' +
+    was +
+    (wer.length ? '<span class="wk-an-wer">' + esc(wer.join(' · ')) + '</span>' : '') +
+    '</span>';
+  // Work that is ticked off keeps its button and its word: a row that marks a
+  // task done on a passing tap would do it by accident.
+  if (k && (k.btn === 'manual' || k.btn === 'chore')) {
+    return '<div class="wk-an-zeile wk-an-haken">' + text + _planBtn(it) + '</div>';
+  }
+  if (!btn) return '<div class="wk-an-zeile">' + text + '</div>';
+  return '<button type="button" class="wk-an-zeile"' + btn.attrs + '>' + text + WK_AN_CHEV + '</button>';
+}
+// The notices of the strip above the jobs, as rows: a desk shows them here and
+// not as a strip (styles.css decides which of the two is on the screen). Each
+// forwards its tap to the notice it stands for.
+function _wkNoticeRowsHtml() {
+  let html = '';
+  for (const id of ['wk-alert', 'wk-np', 'wk-usb', 'wk-usb-key']) {
+    const el = document.getElementById(id);
+    if (!el || el.hidden) continue;
+    const text = id === 'wk-alert' ? el.dataset.full || '' : (el.textContent || '').trim();
+    if (!text) continue;
+    const rot = id === 'wk-alert' || /wk-np-now|wk-usb-error|wk-usb-state/.test(el.className);
+    html +=
+      '<button type="button" class="wk-an-zeile wk-an-hinweis" data-wk-notice="' +
+      id +
+      '"><span class="wk-an-was ' +
+      (rot ? 'rot' : 'bernstein') +
+      '">' +
+      esc(text) +
+      '</span>' +
+      WK_AN_CHEV +
+      '</button>';
+  }
+  return html;
+}
+// What is due today, by job: one row per kind of work, with how many there are
+// and how many of them are late, in the order of the chain above it (Labor,
+// Körnerbrut, Beimpfen, Umziehen, Ernte). A tap opens the job's own rows under
+// it, and they stay open through the 30-second refresh. A job with a single
+// piece of work, and a chore that is ticked off on its own, stand as their row.
+//
+// It was the open day's rows, six of them and "+ n weitere". A demo day has a
+// handful; a full farm's day has many times that, and the six shown were
+// notices while the moves due that morning waited behind "+ n weitere".
+const WK_AN_GRUPPEN = [
+  { key: 'lab', kinds: ['labgroup', 'labmin'], label: 'work.grp.lab' },
+  { key: 'supply', kinds: ['supply'], label: 'work.grp.supply', names: true },
+  { key: 'grain', kinds: ['grain'], label: 'work.grp.grain', today: true },
+  { key: 'move', kinds: ['fruiting'], label: 'work.grp.move', today: true },
+  { key: 'harvest', kinds: ['harvest'], label: 'work.grp.harvest', today: true },
+  { key: 'left', kinds: ['left'], label: 'work.grp.left' },
+  { key: 'manual', kinds: ['manual'], label: 'work.grp.manual', today: true },
+  { key: 'chore', kinds: ['chore'], label: null },
+  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert' }
+];
+const _wkAnOffen = new Set();
+function _wkAnGruppeHtml(g, items) {
+  const late = items.filter((it) => it.overdue).length;
+  const wer = [];
+  // A stock alarm is not late, it is urgent: "überfällig" is for work with a date.
+  if (late) {
+    const word = g.key === 'alert' ? tp('work.grp.urgent', late) : tp('work.grp.late', late);
+    wer.push('<span class="rot">' + esc(word) + '</span>');
+  }
+  if (g.today && items.length > late) wer.push(esc(tp('work.grp.today', items.length - late)));
+  if (g.names) {
+    const names = items.map((it) => it.label).filter(Boolean);
+    wer.push(esc(names.slice(0, 3).join(', ') + (names.length > 3 ? ' …' : '')));
+  } else if (!g.today) {
+    // Rows that say the same thing about different Chargen ("noch in
+    // Inkubation") say it once on their job.
+    const same = items[0].detail || items[0].instruction || '';
+    if (same && items.every((it) => (it.detail || it.instruction || '') === same)) wer.push(esc(same));
+  }
+  const offen = _wkAnOffen.has(g.key);
+  return (
+    '<button type="button" class="wk-an-zeile wk-an-gruppe" data-wk-gruppe="' +
+    g.key +
+    '" aria-expanded="' +
+    offen +
+    '"><span class="wk-an-was">' +
+    esc(t(g.label)) +
+    (wer.length ? '<span class="wk-an-wer">' + wer.join(' · ') + '</span>' : '') +
+    '</span><span class="wk-an-zahl">' +
+    items.length.toLocaleString(loc()) +
+    '</span>' +
+    WK_AN_CHEV +
+    '</button>' +
+    (offen ? '<div class="wk-an-teil">' + items.map((it) => _wkAnRowHtml(it, true)).join('') + '</div>' : '')
+  );
+}
+function renderWorkDue(week) {
+  const box = document.getElementById('wk-an');
+  if (!box) return;
+  const day = week && week[0] ? week[0] : { items: [] };
+  // Within a job, the walk: what to start before setting off, then zone by zone.
+  const order = {};
+  zones.forEach((z, i) => (order[z.id] = typeof z.sortOrder === 'number' ? z.sortOrder : i));
+  const rank = (it) => {
+    const k = planKind(it);
+    if (k && k.rank != null) return k.rank + (it.kind === 'alert' ? (it.task && it.task.rang) || 0 : 0);
+    return it.zone && order[it.zone] != null ? order[it.zone] : 999;
+  };
+  const open = day.items.filter((it) => !it.done).sort((a, b) => rank(a) - rank(b));
+  let html = '';
+  for (const g of WK_AN_GRUPPEN) {
+    const items = open.filter((it) => g.kinds.includes(it.kind));
+    if (!items.length) continue;
+    html += items.length === 1 || !g.label ? items.map((it) => _wkAnRowHtml(it)).join('') : _wkAnGruppeHtml(g, items);
+  }
+  // A kind of work no job above names yet still shows, as its rows.
+  const known = new Set(WK_AN_GRUPPEN.flatMap((g) => g.kinds));
+  html += open
+    .filter((it) => !known.has(it.kind))
+    .map((it) => _wkAnRowHtml(it))
+    .join('');
+  // The notices last: what is due comes first, and on a desk they are the
+  // strip's four above the jobs, drawn here as rows.
+  html += _wkNoticeRowsHtml();
+  // With nothing due the label says so. A desk may still have a notice above
+  // it, a phone shows the notices elsewhere, so the sentence is always written
+  // and the stylesheet takes it away where a notice already fills the label.
+  if (!open.length) html += '<p class="wk-an-leer">' + esc(t('work.todayNone')) + '</p>';
+  box.innerHTML = html;
+  if (box.dataset.bound) return;
+  box.dataset.bound = '1';
+  box.addEventListener('click', (ev) => {
+    const g = ev.target.closest('[data-wk-gruppe]');
+    if (g) {
+      const k = g.dataset.wkGruppe;
+      _wkAnOffen[_wkAnOffen.has(k) ? 'delete' : 'add'](k);
+      renderWorkDue(buildWeekPlan());
+      return;
+    }
+    const notice = ev.target.closest('[data-wk-notice]');
+    if (notice) {
+      const el = document.getElementById(notice.dataset.wkNotice);
+      if (el) el.click();
+    }
+  });
+  // The notices fill themselves from elsewhere (the backup, the shelf), after
+  // this list was drawn. Whenever one changes, their rows are drawn again.
+  const strip = document.querySelector('.wk-alerts');
+  if (strip && typeof MutationObserver === 'function') {
+    new MutationObserver(() => renderWorkDue(buildWeekPlan())).observe(strip, {
+      attributes: true,
+      attributeFilter: ['hidden', 'class', 'data-full'],
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+}
+// The figure at each stop of the chain on a desk: what is standing there now.
+// Read off the rollup the Chargen list draws its bars from, so the two pages
+// cannot disagree: cultures on hand, Sorten that have no grain, kilograms of
+// grain, bags incubating, bags fruiting.
+function renderWorkChain() {
+  const set = (id, n, unit, calls) => {
+    const el = document.getElementById('wk-n-' + id);
+    if (!el) return;
+    el.hidden = false;
+    el.classList.toggle('ruft', !!calls);
+    el.innerHTML = '<b>' + esc(n) + '</b> ' + esc(unit);
+  };
+  const num = (n) => Number(n).toLocaleString(loc());
+  const rows = sorteRollup();
+  const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const short = rows.filter((r) => r.supply === 'now' || r.supply === 'nospawn').length;
+  const nLab = cultures.filter(_kbDa).length;
+  const kg = sum('grain');
+  set('lab', num(nLab), tp('work.atLab', nLab));
+  set('grain', num(short), tp('work.atGrain', short), short > 0);
+  set('batch', fmtKg(kg, kg % 1 ? 1 : 0), t('work.atBatch'));
+  set('move', num(sum('incubation')), t('work.atMove'));
+  set('harvest', num(sum('fruiting')), t('work.atHarvest'));
 }
 function renderDashBatchTasks() {
   renderWorkTents();
+  renderWorkChain();
   const el = document.getElementById('dash-batch-tasks');
   if (!el) return;
   const week = buildWeekPlan();
   renderWorkSummary(week);
+  renderWorkDue(week);
   const anyWork = week.some((d) => d.items.length);
   const hasRhythm = Object.keys(weekRhythm).length > 0;
   if (!anyWork && !hasRhythm) {
@@ -9265,6 +9785,13 @@ document.getElementById('dash-locations').addEventListener('click', function (e)
     e.preventDefault();
     e.stopPropagation();
     openZoneCheck(zc.dataset.zoneCheck);
+    return;
+  }
+  // The heading's own handler has turned the room already; keep what it is now.
+  const head = e.target.closest('.location-section-header');
+  if (head && head.parentElement.dataset.zone) {
+    const sec = head.parentElement;
+    _locRemember(sec.dataset.zone, !sec.classList.contains('collapsed'));
     return;
   }
   const chip = e.target.closest('.bag-chip[data-bag]');
@@ -12143,11 +12670,32 @@ const isArchivedStatus = (s) => ARCHIVED_STATUSES.includes(s);
 // ordnung und ordnungArchiv, chips(g), zeile(x, archiv) → { id, rechts },
 // zaehler(), leer(archiv, gefiltert), oeffnen(id); dazu wahlweise filter() und
 // unterzeile(g), und vorher(), das vor jedem Zeichnen läuft.
+//
+// Was eine Seite ihren Zeilen dazugeben darf, ohne dass die Liste eine andere
+// wird: strang(g), ein Balken neben den Zahlen; kennung(g), ein Kürzel unter
+// dem Namen; seitenkopf(g, archiv), was über den Einträgen der offenen Sorte
+// steht; in zeile() ein `unten`, dann ist ein Eintrag ein Etikett mit einer
+// zweiten Zeile; fuss [{ key, text(), tun(id) }], die Knöpfe unter den
+// Einträgen; und daneben: true, dann steht die offene Sorte nicht in der Liste,
+// sondern auf einem breiten Bildschirm daneben und auf einem schmalen als Blatt
+// von unten. Bisher nutzt das nur SL_CHARGEN.
+//
+// Mit fuss wählt ein Tipp auf einen Eintrag ihn aus, statt sein Fenster zu
+// öffnen, und die Knöpfe darunter gelten dem gewählten: so ist das, was am
+// häufigsten getan wird, ein Tipp entfernt, und das Fenster einer davon.
 // So viele Einträge einer Gruppe stehen offen da; der Rest auf einen Tipp. Ein
 // einzelner mehr wird nicht versteckt, ein "+ 1 weitere" spart nichts.
 const SL_ZEIGEN = 6;
+// Ab dieser Breite hat die offene Sorte neben der Liste Platz (daneben: true).
+const SL_BREIT = '(min-width: 1200px)';
+// Ohne Fenster (die Tests führen diesen Block ohne Browser aus) ist nichts breit.
+const _slFenster = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(SL_BREIT) : null);
+const _slBreit = () => {
+  const mq = _slFenster();
+  return !!mq && mq.matches;
+};
 const _sl = {};
-const _slStand = (spec) => (_sl[spec.id] = _sl[spec.id] || { offen: null, archiv: false, mehr: {} });
+const _slStand = (spec) => (_sl[spec.id] = _sl[spec.id] || { offen: null, archiv: false, mehr: {}, wahl: null });
 function slAlter(created) {
   const tage = Math.floor((Date.now() - new Date(created).getTime()) / 864e5);
   if (!Number.isFinite(tage) || tage < 1) return t('sl.today');
@@ -12181,11 +12729,24 @@ function _slTeile(spec, g, archiv) {
   for (const k of g.teile.keys()) if (!keys.includes(k)) keys.push(k);
   return keys.map((k) => ({ key: k, titel: (bekannt.find((x) => x.key === k) || {}).titel || k, liste: g.teile.get(k) }));
 }
+// Ob ein Tipp auf einen Eintrag ihn auswählt (und Knöpfe darunter stehen) oder
+// sein Fenster öffnet. Ausgewählt wird nur, wo eine Sorte offen ist: nicht im
+// Archiv, wo es nichts mehr zu tun gibt, und nicht mit einem Filter, der alle
+// Sorten zugleich aufklappt und unter jede dieselben Knöpfe setzen würde.
+const _slWaehlt = (spec) => !!spec.fuss && !_slStand(spec).archiv && !(spec.filter && spec.filter());
 function _slEintragHtml(spec, x) {
-  const z = spec.zeile(x, _slStand(spec).archiv);
+  const st = _slStand(spec);
+  const z = spec.zeile(x, st.archiv);
+  // Mit einer zweiten Zeile ist der Eintrag ein Etikett: die Zahl rechts steht
+  // in der Ziffernschrift, das Wort dahinter in der Leseschrift.
+  const rechts = z.unten == null ? esc(z.rechts) : esc(z.rechts).replace(/^[\d.,]+/, '<b>$&</b>');
   return (
-    `<button type="button" class="sl-eintrag" data-sl-id="${esc(z.id)}" data-find="${esc(spec.find + ':' + z.id)}">` +
-    `<span class="sl-id">${esc(z.id)}</span><span class="sl-r">${esc(z.rechts)}</span></button>`
+    `<button type="button" class="sl-eintrag" data-sl-id="${esc(z.id)}" data-find="${esc(spec.find + ':' + z.id)}"` +
+    (z.spaet ? ' data-spaet="1"' : '') +
+    (_slWaehlt(spec) ? ` aria-pressed="${z.id === st.wahl}"` : '') +
+    `><span class="sl-id">${esc(z.id)}</span><span class="sl-r">${rechts}</span>` +
+    (z.unten ? `<span class="sl-u">${esc(z.unten)}</span>` : '') +
+    '</button>'
   );
 }
 function _slTeilHtml(spec, g, teil) {
@@ -12193,7 +12754,7 @@ function _slTeilHtml(spec, g, teil) {
   const alle = _slStand(spec).mehr[k] || teil.liste.length <= SL_ZEIGEN + 1;
   const zeigen = alle ? teil.liste : teil.liste.slice(0, SL_ZEIGEN);
   return (
-    `<div class="sl-teil"><div class="sl-teil-t">${esc(teil.titel)} <span>${teil.liste.length}</span></div>` +
+    `<div class="sl-teil" data-teil="${esc(teil.key)}"><div class="sl-teil-t">${esc(teil.titel)} <span>${teil.liste.length}</span></div>` +
     zeigen.map((x) => _slEintragHtml(spec, x)).join('') +
     (alle
       ? ''
@@ -12205,19 +12766,47 @@ function _slSorteHtml(spec, g, offen) {
   const archiv = _slStand(spec).archiv;
   const chips = spec
     .chips(g, archiv)
-    .map((c) => `<span class="sl-chip">${esc(c.text)} <b>${esc(c.n)}</b></span>`)
+    .map(
+      (c) =>
+        `<span class="sl-chip">${esc(c.text)} <b>${esc(typeof c.n === 'number' ? c.n.toLocaleString(loc()) : c.n)}</b></span>`
+    )
     .join('');
   const unter = !archiv && spec.unterzeile ? spec.unterzeile(g) : null;
+  const strang = !archiv && spec.strang ? spec.strang(g) : '';
+  const kennung = spec.kennung ? spec.kennung(g) : '';
   return (
     `<div class="sl-sorte${offen ? ' open' : ''}">` +
     `<button type="button" class="sl-kopf" data-sl-sorte="${esc(g.key)}" aria-expanded="${offen}">` +
-    `<span class="sl-name">${spDot(g.name)}${esc(g.name)}` +
+    `<span class="sl-name">${spDot(g.name)}<span class="sl-nt">${esc(g.name)}</span>` +
     (unter ? `<small class="sup sup-${esc(unter.art)}">${esc(unter.text)}</small>` : '') +
-    `</span><span class="sl-chips">${chips}</span></button>` +
+    `</span>${strang}` +
+    // Mit einem Kürzel stehen Kürzel und Zahlen als eine Zeile unter dem Namen
+    // und brechen als Ganzes um, nicht jede Zahl für sich.
+    (kennung
+      ? `<span class="sl-unten"><span class="sl-kz">${esc(kennung)}</span><span class="sl-chips">${chips}</span></span>`
+      : `<span class="sl-chips">${chips}</span>`) +
+    '</button>' +
     (offen
-      ? _slTeile(spec, g, archiv)
+      ? '<div class="sl-inhalt">' +
+        (spec.seitenkopf ? spec.seitenkopf(g, archiv) : '') +
+        // Zugemacht wird das Blatt hier; daneben und in der Liste gibt es
+        // nichts zuzumachen, dort nimmt das Stylesheet den Knopf weg.
+        (spec.daneben
+          ? `<button type="button" class="sl-zu" data-sl-zu aria-label="${esc(t('common.close'))}"></button>`
+          : '') +
+        '<div class="sl-teile">' +
+        _slTeile(spec, g, archiv)
           .map((teil) => _slTeilHtml(spec, g, teil))
-          .join('')
+          .join('') +
+        '</div>' +
+        (_slWaehlt(spec)
+          ? '<div class="sl-fuss">' +
+            spec.fuss
+              .map((f) => `<button type="button" class="btn" data-sl-tun="${esc(f.key)}">${esc(f.text())}</button>`)
+              .join('') +
+            '</div>'
+          : '') +
+        '</div>'
       : '') +
     '</div>'
   );
@@ -12238,14 +12827,41 @@ function slRender(spec) {
   // wenige, und gesucht war genau das.
   const gefiltert = !!(spec.filter && spec.filter());
   const gruppen = _slGruppen(spec);
+  // Auf einem breiten Bildschirm steht die offene Sorte neben der Liste, wenn
+  // die Seite das will (daneben). Dann ist immer eine offen, die gewählte oder
+  // sonst die erste, damit der Platz daneben nie leer ist. Mit einem Filter
+  // steht ohnehin alles offen, dann bleibt es bei der Liste.
+  const neben = !!spec.daneben && !gefiltert && gruppen.length > 0 && _slBreit();
+  const offen = neben && !gruppen.some((g) => g.key === st.offen) ? gruppen[0].key : st.offen;
+  // Der gewählte Eintrag der offenen Sorte: der, den jemand angetippt hat, und
+  // sonst ihr erster, also der fälligste. Die Knöpfe darunter gelten ihm.
+  if (_slWaehlt(spec)) {
+    const g = gruppen.find((x) => x.key === offen);
+    const ids = g ? _slTeile(spec, g, false).flatMap((teil) => teil.liste.map((x) => spec.zeile(x, false).id)) : [];
+    if (!ids.includes(st.wahl)) st.wahl = ids.length ? ids[0] : null;
+  }
+  const zeilen = gruppen.map((g) => _slSorteHtml(spec, g, gefiltert || offen === g.key)).join('');
+  // Als Blatt (schmal) liegt die offene Sorte über der Seite; der Grund hinter
+  // ihr nimmt den Tipp daneben und macht sie zu.
+  const blatt = !!spec.daneben && !gefiltert && !neben && gruppen.some((g) => g.key === offen);
   const html = gruppen.length
-    ? gruppen.map((g) => _slSorteHtml(spec, g, gefiltert || st.offen === g.key)).join('')
+    ? neben
+      ? `<div class="sl-zwei" style="--sl-n:${gruppen.length}">${zeilen}</div>`
+      : zeilen + (blatt ? '<div class="sl-grund" data-sl-zu></div>' : '')
     : '<div class="empty">' + esc(spec.leer(st.archiv, gefiltert)) + '</div>';
   // Gezeichnet wird bei jedem Sync und jedem Scan; gleiche Zeilen neu
   // hineinzuschreiben nähme einem Daumen die Zeile weg, die er gerade trifft.
   if (el.__slFp === html) return;
   el.__slFp = html;
   el.innerHTML = html;
+  if (!el.classList) return;
+  // Mit einem Filter klappt alles in der Liste auf; sonst zeigt eine Seite mit
+  // `daneben` ihre offene Sorte als Blatt, und das kommt nur dann von unten
+  // herein, wenn es eben aufging, nicht bei jedem Neuzeichnen.
+  el.classList.toggle('sl-mit-blatt', !!spec.daneben && !gefiltert);
+  const kommt = blatt && st.gezeigt !== offen;
+  st.gezeigt = blatt ? offen : null;
+  if (kommt) for (const x of el.querySelectorAll('.sl-inhalt, .sl-grund')) x.classList.add('sl-kommt');
 }
 function slKlick(spec, e) {
   const st = _slStand(spec);
@@ -12262,8 +12878,39 @@ function slKlick(spec, e) {
     st.mehr[mehr.dataset.slMehr] = true;
     return slRender(spec);
   }
+  if (e.target.closest('[data-sl-zu]')) return slZu(spec);
+  const tun = e.target.closest('[data-sl-tun]');
+  if (tun) {
+    const f = (spec.fuss || []).find((k) => k.key === tun.dataset.slTun);
+    if (f && st.wahl) f.tun(st.wahl);
+    return;
+  }
   const x = e.target.closest('[data-sl-id]');
-  if (x) spec.oeffnen(x.dataset.slId);
+  if (!x) return;
+  // Mit Knöpfen darunter wählt der Tipp den Eintrag; sonst öffnet er wie
+  // überall sein Fenster.
+  if (_slWaehlt(spec)) {
+    st.wahl = x.dataset.slId;
+    return slRender(spec);
+  }
+  spec.oeffnen(x.dataset.slId);
+}
+// Die offene Sorte zumachen. Als Blatt geht sie nach unten weg, bevor die Liste
+// neu gezeichnet wird; neben der Liste und in ihr klappt sie einfach zu.
+function slZu(spec) {
+  const st = _slStand(spec);
+  const fertig = () => {
+    st.offen = null;
+    slRender(spec);
+  };
+  const el = document.getElementById(spec.id + '-list');
+  const blatt = el && el.querySelector && el.querySelector('.sl-grund');
+  if (!blatt || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return fertig();
+  el.classList.add('sl-geht');
+  setTimeout(() => {
+    el.classList.remove('sl-geht');
+    fertig();
+  }, 240);
 }
 function slArchiv(spec) {
   const st = _slStand(spec);
@@ -12279,6 +12926,7 @@ function slZeige(spec, x) {
   const key = spec.sorte(x).key;
   st.offen = key;
   st.mehr[key + '|' + spec.gruppe(x, st.archiv)] = true;
+  if (spec.fuss) st.wahl = spec.zeile(x, st.archiv).id;
   slRender(spec);
 }
 // Die Kamera wie der Scan-Knopf unten: ohne eine Aktion davor öffnet ein
@@ -12372,12 +13020,16 @@ function _chLebend(b) {
   const s = _stageBagsOf(b);
   return s.spawn + s.incubation + s.fruiting;
 }
-function _chFaellig(b) {
+// Tage bis zur Fälligkeit; null und darunter ist heute fällig oder überfällig.
+function _chTageBis(b) {
   const heute = new Date();
   heute.setHours(0, 0, 0, 0);
   const due = new Date(b.due);
   due.setHours(0, 0, 0, 0);
-  const n = Math.round((due - heute) / 864e5);
+  return Math.round((due - heute) / 864e5);
+}
+function _chFaellig(b) {
+  const n = _chTageBis(b);
   if (!Number.isFinite(n)) return '';
   if (n < 0) return t('sl.overdue', { n: -n });
   if (n === 0) return t('sl.dueToday');
@@ -12386,6 +13038,19 @@ function _chFaellig(b) {
 const _kgText = (n) => fmtKg(n, n % 1 ? 1 : 0) + ' kg';
 const _anzahl = (g) => [...g.teile.values()].reduce((s, l) => s + l.length, 0);
 let _chNachschub = new Map();
+let _chRollup = new Map();
+// Die Beutel einer Sorte, wie die Zahlen neben ihrem Namen sie nennen.
+function _chBeutel(g) {
+  let ink = 0;
+  let fr = 0;
+  for (const l of g.teile.values())
+    for (const b of l) {
+      const s = _stageBagsOf(b);
+      ink += s.spawn + s.incubation;
+      fr += s.fruiting;
+    }
+  return { ink, fr };
+}
 const SL_CHARGEN = {
   id: 'ch',
   find: 'batch',
@@ -12397,29 +13062,66 @@ const SL_CHARGEN = {
   ordnung: (a, b) => String(a.due).localeCompare(String(b.due)),
   ordnungArchiv: _nachJung,
   vorher: () => {
-    _chNachschub = new Map(sorteRollup().map((r) => [r.key, r.supply]));
+    const zeilen = sorteRollup();
+    _chNachschub = new Map(zeilen.map((r) => [r.key, r.supply]));
+    _chRollup = new Map(zeilen.map((r) => [r.key, r]));
   },
   chips: (g, archiv) => {
     if (archiv) return [{ text: t('sl.ch.batches'), n: _anzahl(g) }];
-    let ink = 0;
-    let fr = 0;
-    for (const l of g.teile.values())
-      for (const b of l) {
-        const s = _stageBagsOf(b);
-        ink += s.spawn + s.incubation;
-        fr += s.fruiting;
-      }
+    const { ink, fr } = _chBeutel(g);
     return [ink && { text: t('sl.ch.inc'), n: ink }, fr && { text: t('sl.ch.fruit'), n: fr }].filter(Boolean);
   },
+  // Der Strang einer Sorte, wie sie durch die Produktion läuft. Vorn die Körner
+  // in Kilogramm: eine andere Einheit, deshalb eine Zahl vor dem Balken und nie
+  // ein Teil von ihm (sorteRollup sagt, warum). Dann die Beutel, in Inkubation
+  // und in Fruchtung, maßstäblich zueinander.
+  strang: (g) => {
+    const { ink, fr } = _chBeutel(g);
+    const kg = Number((_chRollup.get(g.key) || {}).grain) || 0;
+    return (
+      '<span class="sl-strang">' +
+      `<span class="sl-korn${kg ? '' : ' fehlt'}">${esc(kg ? _kgText(kg) : t('sl.ch.noGrain'))}</span>` +
+      `<span class="sl-balken" role="img" aria-label="${esc(t('sl.ch.bar', { inc: ink, fruit: fr }))}">` +
+      (ink ? `<i class="sl-b-ink" style="flex:${ink} 0 0"></i>` : '') +
+      (fr ? `<i class="sl-b-fr" style="flex:${fr} 0 0"></i>` : '') +
+      '</span></span>'
+    );
+  },
+  kennung: (g) => (_chRollup.get(g.key) || {}).kuerzel || '',
+  // Über den Chargen der offenen Sorte: ihr Name, darunter ihr Kürzel und, wenn
+  // ihr der Nachschub fehlt, im selben Satz warum.
+  seitenkopf: (g, archiv) => {
+    const kz = (_chRollup.get(g.key) || {}).kuerzel || '';
+    const s = archiv ? null : _chNachschub.get(g.key);
+    const warum =
+      s === 'now' || s === 'nospawn' ? t('batch.supply.' + s) + ': ' + t('batch.supply.' + s + 'Why') : '';
+    const unter = [kz, warum].filter(Boolean).join(' · ');
+    return (
+      '<div class="sl-seite-kopf" data-sl-griff>' +
+      `<span class="sl-seite-name">${esc(g.name)}</span>` +
+      (unter ? `<span class="sl-seite-unter">${esc(unter)}</span>` : '') +
+      '</div>'
+    );
+  },
+  // Unter den Chargen der offenen Sorte, für die gewählte: umziehen, ihr Fenster
+  // mit den Beuteln und allem Übrigen (mehr Beutel, pH, löschen), ihre Notiz.
+  fuss: [
+    { key: 'move', text: () => t('work.move'), tun: (id) => openMoveBatchModal(id) },
+    { key: 'bags', text: () => t('ch.bagsBtn'), tun: (id) => SL_CHARGEN.oeffnen(id) },
+    { key: 'note', text: () => t('ch.noteBtn'), tun: (id) => openNote(id) }
+  ],
+  daneben: true,
   unterzeile: (g) => {
     const s = _chNachschub.get(g.key);
     return s === 'now' || s === 'nospawn' ? { art: s, text: t('batch.supply.' + s) } : null;
   },
+  // Eine Charge als ihr Etikett: die Kennung, rechts die Beutel, darunter das
+  // Datum, auf das es ankommt (fällig, im Zelt seit, im Archiv angelegt).
   zeile: (b, archiv) => {
-    const rechts = [t('sl.bags', { n: archiv ? b.qty : _chLebend(b) })];
-    if (archiv) rechts.push(fmtDtShort(b.created));
-    else rechts.push(_chStatus(b) === 'FRUITING' ? slAlter(b.created) : _chFaellig(b));
-    return { id: b.batchId, rechts: rechts.join(' · ') };
+    const rechts = t('sl.bags', { n: archiv ? b.qty : _chLebend(b) });
+    if (archiv) return { id: b.batchId, rechts, unten: fmtDtShort(b.created) };
+    if (_chStatus(b) === 'FRUITING') return { id: b.batchId, rechts, unten: slAlter(b.created) };
+    return { id: b.batchId, rechts, unten: _chFaellig(b), spaet: _chTageBis(b) <= 0 };
   },
   zaehler: () => t('ch.count', { n: batches.filter((b) => b.batchType !== 'grain' && !_chImArchiv(b)).length }),
   leer: (archiv, gefiltert) => t(gefiltert ? 'dash.noMatches' : archiv ? 'sl.archiveEmpty' : 'dash.noBatches'),
@@ -12433,6 +13135,8 @@ function renderBatches() {
   renderBatchAttentionBanner();
   slRender(SL_CHARGEN);
 }
+// Über die Breite, ab der die offene Sorte neben der Liste steht: neu zeichnen.
+if (_slFenster()) _slFenster().addEventListener('change', () => renderBatches());
 
 // ── Körnerbrut ──
 // Die Gläser je Sorte, auf derselben Liste: was fertig ist und was noch wächst,
@@ -33210,7 +33914,7 @@ function initEventListeners() {
   // bnId.slice(3)` is already how the two navigations are paired. Marking from
   // inside it cannot drift, because a bottom-nav entry that is added or removed
   // changes both halves in the same edit.
-  ['bn-work', 'bn-dash', 'bn-batch', 'bn-lab', 'bn-orders'].forEach((bnId) => {
+  ['bn-work', 'bn-batch', 'bn-orders'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());
@@ -33530,6 +34234,7 @@ function initEventListeners() {
     }
   }
   $('dash-batch-tasks').addEventListener('click', dashTaskCardClick);
+  $('wk-an').addEventListener('click', dashTaskCardClick);
   $('wl-close').addEventListener('click', () => document.getElementById('m-worklist').classList.remove('open'));
   $('wl-print').addEventListener('click', printWorkList);
   $('m-worklist').addEventListener('click', function (e) {
@@ -33555,6 +34260,31 @@ function initEventListeners() {
   });
   $('ch-scan').addEventListener('click', slScan);
   $('ch-archiv').addEventListener('click', () => slArchiv(SL_CHARGEN));
+  // The open Sorte as a sheet: Escape closes it, like every surface that lies
+  // over the page, unless a dialog lies over the sheet in turn; and it follows
+  // a finger on its head (sheetDrag).
+  const chSheet = () => document.querySelector('#ch-list.sl-mit-blatt > .sl-grund');
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && chSheet() && !document.querySelector('.modal-bg.open')) slZu(SL_CHARGEN);
+  });
+  sheetDrag($('ch-list'), {
+    grip: '[data-sl-griff]',
+    on: () => !!chSheet(),
+    sheet: () => document.querySelector('#ch-list .sl-inhalt'),
+    scrim: chSheet,
+    close: () => {
+      _slStand(SL_CHARGEN).offen = null;
+      slRender(SL_CHARGEN);
+    }
+  });
+  // "Mehr" is a sheet on a phone as well, and leaves the same way.
+  sheetDrag($('sidebar'), {
+    grip: '.sb-header',
+    on: () => sbIsPhone() && $('sidebar').classList.contains('sb-open'),
+    sheet: () => $('sidebar'),
+    scrim: () => $('sb-overlay'),
+    close: sbClose
+  });
   $('gr-list').addEventListener('click', (e) => slKlick(SL_KOERNER, e));
   $('gr-scan').addEventListener('click', slScan);
   $('gr-archiv').addEventListener('click', () => slArchiv(SL_KOERNER));
@@ -33578,6 +34308,7 @@ function initEventListeners() {
   // delegated rather than carrying inline handlers.
   $('wk-np').addEventListener('click', () => {
     go('lab', 'n-lab');
+    openStab('lab', 'stock');
     const card = document.getElementById('np-card');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -33722,6 +34453,9 @@ function initEventListeners() {
   $('harvest-q').addEventListener('input', renderHarvests);
 
   // Lab
+  $('st-lab-stock').addEventListener('click', () => {
+    openStab('lab', 'stock');
+  });
   $('st-lab-cultures').addEventListener('click', () => {
     openStab('lab', 'cultures');
   });
@@ -34182,10 +34916,17 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
 
+  // The scanner's place on a phone is the bottom bar (#bn-scan). It is the same
+  // door as the floating button a tablet keeps, so it knocks on that one: what
+  // a scan starts from, and what it resumes, is decided in one handler.
+  const barScan = document.getElementById('bn-scan');
+  if (barScan && fab) barScan.addEventListener('click', () => fab.click());
+
   // Back rows for the sub-tab strips. Here rather than in initEventListeners()
   // for the same reason as the FAB above: this inserts elements, and doing that
   // once the document is settled keeps it off the critical path.
   stabDrillInit();
+  sbSubInit();
   gsInit();
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...
@@ -34839,13 +35580,12 @@ window.addEventListener('appinstalled', () => {
   wkInstallRender();
 });
 
-// Die Reihenfolge der Kacheln stellt jeder selbst ein. Wer jeden Tag erntet,
-// will Ernte oben, wer im Labor steht, Labor. Gespeichert am Benutzer auf dem
-// Server (/api/auth/me bringt sie mit, /api/me/tile-order schreibt sie), damit
-// sie auf jedem Telefon gilt, auf dem man sich anmeldet; dazu eine Kopie auf
-// dem Gerät für den Start ohne Netz. Umsortiert wird mit ↑/↓ in einer Liste statt mit
-// Ziehen — Ziehen auf dem Telefon kämpft mit dem Scrollen, und ein Knopf in
-// einer Kachel ginge nicht, die Kachel ist selbst einer.
+// Die Reihenfolge der Arbeitsgänge in der Hand. Sie steht fest: was täglich
+// anfällt zuerst, Kontamination zuletzt, alle sieben auf einem Schirm. Wer sie
+// sich früher selbst umgestellt hat, behält seine Reihenfolge: sie liegt am
+// Benutzer auf dem Server (/api/auth/me bringt sie mit) und als Kopie auf dem
+// Gerät für den Start ohne Netz. Den Schalter dafür gibt es auf der Startseite
+// nicht mehr; /api/me/tile-order nimmt weiterhin eine Reihenfolge an.
 const WK_TILES = {
   move: 'work.move',
   harvest: 'work.harvest',
@@ -34911,71 +35651,8 @@ function applyWkTileOrder() {
     if (el) grid.appendChild(el);
   }
 }
-function renderWkOrderList() {
-  const list = document.getElementById('wk-order-list');
-  if (!list) return;
-  const order = wkTileOrder();
-  list.innerHTML = order
-    .map(
-      (id, i) =>
-        '<li class="wk-order-row"><span class="wk-order-name">' +
-        esc(t(WK_TILES[id])) +
-        '</span><button type="button" class="btn btn-sm" data-wk-order="' +
-        id +
-        '" data-dir="-1" aria-label="' +
-        esc(t('work.orderUp', { name: t(WK_TILES[id]) })) +
-        '"' +
-        (i === 0 ? ' disabled' : '') +
-        '>↑</button><button type="button" class="btn btn-sm" data-wk-order="' +
-        id +
-        '" data-dir="1" aria-label="' +
-        esc(t('work.orderDown', { name: t(WK_TILES[id]) })) +
-        '"' +
-        (i === order.length - 1 ? ' disabled' : '') +
-        '>↓</button></li>'
-    )
-    .join('');
-}
-function setWkOrderOpen(open) {
-  const panel = document.getElementById('wk-order');
-  const btn = document.getElementById('wk-order-btn');
-  if (!panel || !btn) return;
-  panel.hidden = !open;
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (open) renderWkOrderList();
-}
-function wireWkTileOrder() {
-  const btn = document.getElementById('wk-order-btn');
-  const list = document.getElementById('wk-order-list');
-  if (!btn || !list) return;
-  btn.addEventListener('click', () => setWkOrderOpen(document.getElementById('wk-order').hidden));
-  list.addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-wk-order]');
-    if (!b || b.disabled) return;
-    const order = wkTileOrder();
-    const i = order.indexOf(b.dataset.wkOrder);
-    const j = i + Number(b.dataset.dir);
-    if (i < 0 || j < 0 || j >= order.length) return;
-    [order[i], order[j]] = [order[j], order[i]];
-    saveWkTileOrder(order);
-    applyWkTileOrder();
-    renderWkOrderList();
-    // Den Fokus beim selben Pfeil der verschobenen Kachel lassen, damit man
-    // mehrmals hintereinander tippen kann.
-    const again = list.querySelector('[data-wk-order="' + order[j] + '"][data-dir="' + b.dataset.dir + '"]');
-    if (again && !again.disabled) again.focus();
-  });
-  document.getElementById('wk-order-reset').addEventListener('click', () => {
-    saveWkTileOrder(WK_TILE_DEFAULT.slice());
-    applyWkTileOrder();
-    renderWkOrderList();
-  });
-  document.getElementById('wk-order-done').addEventListener('click', () => setWkOrderOpen(false));
-  applyWkTileOrder();
-}
-
 (function wireWorkSteps() {
-  wireWkTileOrder();
+  applyWkTileOrder();
   const tiles = [
     ['wk-t-lab', msQuickLaborNew],
     ['wk-t-grain', wkOpenGrain],

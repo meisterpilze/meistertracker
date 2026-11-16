@@ -72,6 +72,8 @@ function welt({ cultures = [], batches = [], status = {}, beutel = {}, kg = {}, 
      const renderBatchAttentionBanner = () => {};
      const openCultureSheet = (c) => geoeffnet.push('kultur:' + c.id);
      const openChargeSheet = (b) => geoeffnet.push('charge:' + b.batchId);
+     const openMoveBatchModal = (id) => geoeffnet.push('umzug:' + id);
+     const openNote = (id) => geoeffnet.push('notiz:' + id);
      const scan = {};
      const updateSD = () => {};
      const openCamScan = () => geoeffnet.push('kamera');
@@ -223,17 +225,64 @@ describe('Sortenliste: Chargen', () => {
     assert.ok(h.indexOf('stage.incubation') < h.indexOf('stage.fruiting'));
     assert.ok(h.indexOf('TA-101026-01') < h.indexOf('TA-141026-01'), 'überfällig vor heute');
     assert.ok(h.indexOf('TA-141026-01') < h.indexOf('TA-221026-01'), 'heute vor später');
-    assert.match(h, /data-sl-id="TA-101026-01"[^>]*>.*sl\.bags\{"n":4\} · sl\.overdue\{"n":4\}/);
-    assert.match(h, /data-sl-id="TA-141026-01"[^>]*>.*sl\.bags\{"n":12\} · sl\.dueToday/);
+    // Eine Charge ist ein Etikett: die Beutel rechts, das Datum darunter.
+    const unten = '<\\/span><span class="sl-u">';
+    assert.match(
+      h,
+      new RegExp('data-sl-id="TA-101026-01"[^>]*>.*sl\\.bags\\{"n":4\\}' + unten + 'sl\\.overdue\\{"n":4\\}')
+    );
+    assert.match(h, new RegExp('data-sl-id="TA-141026-01"[^>]*>.*sl\\.bags\\{"n":12\\}' + unten + 'sl\\.dueToday'));
     assert.match(h, /data-sl-id="TA-221026-01"[^>]*>.*sl\.due\{"date":"05\.11\."\}/);
-    assert.match(h, /data-sl-id="TA-051026-01"[^>]*>.*sl\.bags\{"n":15\} · sl\.weeks\{"n":3\}/, 'im Zelt: das Alter');
+    assert.match(
+      h,
+      new RegExp('data-sl-id="TA-051026-01"[^>]*>.*sl\\.bags\\{"n":15\\}' + unten + 'sl\\.weeks\\{"n":3\\}'),
+      'im Zelt: das Alter'
+    );
+    assert.match(h, /data-sl-id="TA-101026-01"[^>]*data-spaet="1"/, 'überfällig ist markiert');
     assert.doesNotMatch(h, /TA-010926-01/, 'fertig liegt im Archiv');
   });
 
-  it('eine Charge antippen öffnet ihr Fenster', () => {
+  it('die fälligste Charge der offenen Sorte ist gewählt, ein Tipp wählt eine andere', () => {
     const w = welt({ batches: CHARGEN, status: STATUS, beutel: BEUTEL });
+    w.klick('ch', 'sl-sorte', 'id:1');
+    assert.match(w.html('ch'), /data-sl-id="TA-101026-01"[^>]*aria-pressed="true"/);
+    assert.match(w.html('ch'), /data-sl-id="TA-141026-01"[^>]*aria-pressed="false"/);
     w.klick('ch', 'sl-id', 'TA-141026-01');
-    assert.deepEqual(w.geoeffnet, ['charge:TA-141026-01']);
+    assert.deepEqual(w.geoeffnet, [], 'der Tipp öffnet kein Fenster mehr');
+    assert.match(w.html('ch'), /data-sl-id="TA-141026-01"[^>]*aria-pressed="true"/);
+    assert.match(w.html('ch'), /data-sl-id="TA-101026-01"[^>]*aria-pressed="false"/);
+  });
+
+  it('die drei Knöpfe darunter gelten der gewählten Charge: umziehen, ihr Fenster, ihre Notiz', () => {
+    const w = welt({ batches: CHARGEN, status: STATUS, beutel: BEUTEL });
+    w.klick('ch', 'sl-sorte', 'id:1');
+    assert.match(
+      w.html('ch'),
+      /class="sl-fuss">.*data-sl-tun="move">work\.move<.*data-sl-tun="bags">ch\.bagsBtn<.*data-sl-tun="note">ch\.noteBtn</
+    );
+    w.klick('ch', 'sl-tun', 'move');
+    w.klick('ch', 'sl-id', 'TA-221026-01');
+    w.klick('ch', 'sl-tun', 'bags');
+    w.klick('ch', 'sl-tun', 'note');
+    assert.deepEqual(w.geoeffnet, ['umzug:TA-101026-01', 'charge:TA-221026-01', 'notiz:TA-221026-01']);
+  });
+
+  it('die offene Sorte lässt sich zumachen, und liegt als Blatt über einem Grund, der das auch tut', () => {
+    const w = welt({ batches: CHARGEN, status: STATUS, beutel: BEUTEL });
+    w.klick('ch', 'sl-sorte', 'id:1');
+    assert.match(w.html('ch'), /class="sl-zu" data-sl-zu/);
+    assert.match(w.html('ch'), /<div class="sl-grund" data-sl-zu><\/div>$/);
+    w.klick('ch', 'sl-zu', '');
+    assert.equal(zeilen(w.html('ch')), 0);
+    assert.doesNotMatch(w.html('ch'), /sl-grund/);
+  });
+
+  it('die Kulturbibliothek bleibt, wie sie war: ein Tipp öffnet das Fenster, kein Blatt, keine Knöpfe', () => {
+    const w = welt({ cultures: [k('PD-TA-011026-01', 'PD', 1, vor(3))] });
+    w.klick('kb', 'sl-sorte', 'id:1');
+    assert.doesNotMatch(w.html('kb'), /sl-fuss|sl-grund|sl-zu|aria-pressed/);
+    w.klick('kb', 'sl-id', 'PD-TA-011026-01');
+    assert.deepEqual(w.geoeffnet, ['kultur:PD-TA-011026-01']);
   });
 
   it('der Filter vom Dashboard zeigt nur, was er meint, und alles davon offen', () => {
@@ -246,6 +295,11 @@ describe('Sortenliste: Chargen', () => {
     w.renderBatches();
     assert.equal(zeilen(w.html('ch')), 1);
     assert.match(w.html('ch'), /data-sl-id="TA-101026-01"/);
+    // Alles steht offen in der Liste: dann öffnet der Tipp das Fenster, und
+    // unter den Sorten stehen keine Knöpfe, die für eine andere gelten könnten.
+    assert.doesNotMatch(w.html('ch'), /sl-fuss|sl-grund|aria-pressed/);
+    w.klick('ch', 'sl-id', 'TA-101026-01');
+    assert.deepEqual(w.geoeffnet, ['charge:TA-101026-01']);
     const leer = welt({ batches: CHARGEN, status: STATUS, filter: { pred: () => false, label: 'x' } });
     leer.renderBatches();
     assert.match(leer.html('ch'), /dash\.noMatches/);
@@ -256,6 +310,10 @@ describe('Sortenliste: Chargen', () => {
     w.slArchiv(w.liste.ch);
     w.klick('ch', 'sl-sorte', 'id:1');
     assert.match(w.html('ch'), /sl\.st\.done.*data-sl-id="TA-010926-01"[^>]*>.*sl\.bags\{"n":10\}/);
+    // Im Archiv gibt es nichts mehr zu tun: keine Knöpfe, der Tipp öffnet das Fenster.
+    assert.doesNotMatch(w.html('ch'), /sl-fuss|aria-pressed/);
+    w.klick('ch', 'sl-id', 'TA-010926-01');
+    assert.deepEqual(w.geoeffnet, ['charge:TA-010926-01']);
   });
 });
 
@@ -321,6 +379,14 @@ describe('Sortenliste: ein System, nicht drei', () => {
       assert.ok(block.indexOf('id="' + id + '-archiv"') > 0, sp + ': kein Archiv');
       assert.doesNotMatch(block, /<table|type="search"/, sp + ': Tabelle oder Suche übrig');
     }
+  });
+
+  it('über den Chargen steht eine Zeile Knöpfe und kein Hinweissatz', () => {
+    const a = HTML.indexOf('id="sp-batch-list"');
+    const block = HTML.slice(a, HTML.indexOf('<div class="sp', a + 10));
+    const reihe = block.slice(block.indexOf('class="sl-tools"'), block.indexOf('class="sl-legende"'));
+    assert.match(reihe, /id="btn-batch-new"[\s\S]*id="ch-scan"[\s\S]*id="ch-archiv"/, 'Neue Charge, Scannen, Archiv');
+    assert.doesNotMatch(block, /lb-tap|ch\.help/, 'der Hinweissatz steht wieder über der Liste');
   });
 
   it('der Scan-Knopf öffnet die Kamera ohne eine Aktion davor', () => {
