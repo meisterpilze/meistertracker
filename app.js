@@ -31029,6 +31029,46 @@ function handleCalendarDrop(type, id, newDateStr) {
 }
 
 // ── Time-based Drag & Resize for Week/Day views ──
+// A day and a clock time as minutes, and back. Counted in UTC, so a change of
+// daylight saving time does not shift a wall-clock time.
+function calMinutes(date, time) {
+  return Date.parse(date + 'T' + time + 'Z') / 60000;
+}
+function calDayTime(minutes) {
+  const iso = new Date(minutes * 60000).toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
+
+// The end an event is saved with, never before its start. An end day before
+// the start day is dropped, and an end time that does not come after the start
+// time on the same day becomes an hour after it, as on a new event.
+function calEventEnd(ev) {
+  let { endDate, endTime } = ev;
+  if (!ev.startDate) return { endDate, endTime };
+  if (endDate && endDate < ev.startDate) endDate = null;
+  if (ev.startTime && endTime && (!endDate || endDate === ev.startDate) && endTime <= ev.startTime) {
+    const end = calDayTime(calMinutes(ev.startDate, ev.startTime) + 60);
+    endTime = end.time;
+    if (end.date !== ev.startDate) endDate = end.date;
+  }
+  return { endDate, endTime };
+}
+
+// Where a timed event ends once a drag has moved its start to newDate at
+// newStart: as long after it as the event ran before, or an hour when its end
+// did not come after its start. Without an end day it stays on its day and
+// ends by 23:59; with one, the end day moves along.
+function calMovedEnd(ev, newDate, newStart) {
+  let length = ev.endTime
+    ? calMinutes(ev.endDate || ev.startDate, ev.endTime) - calMinutes(ev.startDate, ev.startTime)
+    : 0;
+  if (!(length > 0)) length = 60;
+  let end = calMinutes(newDate, newStart) + length;
+  if (!ev.endDate) end = Math.min(end, calMinutes(newDate, '23:59'));
+  const at = calDayTime(end);
+  return { endDate: ev.endDate ? at.date : null, endTime: at.time };
+}
+
 function pxToTime(px) {
   const totalMin = (px / 48) * 60;
   let h = CAL_HOURS_START + Math.floor(totalMin / 60);
@@ -31045,17 +31085,19 @@ function snapPx(px) {
   return Math.round(px / 12) * 12;
 }
 
-function updateEventTime(id, newStart, newEnd, newDate) {
+function updateEventTime(id, newStart, newEnd, newDate, newEndDate) {
   const ev = calendarEvents.find((x) => x.id === id);
   if (!ev) return;
   if (newStart) ev.startTime = newStart;
   if (newEnd) ev.endTime = newEnd;
   if (newDate) ev.startDate = newDate;
+  if (newEndDate) ev.endDate = newEndDate;
   ev.caldavSynced = null;
   const patch = { caldavSynced: null };
   if (newStart) patch.startTime = newStart;
   if (newEnd) patch.endTime = newEnd;
   if (newDate) patch.startDate = newDate;
+  if (newEndDate) patch.endDate = newEndDate;
   apiPatch('/api/calendar-events/' + encodeURIComponent(id), patch);
   renderCalendar();
   if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
@@ -31100,20 +31142,13 @@ function initEventDrag(el, body, viewType, dayStrs) {
       const newStart = pxToTime(newTop);
       const ce = calendarEvents.find((x) => x.id === evId);
       if (!ce) return;
-      const [osh, osm] = (ce.startTime || '09:00').split(':').map(Number);
-      const [oeh, oem] = (ce.endTime || '10:00').split(':').map(Number);
-      const durMin = oeh * 60 + oem - (osh * 60 + osm);
-      const [nsh, nsm] = newStart.split(':').map(Number);
-      const endMin = nsh * 60 + nsm + durMin;
-      const neh = Math.min(CAL_HOURS_END, Math.floor(endMin / 60));
-      const nem = endMin % 60;
-      const newEnd = String(neh).padStart(2, '0') + ':' + String(nem).padStart(2, '0');
       let newDate = el.dataset.date;
       if (viewType === 'week' && dayStrs) {
         const newColIdx = parseInt(el.style.gridColumn) - 2;
         if (newColIdx >= 0 && newColIdx < dayStrs.length) newDate = dayStrs[newColIdx];
       }
-      updateEventTime(evId, newStart, newEnd, newDate);
+      const end = calMovedEnd(ce, newDate, newStart);
+      updateEventTime(evId, newStart, end.endTime, newDate, end.endDate);
     };
     const mmh = function (e) {
       onMove(e.clientX, e.clientY);
@@ -31175,8 +31210,10 @@ function initEventResize(el, handle, body, viewType) {
       const newHeight = Math.max(12, parseFloat(el.style.height));
       const topPx = parseFloat(el.style.top);
       const endPx = topPx + newHeight;
-      const newEnd = pxToTime(endPx);
       const newStart = pxToTime(topPx);
+      // pxToTime stops at the last hour row, so an end pulled below the grid
+      // can come back at or before the start.
+      const newEnd = calEventEnd({ startDate: el.dataset.date, startTime: newStart, endTime: pxToTime(endPx) }).endTime;
       updateEventTime(evId, newStart, newEnd, null);
     };
     const mmh = function (e) {
@@ -31931,6 +31968,7 @@ function saveEntryEvent() {
     locationId: locationId,
     pickupCapacity: pickupCapacity
   };
+  Object.assign(ev, calEventEnd(ev));
   // Somebody may already have arranged to turn up for this. Ask before the
   // arrangement changes underneath them — but only when the change is one they
   // would notice: a corrected title is not worth a dialog, a new time is.
