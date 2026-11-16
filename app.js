@@ -11144,7 +11144,7 @@ function _sbRowHtml(s) {
   const cell = (inner, extra) => '<td style="padding:6px 8px 6px 0;' + (extra || '') + '">' + inner + '</td>';
   return (
     '<tr style="border-top:1px solid var(--c-border);cursor:pointer" onclick="openSubstrateInfo(' +
-    JSON.stringify(s.subId).replace(/"/g, '&quot;') +
+    "'" + escJs(s.subId) + "'" +
     ')">' +
     // Als Marke neben der Kennung, nicht als achte Spalte: die Tabelle scrollt
     // auf dem Handy ohnehin seitwärts, und eine Spalte, die meistens leer ist,
@@ -11170,7 +11170,7 @@ function _sbRowHtml(s) {
     // der Weg über die Karte des Ansatzes war zu weit, um es zu tun.
     cell(
       '<button type="button" class="btn-xs" onclick="event.stopPropagation();measureSubstrateRhById(' +
-        JSON.stringify(s.subId).replace(/"/g, '&quot;') +
+        "'" + escJs(s.subId) + "'" +
         ')">' +
         _subRhCell(s) +
         '</button>',

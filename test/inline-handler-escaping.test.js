@@ -51,6 +51,13 @@ describe('app.js: values in inline handlers and bag lists', () => {
     assert.deepEqual(falsch, []);
   });
 
+  it('builds no handler argument by hand-escaping a JSON string', () => {
+    // JSON.stringify(x).replace(/"/g, '&quot;') holds only while x has no
+    // "&quot;" of its own, which decodes back into a quote. escJs has no such
+    // condition.
+    assert.doesNotMatch(APP, /JSON\.stringify\([^)]*\)\.replace\(\/"\/g, '&quot;'\)/);
+  });
+
   it('escapes the bag number in the location chips', () => {
     assert.equal(APP.includes("${bg.id.split('-').pop()}"), false);
     assert.ok(APP.includes("${esc(bg.id.split('-').pop())}"));
