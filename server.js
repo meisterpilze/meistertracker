@@ -485,7 +485,9 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  // The interface typeface, served from lib/ like the other pinned vendor files.
+  '.woff2': 'font/woff2'
 };
 
 // ── P-01: Pre-compressed static assets ─────────────────────────
@@ -995,6 +997,61 @@ function validateTimeOfDay(value, fieldName) {
   if (!value) return null;
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
     return fieldName + ' must be a HH:MM time';
+  }
+  return null;
+}
+// The fields of a calendar event, for POST and PATCH /api/calendar-events
+// alike. Only what is present is checked: which fields a request must carry is
+// the route's business, and a PATCH names just the ones it changes. Times,
+// category and color end up in the week and day views and in the .ics files,
+// so they must have the shape the entry form gives them.
+function validateCalendarEventFields(data) {
+  const vt = validateTypes(data, {
+    title: 'string',
+    description: 'string',
+    startDate: 'string',
+    endDate: 'string',
+    allDay: 'boolean',
+    startTime: 'string',
+    endTime: 'string',
+    category: 'string',
+    color: 'string',
+    recurrence: 'string',
+    recurrenceUntil: 'string',
+    caldavUid: 'string',
+    caldavSynced: 'string'
+  });
+  if (vt) return vt;
+  const vlen = validateLengths(data, { title: 500, description: 10000, caldavUid: 255 });
+  if (vlen) return vlen;
+  for (const f of ['startDate', 'endDate', 'recurrenceUntil', 'caldavSynced']) {
+    const vd = validateDate(data[f], f);
+    if (vd) return vd;
+  }
+  for (const f of ['startTime', 'endTime']) {
+    const vtod = validateTimeOfDay(data[f], f);
+    if (vtod) return vtod;
+  }
+  if (data.category && !/^[a-z][a-z0-9_-]{0,39}$/.test(data.category)) {
+    return 'category must be a short lowercase name';
+  }
+  if (data.color && !/^#[0-9A-Fa-f]{3,8}$/.test(data.color)) return 'color must be a hex color';
+  if (data.caldavUid && /[\r\n]/.test(data.caldavUid)) return 'caldavUid must be a single line';
+  if (data.recurrence != null && !['weekly', 'monthly', 'daily', ''].includes(data.recurrence)) {
+    return 'recurrence must be daily, weekly or monthly';
+  }
+  if (data.assignees != null) {
+    if (!Array.isArray(data.assignees) || data.assignees.some((uid) => !Number.isInteger(uid))) {
+      return 'assignees must be integer user IDs';
+    }
+  }
+  if (data.teamAssignees != null && !Array.isArray(data.teamAssignees)) {
+    return 'teamAssignees must be an array of names';
+  }
+  if (data.exceptionDates != null) {
+    if (!Array.isArray(data.exceptionDates) || data.exceptionDates.some((d) => validateDay(d, 'exceptionDates'))) {
+      return 'exceptionDates must be a list of dates (YYYY-MM-DD)';
+    }
   }
   return null;
 }
@@ -4467,7 +4524,15 @@ function autoSyncCalendarEvent(ev) {
       caldavUid: ev.caldavUid || ev.caldav_uid,
       // Both spellings arrive here: readAll() hands out camelCase, while the
       // PATCH route re-reads the raw row and passes that.
-      locationId: ev.locationId != null ? ev.locationId : ev.location_id
+      locationId: ev.locationId != null ? ev.locationId : ev.location_id,
+      // The series, its exceptions, the SEQUENCE clients compare and the color.
+      // Left out, every edit through PATCH rewrote a recurring event as a
+      // single one, with SEQUENCE 0, in every subscribed calendar.
+      recurrence: ev.recurrence || null,
+      recurrenceUntil: ev.recurrenceUntil || ev.recurrence_until || null,
+      exceptionDates: ev.exceptionDates != null ? ev.exceptionDates : ev.exception_dates,
+      sequence: ev.sequence,
+      color: ev.color
     };
     const aMap = db.getAllCalendarEventAssignees(database);
     normalized.assignees = aMap.get(ev.id) || [];
@@ -13368,39 +13433,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, 'id must be alphanumeric with - _ @ . : (max 200 chars)');
         return;
       }
-      let vd = validateDate(data.startDate, 'startDate');
-      if (vd) {
-        jsonErr(res, 400, vd);
+      const vf = validateCalendarEventFields(data);
+      if (vf) {
+        jsonErr(res, 400, vf);
         return;
       }
-      if (data.endDate) {
-        vd = validateDate(data.endDate, 'endDate');
-        if (vd) {
-          jsonErr(res, 400, vd);
-          return;
-        }
-      }
-      if (Array.isArray(data.assignees)) {
-        for (const uid of data.assignees) {
-          if (typeof uid !== 'number' || !Number.isInteger(uid)) {
-            jsonErr(res, 400, 'assignees must be integer user IDs');
-            return;
-          }
-        }
-      }
-      if (data.recurrence != null && !['weekly', 'monthly', 'daily', ''].includes(data.recurrence)) {
-        jsonErr(res, 400, 'recurrence must be daily, weekly or monthly');
-        return;
-      }
-      if (data.recurrenceUntil) {
-        const vd = validateDate(data.recurrenceUntil, 'recurrenceUntil');
-        if (vd) {
-          jsonErr(res, 400, vd);
-          return;
-        }
-      }
-      if (data.teamAssignees != null && !Array.isArray(data.teamAssignees)) {
-        jsonErr(res, 400, 'teamAssignees must be an array of names');
+      // A new event's caldavUid is the one the server builds for it, or none.
+      // The CalDAV guard looks rows up by UID, so a row must not carry one
+      // that names something else.
+      if (data.caldavUid && data.caldavUid !== 'cev-' + data.id + '@meisterpilze') {
+        jsonErr(res, 400, "caldavUid must be the event's own");
         return;
       }
       try {
@@ -13426,22 +13468,68 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         jsonErr(res, 400, e.message);
         return;
       }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        jsonErr(res, 400, 'Request body must be a JSON object');
+        return;
+      }
+      // The checks a new event gets, for the fields this change names. A title
+      // or a start day can be changed, not emptied.
+      for (const f of ['title', 'startDate']) {
+        if (data[f] !== undefined && !data[f]) {
+          jsonErr(res, 400, 'Missing required field: ' + f);
+          return;
+        }
+      }
+      const vf = validateCalendarEventFields(data);
+      if (vf) {
+        jsonErr(res, 400, vf);
+        return;
+      }
       try {
         // The stored row as well as the body: a PATCH that moves a window
         // usually names no category, and one that sets `category: 'meeting'`
         // takes a published window off the shop without mentioning pickup.
         if (touchesPickupWindow(id, data) && requireAdmin(req, res)) return;
-        // Atomically update the event row + refresh the assignees junction
-        // table so the two can't drift apart on a mid-operation crash.
+        const stored = db.getCalendarEventById(database, id);
+        if (!stored) {
+          jsonErr(res, 404, 'event not found');
+          return;
+        }
+        // The UID the event already has, or the one the server builds for it.
+        // The app writes back what the CalDAV push answered, which is one of
+        // the two.
+        if (
+          data.caldavUid &&
+          data.caldavUid !== stored.caldav_uid &&
+          data.caldavUid !== 'cev-' + id + '@meisterpilze'
+        ) {
+          jsonErr(res, 400, "caldavUid must be the event's own");
+          return;
+        }
+        // The event row and its assignees together or not at all. node:sqlite
+        // has no transaction() helper; this called one that did not exist, so
+        // every edit failed with a TypeError before anything was written.
         const effectiveAssignees = deriveEffectiveAssignees(data);
-        const prevAssignees = db.getCalendarEventAssignees(database, id);
-        const applyUpdate = database.transaction(() => {
+        let prevAssignees = db.getCalendarEventAssignees(database, id);
+        // The entry form creates an event with `assignees: []` beside its
+        // teamAssignees, so its people stand only in team_assignees until the
+        // first edit fills the table. They are not new to the event then, and
+        // are not told they were just assigned.
+        if (!prevAssignees.length && stored.team_assignees) {
+          let namen = [];
+          try {
+            namen = JSON.parse(stored.team_assignees);
+          } catch {
+            /* not a list: nobody was on it */
+          }
+          prevAssignees = resolveUsernamesToIds(Array.isArray(namen) ? namen : []);
+        }
+        db.withSavepoint(database, 'mt_calendar_event', () => {
           db.updateCalendarEvent(database, id, data);
           if (effectiveAssignees) {
             db.setCalendarEventAssignees(database, id, effectiveAssignees);
           }
         });
-        applyUpdate();
         let newlyAdded = null;
         if (effectiveAssignees) {
           const prevSet = new Set(prevAssignees);

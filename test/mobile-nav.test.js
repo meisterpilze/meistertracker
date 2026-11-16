@@ -1,5 +1,5 @@
 'use strict';
-// The sub-tab drill-down, checked as text — same limit and same reason as
+// The phone's navigation, checked as text — same limit and same reason as
 // test/mobile-tokens.test.js: no browser, no jsdom, so these prove the rules are
 // written, not that they render. The device pass is what proves the second one.
 //
@@ -152,6 +152,59 @@ describe('the sub-tab drill-down', () => {
   });
 });
 
+describe('the views of a page, in the navigation', () => {
+  // A strip of tabs stood across the top of every page with more than one view,
+  // and on a phone an index with a back row. The views are entries of the
+  // navigation now, under the page they belong to and only while it is open.
+  // Four places have to agree for that to work, and none of them throws alone.
+  const INIT = APP.match(/function sbSubInit\(\) \{[\s\S]*?\n\}/);
+
+  it('builds the list from the strips in the markup, not from a table of its own', () => {
+    assert.ok(INIT, 'sbSubInit() is gone');
+    assert.match(INIT[0], /querySelectorAll\('\.page > \.stabs'\)/);
+    assert.match(APP, /\bsbSubInit\(\);/, 'sbSubInit() is never called');
+    // One click, one loader: an entry forwards to its tab.
+    assert.match(INIT[0], /getElementById\('st-' \+ btn\.id\.slice\(3\)\)/);
+    assert.match(INIT[0], /stab\.click\(\)/);
+  });
+
+  it('leaves Admin its own list', () => {
+    assert.match(INIT[0], /page === 'settings'/, 'Admin would get a second list beside .sb-admin-nav');
+    const drill = APP.match(/function stabDrillInit\(\) \{[\s\S]*?\n\}/)[0];
+    assert.match(drill, /page\.id !== 'p-settings'/, 'a page whose views are in the navigation got a back row as well');
+  });
+
+  it('shows the list only under the page that is open, and takes the strip off the page', () => {
+    assert.match(CSS, /\n\.sb-sub \{\n {2}display: none;\n\}/);
+    assert.match(CSS, /\.sb-btn\.active \+ \.sb-sub \{\s*display: block;/);
+    assert.match(CSS, /\.stabs\.stabs-nav \{\s*display: none;/);
+    assert.match(INIT[0], /classList\.add\('stabs-nav'\)/, 'nothing marks a strip as carried by the navigation');
+  });
+
+  it('gives the strip back when the sidebar is folded to its icons', () => {
+    // A column of icons cannot carry a list, so the page shows its strip again.
+    assert.match(CSS, /body\.sb-is-collapsed \.stabs\.stabs-nav \{\s*display: flex;/);
+  });
+
+  it('keeps the mark on the view that is showing', () => {
+    const open = APP.match(/function openStab\(page, sub\) \{[\s\S]*?\n\}/)[0];
+    assert.match(
+      open,
+      /\.sb-sub\[data-page="' \+ page \+ '"\] \.sb-btn/,
+      'openStab() no longer clears the list under the page'
+    );
+    // go() clears every entry of the list, the views included, and has to put
+    // the mark back.
+    const go = APP.match(/function go\(page, btnId\) \{[\s\S]*?\n\}/)[0];
+    assert.match(go, /getElementById\('sn-' \+ shown\.id\.slice\(3\)\)/);
+  });
+
+  it('keeps the open page in the sheet on a phone, with its views under its name', () => {
+    const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+    assert.match(phone, /\.sb-btn\.sb-in-bottom-nav\.active:has\(\+ \.sb-sub\) \{\s*display: flex;/);
+  });
+});
+
 describe('the drawer on a phone', () => {
   // Every `@media (... min-width ...)` block body, so "is this rule desktop-only"
   // is answerable without depending on where it sits in the file.
@@ -243,16 +296,38 @@ describe('the drawer and the bottom bar', () => {
     );
   });
 
-  it('puts Bestellungen in the bar, where Kalender was', () => {
-    // Orders are opened many times a day and the drawer was the only way in;
-    // the calendar is barely used and stays in the drawer.
+  it('has three places, the door to the rest, and the scanner', () => {
+    // The bar is the three views the work happens in. Orders came into it when
+    // the drawer was the only way in and they were opened many times a day;
+    // Dashboard and Labor left it for the sheet behind "Mehr", which is one tap
+    // from anywhere. The scanner used to float over the page and cover what
+    // stood in that corner; it is the bar's last button now.
     const bar = HTML.match(/<nav class="bottom-nav[\s\S]*?<\/nav>/)[0];
     const pages = [...bar.matchAll(/data-page="([a-z]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(pages, ['work', 'dash', 'batch', 'lab', 'orders']);
+    assert.deepEqual(pages, ['work', 'batch', 'orders']);
     assert.match(WIRING[0], /'bn-orders'/, 'the orders button is not wired to the drawer entry');
     assert.match(HTML, /id="n-orders" data-page="orders"/, 'the drawer entry the bar clicks is gone');
-    // Its own short label, like Arbeitsgänge: "Bestellungen" does not fit at 320px.
-    assert.match(bar, /data-i18n="nav\.ordersBar"/);
+    // Short names of their own: "Arbeitsgänge" and "Bestellungen" do not fit a
+    // quarter of a 320px bar.
+    assert.match(bar, /data-i18n="nav\.workBar"/);
+    assert.match(bar, /data-i18n="nav\.packBar"/);
+    // "Mehr" is the button that opens the navigation: the same id the drawer's
+    // way out hands the focus back to.
+    assert.match(bar, /id="tgl-17"[\s\S]*?data-i18n="nav\.more"/, '"Mehr" is not the button that opens the navigation');
+    assert.match(APP, /\$\('tgl-17'\)\.addEventListener\('click', toggleSidebar\)/);
+    // The scanner in the bar knocks on the one handler that decides what a scan
+    // starts from, instead of carrying a second copy of it.
+    assert.match(bar, /id="bn-scan"/, 'the bar has no scanner');
+    assert.match(APP, /barScan\.addEventListener\('click', \(\) => fab\.click\(\)\)/);
+  });
+
+  it('floats no scan button over a page that has the bar', () => {
+    const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+    assert.match(
+      phone,
+      /\.cam-fab \{\s*display: none;/,
+      'a phone shows the scanner twice: in the bar and over the page'
+    );
   });
 
   it('marks a group heading whose entries have all gone', () => {
@@ -407,7 +482,7 @@ describe('the mobile topbar title', () => {
     assert.match(HTML, /id="topbar-title"/, 'the mobile topbar has no title element');
     assert.match(
       HTML,
-      /id="topbar-title" data-i18n="nav\.[a-zA-Z]+"/,
+      /id="topbar-title" data-i18n="[a-z]+\.[a-zA-Z]+"/,
       'the title starts without a data-i18n key, so a language switch would leave the first page name in the old language'
     );
   });
@@ -416,18 +491,31 @@ describe('the mobile topbar title', () => {
     // A second table of page names is the thing this rules out: it looks right
     // the day it is written and goes stale the first time a page is renamed in
     // only one of the two places.
-    const fn = APP.match(/function go\(page, btnId\) \{[\s\S]*?\n\}/)[0];
-    assert.match(fn, /getElementById\('topbar-title'\)/, 'go() no longer sets the topbar title');
+    const go = APP.match(/function go\(page, btnId\) \{[\s\S]*?\n\}/)[0];
+    assert.match(go, /setPageTitle\(page, navBtn\)/, 'go() no longer names the page');
+    const fn = APP.match(/function setPageTitle\(page, navBtn\) \{[\s\S]*?\n\}/)[0];
+    assert.match(fn, /'topbar-title'/, 'the phone bar is no longer written');
+    assert.match(fn, /'page-head-title'/, "the desk's page head is no longer written");
     assert.match(
       fn,
-      /navBtn\.querySelector\('\[data-i18n\]'\)/,
+      /nav\.querySelector\('\[data-i18n\]'\)/,
       'the title is no longer derived from the nav entry — whatever names it can now drift from the sidebar'
     );
     assert.match(
       fn,
-      /title\.dataset\.i18n = label\.dataset\.i18n/,
+      /el\.dataset\.i18n = key/,
       'the key does not travel with the text, so translatePage() cannot reach it'
     );
+  });
+
+  it('names the view inside a page that has several', () => {
+    // The views of a page are entries of the navigation (sbSubInit). Inside one
+    // that is not the view the page opens on, the top of the page says its name.
+    const fn = APP.match(/function setPageTitle\(page, navBtn\) \{[\s\S]*?\n\}/)[0];
+    assert.match(fn, /stab\.id !== strip\.dataset\.stabDefault/);
+    assert.match(APP.match(/function openStab\(page, sub\) \{[\s\S]*?\n\}/)[0], /setPageTitle\(page\)/);
+    // Bestellungen opens on the packing board and is named for it.
+    assert.match(HTML, /id="st-orders-pack"[^>]*data-page-title/);
   });
 
   // A different `max-width` block from PHONE_BLOCK: the title's rules sit with
