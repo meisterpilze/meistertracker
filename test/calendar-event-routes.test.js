@@ -62,6 +62,11 @@ describe('calendar-event routes', () => {
     });
   const zeile = (id) => r.db.getCalendarEventById(r.database, id);
   const zugeteilt = (id) => r.db.getCalendarEventAssignees(r.database, id);
+  const meldungen = (id) =>
+    r.database
+      .prepare("SELECT user_id FROM notifications WHERE type='calendar_assignment' AND link_id=?")
+      .all(id)
+      .map((n) => n.user_id);
 
   it('saves an edit', async () => {
     termin('cev-bearbeiten');
@@ -223,31 +228,42 @@ describe('calendar-event routes', () => {
     assert.equal((await r.anfrage('PATCH', '/api/calendar-events/cev-von-aussen', zurueck, MAX)).status, 200);
   });
 
-  it('does not announce the people an event already had on its first edit', async () => {
-    // The entry form sends assignees: [] beside teamAssignees, so a new event's
-    // people stand only in team_assignees until an edit fills the table.
+  it('gives a new event the people the entry form names, and tells them', async () => {
+    // The entry form sends assignees: [] beside teamAssignees. The empty list
+    // used to win, so a new event had nobody on it and nobody was told.
     const neu = {
-      id: 'cev-team',
+      id: 'cev-team-neu',
       title: 'Teamsitzung',
       startDate: '2026-11-23',
       assignees: [],
       teamAssignees: ['max']
     };
     assert.equal((await r.anfrage('POST', '/api/calendar-events', neu, ERIKA)).status, 200);
-    const meldungen = () =>
-      r.database
-        .prepare("SELECT user_id FROM notifications WHERE type='calendar_assignment' AND link_id='cev-team'")
-        .all()
-        .map((n) => n.user_id);
+    assert.deepEqual(zugeteilt('cev-team-neu'), [7]);
+    assert.deepEqual(meldungen('cev-team-neu'), [7]);
+    // Explicit ids still win, and an empty list on its own still clears.
+    const pfad = '/api/calendar-events/cev-team-neu';
+    assert.equal((await r.anfrage('PATCH', pfad, { assignees: [1], teamAssignees: ['max'] }, ERIKA)).status, 200);
+    assert.deepEqual(zugeteilt('cev-team-neu'), [1]);
+    assert.equal((await r.anfrage('PATCH', pfad, { assignees: [] }, ERIKA)).status, 200);
+    assert.deepEqual(zugeteilt('cev-team-neu'), []);
+  });
+
+  it('does not announce the people an event already had on its first edit', async () => {
+    // An event created while the entry form's assignees: [] still outweighed
+    // its teamAssignees has its people only in team_assignees until an edit
+    // fills the table.
+    termin('cev-team', { teamAssignees: ['max'] });
+    assert.deepEqual(zugeteilt('cev-team'), []);
     const pfad = '/api/calendar-events/cev-team';
     assert.equal(
       (await r.anfrage('PATCH', pfad, { title: 'Teamsitzung, neu', teamAssignees: ['max'] }, ERIKA)).status,
       200
     );
     assert.deepEqual(zugeteilt('cev-team'), [7]);
-    assert.deepEqual(meldungen(), [], 'max was on it already');
+    assert.deepEqual(meldungen('cev-team'), [], 'max was on it already');
     assert.equal((await r.anfrage('PATCH', pfad, { teamAssignees: ['max', 'erika'] }, ERIKA)).status, 200);
-    assert.deepEqual(meldungen(), [1], 'erika is new');
+    assert.deepEqual(meldungen('cev-team'), [1], 'erika is new');
   });
 });
 

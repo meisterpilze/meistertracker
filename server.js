@@ -4784,11 +4784,14 @@ function resolveUsernamesToIds(names) {
 // Single source of truth: given a calendar-event request body, return the
 // user IDs that should be written to calendar_event_assignees. Prefer explicit
 // `assignees` (already-resolved IDs); fall back to deriving them from
-// `teamAssignees` names. Returns null if neither field is present so callers
-// can distinguish "not provided" from "empty array".
+// `teamAssignees` names. An empty `assignees` does not outweigh the names:
+// the entry form sends `assignees: []` beside them with every new event.
+// Returns null if neither field is present so callers can distinguish
+// "not provided" from "empty array".
 function deriveEffectiveAssignees(data) {
-  if (Array.isArray(data.assignees)) return data.assignees;
+  if (Array.isArray(data.assignees) && data.assignees.length) return data.assignees;
   if (Array.isArray(data.teamAssignees)) return resolveUsernamesToIds(data.teamAssignees);
+  if (Array.isArray(data.assignees)) return data.assignees;
   return null;
 }
 
@@ -13769,10 +13772,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         // every edit failed with a TypeError before anything was written.
         const effectiveAssignees = deriveEffectiveAssignees(data);
         let prevAssignees = db.getCalendarEventAssignees(database, id);
-        // The entry form creates an event with `assignees: []` beside its
-        // teamAssignees, so its people stand only in team_assignees until the
-        // first edit fills the table. They are not new to the event then, and
-        // are not told they were just assigned.
+        // An event created while POST still let the entry form's
+        // `assignees: []` outweigh its teamAssignees has its people only in
+        // team_assignees until the first edit fills the table. They are not
+        // new to the event then, and are not told they were just assigned.
         if (!prevAssignees.length && stored.team_assignees) {
           let namen = [];
           try {
