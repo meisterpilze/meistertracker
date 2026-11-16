@@ -2,6 +2,55 @@
    Meistertracker — UI Redesign
    ═══════════════════════════════════════════════════════════════ */
 
+/* -- Typeface --
+   Atkinson Hyperlegible Next for everything a person reads, and its Mono for
+   what is printed on a label: batch codes, order numbers, figures. Both were
+   drawn so that 0 and O, 1 and l, B and 8 cannot be mistaken for each other,
+   which is the one thing a code read at arm's length must not allow. Variable
+   files, Latin and Latin Extended, served from lib/ (SIL Open Font License,
+   see NOTICE). `swap`, so a slow first load shows text in the system face and
+   never an empty screen. */
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/lib/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/lib/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/lib/atkinson-hyperlegible-mono-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/lib/atkinson-hyperlegible-mono-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* -- CSS Variables -- */
 :root {
   /* One step down the same green, so a white label on it can be read.
@@ -24,13 +73,45 @@
   --c-primary: #15803d;
   --c-primary-light: #f0fdf4;
   --c-primary-hover: #166534;
-  --c-bg: #f8fafc;
+  /* One neutral ramp, grey with no hue of its own. The page, the surfaces, the
+     hairlines and the three text roles all come from it, so the only colours
+     left on a screen are the ones that mean something: the brand green on the
+     action and the selection, the stage colours, a warning.
+
+     These were the slate steps of a utility palette, which read faintly blue
+     next to the green. --c-text-sec is the tone for sentences a person is
+     meant to read, so it stays close to the ink; --c-text-muted is for short
+     labels and meta only, and still clears 4.5:1 on --c-bg (4.9). */
+  --c-bg: #f1f2f0;
   --c-surface: #ffffff;
-  --c-border: #e2e8f0;
-  --c-border-light: #f1f5f9;
-  --c-text: #1e293b;
-  --c-text-sec: #475569;
-  --c-text-muted: #64748b;
+  --c-border: #dcdeda;
+  --c-border-light: #eceeea;
+  --c-text: #141414;
+  --c-text-sec: #3d3d3d;
+  --c-text-muted: #666666;
+  /* The work surface and what lies on it. The page is the cool grey of a steel
+     bench (--c-bg), and everything a person works with is a white label on it
+     (--c-surface). --c-well is the step below the bench: the pressed state of
+     a row, the empty track of a bar. */
+  --c-well: #e6e8e4;
+  --c-line-strong: #b9bbb6;
+  /* The two faces (see @font-face above). */
+  --ff: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ff-mono: 'Atkinson Hyperlegible Mono', ui-monospace, 'Cascadia Code', monospace;
+  /* The production chain. One colour per stage and only for the stage: grain
+     ochre, mycelium blue-grey, cap brown. None of them is green, because green
+     is the colour of the thing to press. They paint the stops of the chain on
+     the start page and the stage bar of a Sorte, and nothing else. */
+  --korn: #b88a2e;
+  --myzel: #5b7c96;
+  --hut: #a65f47;
+  /* Grain as a ground: behind the kilograms in front of a stage bar (18% of
+     the ochre on white) and as the swatch in the bar's legend (40%). Written
+     out, because color-mix() is younger than some of the lab's tablets. */
+  --korn-hell: #f2ead9;
+  --korn-mittel: #e3d0ab;
+  /* A row that is open or under the pointer: a breath darker than the label. */
+  --c-row: #f6f7f5;
   /* Two names this sheet has always used and never defined.
 
      --c-accent arrived with the dashboard summary strip and spread to fifteen
@@ -117,8 +198,16 @@
   --sidebar-collapsed: 64px;
   --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+  /* Motion. Three curves and two durations for the whole sheet, so a press
+     feels the same on every control. The built-in `ease-out` is too gentle to
+     read as a response; these are the stronger standard forms of it. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 140ms;
+  --dur-ui: 180ms;
 
   /* ── SIZE / SPACE / TYPE ─────────────────────────────────────────────────
      These values are the PHONE. The desktop is the override below.
@@ -265,14 +354,14 @@
     --pad-page: 24px;
     --pad-card: 20px;
     --pad-btn: 9px 16px;
-    --pad-stab: 7px 16px;
-    --pad-sb: 9px 12px;
+    --pad-stab: 8px 12px;
+    --pad-sb: 7px 12px;
     --pad-modal: 28px;
     /* No bottom nav here, so the chrome sits where it always did. Both FABs are
        display:none on a desktop anyway; only .undo-bar reads this off-phone,
        and its own rule keeps it out of the way. */
     --fs-tile: 0.90625rem;
-    --pad-tile: 15px 15px 16px;
+    --pad-tile: 16px;
     --fab-bottom: 24px;
   }
 }
@@ -283,11 +372,7 @@
   padding: 0;
 }
 body {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--ff);
   background: var(--c-bg);
   color: var(--c-text);
   font-size: var(--fs-base);
@@ -309,7 +394,43 @@ body {
      scrollbar. test/breakpoint-coverage.test.js keeps it gone. */
 }
 
+/* ═══ TOUCH ═══════════════════════════════════════════════════
+   What separates an app on a phone from a page in a browser, said once for
+   every control instead of per component.
+
+   - The grey flash a browser paints over anything tapped is off everywhere.
+     Twelve components had switched it off for themselves; the tiles, rows and
+     buttons that had not were the ones that flashed. Every control answers a
+     press itself (:active), which is the feedback that flash stood in for.
+   - `manipulation` says these never double-tap-zoom, so a tap is a click at
+     once instead of after the wait for a second tap.
+   - A long press on a control must not select its label or raise the copy
+     bubble. Text that is content stays selectable: only controls are named.
+   - Landscape on iOS inflates type unless told the page is already sized. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+button,
+a,
+summary,
+[role='button'] {
+  touch-action: manipulation;
+}
+button,
+summary,
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* ═══ SIDEBAR ═══════════════════════════════════════════════════ */
+/* Only the drawer on a phone moves, and it moves as a layer (transform). The
+   desk sidebar used to animate its width while the page beside it animated its
+   margin, which lays the whole page out again on every frame, charts included,
+   for a toggle somebody uses once a week. It switches at once now. */
 .sidebar {
   position: fixed;
   top: 0;
@@ -321,9 +442,7 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 120;
-  transition:
-    width 0.2s ease,
-    transform 0.2s ease;
+  transition: transform 0.3s var(--ease-drawer);
   overflow: hidden;
 }
 .sb-header {
@@ -346,7 +465,7 @@ body {
 }
 .sb-logo-text {
   font-size: 0.9375rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
 }
@@ -372,24 +491,29 @@ body {
   min-width: var(--tap-sm-min);
   min-height: var(--tap-sm-min);
 }
-.sb-toggle:hover {
-  background: var(--c-border-light);
-  color: var(--c-text);
+@media (hover: hover) and (pointer: fine) {
+  .sb-toggle:hover {
+    background: var(--c-border-light);
+    color: var(--c-text);
+  }
 }
 
+/* The list scrolls when a window is short, and nothing used to say so: it
+   simply stopped at the footer, mid-entry. The last 16px fade out instead. It
+   costs nothing when everything fits, because that strip is the padding. */
 .sb-nav,
 .sb-admin-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 10px;
+  padding: 8px 8px 16px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
 }
 .sb-group-label {
-  font-size: max(0.625rem, var(--fs-min));
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 500;
   color: var(--c-text-muted);
-  padding: 12px 10px 6px;
+  padding: 12px 12px 4px;
 }
 .sb-group-label:first-child {
   padding-top: 4px;
@@ -397,7 +521,7 @@ body {
 .sb-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   padding: var(--pad-sb);
   min-height: var(--tap-sm);
@@ -409,9 +533,12 @@ body {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
   white-space: nowrap;
   position: relative;
+  margin-bottom: 2px;
 }
 .sb-btn svg {
   flex-shrink: 0;
@@ -430,31 +557,59 @@ body {
     height: 20px;
   }
 }
-.sb-btn:hover {
+/* Where you are: a step of the surface and the ink, with the icon in the brand
+   green. A green wash with green text on top of it was the brand colour used
+   as a background, on the one row a person reads most often. */
+.sb-btn.active {
   background: var(--c-border-light);
   color: var(--c-text);
-}
-.sb-btn.active {
-  background: var(--c-primary-light);
-  color: var(--c-primary);
+  font-weight: 600;
 }
 .sb-btn.active svg {
   stroke: var(--c-primary);
 }
-.sb-btn.alert::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
-  background: #ef4444;
-  border-radius: 50%;
+@media (hover: hover) and (pointer: fine) {
+  .sb-btn:hover {
+    background: var(--c-bg);
+    color: var(--c-text);
+  }
+  .sb-btn.active:hover {
+    background: var(--c-border-light);
+  }
+}
+
+/* ── The views of the open page ─────────────────────────────────────────────
+   A page with more than one view lists them here, under its own entry and only
+   while it is open (app.js, sbSubInit). They were a strip of tabs across the
+   top of the page; the top of the page belongs to the page's work. The open
+   page's entry keeps its ink and its green icon and gives the grey field to
+   the view that is showing, so one row is marked and not two. */
+.sb-sub {
+  display: none;
+}
+.sb-btn.active + .sb-sub {
+  display: block;
+}
+.sb-sub-btn {
+  /* In line with the label above it: the entry's padding, its icon, the gap. */
+  padding-left: 40px;
+}
+.sb-btn.active:has(+ .sb-sub) {
+  background: transparent;
+}
+@media (pointer: coarse) {
+  .sb-sub-btn {
+    padding-left: 44px;
+  }
+}
+/* A collapsed sidebar is a column of icons and has no room for a list. */
+.sidebar.sb-collapsed .sb-sub {
+  display: none;
 }
 
 .sb-footer {
   border-top: 1px solid var(--c-border-light);
-  padding: 10px;
+  padding: 8px;
 }
 /* Admin navigation — on a desktop the Admin section borrows the sidebar.
    Fourteen sub-tabs do not fit one horizontal strip: .stabs has neither wrap
@@ -509,7 +664,7 @@ body.admin-mode #n-settings .sb-ico-back {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 4px 4px 4px 8px;
 }
 /* One line, always. The text under it changes every five seconds — "gerade
    eben", then "vor 12 Min." — and wrapping to a second line made the row taller
@@ -537,6 +692,15 @@ body.admin-mode #n-settings .sb-ico-back {
   cursor: pointer;
   font-family: inherit;
 }
+/* On a desk the language picker is a 28px control beside the status line. The
+   64px floor every field carries is for a gloved thumb, and here it made the
+   sidebar's footer taller than three navigation rows. */
+@media (min-width: 769px) and (hover: hover) {
+  .sb-lang-sel {
+    min-height: 28px;
+    padding: 2px 6px;
+  }
+}
 
 /* Sidebar collapsed (desktop) */
 .sidebar.sb-collapsed {
@@ -555,7 +719,7 @@ body.admin-mode #n-settings .sb-ico-back {
 }
 .sidebar.sb-collapsed .sb-btn {
   justify-content: center;
-  padding: 9px 0;
+  padding: 7px 0;
 }
 .sidebar.sb-collapsed .sb-sync {
   justify-content: center;
@@ -637,6 +801,10 @@ body.has-worktree-banner .mobile-topbar {
   align-items: center;
   gap: 12px;
 }
+/* `display` is in the list so the scrim can fade OUT as well: it stays in the
+   page for the 0.3s the drawer takes to leave instead of vanishing under it.
+   A browser that cannot transition display ignores both lines and gets the
+   old instant exit. */
 .sb-overlay {
   display: none;
   position: fixed;
@@ -644,11 +812,21 @@ body.has-worktree-banner .mobile-topbar {
   background: rgba(0, 0, 0, 0.4);
   z-index: 115;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition:
+    opacity 0.3s var(--ease-drawer),
+    display 0.3s;
+  transition-behavior: allow-discrete;
 }
 .sb-overlay.sb-show {
   display: block;
   opacity: 1;
+}
+/* The scrim arrives with the drawer it belongs to. It went from display:none to
+   fully dark in one frame while the drawer was still sliding in. */
+@starting-style {
+  .sb-overlay.sb-show {
+    opacity: 0;
+  }
 }
 /* The drawer is a phone arrangement and so is its overlay, but this class knew
    nothing about width: a drawer opened at 760px and a window then widened left
@@ -687,7 +865,6 @@ body:has(.modal-bg.open) .cam-fab {
   margin-left: var(--sidebar-w);
   min-height: 100vh;
   min-height: 100dvh;
-  transition: margin-left 0.2s ease;
 }
 
 /* ═══ SCAN MODAL (centered overlay) ════════════════════════════ */
@@ -926,7 +1103,7 @@ body:has(.modal-bg.open) .cam-fab {
 }
 .scan-success-time {
   color: var(--c-text-muted);
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.6875rem, var(--fs-min));
   flex-shrink: 0;
 }
@@ -938,7 +1115,7 @@ body:has(.modal-bg.open) .cam-fab {
   white-space: nowrap;
 }
 .scan-success-body b {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
 }
 .scan-success-loc {
   color: var(--c-text-muted);
@@ -958,7 +1135,10 @@ body:has(.modal-bg.open) .cam-fab {
   font-size: max(0.75rem, var(--fs-min));
   color: var(--c-text-muted);
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 .scan-success-undo:hover {
   background: #fee2e2;
@@ -999,7 +1179,7 @@ body:has(.modal-bg.open) .cam-fab {
   border: 1px solid #bfdbfe;
 }
 .chip-last-scan .chip-v {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.6875rem, var(--fs-min));
 }
 /* Chip pulse animation for missing input hints */
@@ -1033,13 +1213,18 @@ body:has(.modal-bg.open) .cam-fab {
   background: var(--c-surface);
   font-family: inherit;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.btn-xs:hover {
-  background: var(--c-bg);
+@media (hover: hover) and (pointer: fine) {
+  .btn-xs:hover {
+    background: var(--c-bg);
+  }
 }
 .btn-xs.green {
   background: var(--c-primary-light);
@@ -1064,7 +1249,7 @@ body:has(.modal-bg.open) .cam-fab {
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-weight: 600;
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   text-align: center;
   word-break: break-word;
   display: none;
@@ -1105,7 +1290,7 @@ body:has(.modal-bg.open) .cam-fab {
   min-height: 120px;
   overflow-y: auto;
   font-size: max(0.6875rem, var(--fs-min));
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   display: flex;
   flex-direction: column-reverse;
   gap: 3px;
@@ -1153,7 +1338,10 @@ body:has(.modal-bg.open) .cam-fab {
   cursor: pointer;
   color: var(--c-text-muted);
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 .scan-log-entry:hover .sle-undo {
   display: inline-flex;
@@ -1339,7 +1527,7 @@ body:has(.modal-bg.open) .cam-fab {
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
-  font-family: var(--ff-mono, monospace);
+  font-family: var(--ff-mono);
   transition:
     background 0.2s,
     transform 0.15s;
@@ -1584,30 +1772,27 @@ body:has(.modal-bg.open) .cam-fab {
   bottom: calc(var(--fab-bottom) + env(safe-area-inset-bottom, 0px));
   right: calc(24px + env(safe-area-inset-right, 0px));
   z-index: 850;
-  gap: 9px;
+  gap: 8px;
   height: 56px;
-  padding: 0 22px;
+  padding: 0 20px;
   border-radius: 28px;
   border: none;
   background: var(--c-primary, #16a34a);
   color: #fff;
   font-size: 1rem;
   font-weight: 600;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  transition:
-    transform 0.15s,
-    box-shadow 0.15s;
+  transition: transform var(--dur-press) var(--ease-out);
   -webkit-tap-highlight-color: transparent;
 }
 .cam-fab-label {
   white-space: nowrap;
 }
 .cam-fab:active {
-  transform: scale(0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: scale(0.97);
 }
 /* Show only on touch devices (coarse pointer = finger/stylus, no hover = no mouse) */
 @media (pointer: coarse) and (hover: none) {
@@ -1721,7 +1906,7 @@ body:has(.modal-bg.open) .cam-fab {
   overflow-wrap: anywhere;
 }
 .bb-mono {
-  font-family: monospace;
+  font-family: var(--ff-mono);
 }
 .bb-muted {
   color: var(--c-text-muted);
@@ -1762,6 +1947,40 @@ body:has(.modal-bg.open) .cam-fab {
   container-type: inline-size;
   container-name: inhalt;
 }
+/* ── The page head (a desk) ─────────────────────────────────────────────────
+   The page's name and the day, level with the inbox button that floats in the
+   corner (.notif-fab). A phone has its top bar for this, so the head is not
+   there below the breakpoint the bar appears at. */
+.page-head {
+  display: none;
+}
+@media (min-width: 769px) {
+  .page-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 40px;
+    margin: -8px 0 16px;
+    /* The inbox button: 40px wide, 16px from the edge, and a gap before it. */
+    padding-right: 44px;
+  }
+  .page-head-t {
+    flex: 1;
+    min-width: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    overflow-wrap: break-word;
+  }
+  .page-head-date {
+    flex: none;
+    color: var(--c-text-sec);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+}
+
 .page {
   display: none;
 }
@@ -1773,7 +1992,7 @@ body:has(.modal-bg.open) .cam-fab {
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
   padding: var(--pad-card);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow);
 }
 /* A .sec heading on the left, controls on the right — twenty-three of these in
@@ -1914,22 +2133,23 @@ summary.fs-meta {
   font-size: var(--fs-meta);
   padding: 4px 8px;
 }
+/* A section label is a short sentence-case line in ink, one step under the
+   body. It used to be 12px capitals with wide tracking in the muted grey: the
+   smallest and palest text on a card was the one that says what the card is. */
 .sec {
-  font-size: max(0.75rem, var(--fs-min));
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--c-text-muted);
-  margin-bottom: 10px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-text-sec);
+  margin-bottom: 12px;
 }
 
 /* -- Sub-tabs -- */
 .stabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--c-border);
-  padding-bottom: 10px;
+  padding-bottom: 0;
 }
 .stab {
   padding: var(--pad-stab);
@@ -1937,7 +2157,7 @@ summary.fs-meta {
      the strip with a drill-down list on a phone anyway. 56px pills would be
      enormous for something on its way out. */
   min-height: var(--tap-sm);
-  border-radius: 99px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
@@ -1945,14 +2165,34 @@ summary.fs-meta {
   background: transparent;
   color: var(--c-text-sec);
   font-family: inherit;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
 }
+/* The open tab is the ink with the brand green under it. Filled green pills
+   made the tab strip the loudest thing on every page that has one, louder than
+   the page's own primary button sitting right above it. */
 .stab.active {
-  background: var(--c-primary);
-  color: #fff;
+  background: transparent;
+  color: var(--c-text);
+  box-shadow: inset 0 -2px 0 var(--c-primary);
 }
-.stab:hover:not(.active) {
-  background: var(--c-border-light);
+@media (hover: hover) and (pointer: fine) {
+  .stab:hover:not(.active) {
+    background: var(--c-border-light);
+  }
+}
+/* A strip whose views are in the navigation is not on the page. The one case
+   that brings it back is a collapsed sidebar on a desk, which shows icons only
+   and so cannot carry the list. */
+.stabs.stabs-nav {
+  display: none;
+}
+@media (min-width: 769px) {
+  body.sb-is-collapsed .stabs.stabs-nav {
+    display: flex;
+  }
 }
 .sp {
   display: none;
@@ -2014,6 +2254,7 @@ summary.fs-meta {
     background: transparent;
     color: var(--c-primary);
     font-weight: 600;
+    box-shadow: none;
   }
   .stab:hover:not(.active) {
     background: transparent;
@@ -2113,6 +2354,7 @@ summary.fs-meta {
     background: transparent;
     color: var(--c-primary);
     font-weight: 600;
+    box-shadow: none;
   }
   .stab:hover:not(.active) {
     background: transparent;
@@ -2188,33 +2430,17 @@ summary.fs-meta {
   margin-bottom: 12px;
   font-size: 0.8125rem;
 }
+/* The shop an order came from is a word. Five tints, one per channel, turned
+   the first line of every order into a row of coloured badges, and no channel
+   is more urgent than another. */
 .oh-ch {
   display: inline-block;
   font-size: max(0.6875rem, var(--fs-min));
-  font-weight: 700;
-  border-radius: 6px;
-  padding: 1px 7px;
+  font-weight: 500;
+  border-radius: 0;
+  padding: 0;
   white-space: nowrap;
-}
-.oh-ch-wix {
-  background: var(--c-blue-light);
-  color: var(--c-blue-dark);
-}
-.oh-ch-etsy {
-  background: var(--c-amber-light);
-  color: var(--c-amber-dark);
-}
-.oh-ch-ebay {
-  background: var(--c-indigo-light);
-  color: var(--c-indigo-dark);
-}
-.oh-ch-manual {
-  background: var(--c-border-light);
   color: var(--c-text-sec);
-}
-.oh-ch-shopify {
-  background: var(--c-green-light);
-  color: var(--c-green-dark);
 }
 .oh-st {
   display: inline-block;
@@ -2288,269 +2514,464 @@ summary.fs-meta {
 }
 /* Packen (Bestellungen → Packen): one card per parcel, read on a phone at the
    packing table. Cards rather than table rows, so nothing scrolls sideways. */
+/* ── Packen: the board ────────────────────────────────────────────────────
+   Labels on the bench. What comes off the shelf is one label with a row per
+   product, what is made to order another, and every parcel is a label of its
+   own with the buyer's name, the order number as the small tag it is on the
+   paper, and the lines to put in the box.
+
+   In a hand the board is one column in the order the work is done. On a desk
+   the shelf list and the make list stay on the left while the parcels scroll:
+   one fetches everything first and packs after that. */
+.ob-brett {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.ob-links,
+.ob-rechts {
+  display: contents;
+}
+.ob-teil-totals {
+  order: 1;
+}
+.ob-teil-pack {
+  order: 2;
+}
+.ob-teil-make {
+  order: 3;
+}
+.ob-teil-later {
+  order: 4;
+}
+.ob-brett .ob-done-list {
+  order: 5;
+}
+/* A section of the board is a heading and what stands under it, not a box. */
+.ob-brett .card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+@media (min-width: 1024px) {
+  .ob-brett {
+    display: grid;
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+  }
+  .ob-links,
+  .ob-rechts {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+  }
+  /* It stays while the parcels scroll, and scrolls by itself when the shelf
+     list is longer than the window: a sticky column taller than the screen
+     would keep its lower half out of reach until the very end of the page. */
+  .ob-links {
+    position: sticky;
+    /* Under the page head, which stays at the top as well. */
+    top: 84px;
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
 .ob-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
-}
-.ob-count {
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
-  white-space: nowrap;
-}
-.ob-hint {
+  gap: 12px;
   margin-bottom: 8px;
 }
+.ob-brett .ob-head .sec {
+  margin: 0;
+  color: var(--c-text);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+@media (min-width: 769px) and (hover: hover) {
+  .ob-brett .ob-head .sec {
+    font-size: 1.0625rem;
+  }
+}
+.ob-count {
+  color: var(--c-text-sec);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+/* A hint is a sentence somebody reads once, standing at the packing table. */
+.ob-hint {
+  max-width: 62ch;
+  margin: -2px 0 10px;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+/* The state of the Billbee fetch: a line of text over the board, and a box only
+   when something is wrong. */
 .ob-sync {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 2px 14px;
+  margin-bottom: 14px;
+  color: var(--c-text-sec);
   font-size: var(--fs-sm);
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  border-radius: var(--radius);
-  background: var(--c-surface);
-  border: 1px solid var(--c-border-light);
+}
+.ob-sync .muted {
+  color: var(--c-text-sec);
+}
+.ob-sync .btn {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--c-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .ob-sync.is-warn {
-  background: var(--c-amber-light);
-  border-color: var(--c-amber-border);
-  color: var(--c-amber-dark);
+  padding: 10px 14px;
+  border: 1px solid var(--c-amber-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  color: var(--c-amber-strong);
+}
+/* One label with a row per product: the shelf list and the make list. */
+.ob-etikett {
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  background: var(--c-surface);
 }
 .ob-empty {
-  padding: 14px 4px;
-  color: var(--c-text-muted);
+  padding: 16px;
+  border: 1px dashed var(--c-line-strong);
+  border-radius: 14px;
+  color: var(--c-text-sec);
   font-size: var(--fs-sm);
 }
-.ob-order {
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  background: var(--c-surface);
-  padding: 10px 12px;
-  margin-bottom: 8px;
+.ob-etikett:has(> .ob-empty) {
+  border: 0;
+  background: none;
 }
-.ob-order.is-packed {
-  background: var(--c-bg);
-  border-style: dashed;
-}
-.ob-order.is-packed .ob-items {
-  color: var(--c-text-muted);
-}
-.ob-customer {
-  font-weight: 700;
-  font-size: var(--fs-sm);
-  margin-bottom: 4px;
-  overflow-wrap: anywhere;
-}
-.ob-line-sku {
-  font-family: monospace;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-/* Alles zusammen: one row per product, the count big enough to read across a
-   table. */
+/* Figure and name share the first line; sizes and counts run below at the full
+   width. Beside a figure of seven digits there is no room left for them. */
 .ob-total {
-  border-bottom: 1px solid var(--c-border-light);
-  padding: 8px 0;
-}
-.ob-total:last-child {
-  border-bottom: none;
-}
-.ob-total-top {
   display: flex;
-  align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 2px 14px;
+  align-items: baseline;
+  padding: 12px 16px;
+  border-top: 1px solid var(--c-border-light);
+}
+.ob-total:first-child {
+  border-top: 0;
 }
 .ob-total-n {
-  font-size: 1.5rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  min-width: 2ch;
-}
-.ob-total-name {
-  font-family: monospace;
+  font-family: var(--ff-mono);
+  font-size: 1.625rem;
   font-weight: 700;
-  font-size: var(--fs-sm);
+  line-height: 1.1;
+  text-align: right;
+  white-space: nowrap;
 }
-.ob-total-orders {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
-}
-.ob-sizes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-.ob-size {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 2px 10px;
-  background: var(--c-primary-light);
-  color: var(--c-text);
-}
-.ob-total-skus {
-  margin-top: 4px;
-  font-family: monospace;
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
+/* Beside the figure while twelve characters of it fit there, under it
+   otherwise: next to a figure of seven digits a name was set four letters to
+   the line. */
+.ob-total-name {
+  flex: 1 1 12ch;
+  min-width: 0;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-base);
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
+.ob-sizes,
+.ob-total-orders,
+.ob-make-days {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+.ob-sizes {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+/* Sizes as the shelf says them, one after the other: "9 × 1,75 kg · 2 × 2 kg".
+   The dot trails its item, here and in the two lines below, so a line that
+   wraps never begins with one. */
+.ob-size:not(:last-child)::after {
+  content: ' · ';
+}
+.ob-total-orders {
+  color: var(--c-text-sec);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.ob-make-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ob-day {
+  color: var(--bernstein);
+}
+.ob-day:not(:last-child)::after {
+  content: ' ·';
+  color: var(--c-text-sec);
+  font-weight: 400;
+}
+.ob-day.is-late {
+  color: var(--rot);
+}
+/* A parcel, as its label. */
+.ob-order {
+  overflow: hidden;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  background: var(--c-surface);
+}
+.ob-order + .ob-order,
+.ob-order + .ob-group,
+.ob-group + .ob-order,
+.ob-group + .ob-group {
+  margin-top: 10px;
+}
+.ob-order.is-packed {
+  border-style: dashed;
+  background: none;
+}
+.ob-order.is-packed .ob-items {
+  color: var(--c-text-sec);
+}
+/* Name and number share a line while both fit. A long number drops under the
+   name instead of taking the row from it. */
+.ob-order-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.ob-customer {
+  flex: 1 1 55%;
+  min-width: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+/* The order number the way it stands on the parcel label: mono, in a small
+   white tag with a hairline. It is the thing a packer matches against paper. */
+.ob-num {
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 5px;
+  background: var(--c-surface);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+/* Shop, day and what Billbee says, as one line of text. */
 .ob-order-top {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  margin-bottom: 6px;
-}
-.ob-num {
-  font-family: monospace;
-  font-weight: 700;
+  gap: 0 6px;
+  margin-top: 2px;
+  color: var(--c-text-sec);
   font-size: var(--fs-sm);
 }
+.ob-order-top > *:has(+ :not(.ob-link))::after {
+  content: ' ·';
+  color: var(--c-text-sec);
+  font-weight: 400;
+}
+.ob-order-top .oh-ch,
 .ob-when {
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
+  color: var(--c-text-sec);
+  font-size: inherit;
+}
+/* What Billbee says about an order is information, set as text. A bought label
+   is the one state that changes what a packer does today, so it is in the ink
+   and a step heavier; the rest stays quiet. */
+.ob-bb {
+  color: var(--c-text-sec);
+  font-size: inherit;
+  white-space: nowrap;
+}
+.ob-bb-label,
+.ob-bb-shipped {
+  color: var(--c-text);
+  font-weight: 700;
 }
 .ob-link {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--c-primary);
   display: inline-flex;
   align-items: center;
   min-height: var(--tap-sm-min);
+  margin-left: auto;
+  color: var(--c-text);
+  font-size: var(--fs-xs);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.ob-items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.ob-combine-solo {
+  margin-top: 8px;
+  color: var(--c-text);
   font-size: var(--fs-sm);
+  font-weight: 600;
+}
+/* The lines of a parcel: how many, and the SKU that is on the shelf. */
+.ob-items {
+  margin: 12px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--c-border-light);
+  list-style: none;
 }
 .ob-items li {
-  padding: 3px 0;
+  display: grid;
+  grid-template-columns: minmax(3ch, auto) minmax(0, 1fr);
+  gap: 0 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border-light);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-base);
 }
-.ob-qty,
-.ob-make-qty {
+.ob-qty {
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+/* The SKU and, right behind it in the same line of text, "herstellen". */
+.ob-was {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ob-title {
+  font-family: var(--ff);
 }
 .ob-sku {
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: var(--fs-xs);
   color: var(--c-text-muted);
 }
 .ob-tag {
-  display: inline-block;
-  font-size: max(0.6875rem, var(--fs-min));
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 1px 8px;
+  font-family: var(--ff);
+  font-size: var(--fs-sm);
+  font-weight: 700;
   white-space: nowrap;
 }
 .ob-tag-make {
-  background: var(--c-amber-light);
-  color: var(--c-amber-dark);
+  color: var(--bernstein);
 }
 .ob-order-foot {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  margin-top: 8px;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+/* A parcel that only waits has nothing to press. */
+.ob-order-foot:empty {
+  display: none;
 }
 .ob-plan {
   margin-right: auto;
-  font-size: var(--fs-xs);
-  color: var(--c-amber-dark);
-  font-weight: 600;
-}
-.ob-done {
+  color: var(--bernstein);
   font-size: var(--fs-sm);
-  color: var(--c-green-dark);
   font-weight: 600;
-}
-.ob-group {
-  border-left: 4px solid var(--c-primary);
-  padding-left: 8px;
-  margin-bottom: 10px;
-}
-.ob-group-head,
-.ob-combine-solo {
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--c-primary);
-  margin-bottom: 6px;
-}
-.ob-make {
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 8px;
-}
-.ob-make.is-late {
-  border-color: var(--c-red-border);
-}
-.ob-make-top {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: var(--fs-sm);
-}
-.ob-make-qty {
-  font-size: 1.25rem;
-}
-.ob-make-meta {
-  font-size: var(--fs-xs);
-  color: var(--c-text-muted);
-  margin-top: 2px;
-}
-.ob-make-days {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.ob-day {
-  font-size: var(--fs-xs);
-  border-radius: 999px;
-  padding: 2px 9px;
-  background: var(--c-amber-light);
-  color: var(--c-amber-dark);
-}
-.ob-day.is-late {
-  background: var(--c-red-light);
-  color: var(--c-red-dark);
-}
-.ob-done-list > summary {
-  cursor: pointer;
-  min-height: var(--tap-sm-min);
-  align-items: center;
-}
-/* Billbee's state on the card: information, never what takes an order off the
-   list. A bought label is the loud one, because that parcel leaves today. */
-.ob-bb {
-  display: inline-block;
-  font-size: max(0.6875rem, var(--fs-min));
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 1px 8px;
-  white-space: nowrap;
-  background: var(--c-border-light);
-  color: var(--c-text-sec);
-}
-.ob-bb-label,
-.ob-bb-shipped {
-  background: var(--c-blue-light);
-  color: var(--c-blue-dark);
 }
 .ob-plan.is-due {
-  color: var(--c-red-dark);
+  color: var(--rot);
+}
+.ob-done {
+  margin-right: auto;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+/* The buttons of a label: 56 under a thumb, 40 at a desk. "Gepackt" is the one
+   filled button of the board; what takes a mark back is a step smaller. */
+.ob-order-foot .btn {
+  min-height: var(--b-tap-sm);
+  margin: 0;
+  padding: 0 16px;
+  border-color: var(--c-line-strong);
+  border-radius: var(--r-btn);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ob-order-foot .btn-p {
+  min-height: var(--b-tap);
+  border-color: transparent;
+  font-size: var(--fs-base);
+}
+/* In a hand the one thing to press takes the width of the label. */
+@media (max-width: 768px) {
+  .ob-order-foot .btn-p {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+/* Orders that go into one parcel, held together by a rule in the ink. */
+.ob-group {
+  padding-left: 12px;
+  border-left: 3px solid var(--c-text);
+}
+.ob-group-head {
+  margin-bottom: 8px;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.ob-done-list > summary {
+  min-height: var(--tap-sm-min);
+  margin-bottom: 0;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.ob-done-list > summary::-webkit-details-marker {
+  display: none;
+}
+.ob-done-list[open] > summary {
+  margin-bottom: 8px;
+}
+/* What says the heading opens: the chevron of the task list on Arbeitsgänge. */
+.ob-done-list > summary .ob-count {
+  margin-left: auto;
+}
+.ob-done-list > summary::after {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px 4px;
+  border-right: 2px solid var(--c-text-muted);
+  border-bottom: 2px solid var(--c-text-muted);
+  transform: rotate(45deg);
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+.ob-done-list[open] > summary::after {
+  transform: translateY(4px) rotate(225deg);
 }
 .oh-manual {
   background: var(--c-bg);
@@ -2675,6 +3096,12 @@ textarea:focus {
 button {
   min-height: var(--tap-sm);
 }
+/* Keyboard focus is always visible, and looks the same on every control. Zero
+   specificity (:where), so a component that draws its own ring keeps it. */
+:where(button, a, summary, select, [role='button'], [tabindex]):focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
 /* `hidden` muss auch auf Knöpfen wirken. Die display-Angabe unten ist eine
    Autoren-Regel und schlägt damit die [hidden]-Regel des Browsers; ohne diese
    Ausnahme bleibt ein Knopf mit hidden sichtbar (siehe .worktree-banner). */
@@ -2697,13 +3124,33 @@ button {
   background: var(--c-surface);
   color: var(--c-text);
   font-family: inherit;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform var(--dur-press) var(--ease-out);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.btn:hover {
-  background: var(--c-bg);
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    background: var(--c-bg);
+  }
+}
+.btn:active {
+  transform: scale(0.97);
+}
+/* Rows and chips answer the finger with a step of the surface. */
+.sb-btn:active,
+.stab:active,
+.sl-kopf:active,
+.sl-eintrag:active,
+.sl-mehr:active,
+.wk-today:active,
+.wk-alert:active,
+.wk-usb:active {
+  background-color: var(--c-border-light);
 }
 .btn-p,
 .btn-green {
@@ -2711,9 +3158,11 @@ button {
   color: #fff;
   border-color: transparent;
 }
-.btn-p:hover,
-.btn-green:hover {
-  background: var(--c-primary-hover);
+@media (hover: hover) and (pointer: fine) {
+  .btn-p:hover,
+  .btn-green:hover {
+    background: var(--c-primary-hover);
+  }
 }
 /* Die eine Handlung eines Abschnitts, über seinen Reitern.
    Größer als ein gewöhnlicher Knopf durch Polsterung, Schrift und Symbol —
@@ -3029,9 +3478,11 @@ tr:hover td {
 }
 
 /* ═══ MISC ══════════════════════════════════════════════════════ */
+/* An empty list says what to do next, in a sentence. Sentences are set in the
+   reading tone, not in the grey of a caption. */
 .empty {
   text-align: center;
-  color: var(--c-text-muted);
+  color: var(--c-text-sec);
   font-size: 0.8125rem;
   padding: 3rem;
 }
@@ -3421,22 +3872,38 @@ tr:hover td {
 }
 
 /* Sync dots */
+/* Not a status light. The words next to it are the status; this is the button
+   that asks for a fresh copy, and it takes a colour only when something needs
+   a person: amber while it is fetching, red after a failure. */
 .sync-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #ddd;
   cursor: pointer;
   flex-shrink: 0;
-}
-.sync-dot.ok {
-  background: var(--c-green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-sm-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--c-text-muted);
 }
 .sync-dot.err {
-  background: var(--c-red);
+  color: var(--c-red-strong);
 }
 .sync-dot.busy {
-  background: var(--c-amber);
+  color: var(--c-amber-strong);
+}
+/* In the phone bar there is no label beside it, so it appears only when it has
+   something to say. */
+#sync-dot-m:not(.err):not(.busy) {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .sync-dot:hover {
+    background: var(--c-border-light);
+    color: var(--c-text);
+  }
 }
 
 /* ═══ CALENDAR ══════════════════════════════════════════════════ */
@@ -3471,7 +3938,10 @@ tr:hover td {
   color: var(--c-text);
   cursor: pointer;
   font-size: 1rem;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 .cal-nav-btn:hover {
   background: var(--c-primary-light);
@@ -3489,7 +3959,10 @@ tr:hover td {
   font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 .cal-today-btn:hover {
   background: var(--c-primary);
@@ -3518,7 +3991,10 @@ tr:hover td {
   color: var(--c-text-sec);
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   white-space: nowrap;
 }
 .cal-vbtn:first-child {
@@ -3547,7 +4023,10 @@ tr:hover td {
   color: var(--c-text-sec);
   cursor: pointer;
   font-size: 1rem;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   flex-shrink: 0;
 }
 .cal-print-btn:hover {
@@ -3566,7 +4045,10 @@ tr:hover td {
   font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -3687,7 +4169,9 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
 }
 .cal-cell.today .cal-day {
   background: var(--c-primary);
@@ -4242,7 +4726,9 @@ tr:hover td {
   border-radius: var(--radius);
   padding: 14px;
   background: var(--c-surface);
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
 }
 @media (hover: hover) {
   .rack-card-new:hover {
@@ -4290,7 +4776,9 @@ tr:hover td {
   border: 1px solid var(--c-border-light);
   border-left: 3px solid var(--c-border-light);
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 @media (hover: hover) {
   .batch-card:hover {
@@ -4346,14 +4834,17 @@ tr:hover td {
 }
 .bag-chip {
   font-size: max(0.6875rem, var(--fs-min));
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   color: var(--c-text);
-  transition: all 0.1s;
+  transition:
+    background-color 0.1s,
+    border-color 0.1s,
+    color 0.1s;
   user-select: none;
 }
 .bag-chip.selected {
@@ -4458,7 +4949,11 @@ tr:hover td {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
   white-space: nowrap;
 }
 .ov-period-btn.active {
@@ -4506,14 +5001,6 @@ tr:hover td {
   color: var(--c-text-sec);
   white-space: nowrap;
 }
-.sup::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--sup-c, var(--c-slate));
-  flex: none;
-}
 .sup-now {
   color: #7f1d1d;
   font-weight: 700;
@@ -4521,9 +5008,11 @@ tr:hover td {
 }
 .sup-nospawn {
   --sup-c: #c2410c;
+  color: var(--c-amber-strong);
 }
 .sup-low {
   --sup-c: #a16207;
+  color: var(--c-amber-dark);
 }
 .sup-ok {
   color: var(--c-text-muted);
@@ -4535,9 +5024,6 @@ tr:hover td {
 .sup-off {
   color: var(--c-text-muted);
   --sup-c: transparent;
-}
-.sup-off::before {
-  box-shadow: inset 0 0 0 1.5px var(--c-text-muted);
 }
 /* ═══ LAB STOCK TILES ════════════════════════════════════════════
    The Labor card reuses the Chargen tile wholesale — same chrome, same bar,
@@ -4938,7 +5424,7 @@ tr:hover td {
 }
 .lb-weg-id span {
   min-width: 0;
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.8125rem, var(--fs-min));
   overflow-wrap: anywhere;
 }
@@ -5016,17 +5502,34 @@ tr:hover td {
 }
 .sl-kopf {
   min-height: 48px;
-  padding: 8px 2px;
+  padding: 12px 4px;
 }
 .sl-name {
   min-width: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+}
+/* The Sorte's colour as a stripe in front of its name; see .wk-zchip .zone-dot. */
+.sl-name .sp-dot {
+  width: 4px;
+  height: auto;
+  margin-right: 0;
+  border-radius: 2px;
+  box-shadow: none;
+  display: block;
+  grid-row: 1 / span 2;
+  align-self: stretch;
+  min-height: 16px;
 }
 .sl-name .sup {
   display: flex;
-  margin-top: 2px;
+  margin-top: 0;
   font-weight: 600;
+  grid-column: 2;
 }
 .sl-eintrag.batch-row-flash {
   animation: batch-row-flash 1.5s ease;
@@ -5036,18 +5539,22 @@ tr:hover td {
   flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 4px 16px;
 }
+/* Counts are figures, set as text: "Ink 6", "Frucht 6". Each in a grey chip of
+   its own made the right-hand edge of the list a column of little boxes. */
 .sl-chip {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--c-bg);
+  padding: 0;
+  border-radius: 0;
+  background: none;
   color: var(--c-text-sec);
   font-size: max(0.75rem, var(--fs-min));
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .sl-chip b {
   color: var(--c-text);
+  font-weight: 600;
 }
 .sl-sorte.open .sl-kopf {
   color: var(--c-primary);
@@ -5068,13 +5575,17 @@ tr:hover td {
   padding: 6px 8px;
   border-radius: 6px;
 }
-.sl-eintrag:hover,
 .sl-eintrag:focus-visible {
   background: var(--c-bg);
 }
+@media (hover: hover) and (pointer: fine) {
+  .sl-eintrag:hover {
+    background: var(--c-bg);
+  }
+}
 .sl-id {
   min-width: 0;
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.8125rem, var(--fs-min));
   overflow-wrap: anywhere;
 }
@@ -5089,10 +5600,617 @@ tr:hover td {
   color: var(--c-primary);
   font-size: max(0.8125rem, var(--fs-min));
 }
+
+/* ── Chargen on the Sortenliste: labels, the stage bar, the open Sorte ──────
+   The list is the same component the Kulturbibliothek and Körnerbrut use, with
+   what SL_CHARGEN adds to it (app.js): a bar per Sorte, its Kürzel, a head over
+   the open Sorte, a Charge as the label on its bags, and three buttons under
+   them for the one that is selected.
+
+   .sl-frei is the card without its box. Here the list itself is the white
+   label lying on the bench, and the open Sorte is a second one: beside the
+   list on a wide screen, a sheet from the bottom edge on a narrow one. */
+.card.sl-frei {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+/* The page already says "Chargen"; the count's element stays for the script. */
+.sl-frei > .sl-head {
+  display: none;
+}
+.sl-frei > .sl-tools {
+  margin: 0 0 16px;
+}
+/* The three controls, set as the labels' buttons: 56 under a thumb and 40 at a
+   desk, the one that makes a Charge filled. */
+.sl-frei .sl-tools .btn,
+.sl-fuss .btn {
+  min-height: var(--b-tap);
+  margin: 0;
+  padding: 0 20px;
+  border-color: var(--c-line-strong);
+  border-radius: var(--r-btn);
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.sl-frei .sl-tools .btn-p {
+  border-color: transparent;
+}
+@media (min-width: 769px) and (hover: hover) {
+  .sl-frei .sl-tools .btn,
+  .sl-fuss .btn {
+    padding: 0 16px;
+  }
+}
+/* A phone scans from its bottom bar. */
+@media (max-width: 768px) {
+  #ch-scan {
+    display: none;
+  }
+}
+.sl-frei > [id$='-list'] {
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-label);
+  background: var(--c-surface);
+}
+/* Beside each other, the list rows and the open Sorte are two labels. */
+.sl-frei > [id$='-list']:has(> .sl-zwei) {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* Nothing to list: a sentence in a dashed outline, where the label would lie. */
+.sl-frei > [id$='-list']:has(> .empty) {
+  border: 1px dashed var(--c-line-strong);
+  background: none;
+}
+.sl-frei .empty {
+  padding: 20px 16px;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+/* The colours of the stage bar, named once above the list. */
+.sl-legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+}
+.sl-farbe {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+.sl-farbe-korn {
+  background: var(--korn-mittel);
+}
+.sl-farbe-ink {
+  background: var(--myzel);
+}
+.sl-farbe-fr {
+  background: var(--hut);
+}
+
+/* A Sorte: name and verdict, the bar, then Kürzel and counts. */
+.sl-frei .sl-sorte {
+  border-bottom: 0;
+  border-top: 1px solid var(--c-border);
+}
+.sl-frei .sl-sorte:first-child {
+  border-top: 0;
+}
+.sl-frei .sl-sorte.open {
+  padding-bottom: 0;
+}
+.sl-frei .sl-kopf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'name'
+    'strang'
+    'unten';
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 16px;
+}
+.sl-frei .sl-sorte.open .sl-kopf,
+.sl-frei .sl-kopf:active {
+  background: var(--c-row);
+  color: inherit;
+}
+/* Name and verdict share a line while both fit; a long name wraps beside the
+   verdict, which keeps its line. No colour of the Sorte in front of the name:
+   the row already carries the two stage colours and, when supply is short, a
+   word in red or amber, and a third hue beside them read as one more signal. */
+.sl-frei .sl-name {
+  grid-area: name;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.sl-frei .sl-nt {
+  flex: 1 1 60%;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.sl-frei .sl-name .sp-dot {
+  display: none;
+}
+.sl-frei .sl-name .sup {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sl-frei .sl-name .sup-now {
+  color: var(--rot);
+}
+.sl-frei .sl-name .sup-nospawn {
+  color: var(--bernstein);
+}
+/* Kürzel at the left, the counts at the right; when the two do not share a
+   line the counts move under the Kürzel as one. */
+.sl-unten {
+  grid-area: unten;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 16px;
+  min-width: 0;
+}
+.sl-frei .sl-chips {
+  flex-wrap: nowrap;
+  gap: 2px 16px;
+}
+.sl-kz {
+  min-width: 0;
+  color: var(--c-text-sec);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+/* "6 Inkubation": the figure first and in the mono face, as on the bar. */
+.sl-frei .sl-chip {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 5px;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+}
+.sl-frei .sl-chip b {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+}
+
+/* The stage bar: bags in incubation and in fruiting, to scale. Grain is in
+   kilograms, a different unit, so it stands in front of the bar as a figure
+   and is never part of its arithmetic. */
+.sl-strang {
+  grid-area: strang;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.sl-korn {
+  min-width: 64px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--korn-hell);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+.sl-korn.fehlt {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--c-line-strong);
+  color: var(--c-text-sec);
+  font-weight: 400;
+}
+.sl-balken {
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--c-well);
+}
+.sl-balken i {
+  display: block;
+  min-width: 3px;
+}
+.sl-balken i + i {
+  box-shadow: -2px 0 0 var(--c-surface);
+}
+.sl-b-ink {
+  background: var(--myzel);
+}
+.sl-b-fr {
+  background: var(--hut);
+}
+
+/* ── The open Sorte ──
+   Its name, under it the Kürzel and, when supply is short, why; then its
+   Chargen by phase, each one the label that is on its bags; then the buttons
+   for the one that is selected. One block of markup in three places: in the
+   list (with a filter), beside it (wide), over the page as a sheet (narrow). */
+.sl-frei .sl-inhalt {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-row);
+}
+.sl-seite-kopf {
+  display: grid;
+  gap: 2px;
+  padding: 16px 20px 4px;
+}
+.sl-seite-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+}
+.sl-seite-unter {
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.sl-zu {
+  display: none;
+}
+.sl-teile {
+  padding: 12px 20px 8px;
+}
+.sl-frei .sl-teil {
+  margin: 20px 0 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.sl-frei .sl-teil:first-child {
+  margin-top: 0;
+}
+.sl-frei .sl-teil-t {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.sl-frei .sl-teil-t::before {
+  content: '';
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--c-line-strong);
+}
+.sl-frei .sl-teil[data-teil='INCUBATING'] .sl-teil-t::before,
+.sl-frei .sl-teil[data-teil='SPAWN RUN'] .sl-teil-t::before {
+  background: var(--myzel);
+}
+.sl-frei .sl-teil[data-teil='FRUITING'] .sl-teil-t::before {
+  background: var(--hut);
+}
+/* The heading names the phase; how many stand under it is plain to see. */
+.sl-frei .sl-teil-t span {
+  display: none;
+}
+/* A Charge as its label: the code in its tag, the bags at the right, and under
+   both the date that matters. The selected one carries the ink on its edge. */
+.sl-frei .sl-eintrag {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  min-height: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-label);
+  background: var(--c-surface);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.sl-frei .sl-eintrag + .sl-eintrag {
+  margin-top: 8px;
+}
+.sl-frei .sl-eintrag[aria-pressed='true'] {
+  border-color: var(--c-text);
+  box-shadow: inset 0 0 0 0.5px var(--c-text);
+}
+/* The code as it is printed: mono, in its own small tag. */
+.sl-frei .sl-id {
+  justify-self: start;
+  padding: 1px 7px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-tag);
+  background: var(--c-surface);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.45;
+}
+.sl-frei .sl-r {
+  color: var(--c-text);
+  font-size: var(--fs-base);
+}
+.sl-frei .sl-r b {
+  font-family: var(--ff-mono);
+  font-weight: 700;
+}
+.sl-u {
+  grid-column: 1 / -1;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+}
+.sl-frei .sl-eintrag[data-spaet] .sl-u {
+  color: var(--rot);
+  font-weight: 700;
+}
+.sl-frei .sl-mehr {
+  margin-top: 8px;
+  padding: 8px 4px;
+  color: var(--c-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sl-fuss {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--c-border);
+}
+.sl-fuss .btn {
+  justify-content: center;
+  padding: 0 8px;
+  background: var(--c-surface);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+@media (hover: hover) and (pointer: fine) {
+  .sl-frei .sl-kopf:hover {
+    background: var(--c-well);
+  }
+  .sl-frei .sl-sorte.open .sl-kopf:hover {
+    background: var(--c-row);
+  }
+  .sl-frei .sl-eintrag:hover {
+    border-color: var(--c-line-strong);
+    background: var(--c-surface);
+  }
+  .sl-frei .sl-eintrag[aria-pressed='true']:hover {
+    border-color: var(--c-text);
+  }
+  .sl-frei .sl-tools .btn:not(.btn-p):hover,
+  .sl-fuss .btn:hover {
+    border-color: var(--c-text);
+  }
+}
+
+/* A desk: name and figures on the left, the bar on the right at the height of
+   both lines, so the bars of all Sorten stand in one column. */
+@media (min-width: 769px) {
+  .sl-frei .sl-kopf {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-areas:
+      'name strang'
+      'unten strang';
+    gap: 2px 24px;
+    padding: 12px 20px;
+  }
+}
+@media (min-width: 769px) and (hover: hover) {
+  .sl-frei .sl-name {
+    font-size: 1rem;
+  }
+}
+
+/* ── Narrow: the open Sorte is a sheet ──
+   It lies over the page from the bottom edge, on the grey of the bench so the
+   white labels in it read as labels. Its head is what a finger takes hold of
+   (sheetDrag in app.js); the cross, the ground behind it and Escape close it.
+   With a filter the list unfolds in place instead (no .sl-mit-blatt). */
+@media (max-width: 1199px) {
+  .sl-grund {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    background: rgba(0, 0, 0, 0.4);
+    transition: opacity 0.22s var(--ease-out);
+  }
+  .sl-mit-blatt .sl-inhalt {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 131;
+    width: min(560px, 100%);
+    max-height: min(88dvh, 720px);
+    margin: 0 auto;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+    background: var(--c-bg);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+    transition: transform 0.22s var(--ease-out);
+  }
+  .sl-mit-blatt .sl-seite-kopf {
+    flex: none;
+    padding: 10px 64px 4px 16px;
+    cursor: grab;
+    touch-action: none;
+  }
+  /* The grip: the bar a sheet is taken by. */
+  .sl-mit-blatt .sl-seite-kopf::before {
+    content: '';
+    justify-self: center;
+    width: 40px;
+    height: 5px;
+    margin: 0 0 10px 48px;
+    border-radius: 3px;
+    background: var(--c-line-strong);
+  }
+  .sl-mit-blatt .sl-zu {
+    position: absolute;
+    top: 14px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--c-text);
+    cursor: pointer;
+  }
+  /* The cross, drawn: two strokes of the ink. */
+  .sl-mit-blatt .sl-zu::before,
+  .sl-mit-blatt .sl-zu::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    transform: rotate(45deg);
+  }
+  .sl-mit-blatt .sl-zu::after {
+    transform: rotate(-45deg);
+  }
+  .sl-mit-blatt .sl-zu:active {
+    background: var(--c-well);
+  }
+  .sl-mit-blatt .sl-teile {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 16px 8px;
+  }
+  .sl-mit-blatt .sl-fuss {
+    flex: none;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--c-bg);
+  }
+  /* In: up from the edge, slowing as it arrives. Out: quicker. */
+  .sl-inhalt.sl-kommt {
+    animation: sl-auf 0.5s var(--ease-drawer);
+  }
+  .sl-grund.sl-kommt {
+    animation: sl-ein 0.5s var(--ease-drawer);
+  }
+  .sl-geht .sl-inhalt {
+    transform: translateY(100%);
+  }
+  .sl-geht .sl-grund {
+    opacity: 0;
+  }
+}
+/* Beside a sidebar the sheet stands in the middle of the page, not of the window. */
+@media (min-width: 769px) and (max-width: 1199px) {
+  .sl-mit-blatt .sl-inhalt {
+    left: var(--sidebar-w);
+  }
+  .sb-is-collapsed .sl-mit-blatt .sl-inhalt {
+    left: var(--sidebar-collapsed);
+  }
+}
+@keyframes sl-auf {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sl-ein {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── Wide: the open Sorte beside the list (slRender, .sl-zwei) ──
+   The rows and the open Sorte are children of one grid: the rows fill the
+   first column, the open Sorte takes the second over its whole height. The
+   last row track is flexible, so a long list of Chargen lengthens that track
+   and not the rows. */
+@media (min-width: 1200px) {
+  .sl-zwei {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-rows: repeat(var(--sl-n, 1), auto) 1fr;
+    column-gap: 24px;
+  }
+  .sl-zwei > .sl-sorte {
+    display: contents;
+  }
+  .sl-zwei .sl-kopf {
+    grid-column: 1;
+    border: solid var(--c-border);
+    border-width: 1px 1px 0;
+    background: var(--c-surface);
+  }
+  .sl-zwei > .sl-sorte:first-child > .sl-kopf {
+    border-radius: var(--r-label) var(--r-label) 0 0;
+  }
+  .sl-zwei > .sl-sorte:last-child > .sl-kopf {
+    border-bottom-width: 1px;
+    border-radius: 0 0 var(--r-label) var(--r-label);
+  }
+  .sl-zwei > .sl-sorte:only-child > .sl-kopf {
+    border-radius: var(--r-label);
+  }
+  .sl-zwei .sl-inhalt {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: start;
+    position: sticky;
+    top: 84px;
+    max-height: calc(100dvh - 108px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-label);
+    background: var(--c-surface);
+  }
+  .sl-zwei .sl-teile {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .sl-zwei .sl-fuss {
+    flex: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sl-inhalt.sl-kommt,
+  .sl-grund.sl-kommt {
+    animation: none;
+  }
+}
 .lb-help,
 .lb-tap {
   margin: 0 0 8px;
-  color: var(--c-text-muted);
+  color: var(--c-text-sec);
   font-size: max(0.75rem, var(--fs-min));
   line-height: 1.35;
 }
@@ -5229,7 +6347,7 @@ tr.ms-off .ms-prog {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   z-index: 200;
   align-items: center;
@@ -5243,6 +6361,19 @@ tr.ms-off .ms-prog {
 }
 .modal-bg.open {
   display: flex;
+}
+/* A dialog fades in over 150ms instead of replacing the screen between two
+   frames. Opacity only, and short: the guided flow opens for every job that is
+   logged, and anything slower would be a wait. Two are left out on purpose.
+   The search palette opens from the keyboard, where any animation reads as
+   lag; the scanner is the most-opened overlay in the building. */
+.modal-bg.open:not(.gs-bg):not(#m-camscan) {
+  transition: opacity 0.15s var(--ease-out);
+}
+@starting-style {
+  .modal-bg.open:not(.gs-bg):not(#m-camscan) {
+    opacity: 0;
+  }
 }
 #m-confirm {
   z-index: 210;
@@ -5594,7 +6725,7 @@ body:has(#m-camscan.open) #m-move-batch {
   color: var(--c-text-muted);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.6875rem, var(--fs-min));
   cursor: pointer;
   /* Both floors, not just the tall one. On a phone the word "esc" is swapped
@@ -5652,7 +6783,7 @@ body:has(#m-camscan.open) #m-move-batch {
   color: var(--c-text);
 }
 .gs-mono {
-  font-family: monospace;
+  font-family: var(--ff-mono);
 }
 .gs-row-s {
   font-size: max(0.75rem, var(--fs-min));
@@ -5718,7 +6849,7 @@ body:has(#m-camscan.open) #m-move-batch {
   border: 1px solid var(--c-border);
   border-radius: 4px;
   padding: 1px 5px;
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.625rem, var(--fs-min));
   color: var(--c-text-muted);
 }
@@ -5742,9 +6873,11 @@ body:has(#m-camscan.open) #m-move-batch {
   min-width: max(36px, var(--tap-sm-min));
   min-height: max(36px, var(--tap-sm-min));
 }
-.mobile-search:hover {
-  background: var(--c-border-light);
-  color: var(--c-text);
+@media (hover: hover) and (pointer: fine) {
+  .mobile-search:hover {
+    background: var(--c-border-light);
+    color: var(--c-text);
+  }
 }
 @media (max-width: 768px) {
   /* Nearer the top: the on-screen keyboard takes the lower half, and 10vh of a
@@ -5876,10 +7009,15 @@ body:has(#m-camscan.open) #m-move-batch {
   background: #3a1618;
   color: #ffe1e1;
 }
+/* In slower than out: the bar eases up over 400ms so it is noticed, and leaves
+   in the 200ms of the base rule once it has been read or tapped. */
 .undo-bar.show {
   transform: translate(-50%, 0);
   opacity: 1;
   pointer-events: auto;
+  transition:
+    transform 0.4s ease,
+    opacity 0.4s ease;
 }
 .undo-bar #undo-msg {
   flex: 1;
@@ -6170,6 +7308,11 @@ body:has(#m-camscan.open) .update-bar {
      is marked too, or "Arbeiten" would sit alone over the gap. */
   .sb-in-bottom-nav {
     display: none;
+  }
+  /* The page that is open stays, when it has views to list: they stand under
+     its name, and a list under no name reads as part of the group above it. */
+  .sb-btn.sb-in-bottom-nav.active:has(+ .sb-sub) {
+    display: flex;
   }
   /* Both of these describe the grids, and below this breakpoint there are no
      grids. The toggle would offer three views that all render the agenda; the
@@ -6530,7 +7673,7 @@ body:has(#m-camscan.open) .update-bar {
 }
 .zone-rack-chip {
   font-size: max(0.6875rem, var(--fs-min));
-  font-family: monospace;
+  font-family: var(--ff-mono);
   padding: 2px 8px;
   border-radius: 4px;
   background: var(--c-border-light);
@@ -6622,7 +7765,7 @@ body:has(#m-camscan.open) .update-bar {
 .zone-qr-label {
   font-size: max(0.6875rem, var(--fs-min));
   font-weight: 600;
-  font-family: monospace;
+  font-family: var(--ff-mono);
   color: var(--c-text-sec);
 }
 
@@ -6635,65 +7778,40 @@ body:has(#m-camscan.open) .update-bar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: 1px solid var(--c-border);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: var(--c-surface);
   color: var(--c-text-sec);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow);
   transition:
-    background 0.15s,
+    background-color 0.15s,
     color 0.15s,
-    box-shadow 0.15s,
-    transform 0.08s;
+    transform var(--dur-press) var(--ease-out);
 }
 .notif-fab svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
-.notif-fab:hover {
-  background: var(--c-border-light);
-  color: var(--c-text);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+@media (hover: hover) and (pointer: fine) {
+  .notif-fab:hover {
+    background: var(--c-border-light);
+    color: var(--c-text);
+  }
 }
 .notif-fab:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 /* When there are unread notifications, make the button prominent and pulse */
-.notif-fab:has(.bell-badge:not([hidden])) {
-  background: var(--c-primary);
-  color: #fff;
-  border-color: var(--c-primary);
-  animation: notif-pulse 2s ease-in-out infinite;
-}
-.notif-fab:has(.bell-badge:not([hidden])):hover {
-  background: var(--c-primary);
-  color: #fff;
-  filter: brightness(1.05);
-}
-@keyframes notif-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.08),
-      0 0 0 0 rgba(22, 163, 74, 0.55);
-  }
-  50% {
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.08),
-      0 0 0 10px rgba(22, 163, 74, 0);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   /* Disable every named keyframe animation in this stylesheet. The standard
      "*, *::before, *::after { animation-duration: 0.01ms !important }" trick
      is too heavy — it would also kill open/close transitions which are
      functional (they signal state change). Listing the animation-using
      selectors explicitly leaves transitions intact. */
-  .notif-fab:has(.bell-badge:not([hidden])),
   .chip-pulse,
   .count-bump .chip-v,
   .cam-chip.ch-pulse,
@@ -6745,9 +7863,11 @@ body:has(#m-camscan.open) .update-bar {
   min-width: max(36px, var(--tap-sm-min));
   min-height: max(36px, var(--tap-sm-min));
 }
-.mobile-bell:hover {
-  background: var(--c-border-light);
-  color: var(--c-text);
+@media (hover: hover) and (pointer: fine) {
+  .mobile-bell:hover {
+    background: var(--c-border-light);
+    color: var(--c-text);
+  }
 }
 .mobile-bell .bell-badge {
   top: 2px;
@@ -6923,6 +8043,10 @@ body:has(#m-camscan.open) .update-bar {
    Lab, Calendar. Hidden on desktop; shown on phones via the media
    query below. Sidebar remains accessible via the hamburger for the
    less-frequent pages (Inventory, Zones, Print, Strains). */
+/* The bar floats over the page it belongs to: what scrolls under it shows
+   through, softened, so the bar reads as a layer above the content and not
+   as a strip cut out of it. Solid again for anyone who asked for less
+   transparency, and wherever the blur is not available. */
 .bottom-nav {
   display: none;
   position: fixed;
@@ -6930,10 +8054,23 @@ body:has(#m-camscan.open) .update-bar {
   left: 0;
   right: 0;
   z-index: 100;
-  background: var(--c-surface);
+  background: rgba(255, 255, 255, 0.86);
   border-top: 1px solid var(--c-border);
   padding-bottom: env(safe-area-inset-bottom, 0);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bottom-nav {
+    background: var(--c-surface);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bottom-nav {
+    background: var(--c-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .bottom-nav-btn {
   flex: 1;
@@ -7746,7 +8883,10 @@ body:has(#m-camscan.open) .update-bar {
   font-weight: 500;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: all 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 .contam-sev-btn:active {
   background: rgba(0, 0, 0, 0.05);
@@ -7939,12 +9079,12 @@ body:has(#m-camscan.open) .update-bar {
   align-items: center;
 }
 .contam-list-bag {
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 .contam-list-batch {
-  font-family: monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
@@ -8097,21 +9237,6 @@ body:has(#m-camscan.open) .update-bar {
    this is the screen a new worker meets first, and on the tablet it is used
    standing up. Line icons, not emoji — same visual language as the sidebar. */
 
-/* Wieder ganz oben, also ohne Abstand nach oben: die Kacheln stehen seit dem
-   11.09.2026 über der Tagesliste, damit das Telefon auf ihnen öffnet. Den
-   Abstand zwischen den beiden Hälften trägt jetzt .dash-top-row. */
-.wk-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-.wk-sub {
-  font-size: var(--fs-sm);
-  color: var(--c-text-muted);
-  margin-top: 3px;
-}
 /* Aufs Handy legen: dieselbe Bauart wie der Hinweis oben, aber ruhiger — das
    ist ein Angebot, keine Aufgabe. Die eigene [hidden]-Regel ist nötig, weil
    display:flex eine Autoren-Regel ist und sonst die des Browsers schlägt;
@@ -8121,14 +9246,14 @@ body:has(#m-camscan.open) .update-bar {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  background: var(--c-blue-light);
-  border: 1px solid var(--c-blue-border);
-  color: var(--c-blue-dark);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
   border-radius: var(--radius-sm);
-  padding: 9px 12px;
+  padding: 8px 12px;
   font-size: var(--fs-sm);
-  font-weight: 600;
-  margin: 14px 0 0;
+  font-weight: 500;
+  margin: 16px 0 0;
 }
 .wk-install[hidden] {
   display: none;
@@ -8136,8 +9261,8 @@ body:has(#m-camscan.open) .update-bar {
 .wk-install .btn {
   margin-left: auto;
   min-height: var(--tap);
-  border-color: var(--c-blue-dark);
-  color: var(--c-blue-dark);
+  border-color: var(--c-border);
+  color: var(--c-text);
 }
 
 .wk-tiles {
@@ -8149,121 +9274,247 @@ body:has(#m-camscan.open) .update-bar {
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
-/* Wo steht was: one chip per zone, and under the chosen one a tap-to-unfold row
-   per species and move-in day. The date line is the reason the card exists, so
-   it is set in the secondary text colour rather than muted. */
-.wk-tents {
-  margin-top: 12px;
-  padding: 12px 16px;
+/* ── Below the jobs: what is due, and where things stand ────────────────────
+   Two sections with a heading each. In a hand they follow each other, what is
+   due first, and the week opens between them; on a desk they stand side by
+   side, where things stand on the left with the wider share. */
+.wk-unten {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  margin-top: 28px;
 }
-.wk-zchips {
+.wk-unten > .dash-top-row {
+  margin: -12px 0 0;
+}
+.wk-unten > .dash-top-row:has(> .wk-tasks-closed) {
+  display: none;
+}
+.wk-unten .card {
+  margin-bottom: 0;
+}
+.wk-teil-kopf {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
-.wk-zchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  max-width: 100%;
-  padding: 6px 12px;
+.wk-teil-t {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+.wk-teil[hidden] {
+  display: none;
+}
+@media (min-width: 769px) and (hover: hover) {
+  .wk-teil-t {
+    font-size: 1.0625rem;
+  }
+}
+@media (min-width: 1024px) {
+  .wk-unten {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  .wk-teil-wo {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .wk-teil-an {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  /* With no zones to show, what is due takes the row. */
+  .wk-unten:has(> .wk-teil-wo[hidden]) .wk-teil-an {
+    grid-column: 1 / -1;
+  }
+  .wk-unten > .dash-top-row {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 0;
+  }
+}
+
+/* Wo steht was: a label per zone, its bag count at the right, and on it a row
+   per species and move-in day that unfolds to the batches and bag numbers. The
+   date line is the reason the label exists, so it is set in the reading tone
+   and not muted. */
+.wk-zonen {
+  display: grid;
+  gap: 8px;
+}
+@media (min-width: 1024px) {
+  .wk-zonen {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+}
+.wk-zone {
+  padding: 4px 16px;
   border: 1px solid var(--c-border);
-  border-radius: 22px;
+  border-radius: var(--r-label);
   background: var(--c-surface);
-  color: var(--c-text);
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
 }
-.wk-zchip[aria-pressed='true'] {
-  border-color: var(--c-accent);
-  box-shadow: inset 0 0 0 1px var(--c-accent);
-  font-weight: 600;
+.wk-zone-kopf {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0 8px;
+  font-weight: 700;
 }
-.wk-zchip .zone-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-}
-.wk-zchip-name {
+.wk-zone-kopf > span:first-child {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
-.wk-zchip-n {
-  color: var(--c-text-muted);
-  font-weight: 600;
-}
-.wk-zone-rows {
-  margin-top: 8px;
-  border-top: 1px solid var(--c-border);
+.wk-zone-n {
+  font-family: var(--ff-mono);
 }
 .wk-tent-row summary {
   display: grid;
-  grid-template-columns: 1fr auto;
-  column-gap: 8px;
-  padding: 6px 0;
-  min-height: 44px;
-  align-content: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--c-border);
   cursor: pointer;
   list-style: none;
 }
 .wk-tent-row summary::-webkit-details-marker {
   display: none;
 }
-.wk-tent-row + .wk-tent-row summary {
-  border-top: 1px dashed var(--c-border);
-}
 .wk-tent-sp {
-  font-weight: 500;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .wk-tent-n {
-  font-weight: 600;
   white-space: nowrap;
+}
+.wk-tent-n b {
+  font-family: var(--ff-mono);
+  font-weight: 700;
 }
 .wk-tent-when {
   grid-column: 1 / -1;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-sec);
 }
 .wk-tent-detail {
   padding: 0 0 8px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-sec);
 }
 .wk-tent-batch {
-  font-family: monospace;
+  font-family: var(--ff-mono);
   color: var(--c-text-muted);
 }
-.wk-tent-empty {
-  padding: 10px 0 4px;
-  font-size: 0.875rem;
-  color: var(--c-text-muted);
+.wk-zone-leer {
+  padding: 0 0 12px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-sec);
+}
+
+/* Was ansteht: one white label, a row per piece of work. The first line says
+   what to do and takes the colour of how urgent it is; the second says what it
+   is about. The whole row is the button. */
+.wk-an {
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-label);
+  background: var(--c-surface);
+}
+.wk-an-zeile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--b-tap);
+  padding: 8px 12px 8px 16px;
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.wk-an-zeile {
+  cursor: pointer;
+}
+.wk-an-zeile:first-child {
+  border-top: 0;
+}
+button.wk-an-zeile:active {
+  background: var(--c-well);
+}
+.wk-an-was {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.wk-an-was.rot {
+  color: var(--rot);
+}
+.wk-an-was.bernstein {
+  color: var(--bernstein);
+}
+.wk-an-wer {
+  display: block;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+.wk-an-zeile > svg {
+  flex: none;
+}
+.wk-an-leer {
+  padding: 16px;
+  color: var(--c-text-sec);
+  font-size: var(--fs-sm);
+}
+@media (hover: hover) and (pointer: fine) {
+  button.wk-an-zeile:hover {
+    background: var(--c-well);
+  }
+}
+/* The notices are rows of the list on a desk and a strip above the jobs in a
+   hand: the same four, in one place or the other. */
+.wk-an-hinweis {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .wk-an-hinweis {
+    display: grid;
+  }
+  .wk-an-hinweis ~ .wk-an-leer {
+    display: none;
+  }
 }
 /* Only there when something is wrong. Sized to its text, not stretched. */
+/* What needs attention sits in one row of quiet chips above the question: the
+   tone is in the words and the hairline, on the surface every other control is
+   on. As filled amber blocks stacked one per line they took the top of the
+   page, 110px of a phone, before the first thing a person came to do. */
 .wk-alert {
-  display: flex;
-  width: fit-content;
+  display: inline-flex;
   max-width: 100%;
   align-items: center;
   min-height: 44px;
-  margin: 0 0 12px;
-  padding: 8px 14px;
+  margin: 0 8px 12px 0;
+  padding: 6px 12px;
   border: 1px solid var(--c-amber-border);
-  border-radius: var(--radius);
-  background: var(--c-amber-light);
-  color: var(--c-amber-dark);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  color: var(--c-amber-strong);
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
+  vertical-align: top;
+  font-size: var(--fs-sm);
 }
 .wk-alert[hidden] {
   display: none;
@@ -8272,28 +9523,29 @@ body:has(#m-camscan.open) .update-bar {
    shape, red while something is urgent, amber while it is only short. */
 .wk-alert.wk-np-now {
   border-color: var(--c-red-border);
-  background: var(--c-red-light);
+  background: var(--c-surface);
   color: var(--c-red-dark);
 }
 /* Today's USB stick backup, for admins: the alert's shape, coloured by what
    it asks for. Blue while a backup runs, amber when one is due or nothing is
    set up, green when the stick can come out, red when it failed. */
 .wk-usb {
-  display: flex;
-  width: fit-content;
+  display: inline-flex;
   max-width: 100%;
   align-items: center;
   min-height: 44px;
-  margin: 0 0 12px;
-  padding: 8px 14px;
+  margin: 0 8px 12px 0;
+  padding: 6px 12px;
   border: 1px solid var(--c-blue-border);
-  border-radius: var(--radius);
-  background: var(--c-blue-light);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
   color: var(--c-blue-dark);
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
+  vertical-align: top;
+  font-size: var(--fs-sm);
 }
 .wk-usb[hidden] {
   display: none;
@@ -8304,55 +9556,54 @@ body:has(#m-camscan.open) .update-bar {
 .wk-usb-gaps,
 .wk-usb-first {
   border-color: var(--c-amber-border);
-  background: var(--c-amber-light);
-  color: var(--c-amber-dark);
+  background: var(--c-surface);
+  color: var(--c-amber-strong);
 }
 .wk-usb-remove {
   border-color: var(--c-green-border);
-  background: var(--c-green-light);
+  background: var(--c-surface);
   color: var(--c-green-dark);
 }
 .wk-usb-error,
 .wk-usb-state {
   border-color: var(--c-red-border);
-  background: var(--c-red-light);
+  background: var(--c-surface);
   color: var(--c-red-dark);
 }
-/* The task card's heading is the day in one line and the switch for the list. */
+/* "Woche": the switch for the week under the list, set as a link in the list's
+   heading with the mark that says which way it folds. */
 .wk-today {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
+  gap: 2px;
   min-height: 44px;
-  padding: 0;
+  margin: -12px 0;
+  padding: 0 4px;
   border: 0;
   background: none;
-  color: inherit;
+  color: var(--c-text);
   font: inherit;
-  text-align: left;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
-.wk-today-sum {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.875rem;
-  color: var(--c-text-sec);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .wk-today-chev {
-  color: var(--c-text-muted);
-  transition: transform 0.15s;
+  color: var(--c-text-sec);
+  transition: transform var(--dur-ui) var(--ease-out);
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 4px 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
 }
 .wk-today[aria-expanded='true'] .wk-today-chev {
-  transform: rotate(180deg);
+  transform: translateY(4px) rotate(225deg);
 }
-.wk-today[aria-expanded='true'] {
-  margin-bottom: 8px;
-}
-#dash-batch-tasks-card.wk-tasks-closed #dash-batch-tasks {
+#dash-batch-tasks-card.wk-tasks-closed {
   display: none;
 }
 /* Two columns from 900px down, phones included. One column put seven full-width
@@ -8364,15 +9615,18 @@ body:has(#m-camscan.open) .update-bar {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+/* A white tile with its drawing. The drawing is the one coloured thing on it,
+   and each has its own hue, so seven of them side by side already tell the
+   jobs apart; a wash of the same hue behind each made every tile shout. */
 .wk-tile {
   position: relative;
   overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr;
   align-content: start;
-  gap: 7px;
+  gap: 8px;
   text-align: left;
-  background: linear-gradient(150deg, var(--wk-cl) 0%, var(--c-surface) 62%);
+  background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
   padding: var(--pad-tile);
@@ -8380,18 +9634,17 @@ body:has(#m-camscan.open) .update-bar {
   cursor: pointer;
   font: inherit;
   color: var(--c-text);
-  box-shadow: var(--shadow);
   transition:
     border-color 0.15s,
-    box-shadow 0.15s,
-    transform 0.1s;
-}
-.wk-tile:hover {
-  border-color: var(--wk-c);
-  box-shadow: var(--shadow-md);
+    transform var(--dur-press) var(--ease-out);
 }
 .wk-tile:active {
-  transform: scale(0.985);
+  transform: scale(0.98);
+}
+@media (hover: hover) and (pointer: fine) {
+  .wk-tile:hover {
+    border-color: var(--c-text-muted);
+  }
 }
 /* The drawing sits behind the words and bleeds off the corner, so the tile reads
    as a picture of the job rather than a labelled box. It is drawn, not
@@ -8428,18 +9681,17 @@ body:has(#m-camscan.open) .update-bar {
   position: relative;
   z-index: 2;
   font-size: var(--fs-tile);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 600;
   line-height: 1.25;
   max-width: 90%;
 }
 .wk-tile-when {
   position: relative;
   z-index: 2;
-  font-size: max(0.71875rem, var(--fs-min));
-  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  color: var(--c-text-sec);
   line-height: 1.4;
-  max-width: 64%;
+  max-width: 56%;
 }
 
 /* The phone tile, after the four rules above rather than before them: a media
@@ -8452,86 +9704,290 @@ body:has(#m-camscan.open) .update-bar {
      corner of a picture reads as a smudge, so it stands whole on the right
      at one fixed size on every tile, and the title takes the rest. No veil
      is needed with nothing underneath the words. */
+  /* One job per row on a phone. Two columns left 92px for a title, and
+       "Körnerbrut" and "Kontamination" broke in the middle of the word; the line
+       that says when to use a job had to be hidden to make the tiles fit at all.
+       Seven rows of 64px are 496px: still one screen, with the words whole. */
   .wk-tiles {
-    gap: 10px;
+    gap: 6px;
+    grid-template-columns: 1fr;
   }
   .wk-tile {
-    grid-template-columns: minmax(0, 1fr) 52px;
-    grid-template-rows: auto;
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: auto auto;
     align-items: center;
-    column-gap: 8px;
-    min-height: 72px;
-    padding: 10px 10px 10px 14px;
+    column-gap: 12px;
+    min-height: var(--tap);
+    padding: 8px 14px 8px 12px;
+    row-gap: 2px;
+    align-content: center;
   }
   .wk-tile::after {
     display: none;
   }
   .wk-tile-art {
     position: static;
-    grid-column: 2;
-    grid-row: 1;
-    width: 52px;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 40px;
   }
   .wk-tile-t {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 1;
     max-width: none;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
   .wk-tile-when {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    max-width: none;
+  }
+}
+
+/* ── The notices, in one row ────────────────────────────────────────────────
+   Side by side while they fit and wrapped when they do not. Each one on its
+   own line cost a phone 56px per notice before the first job. On a quiet day
+   the row is not there at all. */
+.wk-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.wk-alerts:not(:has(> button:not([hidden]))) {
+  display: none;
+}
+.wk-alerts > .wk-alert,
+.wk-alerts > .wk-usb {
+  margin: 0;
+}
+
+/* On a desk the notices are rows of "Was ansteht" (.wk-an-hinweis), so the
+   strip is a hand's. */
+@media (min-width: 1024px) {
+  .wk-alerts {
     display: none;
   }
 }
 
-/* Reihenfolge ändern: a quiet link under the tiles, and a numbered list with
-   up/down buttons that moves the tiles as you tap. */
-.wk-order-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 6px;
-}
-.wk-order-link {
-  min-height: 44px;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: var(--c-text-sec);
-  font: inherit;
-  font-size: 0.875rem;
-  text-decoration: underline;
-  cursor: pointer;
-}
-.wk-order {
-  margin-top: 4px;
-  padding: 10px 14px;
-}
-.wk-order[hidden] {
+/* The number of a stop and what stands at it belong to the chain below; the
+   rows of a phone and the tiles of a narrow window do not show them. */
+.wk-nr,
+.wk-stand {
   display: none;
 }
-.wk-order-list {
-  margin: 0;
-  padding-left: 1.5em;
+
+/* ── The chain (a desk) ─────────────────────────────────────────────────────
+   Five of the seven jobs are the stations of one batch's life, in the order
+   it lives them: culture, grain, bag, move, harvest. On a desk they stand as
+   that line on one white label, one stop per column, each with what is
+   standing at it right now. Substrate and contamination are not stations, so
+   they are two plain buttons under the label.
+
+   Every stop is still the same button it is as a row on a phone: same id, same
+   flow behind it. The five lie edge to edge and draw the label between them:
+   each carries its top and bottom edge, the first and the last the ends. The
+   order is the process, set by `order`, so it does not depend on where the
+   jobs stand in the document. */
+@media (min-width: 1024px) {
+  .wk-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  /* The break that puts the two buttons on a row of their own, and the air
+     between the label and them. */
+  .wk-tiles::after {
+    content: '';
+    order: 6;
+    flex: 0 0 100%;
+    height: 16px;
+  }
+  .wk-tile {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 0;
+    padding: 24px 16px 20px 0;
+    border: 0;
+    border-top: 1px solid var(--c-border);
+    border-bottom: 1px solid var(--c-border);
+    border-radius: 0;
+    transition: none;
+  }
+  .wk-tile:active {
+    transform: none;
+  }
+  .wk-tile::after,
+  .wk-tile-art {
+    display: none;
+  }
+  #wk-t-lab {
+    order: 1;
+    padding-left: 24px;
+    border-left: 1px solid var(--c-border);
+    border-radius: var(--r-label) 0 0 var(--r-label);
+    --wk-s: var(--c-line-strong);
+    --wk-k: var(--c-text);
+  }
+  #wk-t-grain {
+    order: 2;
+    --wk-s: var(--korn);
+  }
+  #wk-t-batch {
+    order: 3;
+    --wk-s: var(--korn);
+  }
+  #wk-t-move {
+    order: 4;
+    --wk-s: var(--myzel);
+  }
+  #wk-t-harvest {
+    order: 5;
+    padding-right: 24px;
+    border-right: 1px solid var(--c-border);
+    border-radius: 0 var(--r-label) var(--r-label) 0;
+    --wk-s: var(--hut);
+  }
+  /* The line through a stop, in the colour of its stage. It starts at the
+     first stop's number and ends at the last one's. */
+  .wk-tile::before {
+    content: '';
+    position: absolute;
+    top: 43px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--wk-s);
+  }
+  #wk-t-lab::before {
+    left: 44px;
+  }
+  #wk-t-harvest::before {
+    right: auto;
+    width: 20px;
+  }
+  .wk-nr {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 12px;
+    border: 2px solid var(--wk-k, var(--wk-s));
+    border-radius: 12px;
+    background: var(--c-surface);
+    font-family: var(--ff-mono);
+    font-size: var(--fs-base);
+    font-weight: 700;
+    transition:
+      background-color 0.15s,
+      transform var(--dur-press) var(--ease-out);
+  }
+  .wk-tile:active .wk-nr {
+    transform: scale(0.96);
+  }
+  .wk-tile-t {
+    max-width: none;
+    font-size: 1.0625rem;
+    font-weight: 700;
+  }
+  .wk-tile-when {
+    max-width: none;
+    font-size: var(--fs-sm);
+    line-height: 1.4;
+  }
+  /* The unit under the figure is 12px under a mouse and takes the 13px floor
+     under a finger: a tablet is this wide too. */
+  .wk-stand {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    margin-top: 12px;
+    color: var(--c-text-sec);
+    font-size: max(0.75rem, var(--fs-min));
+  }
+  .wk-stand[hidden] {
+    display: none;
+  }
+  .wk-stand b {
+    color: var(--c-text);
+    font-family: var(--ff-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .wk-stand.ruft b {
+    color: var(--rot);
+  }
+
+  /* The two jobs that are not a station: a button each, and nothing beside it. */
+  #wk-t-sub,
+  #wk-t-contam {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--b-tap);
+    margin-right: 8px;
+    padding: 0 16px;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-btn);
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      transform var(--dur-press) var(--ease-out);
+  }
+  #wk-t-sub {
+    order: 7;
+  }
+  #wk-t-contam {
+    order: 8;
+    border-color: rgba(179, 38, 30, 0.4);
+    color: var(--rot);
+  }
+  #wk-t-sub:active,
+  #wk-t-contam:active {
+    background: var(--c-well);
+    transform: scale(0.97);
+  }
+  #wk-t-sub::before,
+  #wk-t-contam::before,
+  #wk-t-sub .wk-tile-when,
+  #wk-t-contam .wk-tile-when {
+    display: none;
+  }
+  #wk-t-sub .wk-tile-t,
+  #wk-t-contam .wk-tile-t {
+    font-size: var(--fs-base);
+    font-weight: 600;
+  }
 }
-.wk-order-row {
-  padding: 2px 0;
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .wk-tile:hover {
+    border-color: var(--c-border);
+  }
+  .wk-tile:hover .wk-nr {
+    background: var(--c-well);
+  }
+  #wk-t-sub:hover {
+    border-color: var(--c-text);
+  }
+  #wk-t-contam:hover {
+    border-color: var(--rot);
+  }
 }
-.wk-order-row > * {
-  vertical-align: middle;
-}
-.wk-order-name {
-  display: inline-block;
-  min-width: 9em;
-  margin-right: 8px;
-}
-.wk-order-row .btn {
-  min-width: 44px;
-  margin-left: 4px;
-}
-.wk-order-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .wk-tile:active .wk-nr,
+  #wk-t-sub:active,
+  #wk-t-contam:active {
+    transform: none;
+  }
 }
 
 /* ── flow modal ─────────────────────────────────────────────────────────── */
@@ -8618,7 +10074,7 @@ body:has(#m-camscan.open) .update-bar {
   background: var(--c-primary-light);
 }
 .wkf-row-id {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.78125rem, var(--fs-min));
   font-weight: 700;
 }
@@ -8684,7 +10140,7 @@ body:has(#m-camscan.open) .update-bar {
   border-top: 0;
 }
 .wkf-bag-id {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-family: var(--ff-mono);
   font-size: max(0.78125rem, var(--fs-min));
   font-weight: 650;
 }
@@ -9095,7 +10551,7 @@ body:has(#m-camscan.open) .update-bar {
   margin-bottom: 4px;
 }
 .stamm-kz {
-  font-family: monospace;
+  font-family: var(--ff-mono);
   color: var(--c-text-muted);
 }
 /* Name und Verwendung links übereinander, die Knöpfe rechts: so bleibt eine
@@ -10515,4 +11971,383 @@ body:has(#m-camscan.open) .update-bar {
 }
 .prb-verlauf {
   margin-top: 14px;
+}
+
+/* ═══ THE SHELL ═══════════════════════════════════════════════
+   What stands around every page: the sidebar and the page head on a desk, the
+   top bar and the bottom bar on a phone. It sits late in the sheet because it
+   restates rules from the sidebar, notification and bottom-nav sections above,
+   and at equal weight the later rule is the one that holds.
+
+   The page is the grey of the bench and nothing in the shell is a box on it:
+   the head and both bars are the bench itself, seen through, and the bell and
+   the magnifier are marks with no frame. The one filled thing is the scanner. */
+
+/* Sizes the labels below are set in. The app's own --tap pair is a floor that
+   is 24px at a desk; a label's controls have a size of their own there. */
+:root {
+  --b-tap: 56px;
+  --b-tap-sm: 48px;
+  --r-tag: 5px;
+  --r-btn: 12px;
+  --r-label: 14px;
+  --r-sheet: 22px;
+  /* Signals, as text on white: 6.5:1 and 5.9:1. */
+  --rot: #b3261e;
+  --bernstein: #8a5300;
+}
+@media (min-width: 769px) and (hover: hover), print {
+  :root {
+    --b-tap: 40px;
+    --b-tap-sm: 36px;
+  }
+}
+
+/* ── The sidebar ── */
+.sb-header {
+  border-bottom: 0;
+}
+/* The sheet's head and its closing mark: a phone's (see the block below). */
+.sb-sheet-title,
+.sb-toggle-close {
+  display: none;
+}
+.sb-logo-text {
+  font-size: 1rem;
+  font-weight: 700;
+}
+/* The search is a field, and says what it takes: a name typed or a code read
+   by the hand scanner land in the same place. */
+.sb-search-wrap {
+  padding: 0 12px 8px;
+}
+.sb-btn.sb-search {
+  min-height: max(36px, var(--tap-sm-min));
+  margin-bottom: 0;
+  padding: 0 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-bg);
+  color: var(--c-text-sec);
+}
+.sb-search-key {
+  padding: 0 5px;
+  border-color: var(--c-line-strong);
+  border-radius: 5px;
+  background: var(--c-surface);
+  font-size: max(0.6875rem, var(--fs-min));
+}
+.sb-nav,
+.sb-admin-nav {
+  padding: 0 12px 16px;
+}
+.sb-group-label {
+  padding: 14px 8px 4px;
+}
+.sb-btn.active {
+  background: var(--c-bg);
+  font-weight: 700;
+}
+.sb-btn.active:has(+ .sb-sub) {
+  background: transparent;
+}
+.sb-footer {
+  border-top: 0;
+  padding: 8px 12px 12px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .sb-btn.sb-search:hover {
+    border-color: var(--c-line-strong);
+    background: var(--c-bg);
+  }
+  .sb-btn.active:hover {
+    background: var(--c-bg);
+  }
+}
+
+/* ── The page head and the bell (a desk) ──
+   The head stays at the top while the page scrolls under it. It reaches to the
+   edges of the column, so nothing shows beside it, and keeps the corner free
+   where the bell stands. */
+@media (min-width: 769px) {
+  .page-head {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    min-height: 0;
+    margin: calc(-1 * var(--pad-page)) calc(-1 * var(--pad-page)) 4px;
+    padding: 20px calc(var(--pad-page) + 44px) 12px var(--pad-page);
+    background: rgba(241, 242, 240, 0.86);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+    backdrop-filter: saturate(160%) blur(16px);
+  }
+  body.has-worktree-banner .page-head {
+    top: var(--worktree-banner-h, 38px);
+  }
+}
+.notif-fab {
+  top: 16px;
+  right: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: none;
+  color: var(--c-text);
+}
+.notif-fab svg {
+  width: 22px;
+  height: 22px;
+}
+.notif-fab:active {
+  background: var(--c-well);
+}
+@media (hover: hover) and (pointer: fine) {
+  .notif-fab:hover {
+    background: var(--c-well);
+    color: var(--c-text);
+  }
+}
+
+/* ── The phone: top bar ──
+   The page's name, large, and two marks. No menu here: it is "Mehr" below. */
+@media (max-width: 768px) {
+  .mobile-topbar {
+    gap: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) 8px
+      calc(16px + env(safe-area-inset-left, 0px));
+    border-bottom: 0;
+    background: rgba(241, 242, 240, 0.86);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+    backdrop-filter: saturate(160%) blur(16px);
+  }
+  .mobile-topbar .sb-logo {
+    margin-right: 8px;
+  }
+  /* A name that does not fit the line takes a second one before it is cut: on
+     the narrowest phones the page's question is longer than the bar is wide. */
+  #topbar-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 1.375rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+  .mobile-search,
+  .mobile-bell {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    color: var(--c-text);
+  }
+  .mobile-search svg,
+  .mobile-bell svg {
+    width: 22px;
+    height: 22px;
+  }
+  .mobile-search:active,
+  .mobile-bell:active {
+    background: var(--c-well);
+  }
+}
+
+/* ── The phone: bottom bar ──
+   Three places and "Mehr" share the width; the scanner stands apart at the
+   trailing end, the one filled control in the shell. */
+.bottom-nav {
+  align-items: center;
+  gap: 8px;
+  padding: 6px calc(10px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px))
+    calc(6px + env(safe-area-inset-left, 0px));
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  backdrop-filter: saturate(160%) blur(18px);
+}
+.bottom-nav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 2px;
+  min-height: 52px;
+  padding: 4px 2px;
+  border-radius: var(--r-btn);
+  font-size: 0.8125rem;
+}
+.bottom-nav-btn svg {
+  width: 24px;
+  height: 24px;
+}
+.bottom-nav-btn:active {
+  background: var(--c-well);
+}
+.bottom-nav-btn.active {
+  color: var(--c-text);
+  font-weight: 700;
+}
+.bottom-nav-btn.active svg {
+  color: var(--c-primary);
+}
+.bottom-nav-scan {
+  display: inline-flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 76px;
+  height: 52px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--c-primary);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    transform var(--dur-press) var(--ease-out);
+}
+.bottom-nav-scan:active {
+  background: var(--c-primary-hover);
+  transform: scale(0.97);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bottom-nav {
+    background: var(--c-surface);
+  }
+  .mobile-topbar,
+  .page-head {
+    background: var(--c-bg);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bottom-nav {
+    background: var(--c-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .mobile-topbar,
+  .page-head {
+    background: var(--c-bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (max-width: 768px) {
+  /* The scanner is in the bar, so nothing floats over the page on a phone. A
+     tablet has no bar and keeps the floating button. */
+  .cam-fab {
+    display: none;
+  }
+  /* Room under the page for the bar: 64px of bar and a line of air. */
+  .content-wrap {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+  /* As wide as its sentence. Centred from the middle of the window it had half
+     the window to fit in, and "Als gepackt markiert" stood in three lines. */
+  .undo-bar {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    width: max-content;
+  }
+
+  /* ── "Mehr": the navigation, as a sheet ──
+     It comes up from the edge the button is on. Every other page is in it, and
+     under the page that is open, that page's views. */
+  .sidebar {
+    top: auto;
+    right: 0;
+    width: auto;
+    max-height: min(88dvh, 720px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-right: 0;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+    transform: translateY(100%);
+    transition: transform 0.5s var(--ease-drawer);
+  }
+  /* The shadow belongs to the open sheet: closed, it lies just under the edge
+     and its shadow would reach up over the bar. */
+  .sidebar.sb-open {
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+    transform: translateY(0);
+  }
+  body.has-worktree-banner .sidebar {
+    top: auto;
+  }
+  /* One scroll for the whole sheet. With the list scrolling inside it between
+     a fixed head and a fixed foot, a phone showed five rows and no sign of the
+     ten below them; now a row cut by the edge says there is more. */
+  .sidebar {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .sb-nav,
+  .sb-admin-nav {
+    flex: none;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  /* The page that is open comes first, with its views: that is what somebody
+     standing on that page opens the sheet for, and the last page of the list
+     would otherwise put them under everything else. */
+  .sb-nav {
+    display: flex;
+    flex-direction: column;
+  }
+  .sb-nav > .sb-btn.active:has(+ .sb-sub),
+  .sb-nav > .sb-btn.active + .sb-sub {
+    order: -1;
+  }
+  .sb-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 12px 8px 4px 20px;
+    background: var(--c-surface);
+  }
+  .sb-header .sb-logo,
+  .sb-toggle-fold,
+  /* The magnifier is in the top bar on a phone. */
+  .sb-search-wrap {
+    display: none;
+  }
+  .sb-sheet-title {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  .sb-toggle-close {
+    display: block;
+  }
+  .sb-toggle {
+    border-radius: 50%;
+    color: var(--c-text);
+  }
+}
+
+/* ═══ REDUCED MOTION ══════════════════════════════════════════
+   Movement goes, colour and opacity stay: a press still darkens the control and
+   a message still fades in, but nothing slides or scales for someone who asked
+   the system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .wk-today-chev {
+    transition: none;
+  }
+  .undo-bar,
+  .undo-bar.show {
+    transition: opacity 0.2s ease;
+  }
+  .btn:active,
+  .wk-tile:active,
+  .cam-fab:active,
+  .notif-fab:active {
+    transform: none;
+  }
 }
