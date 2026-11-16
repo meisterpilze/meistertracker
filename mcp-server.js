@@ -36,8 +36,15 @@ const CULTURE_ID_RE = /^[A-Za-z0-9_\-@.:]{1,200}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const CULTURE_STATUSES = ['active', 'stored', 'used', 'sold', 'contam'];
 
+// A day, or a day with a time as toISOString() writes it. Nothing after it:
+// V8's date parser skips a trailing comment in parentheses, so a looser check
+// would let text ride along on a valid date.
 function isDate(v) {
-  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) && !isNaN(new Date(v).getTime());
+  return (
+    typeof v === 'string' &&
+    /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(v) &&
+    !isNaN(new Date(v).getTime())
+  );
 }
 
 // The first problem with a set of fields, or null. checks: [value, test, message]
@@ -1055,6 +1062,20 @@ function createMcpServer(database, onWrite, printer) {
     async (params) => {
       try {
         const { batchId, ...fields } = params;
+        if (!db.readBatchById(database, batchId)) return errResult('Batch not found: ' + batchId);
+        // The ranges create_batch holds days to, and a due date that is a date.
+        const problem = firstProblem([
+          [
+            fields.days,
+            (v) => Number.isInteger(v) && v >= 1 && v <= 3650,
+            'days must be a whole number from 1 to 3650'
+          ],
+          [fields.due, isDate, 'due must be a date (YYYY-MM-DD) or an ISO timestamp'],
+          [fields.notes, maxLen(10000), 'notes exceeds max length of 10000'],
+          [fields.species, maxLen(200), 'species exceeds max length of 200'],
+          [fields.strain, maxLen(200), 'strain exceeds max length of 200']
+        ]);
+        if (problem) return errResult(problem);
         const updates = {};
         for (const [k, v] of Object.entries(fields)) {
           if (v !== undefined) updates[k] = v;
@@ -1200,8 +1221,9 @@ function createMcpServer(database, onWrite, printer) {
         const adminErr = requireAdminRole();
         if (adminErr) return adminErr;
       }
-      // What POST /api/calendar-events checks. The times are shown in the
-      // calendar's week and day views and go into the .ics files.
+      // Dates, times, category and color in the shape the app's entry form
+      // gives them. The times are shown in the calendar's week and day views
+      // and go into the .ics files.
       const problem =
         (isDate(params.startDate) ? null : 'startDate must be a date (YYYY-MM-DD)') ||
         firstProblem([
@@ -1497,7 +1519,10 @@ function createMcpServer(database, onWrite, printer) {
     "Update a mushroom culture's metadata: status, notes, Pilzsorte (strainId), species, strain, or source. For status changes like 'contam' use this. NOT for physical bag handling (→ move_bags). Pass strainId to switch Pilzsorte — species/strain auto-update.",
     {
       id: z.string().describe('Culture ID'),
-      status: z.string().optional().describe('New status (e.g. active, archived, contaminated)'),
+      status: z
+        .enum(['active', 'stored', 'used', 'sold', 'contam'])
+        .optional()
+        .describe('New status: active, stored, used, sold or contam'),
       notes: z.string().optional(),
       strainId: z.number().optional().describe('Pilzsorte id (auto-fills species/strain from mushroom_strains)'),
       species: z.string().optional(),
@@ -1967,6 +1992,11 @@ function createMcpServer(database, onWrite, printer) {
       entityId: z.string().describe('Entity ID')
     },
     async (params) => {
+      // The barcode list shows the id, and it is the id of a bag, culture, zone
+      // or rack, so it gets their charset.
+      if (!CULTURE_ID_RE.test(params.entityId)) {
+        return errResult('entityId must be alphanumeric with - _ @ . : (max 200 chars)');
+      }
       try {
         const barcode = db.assignBarcode(database, params.entityType, params.entityId);
         notify();
@@ -2240,6 +2270,16 @@ function createMcpServer(database, onWrite, printer) {
       notes: z.string().optional().describe('Notes')
     },
     async (params) => {
+      const problem =
+        (/^[a-z0-9_-]{1,50}$/i.test(params.type) ? null : 'type must be a short name of letters, digits, _ or -') ||
+        firstProblem([
+          [params.assetId, maxLen(100), 'assetId exceeds max length of 100'],
+          [params.zoneId, (v) => ID_RE.test(v), 'zoneId must be alphanumeric with - _ @ . : (max 100 chars)'],
+          [params.scheduledDate, isDate, 'scheduledDate must be a date (YYYY-MM-DD)'],
+          [params.description, maxLen(2000), 'description exceeds max length of 2000'],
+          [params.notes, maxLen(10000), 'notes exceeds max length of 10000']
+        ]);
+      if (problem) return errResult(problem);
       try {
         if (!params.assetId && !params.zoneId) {
           return errResult('Either assetId or zoneId is required');

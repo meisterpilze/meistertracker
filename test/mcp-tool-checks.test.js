@@ -179,5 +179,57 @@ describe('MCP write tools check what the REST routes check', () => {
       await werkzeug(ERIKA, 'complete_maintenance')({ id: Number(id2), completedBy: 'max' });
       assert.equal(d.prepare('SELECT completed_by FROM maintenance_log WHERE id=?').get(id2).completed_by, 'max');
     });
+
+    it('schedules maintenance only with a plain type, a zone id and a date', async () => {
+      const planen = werkzeug(MAX, 'schedule_maintenance');
+      for (const args of [
+        { type: 'Autoklav <b>', assetId: 'AK-001' },
+        { type: 'autoclave_cycle', zoneId: 'INC 01' },
+        { type: 'autoclave_cycle', assetId: 'AK-001', scheduledDate: 'bald' }
+      ]) {
+        assert.ok(fehler(await planen(args)), JSON.stringify(args));
+      }
+      assert.equal(fehler(await planen({ type: 'hepa_filter', assetId: 'AK-002', scheduledDate: '2026-12-01' })), null);
+    });
+  });
+
+  describe('update_batch and assign_barcode', () => {
+    before(() => {
+      db.insertBatch(
+        d,
+        {
+          batchId: 'B-02',
+          species: 'Beispielsorte',
+          qty: 1,
+          days: 14,
+          created: '2026-11-16T08:00:00.000Z',
+          due: '2026-11-30T08:00:00.000Z',
+          bags: ['B-02-01']
+        },
+        null,
+        null
+      );
+    });
+
+    it('fails for a batch that is not there, and checks days and due', async () => {
+      const aendern = werkzeug(MAX, 'update_batch');
+      assert.match(fehler(await aendern({ batchId: 'B-99', notes: 'x' })), /not found/);
+      assert.match(fehler(await aendern({ batchId: 'B-02', days: 0 })), /days/);
+      assert.match(fehler(await aendern({ batchId: 'B-02', due: 'nächste Woche' })), /due/);
+      assert.equal(fehler(await aendern({ batchId: 'B-02', due: '2026-12-01T12:00:00.000Z' })), null);
+    });
+
+    it('assigns a barcode only to an id in the id charset', async () => {
+      const zuweisen = werkzeug(MAX, 'assign_barcode');
+      assert.ok(fehler(await zuweisen({ entityType: 'bag', entityId: '<b>' })));
+      assert.equal(fehler(await zuweisen({ entityType: 'bag', entityId: 'B-02-01' })), null);
+    });
+
+    it('reads a date as a date and nothing behind it', async () => {
+      // V8 takes "2026-11-20 (anything)" for a date; the tools do not.
+      const anlegen = werkzeug(MAX, 'create_task');
+      assert.ok(fehler(await anlegen({ text: 'Regal', dueDate: '2026-11-20 (Freitag)' })));
+      assert.equal(fehler(await anlegen({ text: 'Regal', dueDate: '2026-11-20' })), null);
+    });
   });
 });
