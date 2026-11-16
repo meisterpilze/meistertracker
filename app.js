@@ -7575,14 +7575,17 @@ const WK_AN_GRUPPEN = [
   { key: 'left', kinds: ['left'], label: 'work.grp.left' },
   { key: 'manual', kinds: ['manual'], label: 'work.grp.manual', today: true },
   { key: 'chore', kinds: ['chore'], label: null },
-  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert', late: 'work.grp.urgent' }
+  { key: 'alert', kinds: ['alert'], label: 'work.grp.alert' }
 ];
 const _wkAnOffen = new Set();
 function _wkAnGruppeHtml(g, items) {
   const late = items.filter((it) => it.overdue).length;
   const wer = [];
   // A stock alarm is not late, it is urgent: "überfällig" is for work with a date.
-  if (late) wer.push('<span class="rot">' + esc(tp(g.late || 'work.grp.late', late)) + '</span>');
+  if (late) {
+    const word = g.key === 'alert' ? tp('work.grp.urgent', late) : tp('work.grp.late', late);
+    wer.push('<span class="rot">' + esc(word) + '</span>');
+  }
   if (g.today && items.length > late) wer.push(esc(tp('work.grp.today', items.length - late)));
   if (g.names) {
     const names = items.map((it) => it.label).filter(Boolean);
