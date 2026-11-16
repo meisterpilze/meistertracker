@@ -2545,6 +2545,13 @@ window.LANG['pt'] = {
   'server.updateStatus': 'A atualizar e reiniciar servidor\u2026',
   'server.waitReconnect': 'Servidor a reiniciar. A aguardar liga\u00e7\u00e3o\u2026',
   'server.noResponse': 'Servidor n\u00e3o responde. Verifique manualmente.',
+  'server.updateQueued': 'Outra atualiza\u00e7\u00e3o ainda est\u00e1 em curso. Esta segue-se a ela\u2026',
+  'server.updateFailed': 'Atualiza\u00e7\u00e3o interrompida em \u201c{step}\u201d.',
+  'server.updateRolledBack': 'A vers\u00e3o anterior continua a correr.',
+  'server.updateNotRolledBack':
+    'N\u00e3o foi poss\u00edvel repor a vers\u00e3o anterior. Verifique o computador do servidor.',
+  'server.updateNoRestart':
+    'O servidor est\u00e1 a correr, mas n\u00e3o reiniciou. Verifique o estado da atualiza\u00e7\u00e3o.',
   'server.statusLabel': 'Estado',
   'server.versionLabel': 'Vers\u00e3o',
   'server.codeLabel': 'Vers\u00e3o do c\u00f3digo',

@@ -2528,6 +2528,13 @@ window.LANG['en'] = {
   'server.updateStatus': 'Updating and restarting server\u2026',
   'server.waitReconnect': 'Server restarting. Waiting for connection\u2026',
   'server.noResponse': 'Server not responding. Please check manually.',
+  'server.updateQueued': 'Another update is still running. This one follows it…',
+  'server.updateFailed': 'Update stopped at “{step}”.',
+  'server.updateRolledBack': 'The previous version keeps running.',
+  'server.updateNotRolledBack':
+    'The previous version could not be restored. Please check the server machine.',
+  'server.updateNoRestart':
+    'The server is running but has not restarted. Please check the deploy state.',
   'server.statusLabel': 'Status',
   'server.versionLabel': 'Version',
   'server.codeLabel': 'Code version',

@@ -16020,44 +16020,97 @@ function restartServer() {
   confirm2(t('server.restartTitle'), t('server.restartMsg'), t('server.restartConfirm'), async () => {
     const btn = document.getElementById('btn-server-restart');
     const status = document.getElementById('server-restart-status');
+    const zeige = (text) => {
+      status.textContent = text;
+      status.style.color = 'var(--c-text-muted)';
+    };
+    const zurueck = (text) => {
+      status.textContent = text;
+      status.style.color = 'var(--c-red-dark)';
+      btn.disabled = false;
+      btn.textContent = t('server.updateBtn');
+    };
+    // Why a deploy stopped. The runner writes `error` for its own steps, the
+    // chain `detail` (the step's last lines of output) and, from the update
+    // step on, whether it put the running commit back.
+    const fehlgeschlagen = (dep) => {
+      const zeilen = String(dep.error || dep.detail || '')
+        .split('\n')
+        .filter((z) => z.trim());
+      let text = t('server.updateFailed', { step: dep.step || '?' });
+      if (zeilen.length) text += ' ' + zeilen[zeilen.length - 1].trim().slice(0, 300);
+      if (dep.rolledBack === true) text += ' ' + t('server.updateRolledBack');
+      if (dep.rolledBack === false) text += ' ' + t('server.updateNotRolledBack');
+      return text;
+    };
     btn.disabled = true;
     btn.textContent = t('server.restarting');
     status.style.display = 'block';
-    status.style.color = 'var(--c-text-muted)';
-    status.textContent = t('server.updateStatus');
+    zeige(t('server.updateStatus'));
+    // The server runs the webhook's deploy and answers once it has started it,
+    // queued it, or stopped before changing anything.
+    let antwort;
     try {
-      await authFetch('/api/server/restart', {
+      const r = await authFetch('/api/server/restart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}'
       });
-      status.textContent = t('server.waitReconnect');
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        try {
-          const r = await fetch('/api/health');
-          if (r.ok) {
-            clearInterval(poll);
-            window.location.reload();
-          }
-        } catch (e) {
-          /* still down */
-        }
-        if (attempts > 60) {
-          clearInterval(poll);
-          status.textContent = t('server.noResponse');
-          status.style.color = 'var(--c-red-dark)';
-          btn.disabled = false;
-          btn.textContent = t('server.updateBtn');
-        }
-      }, 3000);
+      antwort = await r.json().catch(() => ({}));
+      if (!r.ok || !antwort.ok) {
+        zurueck(
+          antwort.result === 'stopped' && antwort.deploy
+            ? fehlgeschlagen(antwort.deploy)
+            : t('common.error') + ': ' + (antwort.error || 'HTTP ' + r.status)
+        );
+        return;
+      }
     } catch (e) {
-      status.textContent = t('common.error') + ': ' + e.message;
-      status.style.color = 'var(--c-red-dark)';
-      btn.disabled = false;
-      btn.textContent = t('server.updateBtn');
+      zurueck(t('common.error') + ': ' + e.message);
+      return;
     }
+    // Install and preflight come before the restart and take a while, and the
+    // old server answers all that time. So an answer counts only from a
+    // process younger than this click; until then, the deploy record says
+    // whether the deploy stopped at a step, in which case nothing restarts.
+    zeige(antwort.result === 'queued' ? t('server.updateQueued') : t('server.waitReconnect'));
+    const seit = Date.now();
+    // The record of this deploy, by its start. A queued one has none yet: it
+    // is the first record that turns up with another start than the one there
+    // was at the click.
+    const vorher = antwort.deploy ? antwort.deploy.started : null;
+    let eigener = antwort.result === 'started' ? vorher : null;
+    let erreichbar = false;
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        const h = r.ok ? await r.json() : null;
+        erreichbar = !!h;
+        if (h && typeof h.uptime === 'number' && h.uptime * 1000 < Date.now() - seit) {
+          clearInterval(poll);
+          window.location.reload();
+          return;
+        }
+        if (h && attempts % 3 === 0) {
+          const voll = await authFetch('/api/health/full').then((x) => (x.ok ? x.json() : null));
+          const dep = voll && voll.deploy;
+          if (!eigener && dep && dep.started && dep.started !== vorher) eigener = dep.started;
+          if (dep && eigener && dep.started === eigener && dep.status === 'failed') {
+            clearInterval(poll);
+            zurueck(fehlgeschlagen(dep));
+            return;
+          }
+        }
+      } catch (e) {
+        erreichbar = false;
+      }
+      if (attempts > 200) {
+        clearInterval(poll);
+        zurueck(erreichbar ? t('server.updateNoRestart') : t('server.noResponse'));
+      }
+    }, 3000);
   });
 }
 
