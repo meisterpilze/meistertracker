@@ -11252,12 +11252,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     const teile = [];
     let groesse = 0;
     let zuGross = false;
-    // Hinter dem HTTPS-Port hat der Server keine eigene Wartezeit fuer eine
-    // Anfrage: die Verbindungen reicht ihm der Port-Verteiler herein, und
-    // Node stellt requestTimeout nur fuer einen Server, der selbst lauscht.
     // Ein Handy, das mitten im Hochladen aus dem WLAN faellt, schickt kein
-    // Ende; bis zu 40 MB lagen dann in `teile` bis zum naechsten Neustart.
-    // Kommt eine Minute lang nichts, wird die Anfrage beendet.
+    // Ende. Die Verbindung haelt danach noch Minuten (PORT_LIMITS), und so
+    // lange laegen bis zu 40 MB in `teile`. Kommt eine Minute lang nichts,
+    // wird die Anfrage schon hier beendet.
     req.setTimeout(ORIGINAL_IDLE_MS, () => {
       teile.length = 0;
       req.destroy();
@@ -15196,6 +15194,70 @@ try {
   log('warn', 'Static asset precompression failed', { error: e.message });
 }
 
+// ── PORT LIMITS ─────────────────────────────────────────────
+// How long the HTTPS port gives a connection; createPortMux applies them.
+const PORT_LIMITS = {
+  // From connecting until the first byte, which tells TLS from plain HTTP.
+  firstByteMs: 10 * 1000,
+  // From the first byte of a request until its last header (Node's
+  // headersTimeout). Each request on a kept-alive connection starts it anew.
+  headersMs: 30 * 1000,
+  // From the first byte of a request until its last body byte (Node's
+  // requestTimeout). The largest bodies, an original photo of 40 MB and a
+  // backup of 50 MB to restore, still make it at half a megabit per second.
+  requestMs: 15 * 60 * 1000,
+  // How long a connection may go without a byte in either direction; the TLS
+  // handshake has to finish within it. Both event streams, /api/events and the
+  // MCP stream, send something every 15 s, and an original's upload gives up
+  // after a minute of silence on its own (ORIGINAL_IDLE_MS).
+  idleMs: 2 * 60 * 1000,
+  // How often Node looks for requests past their deadline.
+  checkMs: 5 * 1000,
+  // Connections at once. A browser opens at most six to one server, plus its
+  // event stream. Past the limit a new connection is closed before it costs a
+  // TLS handshake.
+  maxConnections: 500
+};
+
+// The listener on PORT in HTTPS mode. It reads the first byte of each
+// connection: 0x16 starts a TLS ClientHello and goes to tlsServer, anything
+// else to plainServer, which redirects to HTTPS. So PORT takes both, and
+// someone who types http:// does not run into a broken TLS handshake.
+//
+// Both servers get their connections through emit('connection') and never
+// listen themselves. Node starts its header and request deadlines from a
+// server's 'listening' event (setupConnectionsTracking in lib/_http_server.js),
+// so the loop below sets them and raises the event; without it a request on
+// this port has no deadline. test/port-multiplexer.test.js fails if a Node
+// release stops honouring the event.
+function createPortMux(tlsServer, plainServer, limits) {
+  for (const inner of [tlsServer, plainServer]) {
+    inner.headersTimeout = limits.headersMs;
+    inner.requestTimeout = limits.requestMs;
+    inner.connectionsCheckingInterval = limits.checkMs;
+    inner.emit('listening');
+  }
+  const mux = net.createServer((socket) => {
+    // One timer per socket: the wait for the first byte, then the idle limit.
+    // A TLS connection reads and writes through this socket, so every byte
+    // either way restarts it. On a plain one, Node's keep-alive timeout takes
+    // it over after the first answer.
+    socket.setTimeout(limits.firstByteMs);
+    socket.on('timeout', () => socket.destroy());
+    socket.on('error', () => {});
+    socket.once('data', (buf) => {
+      socket.pause();
+      socket.unshift(buf);
+      socket.setTimeout(limits.idleMs);
+      const target = buf[0] === 0x16 ? tlsServer : plainServer;
+      target.emit('connection', socket);
+      process.nextTick(() => socket.resume());
+    });
+  });
+  mux.maxConnections = limits.maxConnections;
+  return mux;
+}
+
 // ── SERVER CREATION (HTTPS with HTTP→HTTPS redirect, HTTP fallback if no certs) ──
 let server; // HTTPS (or plain HTTP in fallback) — keeps setSecureContext working for cert hot-reload
 let listenServer; // The listener actually bound to PORT — a TCP mux in HTTPS mode, else === server
@@ -15214,19 +15276,14 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
     res.end();
   });
 
-  // TCP multiplexer: sniff the first byte of each connection.
-  // 0x16 = TLS ClientHello record type → forward to the HTTPS server.
-  // Anything else → forward to the plain-HTTP redirect server.
-  // This lets PORT accept both HTTP and HTTPS so users who type `http://` don't hit a broken TLS handshake.
-  listenServer = net.createServer((socket) => {
-    socket.once('data', (buf) => {
-      socket.pause();
-      socket.unshift(buf);
-      const target = buf[0] === 0x16 ? server : samePortRedirect;
-      target.emit('connection', socket);
-      process.nextTick(() => socket.resume());
-    });
-    socket.on('error', () => {});
+  listenServer = createPortMux(server, samePortRedirect, PORT_LIMITS);
+  // Past the limit a new connection is closed before it sends anything, so the
+  // app simply stops loading. This says why, at most once a minute.
+  let dropLoggedAt = 0;
+  listenServer.on('drop', () => {
+    if (Date.now() - dropLoggedAt < 60 * 1000) return;
+    dropLoggedAt = Date.now();
+    log('warn', 'Connection limit reached, closing new connections', { max: PORT_LIMITS.maxConnections });
   });
 
   // Legacy redirect on port 80 so users who type `http://host` (no port) still get forwarded to HTTPS.
