@@ -3838,6 +3838,14 @@ function icsValue(component, name) {
   const p = icsProp(component, name);
   return p ? p.value.trim() : null;
 }
+// The same for a TEXT property, read back as the text it stands for (RFC 5545
+// §3.3.11): the reverse of escapeIcsText, so text the app wrote and a client
+// returned unchanged is stored unchanged. A backslash before any other
+// character stays as it is.
+function icsText(component, name) {
+  const v = icsValue(component, name);
+  return v === null ? null : v.replace(/\\([\\;,nN])/g, (_, c) => (c === 'n' || c === 'N' ? '\n' : c));
+}
 
 // The component a resource is about: the one without RECURRENCE-ID, which is
 // the series or the only one there is, else the first. A client may list a
@@ -5851,17 +5859,14 @@ function handlePut(parts, body, req, res) {
         const uid = obj.uid;
         if (/^[A-Za-z0-9\-_.@]+$/.test(uid)) {
           const task = db.readTaskByCaldavUid(database, uid);
-          const summary = icsValue(todo, 'SUMMARY');
+          const summary = icsText(todo, 'SUMMARY');
           const prio = icsValue(todo, 'PRIORITY');
           const status = icsValue(todo, 'STATUS');
           const due = icsDateTime(todo, 'DUE');
-          const desc = icsValue(todo, 'DESCRIPTION');
+          const desc = icsText(todo, 'DESCRIPTION');
           if (task) {
             const fields = {};
-            if (summary !== null) {
-              const t = summary.replace(/\\n/g, '\n');
-              if (t !== task.text) fields.text = t;
-            }
+            if (summary !== null && summary !== task.text) fields.text = summary;
             if (prio !== null && /^\d+$/.test(prio)) {
               const p = CALDAV_PRIO_MAP[prio] || 'med';
               if (p !== task.priority) fields.priority = p;
@@ -5886,11 +5891,8 @@ function handlePut(parts, body, req, res) {
                 fields.dueEndTime = null;
               }
             }
-            if (desc !== null) {
-              const d = desc.replace(/\\n/g, '\n');
-              if (d !== (task.description || '')) fields.description = d;
-            }
-            const assignee = icsValue(todo, 'X-MEISTERPILZE-ASSIGNEE');
+            if (desc !== null && desc !== (task.description || '')) fields.description = desc;
+            const assignee = icsText(todo, 'X-MEISTERPILZE-ASSIGNEE');
             if (assignee !== null && assignee !== (task.assignee || '')) fields.assignee = assignee;
 
             if (Object.keys(fields).length > 0) {
@@ -5903,13 +5905,13 @@ function handlePut(parts, body, req, res) {
           } else {
             // New task created from external CalDAV client
             db.insertTask(database, {
-              text: summary !== null ? summary.replace(/\\n/g, '\n') : '(kein Titel)',
+              text: summary !== null ? summary : '(kein Titel)',
               priority: prio !== null && /^\d+$/.test(prio) ? CALDAV_PRIO_MAP[prio] || 'med' : 'med',
               done: status === 'COMPLETED',
               created: new Date().toISOString(),
               dueDate: due ? due.date : null,
               dueTime: due ? due.time : null,
-              description: desc !== null ? desc.replace(/\\n/g, '\n') : null,
+              description: desc,
               caldavUid: uid,
               caldavSynced: new Date().toISOString()
             });
@@ -5957,10 +5959,10 @@ function handlePut(parts, body, req, res) {
           const idMatch = obj.uid.match(/^cev-(.+)@meisterpilze$/);
           if (idMatch) {
             const fields = {};
-            const summary = icsValue(vevent, 'SUMMARY');
-            if (summary !== null) fields.title = summary.replace(/\\n/g, '\n');
-            const desc = icsValue(vevent, 'DESCRIPTION');
-            if (desc !== null) fields.description = desc.replace(/\\n/g, '\n');
+            const summary = icsText(vevent, 'SUMMARY');
+            if (summary !== null) fields.title = summary;
+            const desc = icsText(vevent, 'DESCRIPTION');
+            if (desc !== null) fields.description = desc;
             const cat = (icsValue(vevent, 'CATEGORIES') || '').toLowerCase();
             if (Object.hasOwn(KNOWN_CATEGORIES, cat)) fields.category = cat;
             const start = icsDateTime(vevent, 'DTSTART');
@@ -5993,10 +5995,9 @@ function handlePut(parts, body, req, res) {
           // Check it doesn't already exist in DB
           const existing = db.readCalendarEventByCaldavUid(database, uid);
           if (!existing) {
-            const summary = icsValue(vevent, 'SUMMARY');
-            const title = summary !== null ? summary.replace(/\\n/g, '\n') : '(kein Titel)';
-            const desc = icsValue(vevent, 'DESCRIPTION');
-            const description = desc !== null ? desc.replace(/\\n/g, '\n') : null;
+            const summary = icsText(vevent, 'SUMMARY');
+            const title = summary !== null ? summary : '(kein Titel)';
+            const description = icsText(vevent, 'DESCRIPTION');
             const cat = (icsValue(vevent, 'CATEGORIES') || '').toLowerCase();
             const category = Object.hasOwn(KNOWN_CATEGORIES, cat) ? cat : 'custom';
             // The second door to the same thing. Any user may mint a CalDAV
@@ -14781,12 +14782,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               const end = icsDateTime(item, 'DTEND');
               imported.push({
                 uid: obj.uid || f,
-                summary: (icsValue(item, 'SUMMARY') || '(kein Titel)').replace(/\\n/g, ' '),
+                summary: (icsText(item, 'SUMMARY') || '(kein Titel)').replace(/\n/g, ' '),
                 date: start.date,
                 startTime: start.time,
                 endTime: end ? end.time : null,
                 allDay: start.allDay,
-                description: icsValue(item, 'DESCRIPTION') || null,
+                description: icsText(item, 'DESCRIPTION') || null,
                 calendar: dir
               });
             } catch (e) {
