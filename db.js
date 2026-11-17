@@ -3337,6 +3337,26 @@ const MIGRATIONS = [
         PRIMARY KEY (batch_id, kg)
       )`);
     }
+  },
+  {
+    version: 117,
+    description: 'Regal-Etikett: Bild, Band und Etikett-Text je Artikel',
+    fn(db) {
+      // Das Etikett am Regalfach hat oben ein schwarzes Band mit einem Bild und
+      // einem Wort (ALL-IN-ONE, WEIZEN, GLÄSER) und darunter den Text, auf den es
+      // ankommt (Hartholz, 1 kg, VOLL). Was wo steht, legt das Team am Artikel
+      // fest; der Code kennt nur die Bilder. Leer heisst: kein Bild, kein Band,
+      // und der Etikett-Text ist der Name.
+      const cols = new Set(
+        db
+          .prepare("SELECT name FROM pragma_table_info('shelf_items')")
+          .all()
+          .map((r) => r.name)
+      );
+      if (!cols.has('bild')) db.exec('ALTER TABLE shelf_items ADD COLUMN bild TEXT');
+      if (!cols.has('band')) db.exec('ALTER TABLE shelf_items ADD COLUMN band TEXT');
+      if (!cols.has('etikett')) db.exec('ALTER TABLE shelf_items ADD COLUMN etikett TEXT');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3610,8 +3630,32 @@ function _shelfRow(db, r) {
     // Fuer welche Beutelgroesse Koernerbrut dieser Artikel beim Beimpfen
     // abgibt, oder null.
     spawnKg: r.spawn_kg == null ? null : r.spawn_kg,
+    bild: r.bild || '',
+    band: r.band || '',
+    etikett: r.etikett || '',
     updated: r.updated
   };
+}
+
+// Die Bilder, die ein Etikett im Band tragen kann. Gezeichnet werden sie in
+// app.js (ETIKETT_BILDER), dieselben Namen.
+const ETIKETT_BILDER = ['glas', 'glas-leer', 'petri', 'spritze', 'koernerbeutel', 'growkit', 'cvg', 'weizen', 'baum'];
+// Das Band: hoechstens zwei Zeilen, je eine kurze; der Etikett-Text darunter.
+function _shelfBand(v) {
+  const zeilen = String(v == null ? '' : v)
+    .split(/\r?\n/)
+    .map((z) => z.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+  if (zeilen.length > 2) throw new Error('Das Band hat höchstens zwei Zeilen.');
+  if (zeilen.some((z) => z.length > 16)) throw new Error('Eine Zeile im Band hat höchstens 16 Zeichen.');
+  return zeilen.join('\n');
+}
+function _shelfEtikett(v) {
+  const t = String(v == null ? '' : v)
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (t.length > 40) throw new Error('Der Etikett-Text hat höchstens 40 Zeichen.');
+  return t;
 }
 
 function listShelfItems(db) {
@@ -3682,6 +3726,13 @@ function updateShelfItem(db, id, patch) {
       spawnKg = _spawnKgKey(kg);
     }
   }
+  let bild = cur.bild || '';
+  if (patch.bild !== undefined) {
+    bild = String(patch.bild || '');
+    if (bild && !ETIKETT_BILDER.includes(bild)) throw new Error('Dieses Bild gibt es nicht.');
+  }
+  const band = patch.band !== undefined ? _shelfBand(patch.band) : cur.band || '';
+  const etikett = patch.etikett !== undefined ? _shelfEtikett(patch.etikett) : cur.etikett || '';
   if (active) _shelfNameFrei(db, name, cur.id);
   if (active && spawnKg != null) {
     const clash = db
@@ -3696,8 +3747,8 @@ function updateShelfItem(db, id, patch) {
   // Neu verknuepft: ab jetzt. Chargen von vorher nimmt der Artikel nicht nachtraeglich.
   const linked = spawnKg == null ? null : spawnKg === cur.spawn_kg ? cur.spawn_linked : now;
   db.prepare(
-    'UPDATE shelf_items SET name=?, active=?, min_stock=?, spawn_kg=?, spawn_linked=?, updated=? WHERE id=?'
-  ).run(name, active, min, spawnKg, linked, now, cur.id);
+    'UPDATE shelf_items SET name=?, active=?, min_stock=?, spawn_kg=?, spawn_linked=?, bild=?, band=?, etikett=?, updated=? WHERE id=?'
+  ).run(name, active, min, spawnKg, linked, bild || null, band || null, etikett || null, now, cur.id);
   incrementDataVersion(db);
   return getShelfItem(db, cur.id);
 }
@@ -15923,6 +15974,7 @@ module.exports = {
   syncShelfOrders,
   syncShelfSpawn,
   shelfLowAlerts,
+  ETIKETT_BILDER,
   labFachText,
   getLabFach,
   ensureLabFach,
