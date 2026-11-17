@@ -17464,7 +17464,7 @@ function _lfSlotKind(slot) {
 }
 // Lang, wie im Blatt: "FK-Glas", "Spritze 10 ml", "Körnerbrut 3 kg", "Spritzen".
 function _lfLang(f) {
-  if (f.group) return t('lf.kind.SYall');
+  if (f.group) return t(f.kind === 'KB' ? 'lf.kind.KBall' : 'lf.kind.SYall');
   if (f.kind === 'SY') return t('lf.kind.SY', { ml: f.size });
   if (f.kind === 'KB') return t('lf.kind.KB', { kg: String(f.size).replace('.', ',') });
   return t('lf.kind.' + f.kind);
@@ -17474,6 +17474,7 @@ function _lfFind(strainId, slot) {
   const sp = _lfArt(strainId);
   if (!sp) return null;
   if (slot === 'SY') return sp.sy || null;
+  if (slot === 'KB') return sp.kb || null;
   return (sp.fach || []).find((f) => f.slot === slot) || null;
 }
 // Ein Fach, das die Liste (noch) nicht kennt, etwa die 50er, wenn es keine gibt.
@@ -17488,8 +17489,8 @@ function _lfLeer(strainId, slot) {
     name: ms ? ms.name : '',
     slot,
     kind,
-    size: slot !== 'SY' && (kind === 'SY' || kind === 'KB') ? Number(String(slot).slice(2)) : null,
-    group: slot === 'SY',
+    size: slot !== 'SY' && slot !== 'KB' && (kind === 'SY' || kind === 'KB') ? Number(String(slot).slice(2)) : null,
+    group: slot === 'SY' || slot === 'KB',
     have: 0,
     growing: 0,
     readyAt: null,
@@ -17515,6 +17516,7 @@ async function _lfHolen(strainId, slot) {
   _lfMerken(r.fach);
   const sp = _lfArt(strainId);
   if (sp && slot === 'SY') sp.sy = r.fach;
+  if (sp && slot === 'KB') sp.kb = r.fach;
   return r.fach;
 }
 
@@ -17604,14 +17606,13 @@ function lfRender() {
         ? t('lf.alarmUnder', { n: min })
         : t('lf.alarmOff');
     for (const b of document.querySelectorAll('#m-labfach [data-lf-min]')) b.disabled = !f.id;
-    // Körnerbrut kommt aus einer Charge, nicht aus einem Knopf.
-    document.getElementById('m-lf-in').hidden = f.kind === 'KB';
     document.getElementById('m-lf-help').textContent = t(f.kind === 'KB' ? 'lf.helpKB' : 'lf.help');
   }
-  // Gedruckt wird bei Spritzen immer das eine Etikett fürs Fach, egal welche
-  // Größe gerade offen ist.
-  const etikett = f.kind === 'SY' ? (_lfArt(f.strainId) || {}).sy || (gruppe ? f : null) : f;
-  document.getElementById('m-lf-print').disabled = !(etikett && etikett.barcode) && f.kind !== 'SY';
+  // Gedruckt wird bei Spritzen und Körnerbrut immer das eine Etikett der Art,
+  // egal welche Größe gerade offen ist.
+  const sammel = f.kind === 'SY' || f.kind === 'KB';
+  const etikett = sammel ? (_lfArt(f.strainId) || {})[f.kind.toLowerCase()] || (gruppe ? f : null) : f;
+  document.getElementById('m-lf-print').disabled = !(etikett && etikett.barcode) && !sammel;
   lfPreview(etikett);
 }
 
@@ -17689,7 +17690,12 @@ function _lfBeutel(f) {
 // aus einer Charge.
 function lfAdd(f, n) {
   const ms = (mushroomStrains || []).find((x) => x.id === f.strainId);
-  if (!ms || f.kind === 'KB' || f.group) return;
+  if (!ms || f.group) return;
+  // Körnerbrut: fertige Beutel ohne Etikett dazu, wie beim Zählen (kbzBuchen).
+  if (f.kind === 'KB') {
+    lfClose();
+    return kbzBuchen([{ strainId: f.strainId, kg: f.size, count: f.have + n }]);
+  }
   lfClose();
   const { newC, saved } = kulturenAnlegen({ type: f.kind, ms, wann: new Date(), qty: n, ml: f.size });
   cprShow(
@@ -17708,6 +17714,11 @@ async function lfOut(f, n, wie) {
     n,
     what
   });
+  // Beim Zählen gebucht wie die Monatszählung: auf dem Server, mit einem Rückgängig.
+  if (f.kind === 'KB' && wie === 'count') {
+    lfClose();
+    return kbzBuchen([{ strainId: f.strainId, kg: f.size, count: Math.max(0, f.have - n) }]);
+  }
   if (f.kind === 'KB') {
     const bags = _lfBeutel(f).slice(0, n);
     if (bags.length < n) {
@@ -17766,10 +17777,7 @@ function lfAct(a) {
       lfClose();
       return toast(t('lf.countSame', { n }));
     }
-    if (diff > 0) {
-      if (f.kind === 'KB') return toast(t('lf.kbNoAdd'), 'err');
-      return lfAdd(f, diff);
-    }
+    if (diff > 0) return lfAdd(f, diff);
     return lfOut(f, -diff, 'count');
   }
   if (!n) return toast(t('shelf.amountMissing'), 'err');
@@ -17804,7 +17812,7 @@ async function lfScanned(id) {
 // der Text darunter die Art, in der Größe für Artnamen.
 const LF_BILD = { LC: 'glas', PD: 'petri', SY: 'spritze', KB: 'koernerbeutel' };
 function _lfLabelItem(f) {
-  const wort = t(f.group ? 'lf.label.SYall' : 'lf.label.' + f.kind);
+  const wort = t(f.group ? (f.kind === 'KB' ? 'lf.label.KBall' : 'lf.label.SYall') : 'lf.label.' + f.kind);
   const groesse =
     f.group || f.kind === 'LC' || f.kind === 'PD'
       ? ''
@@ -17846,13 +17854,122 @@ async function lfPrint() {
   if (!_lfSheet) return;
   let f = _lfSheet.fach;
   // Spritzen: das Etikett fürs ganze Fach, angelegt, falls es noch keins gibt.
-  if (f.kind === 'SY' && !f.group) f = (_lfArt(f.strainId) || {}).sy || { kind: 'SY' };
-  if (f.kind === 'SY' && !f.barcode) f = (await _lfHolen(_lfSheet.strainId, 'SY')) || {};
+  // Spritzen und Körnerbrut: das Etikett der Art, angelegt, falls es noch keins gibt.
+  const kind = f.kind;
+  if ((kind === 'SY' || kind === 'KB') && !f.group) f = (_lfArt(f.strainId) || {})[kind.toLowerCase()] || { kind };
+  if ((kind === 'SY' || kind === 'KB') && !f.barcode) f = (await _lfHolen(_lfSheet.strainId, kind)) || {};
   if (!f.barcode) return toast(t('shelf.saveFailed'), 'err');
   if (typeof QRCode === 'undefined') await loadVendorLibs();
   const err = await sendToPrinter(shelfLabelZPL(shelfLabelCanvas(_lfLabelItem(f)), 1));
   if (err) toast(t('shelf.printFailed', { err }), 'err');
   else toast(tp('shelf.printed', 1));
+}
+
+// ── Körnerbrut zählen ──────────────────────────────────────
+// Einmal im Monat: je Art die fertigen Beutel zu 1, 2 und 5 kg, vorbelegt mit
+// dem, was die App meint. Man tippt nur die Zahlen um, die nicht stimmen, und
+// bucht alles mit einem Knopf (db.zaehleKoernerbrut): zu wenige gehen als
+// "beim Zählen ausgebucht" hinaus, zu viele kommen als fertige Beutel "aus der
+// Zählung" dazu. Ein Rückgängig nimmt die ganze Zählung zurück.
+const KBZ_KG = [1, 2, 5];
+function _kbzFach(sp, kg) {
+  return (sp.fach || []).find((f) => f.kind === 'KB' && Number(f.size) === kg) || { have: 0, growing: 0 };
+}
+function _kbzArten() {
+  return _lbSpecies().filter((sp) => !sp.ruht || (sp.fach || []).some((f) => f.kind === 'KB' && (f.have || f.growing)));
+}
+async function kbzOpen() {
+  await loadLabStock();
+  const arten = _kbzArten();
+  document.getElementById('kbz-list').innerHTML = arten.length
+    ? arten
+        .map(
+          (sp) =>
+            `<div class="kbz-sp"><b>${esc(sp.name)}</b>` +
+            KBZ_KG.map((kg) => {
+              const f = _kbzFach(sp, kg);
+              return (
+                `<label class="kbz-cell"><input type="number" inputmode="numeric" min="0" step="1" value="${f.have}"` +
+                ` data-kbz-strain="${sp.strainId}" data-kbz-kg="${kg}" data-kbz-alt="${f.have}"` +
+                ` aria-label="${esc(sp.name + ' ' + kg + ' kg')}" />` +
+                `<small>${f.growing ? esc(t('kbz.growing', { n: f.growing })) : ''}</small></label>`
+              );
+            }).join('') +
+            '</div>'
+        )
+        .join('')
+    : `<p class="fs-meta muted">${esc(t('kbz.none'))}</p>`;
+  kbzRender();
+  document.getElementById('m-kbz').classList.add('open');
+}
+function kbzClose() {
+  document.getElementById('m-kbz').classList.remove('open');
+}
+function _kbzAenderungen() {
+  const out = [];
+  for (const el of document.querySelectorAll('#kbz-list input[data-kbz-strain]')) {
+    const v = el.value.trim();
+    const n = v === '' ? NaN : Number(v);
+    const alt = Number(el.dataset.kbzAlt);
+    const anders = Number.isInteger(n) && n >= 0 && n !== alt;
+    el.parentElement.classList.toggle('kbz-diff', anders);
+    el.parentElement.classList.toggle('kbz-bad', v !== '' && !(Number.isInteger(n) && n >= 0));
+    if (anders) {
+      const sp = _lbSpecies().find((x) => x.strainId === Number(el.dataset.kbzStrain));
+      out.push({
+        strainId: Number(el.dataset.kbzStrain),
+        kg: Number(el.dataset.kbzKg),
+        count: n,
+        text: (sp ? sp.name : '') + ' ' + el.dataset.kbzKg + ' kg: ' + alt + ' → ' + n
+      });
+    }
+  }
+  return out;
+}
+function kbzRender() {
+  const a = _kbzAenderungen();
+  document.getElementById('kbz-sum').textContent = a.length ? a.map((x) => x.text).join(' · ') : t('kbz.allRight');
+  const go = document.getElementById('kbz-go');
+  go.disabled = !a.length;
+  go.textContent = a.length ? tp('kbz.apply', a.length) : t('kbz.applyNone');
+}
+// Bucht Zählungen auf dem Server; danach Rückgängig für alles zusammen.
+async function kbzBuchen(changes) {
+  const r = await apiPost('/api/lab-fach/zaehlung', { changes: changes.map(({ strainId, kg, count }) => ({ strainId, kg, count })) });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  pollSync();
+  loadLabStock();
+  if (!r.changes || !r.changes.length) {
+    toast(t('kbz.nothing'));
+    return;
+  }
+  showUndoBar(tp('kbz.done', r.changes.length), async () => {
+    const u = await apiPost('/api/lab-fach/zaehlung/zurueck', { removed: r.removed, added: r.added });
+    if (!u || u.error) toast(u && u.error ? u.error : t('shelf.saveFailed'), 'err');
+    else toast(t('kbz.undone'));
+    pollSync();
+    loadLabStock();
+  });
+}
+function kbzWire() {
+  document.getElementById('gr-zaehlen').addEventListener('click', kbzOpen);
+  const m = document.getElementById('m-kbz');
+  m.addEventListener('click', (e) => {
+    if (e.target === m || e.target.closest('[data-kbz-act="close"]')) return kbzClose();
+    if (e.target.closest('#kbz-go')) {
+      const a = _kbzAenderungen();
+      if (!a.length) return;
+      kbzClose();
+      kbzBuchen(a);
+    }
+  });
+  m.addEventListener('input', kbzRender);
+  m.addEventListener('focusin', (e) => {
+    if (e.target.matches('input[data-kbz-strain]')) e.target.select();
+  });
 }
 
 function lfWire() {
@@ -34204,6 +34321,7 @@ const _Z_SCHLIESSEN = {
   'm-note': () => closeNote(),
   'm-shelf': () => shelfSheetClose(),
   'm-labfach': () => lfClose(),
+  'm-kbz': () => kbzClose(),
   'm-lb': () => lbSheetClose(),
   'm-culture-print': () => cprClose(),
   'm-subinfo': () => closeSubstrateInfo(),
@@ -36009,6 +36127,7 @@ function initEventListeners() {
   });
   shelfWire();
   lfWire();
+  kbzWire();
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
   });

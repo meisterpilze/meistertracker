@@ -351,6 +351,26 @@
       </div>
     </div>
 
+    <!-- Körnerbrut zählen (kbzOpen): je Art die fertigen Beutel zu 1, 2 und 5 kg,
+         vorbelegt; was nicht stimmt, umtippen, und mit einem Knopf buchen. -->
+    <div class="modal-bg" id="m-kbz" role="dialog" aria-modal="true" aria-labelledby="kbz-title" hidden>
+      <div class="modal">
+        <h3 id="kbz-title" data-i18n="kbz.open">Körnerbrut zählen</h3>
+        <p class="fs-meta shelf-help" data-i18n="kbz.help">
+          Fertige Beutel im Regal. Tippe nur die Zahlen um, die nicht stimmen.
+        </p>
+        <div class="kbz-head" aria-hidden="true">
+          <span></span><span>1 kg</span><span>2 kg</span><span>5 kg</span>
+        </div>
+        <div id="kbz-list" class="kbz-list"></div>
+        <p class="fs-meta kbz-sum" id="kbz-sum" aria-live="polite"></p>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-kbz-act="close" data-i18n="common.close">Schließen</button>
+          <button type="button" class="btn btn-p" id="kbz-go" disabled data-i18n="kbz.applyNone">Bestand übernehmen</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Calendar print range modal -->
     <div class="modal-bg" id="m-cal-print" role="dialog" aria-modal="true" aria-labelledby="m-cal-print-title" hidden>
       <div class="modal">
@@ -4676,6 +4696,7 @@
               </div>
               <div class="sl-tools">
                 <button type="button" id="gr-scan" class="btn" data-i18n="gr.scan">Glas scannen</button>
+                <button type="button" id="gr-zaehlen" class="btn" data-i18n="kbz.open">Körnerbrut zählen</button>
                 <button type="button" id="gr-archiv" class="btn" aria-pressed="false"></button>
               </div>
               <p class="lb-tap" data-i18n="gr.help">Tipp auf eine Sorte, dann auf eine Charge: Beutel, Notiz, löschen.</p>

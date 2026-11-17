@@ -12662,6 +12662,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // selbst, nicht hier: das Fach zaehlt nichts eigenes.
   if (req.url === '/api/lab-fach' || req.url.startsWith('/api/lab-fach/')) {
     const idMatch = req.url.match(/^\/api\/lab-fach\/(\d+)$/);
+    const userId = (checkAuth(req) || {}).user_id || null;
     const run = (fn) => {
       try {
         const out = fn();
@@ -12696,6 +12697,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 400, err.message);
         }
       });
+    } else if (req.method === 'POST' && req.url === '/api/lab-fach/zaehlung') {
+      // Koernerbrut zaehlen: { changes: [{ strainId, kg, count }] }.
+      withBody((data) => db.zaehleKoernerbrut(database, data.changes, userId));
+    } else if (req.method === 'POST' && req.url === '/api/lab-fach/zaehlung/zurueck') {
+      withBody((data) => db.zaehlungZurueck(database, data, userId));
     } else if (req.method === 'GET' && idMatch) {
       const fach = db.getLabFach(database, Number(idMatch[1]));
       if (fach) jsonOk(res, { fach });
