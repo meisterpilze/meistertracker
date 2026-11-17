@@ -3290,6 +3290,27 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_research_handoffs_sample ON research_handoffs(sample_id)');
     }
+  },
+  {
+    version: 115,
+    description: 'Laborfach: Etikett und Alarm je Art und Gefaess (Petri, FK, Spritze, Koernerbrut)',
+    fn(db) {
+      // Ein Fach im Labor ist eine Art in einem Gefaess: Shiitake-Petrischalen,
+      // Austernpilz-Spritzen 10 ml, Koernerbrut 3 kg. Es hat ein Etikett (Barcode
+      // Typ 'labfach') und einen Alarm. Gezaehlt wird es nicht hier: der Bestand
+      // sind die Schalen, Spritzen und Beutel selbst, wie bisher.
+      // min_stock gilt nur, wo die Art oder die Shop-SKU kein Soll fuehren
+      // (labFachSoll); low_alerted wie bei shelf_items.
+      db.exec(`CREATE TABLE IF NOT EXISTS lab_fach (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        strain_id   INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        slot        TEXT NOT NULL,
+        min_stock   INTEGER,
+        low_alerted INTEGER NOT NULL DEFAULT 0,
+        created     TEXT NOT NULL,
+        UNIQUE(strain_id, slot)
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -12665,10 +12686,11 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   // diese Ausnahme zählte jeder verbrauchte Beutel hier als Kontamination.
   // Ebenso "undo": den Grund trägt der Rückweg, mit dem die App eine
   // Verschiebung zurücknimmt (_undoMove in app.js). Ohne die Ausnahme zählte
-  // jedes Rückgängig hier als Kontamination.
+  // jedes Rückgängig hier als Kontamination. Und "sold": ein Beutel, der an
+  // einen Kunden ging (Verkauft im Beutel-Fenster), ist ebenso kein Verlust.
   let rows = db
     .prepare(
-      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' ORDER BY id"
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' ORDER BY id"
     )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
@@ -14626,6 +14648,7 @@ function labStock(db, now = new Date()) {
          FROM mushroom_strains ORDER BY name COLLATE NOCASE`
     )
     .all();
+  const faecher = labFaecher(db, now);
   const out = [];
   for (const ms of strains) {
     const imProgramm = ms.im_programm !== 0;
@@ -14676,8 +14699,269 @@ function labStock(db, now = new Date()) {
     // Laborseite nie wieder einschalten.
     const hatWas = items.some((i) => i.have > 0 || i.growing > 0 || i.shop || i.ordered > 0);
     const ruht = !imProgramm && !hatWas;
-    out.push({ strainId: ms.id, name: ms.name, kuerzel: ms.kuerzel || '', imProgramm, ruht, items });
+    out.push({
+      strainId: ms.id,
+      name: ms.name,
+      kuerzel: ms.kuerzel || '',
+      imProgramm,
+      ruht,
+      items,
+      fach: faecher.get(ms.id) || []
+    });
   }
+  return out;
+}
+
+// ── Laborfach: eine Art in einem Gefaess ──────────────────────
+// Ein Fach ist, was auf einem Etikett am Regal oder im Kuehlschrank steht:
+// Shiitake-Petrischalen, Austernpilz-Spritzen 10 ml, Koernerbrut 3 kg. Gezaehlt
+// wird es nicht eigens. Der Bestand sind die Schalen, Spritzen und Beutel selbst,
+// derselbe, den Billbee bekommt und Nachproduzieren liest; das Fach gibt ihm ein
+// Etikett zum Scannen und einen Alarm.
+//
+// Slot: 'LC' (FK-Glas), 'PD' (Petrischale), 'SY10' / 'SY20' / 'SY50' (Spritze je
+// Groesse), 'KB<kg>' (Koernerbrut je Beutelgroesse; 'KB3', auch 'KB1.5').
+function _fachSlot(slot) {
+  const s = String(slot == null ? '' : slot)
+    .trim()
+    .toUpperCase();
+  if (s === 'LC' || s === 'PD') return { slot: s, kind: s, size: null };
+  let m = s.match(/^SY(\d+)$/);
+  if (m && SYRINGE_SIZES.includes(Number(m[1]))) return { slot: s, kind: 'SY', size: Number(m[1]) };
+  m = s.match(/^KB(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const kg = Math.round(Number(m[1]) * 10) / 10;
+    if (kg > 0 && kg <= 50) return { slot: 'KB' + kg, kind: 'KB', size: kg };
+  }
+  throw new Error('Dieses Fach gibt es nicht: ' + slot);
+}
+const _kbSlot = (kg) => 'KB' + Math.round(Number(kg) * 10) / 10;
+const _FACH_ORDER = { LC: 0, PD: 1, SY: 2, KB: 3 };
+function _fachCmp(a, b) {
+  const x = _fachSlot(a);
+  const y = _fachSlot(b);
+  return _FACH_ORDER[x.kind] - _FACH_ORDER[y.kind] || (x.size || 0) - (y.size || 0);
+}
+
+// Wie das Fach in Meldungen heisst, nach dem Namen der Art.
+function labFachText(slot) {
+  const f = _fachSlot(slot);
+  if (f.kind === 'LC') return 'FK-Glas';
+  if (f.kind === 'PD') return 'Petri';
+  if (f.kind === 'SY') return 'Spritze ' + f.size + ' ml';
+  return 'Körnerbrut ' + String(f.size).replace('.', ',') + ' kg';
+}
+
+// Was in jedem Fach ist, als "<Art>:<Slot>" → { have, growing, readyAt }. Gezaehlt
+// wie ueberall: Kulturen aktiv und gelagert; Koernerbrut, was im Regal steht,
+// fertig ab dem Faelligkeitstag der Charge (wie _grainSaleStock, aber jede
+// Beutelgroesse, auch die fuer die eigenen Bloecke).
+function _labFachCounts(db, nowIso) {
+  const out = new Map();
+  const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
+  const kulturen = db
+    .prepare(
+      `SELECT ms.id AS strain_id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END AS ml, COUNT(*) AS n
+         FROM cultures c JOIN mushroom_strains ms
+           ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
+        WHERE c.type IN ('LC', 'PD', 'SY') AND c.status IN (${st})
+        GROUP BY ms.id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END`
+    )
+    .all(...SYRINGE_STOCK_STATUSES);
+  for (const r of kulturen) {
+    const slot = r.type === 'SY' ? 'SY' + r.ml : r.type;
+    out.set(r.strain_id + ':' + slot, { have: r.n, growing: 0, readyAt: null });
+  }
+  const imRegal = getStockBagZoneMap(db);
+  const beutel = db
+    .prepare(
+      `SELECT b.bag_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.strain_id, ba.due
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all();
+  for (const r of beutel) {
+    if (!imRegal.has(r.bag_id)) continue;
+    const key = r.strain_id + ':' + _kbSlot(r.kg);
+    const z = out.get(key) || { have: 0, growing: 0, readyAt: null };
+    if (!r.due || r.due <= nowIso) z.have++;
+    else {
+      z.growing++;
+      if (!z.readyAt || r.due < z.readyAt) z.readyAt = r.due;
+    }
+    out.set(key, z);
+  }
+  return out;
+}
+
+function _fachCtx(db, now) {
+  const skus = new Map();
+  for (const s of db.prepare('SELECT * FROM syringe_stock_sku').all())
+    skus.set(s.strain_id + ':' + s.type + ':' + s.ml, s);
+  const barcodes = new Map(
+    db
+      .prepare("SELECT entity_id, barcode FROM barcodes WHERE entity_type = 'labfach'")
+      .all()
+      .map((r) => [String(r.entity_id), r.barcode])
+  );
+  return {
+    counts: _labFachCounts(db, now.toISOString()),
+    skus,
+    barcodes,
+    ordered: _openOrderedBySku(db),
+    rows: db.prepare('SELECT * FROM lab_fach').all()
+  };
+}
+
+// Ein Fach, wie die App es zeigt. Das Soll ist sein Alarm, und es steht, wo es
+// schon stand: an der Art fuer FK und Petri (min_lc, min_pd, dieselben Felder
+// wie Nachproduzieren und die Pilzsorten-Seite), an der Shop-SKU fuer eine
+// Spritzen- oder Beutelgroesse, die ein Shop verkauft; nur sonst am Fach selbst.
+// Knapp (low) heisst dasselbe wie gelb oder rot in Nachproduzieren (saleNeed).
+function _fachView(ctx, ms, slot, row) {
+  const f = _fachSlot(slot);
+  const c = ctx.counts.get(ms.id + ':' + f.slot) || { have: 0, growing: 0, readyAt: null };
+  let sku = null;
+  if (f.kind === 'SY') sku = ctx.skus.get(ms.id + ':SY:' + f.size);
+  else if (f.kind === 'KB') sku = ctx.skus.get(ms.id + ':GS:' + f.size);
+  else if (f.kind === 'PD') sku = ctx.skus.get(ms.id + ':PD:0');
+  let soll;
+  if (f.kind === 'LC') soll = ms.min_lc;
+  else if (f.kind === 'PD') soll = ms.min_pd;
+  else if (sku) soll = sku.soll;
+  else soll = row ? row.min_stock : null;
+  soll = soll || null;
+  const ordered = sku ? ctx.ordered.get(sku.sku) || 0 : 0;
+  const imProgramm = ms.im_programm !== 0;
+  const need = saleNeed({ count: c.have, growing: c.growing, ordered, soll: imProgramm ? soll : null });
+  return {
+    id: row ? row.id : null,
+    barcode: row ? ctx.barcodes.get(String(row.id)) || null : null,
+    strainId: ms.id,
+    name: ms.name,
+    slot: f.slot,
+    kind: f.kind,
+    size: f.size,
+    have: c.have,
+    growing: c.growing,
+    readyAt: c.readyAt,
+    soll,
+    ordered,
+    sku: sku ? sku.sku : '',
+    imProgramm,
+    low: need.make > 0,
+    urgency: need.urgency
+  };
+}
+
+const _FACH_STRAIN_COLS = 'id, name, im_programm, min_lc, min_pd';
+
+// Die Faecher je Art (Map Art-id → Liste), fuer Labor → Bestand. FK und Petri
+// hat jede Art. Eine Spritzen- oder Beutelgroesse steht da, sobald es sie gibt:
+// etwas darin, ein Etikett, eine Shop-SKU. Eine Art im Programm ohne jede
+// Spritze bekommt die 10er, damit man dort anfangen kann; die anderen Groessen
+// erreicht man im Blatt.
+function labFaecher(db, now = new Date()) {
+  const ctx = _fachCtx(db, now);
+  const rowBy = new Map(ctx.rows.map((r) => [r.strain_id + ':' + r.slot, r]));
+  const out = new Map();
+  for (const ms of db.prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains`).all()) {
+    const slots = new Set(['LC', 'PD']);
+    const pre = ms.id + ':';
+    for (const key of [...ctx.counts.keys(), ...rowBy.keys()]) {
+      if (key.startsWith(pre) && /^(SY|KB)/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
+    }
+    for (const [key, s] of ctx.skus) {
+      if (!key.startsWith(pre)) continue;
+      if (s.type === 'SY') slots.add('SY' + s.ml);
+      else if (s.type === 'GS') slots.add(_kbSlot(s.ml));
+    }
+    if (![...slots].some((s) => s.startsWith('SY')) && ms.im_programm !== 0) slots.add('SY10');
+    out.set(
+      ms.id,
+      [...slots].sort(_fachCmp).map((s) => _fachView(ctx, ms, s, rowBy.get(pre + s)))
+    );
+  }
+  return out;
+}
+
+function getLabFach(db, id) {
+  const row = db.prepare('SELECT * FROM lab_fach WHERE id = ?').get(Number(id));
+  if (!row) return null;
+  const ms = db.prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains WHERE id = ?`).get(row.strain_id);
+  if (!ms) return null;
+  return _fachView(_fachCtx(db, new Date()), ms, row.slot, row);
+}
+
+// Das Fach einer Art holen, und anlegen, wenn es noch keins gibt: mit seiner
+// Nummer aus der Barcode-Liste, fuers Etikett. Das passiert, wenn jemand das
+// Blatt oeffnet; ein Etikett gibt es also fuer jedes Fach, das man sieht.
+function ensureLabFach(db, strainId, slot) {
+  const f = _fachSlot(slot);
+  const ms = db.prepare('SELECT id FROM mushroom_strains WHERE id = ?').get(Number(strainId));
+  if (!ms) throw new Error('Diese Art gibt es nicht');
+  let row = db.prepare('SELECT id FROM lab_fach WHERE strain_id = ? AND slot = ?').get(ms.id, f.slot);
+  if (!row) {
+    row = _blockTx(db, () => {
+      const id = db
+        .prepare('INSERT INTO lab_fach(strain_id, slot, created) VALUES(?, ?, ?)')
+        .run(ms.id, f.slot, new Date().toISOString()).lastInsertRowid;
+      assignBarcode(db, 'labfach', String(id));
+      return { id };
+    });
+    incrementDataVersion(db);
+  }
+  return getLabFach(db, row.id);
+}
+
+// Den Alarm eines Fachs setzen: 0 schaltet ihn aus. Geschrieben wird dorthin,
+// wo _fachView das Soll liest.
+function setLabFachAlarm(db, id, soll) {
+  const row = db.prepare('SELECT * FROM lab_fach WHERE id = ?').get(Number(id));
+  if (!row) throw new Error('Dieses Fach gibt es nicht');
+  const n = soll == null || soll === '' ? 0 : Number(soll);
+  if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('Der Alarm ist eine ganze Zahl von 0 bis 500');
+  const f = _fachSlot(row.slot);
+  if (f.kind === 'LC') db.prepare('UPDATE mushroom_strains SET min_lc = ? WHERE id = ?').run(n, row.strain_id);
+  else if (f.kind === 'PD') db.prepare('UPDATE mushroom_strains SET min_pd = ? WHERE id = ?').run(n, row.strain_id);
+  else {
+    const r = db
+      .prepare('UPDATE syringe_stock_sku SET soll = ? WHERE strain_id = ? AND type = ? AND ml = ?')
+      .run(n || null, row.strain_id, f.kind === 'SY' ? 'SY' : 'GS', f.size);
+    if (!r.changes) db.prepare('UPDATE lab_fach SET min_stock = ? WHERE id = ?').run(n || null, row.id);
+  }
+  incrementDataVersion(db);
+  return getLabFach(db, row.id);
+}
+
+// Welche Faecher gerade unter ihr Soll gefallen sind, wie shelfLowAlerts: jedes
+// nur einmal, bis es wieder reicht; dann ist der Alarm wieder scharf und die
+// Meldung in der Glocke erledigt. Nur Faecher mit Etikett: eine Art, die nie
+// jemand angesehen hat, laeutet nicht.
+function labFachLowAlerts(db, now = new Date()) {
+  const ctx = _fachCtx(db, now);
+  if (!ctx.rows.length) return [];
+  const strains = new Map(
+    db
+      .prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains`)
+      .all()
+      .map((m) => [m.id, m])
+  );
+  const out = [];
+  _blockTx(db, () => {
+    for (const r of ctx.rows) {
+      const ms = strains.get(r.strain_id);
+      if (!ms) continue;
+      const v = _fachView(ctx, ms, r.slot, r);
+      if (v.low && !r.low_alerted) {
+        db.prepare('UPDATE lab_fach SET low_alerted = 1 WHERE id = ?').run(r.id);
+        out.push({ ...v, text: labFachText(v.slot) });
+      } else if (!v.low && r.low_alerted) {
+        db.prepare('UPDATE lab_fach SET low_alerted = 0 WHERE id = ?').run(r.id);
+        dismissNotificationsFor(db, 'lab_low', 'labfach', String(r.id));
+      }
+    }
+  });
   return out;
 }
 
@@ -15430,6 +15714,11 @@ module.exports = {
   setShelfSku,
   syncShelfOrders,
   shelfLowAlerts,
+  labFachText,
+  getLabFach,
+  ensureLabFach,
+  setLabFachAlarm,
+  labFachLowAlerts,
   snapshotDailyKPIs,
   getKpiSnapshots,
   getContaminationReport,

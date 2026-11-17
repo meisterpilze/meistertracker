@@ -939,6 +939,11 @@ function onNotifItemClick(e) {
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
+  } else if (linkType === 'labfach' && linkId) {
+    // "Nachproduzieren" (checkLabFach): Labor → Bestand, mit dem Blatt des Fachs.
+    go('lab', 'n-lab');
+    openStab('lab', 'stock');
+    lfScanned(linkId);
   } else if (linkType === 'shelf' && linkId) {
     // "Nachproduzieren" (checkShelf): das Fach unter Lager → Regal, mit seinem Blatt.
     go('inv', 'n-inv');
@@ -9175,6 +9180,7 @@ async function loadLabStock() {
   }
   renderLabStock();
   if (_lbSheet) lbSheetRender();
+  if (_lfSheet) lfRefresh();
   // Die Tagesliste nimmt ihre Laboraufgaben aus denselben Zahlen
   // (buildLabMinTasks); sie kamen gerade erst an.
   const work = document.getElementById('p-work');
@@ -9183,7 +9189,6 @@ async function loadLabStock() {
 const _lbSpecies = () => (_lbData && _lbData.species) || [];
 const _lbFehlt = (sp) => sp.items.filter((i) => i.make > 0);
 const _lbDringend = (sp) => sp.items.some((i) => i.urgency === 'now');
-const _lbIstShop = (i) => !!i.shop;
 // Ein Feld kurz, wie es in einer Zeile steht, und lang, wie im Blatt.
 function _lbKurz(i) {
   if (i.key === 'MC' || i.key === 'LC' || i.key === 'PD' || i.key === 'GSKG') return t('lb.short.' + i.key);
@@ -9261,13 +9266,16 @@ function renderWorkNachproduzieren(species) {
 }
 
 // ── Die Liste je Art ──
-// Fünf Felder je Zeile, immer dieselben an derselben Stelle: Slant, FK, Petri,
-// Spritzen (die Größen, die es gibt), Körnerbrut in kg. Gelb unter dem Soll,
-// rot bei einer Bestellung, die nicht gedeckt ist. Ein Tipp öffnet die Art.
-function _lbStat(label, have, soll, cls, shop) {
+// Je Art eine Karte. Der Name oben öffnet die Art (Soll, Ansetzen, Im
+// Programm). Darunter jedes Fach mit seiner Zahl: FK, Petri, jede Spritzen- und
+// jede Beutelgröße, die es gibt. Eine Zahl öffnet ihr Fach, dasselbe Blatt wie
+// das Etikett am Regal (lfOpen). Slant hat kein Fach und öffnet die Art. Gelb
+// unter dem Soll, rot bei einer Bestellung, die nicht gedeckt ist.
+function _lbStat(label, have, soll, cls, shop, attr) {
+  const tag = attr ? 'button' : 'span';
   return (
-    `<span class="lb-st${cls ? ' ' + cls : ''}"><small>${esc(label)}${shop ? '<i class="lb-shopdot" aria-hidden="true"></i>' : ''}</small>` +
-    `<b>${esc(have)}${soll ? '<em>/' + esc(soll) + '</em>' : ''}</b></span>`
+    `<${tag}${attr ? ' type="button" ' + attr : ''} class="lb-st${cls ? ' ' + cls : ''}"><small>${esc(label)}${shop ? '<i class="lb-shopdot" aria-hidden="true"></i>' : ''}</small>` +
+    `<b>${esc(have)}${soll ? '<em>/' + esc(soll) + '</em>' : ''}</b></${tag}>`
   );
 }
 function _lbStatCls(items) {
@@ -9275,32 +9283,46 @@ function _lbStatCls(items) {
   if (items.some((i) => i.make > 0)) return 'lb-under';
   return items.every((i) => !i.have) ? 'lb-zero' : '';
 }
+// Ein Fach, wie es in der Zeile steht: "FK", "Petri", "10 ml", "KB 3 kg".
+function _lfKurz(f) {
+  if (f.kind === 'SY') return t('lb.short.SY', { ml: f.size });
+  if (f.kind === 'KB') return t('lb.short.kb', { kg: String(f.size).replace('.', ',') });
+  return t('lb.short.' + f.kind);
+}
+function _lfCls(f) {
+  if (f.urgency === 'now') return 'lb-now';
+  if (f.low) return 'lb-under';
+  return f.have || f.growing ? '' : 'lb-zero';
+}
 function _lbZeile(sp) {
-  const by = (k) => sp.items.find((i) => i.key === k);
-  const one = (k) => {
-    const i = by(k);
-    return _lbStat(_lbKurz(i), _lbZahl(i, i.have), i.soll ? _lbZahl(i, i.soll) : '', _lbStatCls([i]), _lbIstShop(i));
-  };
-  const sy = sp.items.filter((i) => i.key.startsWith('SY'));
-  const kb = sp.items.filter((i) => i.key === 'GSKG' || i.key.startsWith('kb'));
-  const gskg = by('GSKG');
-  return (
-    `<button type="button" class="lb-sp" data-lb-strain="${sp.strainId}">` +
-    `<span class="lb-sp-h"><b>${esc(sp.name)}</b>` +
-    (sp.imProgramm ? '' : `<small class="lb-paused">${esc(t('lb.paused'))}</small>`) +
-    '<span class="lb-chev" aria-hidden="true">›</span></span><span class="lb-row">' +
-    one('MC') +
-    one('LC') +
-    one('PD') +
-    _lbStat(t('lb.short.SYall'), sy.length ? sy.map((i) => i.have).join('·') : '–', '', sy.length ? _lbStatCls(sy) : 'lb-zero', sy.some(_lbIstShop)) +
+  const mc = sp.items.find((i) => i.key === 'MC');
+  const fach = (sp.fach || []).map((f) =>
     _lbStat(
-      t('lb.short.GSKG'),
-      _lbZahl(gskg, gskg.have),
-      gskg.soll ? _lbZahl(gskg, gskg.soll) : '',
-      _lbStatCls(kb),
-      kb.some(_lbIstShop)
-    ) +
-    '</span></button>'
+      _lfKurz(f),
+      String(f.have),
+      f.soll ? String(f.soll) : '',
+      _lfCls(f),
+      !!f.sku,
+      `data-lf-strain="${sp.strainId}" data-lf-slot="${esc(f.slot)}" aria-label="${esc(sp.name + ' ' + _lfLang(f) + ': ' + f.have)}"`
+    )
+  );
+  return (
+    '<div class="lb-sp">' +
+    `<button type="button" class="lb-sp-h" data-lb-strain="${sp.strainId}"><b>${esc(sp.name)}</b>` +
+    (sp.imProgramm ? '' : `<small class="lb-paused">${esc(t('lb.paused'))}</small>`) +
+    '<span class="lb-chev" aria-hidden="true">›</span></button><div class="lb-row">' +
+    (mc
+      ? _lbStat(
+          _lbKurz(mc),
+          _lbZahl(mc, mc.have),
+          mc.soll ? _lbZahl(mc, mc.soll) : '',
+          _lbStatCls([mc]),
+          false,
+          `data-lb-strain="${sp.strainId}"`
+        )
+      : '') +
+    fach.join('') +
+    '</div></div>'
   );
 }
 let _lbRuhenOffen = false;
@@ -16683,6 +16705,7 @@ function shelfScanned(id) {
 
 function shelfSheetOpen(id) {
   if (!shelfById(id)) return;
+  if (_shelfSheet && _shelfSheet.minTimer) shelfSaveMin();
   _shelfSheet = { id: Number(id) };
   document.getElementById('m-shelf-n').value = '0';
   document.getElementById('m-shelf-more').open = false;
@@ -16691,6 +16714,7 @@ function shelfSheetOpen(id) {
   shelfLogLoad();
 }
 function shelfSheetClose() {
+  if (_shelfSheet && _shelfSheet.minTimer) shelfSaveMin();
   document.getElementById('m-shelf').classList.remove('open');
   _shelfSheet = null;
 }
@@ -16703,11 +16727,11 @@ function shelfSheetRender() {
   document.getElementById('m-shelf-title').textContent = x.name;
   document.getElementById('m-shelf-stock').textContent = x.stock;
   document.getElementById('m-shelf-now').classList.toggle('shelf-low', _shelfLow(x));
-  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: x.minStock });
+  if (_shelfSheet.min == null || !_shelfSheet.minTimer) _shelfSheet.min = x.minStock;
+  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: _shelfSheet.min });
+  document.getElementById('m-shelf-minv').textContent = _shelfSheet.min;
   const rn = document.getElementById('m-shelf-rename');
   if (document.activeElement !== rn) rn.value = x.name;
-  const mn = document.getElementById('m-shelf-min');
-  if (document.activeElement !== mn) mn.value = String(x.minStock);
   document.getElementById('m-shelf-skus').innerHTML = (x.skus || []).length
     ? x.skus
         .map(
@@ -16720,15 +16744,25 @@ function shelfSheetRender() {
   shelfLabelPreview(x);
 }
 
+// Der Alarm steht unter der Zahl, mit − und +: ein Tipp gilt sofort, gespeichert
+// wird kurz nach dem letzten. Vorher lag er unter "Verlauf und Artikel", mit
+// einem Feld und Speichern, und niemand fand ihn.
+function shelfMinStep(d) {
+  if (!_shelfSheet) return;
+  _shelfSheet.min = Math.max(0, (_shelfSheet.min || 0) + d);
+  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: _shelfSheet.min });
+  document.getElementById('m-shelf-minv').textContent = _shelfSheet.min;
+  clearTimeout(_shelfSheet.minTimer);
+  _shelfSheet.minTimer = setTimeout(shelfSaveMin, 700);
+}
 async function shelfSaveMin() {
-  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  const sheet = _shelfSheet;
+  const x = sheet && shelfById(sheet.id);
   if (!x) return;
-  const v = document.getElementById('m-shelf-min').value.trim();
-  const n = Number(v);
-  if (v === '' || !Number.isInteger(n) || n < 0) {
-    toast(t('shelf.minWhole'), 'err');
-    return;
-  }
+  clearTimeout(sheet.minTimer);
+  sheet.minTimer = null;
+  const n = sheet.min;
+  if (n === x.minStock) return;
   const r = await apiPatch('/api/shelf/' + x.id, { minStock: n });
   if (!r || r.error) {
     toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
@@ -17028,6 +17062,8 @@ function shelfWire() {
     }
     const step = e.target.closest('[data-shelf-step]');
     if (step) shelfStep(Number(step.dataset.shelfStep));
+    const min = e.target.closest('[data-shelf-min]');
+    if (min) shelfMinStep(Number(min.dataset.shelfMin));
     const unsku = e.target.closest('[data-shelf-unsku]');
     if (unsku) shelfSku(unsku.dataset.shelfUnsku, 0);
     const act = e.target.closest('[data-shelf-act]');
@@ -17037,7 +17073,6 @@ function shelfWire() {
     else if (a === 'print') shelfPrint([_shelfSheet.id]);
     else if (a === 'rename') shelfRename();
     else if (a === 'hide') shelfSetActive(_shelfSheet.id, false);
-    else if (a === 'min') shelfSaveMin();
     else if (a === 'sku') {
       const sku = document.getElementById('m-shelf-sku').value.trim();
       const per = Number(document.getElementById('m-shelf-per').value || 1);
@@ -17049,6 +17084,372 @@ function shelfWire() {
   });
   // Das Feld öffnet mit 0; beim Antippen ist sie markiert, damit die Zahl sie ersetzt.
   document.getElementById('m-shelf-n').addEventListener('focus', (e) => e.target.select());
+}
+
+// ── Laborfach: eine Art in einem Gefäß ──────────────────────
+// Shiitake-Petrischalen, Austernpilz-Spritzen 10 ml, Körnerbrut 3 kg: was ein
+// Etikett am Regal oder im Kühlschrank hat. Das Blatt sieht aus wie das am
+// Regal (Add, Remove, Das ist der Bestand), zählt aber nichts Eigenes: der
+// Bestand sind die Schalen, Spritzen und Beutel selbst, dieselbe Zahl, die
+// Billbee bekommt und Nachproduzieren liest (db.labFaecher). Add legt neue an
+// und endet im Etiketten-Fenster wie jede Laborarbeit; Remove und Verkauft
+// nehmen die ältesten. Was an einen Kunden geht, scannt man am besten einzeln
+// (Verkauft im Kultur- oder Beutel-Fenster): nur so weiß die App, welches.
+//
+// Der Alarm ist das Soll, an derselben Stelle gespeichert (db.setLabFachAlarm),
+// und ein Tipp auf − oder + gilt gleich, ohne Speichern-Knopf.
+let _lfSheet = null; // { strainId, slot, fach, min, minTimer }
+function _lfSlotKind(slot) {
+  const s = String(slot);
+  return s.startsWith('SY') ? 'SY' : s.startsWith('KB') ? 'KB' : s;
+}
+// Lang, wie im Blatt: "FK-Glas", "Spritze 10 ml", "Körnerbrut 3 kg".
+function _lfLang(f) {
+  if (f.kind === 'SY') return t('lf.kind.SY', { ml: f.size });
+  if (f.kind === 'KB') return t('lf.kind.KB', { kg: String(f.size).replace('.', ',') });
+  return t('lf.kind.' + f.kind);
+}
+function _lfFind(strainId, slot) {
+  const sp = _lbSpecies().find((x) => x.strainId === strainId);
+  return sp ? (sp.fach || []).find((f) => f.slot === slot) || null : null;
+}
+// Ein Fach, das die Liste (noch) nicht kennt, etwa die 50er, wenn es keine gibt.
+// Der Server schickt es gleich darauf richtig (lfOpen).
+function _lfLeer(strainId, slot) {
+  const kind = _lfSlotKind(slot);
+  const ms = (mushroomStrains || []).find((x) => x.id === strainId);
+  return {
+    id: null,
+    barcode: null,
+    strainId,
+    name: ms ? ms.name : '',
+    slot,
+    kind,
+    size: kind === 'SY' || kind === 'KB' ? Number(String(slot).slice(2)) : null,
+    have: 0,
+    growing: 0,
+    readyAt: null,
+    soll: null,
+    ordered: 0,
+    sku: '',
+    imProgramm: true,
+    low: false,
+    urgency: null
+  };
+}
+function _lfMerken(f) {
+  if (f && f.barcode) {
+    barcodeRegistry.set(f.barcode, { type: 'labfach', id: String(f.id) });
+    barcodeByEntity.set('labfach:' + f.id, f.barcode);
+  }
+}
+
+function lfOpen(strainId, slot) {
+  strainId = Number(strainId);
+  if (_lfSheet && _lfSheet.minTimer) {
+    clearTimeout(_lfSheet.minTimer);
+    lfMinSave();
+  }
+  const f = _lfFind(strainId, slot) || _lfLeer(strainId, slot);
+  _lfSheet = { strainId, slot, fach: f, min: f.soll || 0, minTimer: null };
+  document.getElementById('m-lf-n').value = '0';
+  lfRender();
+  document.getElementById('m-labfach').classList.add('open');
+  // Das Fach vom Server: beim ersten Mal legt er es an, mit der Nummer fürs Etikett.
+  apiPost('/api/lab-fach', { strainId, slot }).then((r) => {
+    if (!r || r.error || !r.fach || !_lfSheet || _lfSheet.slot !== slot || _lfSheet.strainId !== strainId) return;
+    _lfMerken(r.fach);
+    _lfSheet.fach = r.fach;
+    if (!_lfSheet.minTimer) _lfSheet.min = r.fach.soll || 0;
+    lfRender();
+  });
+}
+function lfClose() {
+  if (_lfSheet && _lfSheet.minTimer) {
+    clearTimeout(_lfSheet.minTimer);
+    lfMinSave();
+  }
+  document.getElementById('m-labfach').classList.remove('open');
+  _lfSheet = null;
+}
+// Neue Zahlen vom Server: das offene Blatt nimmt sein Fach daraus.
+function lfRefresh() {
+  if (!_lfSheet) return;
+  const f = _lfFind(_lfSheet.strainId, _lfSheet.slot);
+  if (!f) return;
+  _lfSheet.fach = { ...f, barcode: f.barcode || _lfSheet.fach.barcode, id: f.id || _lfSheet.fach.id };
+  if (!_lfSheet.minTimer) _lfSheet.min = f.soll || 0;
+  lfRender();
+}
+function lfRender() {
+  if (!_lfSheet) return;
+  const f = _lfSheet.fach;
+  document.getElementById('m-lf-title').textContent = f.name;
+  document.getElementById('m-lf-what').textContent = _lfLang(f);
+  // Die anderen Größen derselben Art, ein Tipp entfernt: so erreicht man auch
+  // eine Größe, die es noch gar nicht gibt.
+  const sizes = document.getElementById('m-lf-sizes');
+  if (f.kind === 'SY' || f.kind === 'KB') {
+    const da = (_lbSpecies().find((x) => x.strainId === f.strainId) || {}).fach || [];
+    const alle = new Set((f.kind === 'SY' ? SY_ML : KB_KG).map(Number));
+    for (const x of da) if (x.kind === f.kind) alle.add(Number(x.size));
+    alle.add(Number(f.size));
+    sizes.innerHTML = [...alle]
+      .sort((a, b) => a - b)
+      .map((n) => {
+        const slot = f.kind + n;
+        const on = slot === f.slot;
+        return (
+          `<button type="button" class="lf-size${on ? ' on' : ''}" data-lf-size="${esc(slot)}" aria-pressed="${on}">` +
+          `${esc(String(n).replace('.', ','))} ${f.kind === 'SY' ? 'ml' : 'kg'}</button>`
+        );
+      })
+      .join('');
+    sizes.hidden = false;
+  } else {
+    sizes.innerHTML = '';
+    sizes.hidden = true;
+  }
+  document.getElementById('m-lf-stock').textContent = f.have;
+  document.getElementById('m-lf-now').classList.toggle('shelf-low', !!f.low);
+  document.getElementById('m-lf-grow').textContent = f.growing
+    ? t('lf.growing', { n: f.growing, date: f.readyAt ? fmtDtShort(f.readyAt) : '–' })
+    : '';
+  const min = _lfSheet.min;
+  document.getElementById('m-lf-minv').textContent = min;
+  document.getElementById('m-lf-alarm').textContent = !f.imProgramm
+    ? t('lf.alarmPaused')
+    : min
+      ? t('lf.alarmUnder', { n: min })
+      : t('lf.alarmOff');
+  for (const b of document.querySelectorAll('#m-labfach [data-lf-min]')) b.disabled = !f.id;
+  // Körnerbrut kommt aus einer Charge, nicht aus einem Knopf.
+  document.getElementById('m-lf-in').hidden = f.kind === 'KB';
+  document.getElementById('m-lf-help').textContent = t(f.kind === 'KB' ? 'lf.helpKB' : 'lf.help');
+  document.getElementById('m-lf-print').disabled = !f.barcode;
+  lfPreview();
+}
+
+// Der Alarm: − und + gelten sofort, gespeichert wird kurz nach dem letzten Tipp.
+function lfMinStep(d) {
+  if (!_lfSheet || !_lfSheet.fach.id) return;
+  _lfSheet.min = Math.max(0, Math.min(500, _lfSheet.min + d));
+  lfRender();
+  clearTimeout(_lfSheet.minTimer);
+  _lfSheet.minTimer = setTimeout(lfMinSave, 700);
+}
+async function lfMinSave() {
+  const sheet = _lfSheet;
+  if (!sheet || !sheet.fach.id) return;
+  sheet.minTimer = null;
+  const n = sheet.min;
+  const r = await apiPatch('/api/lab-fach/' + sheet.fach.id, { soll: n });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  toast(n ? t('lf.alarmUnder', { n }) : t('lf.alarmOff'));
+  if (_lfSheet === sheet && !sheet.minTimer) {
+    sheet.fach = { ...r.fach, barcode: r.fach.barcode || sheet.fach.barcode };
+    lfRender();
+  }
+  loadLabStock();
+}
+
+function _lfN() {
+  const v = document.getElementById('m-lf-n').value.trim();
+  const n = v === '' ? 0 : Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : NaN;
+}
+function lfStep(d) {
+  const n = _lfN();
+  document.getElementById('m-lf-n').value = String(Math.max(0, (Number.isNaN(n) ? 0 : n) + d));
+}
+
+// Was im Fach ist, das Älteste zuerst. Kulturen: aktiv und gelagert, wie
+// db.labFaecher zählt. Körnerbrut: fertige Beutel, die im Regal stehen.
+function _lfKulturen(f) {
+  return cultures
+    .filter(
+      (c) =>
+        c.type === f.kind &&
+        (c.status === 'active' || c.status === 'stored') &&
+        (c.strainId === f.strainId || (!c.strainId && c.species === f.name)) &&
+        (f.kind !== 'SY' || (Number(c.ml) || 10) === f.size)
+    )
+    .sort((a, b) => String(a.created).localeCompare(String(b.created)) || a.id.localeCompare(b.id));
+}
+function _lfBeutel(f) {
+  const placed = buildLastPlacementByBag();
+  const jetzt = new Date().toISOString();
+  const out = [];
+  for (const b of batches) {
+    if (b.batchType !== 'grain' || b.strainId !== f.strainId) continue;
+    if (b.due && b.due > jetzt) continue;
+    for (const bag of b.bags || []) {
+      const w = b.bagWeights && Number.isFinite(b.bagWeights[bag]) ? b.bagWeights[bag] : b.bagKg || 3;
+      if (Math.round(w * 10) / 10 !== f.size) continue;
+      const last = placed.get(String(bag).toUpperCase());
+      if (!last || last.action === 'REMOVE' || !last.to) continue;
+      const z = ZONE_BY_ID[toZone(last.to)];
+      if (z && z.role === 'contaminated') continue;
+      out.push({ bag, due: b.due || '' });
+    }
+  }
+  return out.sort((a, z) => a.due.localeCompare(z.due) || a.bag.localeCompare(z.bag)).map((x) => x.bag);
+}
+
+// Add: neue Kulturen dieser Art, mit Kennung, und dann ihre Etiketten. Wie
+// jede Laborarbeit endet es im Etiketten-Fenster. Körnerbrut nicht: die kommt
+// aus einer Charge.
+function lfAdd(f, n) {
+  const ms = (mushroomStrains || []).find((x) => x.id === f.strainId);
+  if (!ms || f.kind === 'KB') return;
+  lfClose();
+  const { newC, saved } = kulturenAnlegen({ type: f.kind, ms, wann: new Date(), qty: n, ml: f.size });
+  cprShow(
+    newC.map((c) => c.id),
+    saved
+  );
+  saved.then(() => loadLabStock()).catch(() => {});
+}
+// Remove (verbraucht) oder Verkauft: die n ältesten hinaus, mit Rückgängig.
+async function lfOut(f, n, sold) {
+  const what = f.name + ' ' + _lfLang(f);
+  if (f.kind === 'KB') {
+    const bags = _lfBeutel(f).slice(0, n);
+    if (bags.length < n) {
+      toast(t('lf.notEnough', { n: bags.length }), 'err');
+      return;
+    }
+    lfClose();
+    const entries = spawnBuchen(bags, sold ? 'sold' : 'spawn');
+    showUndoBar(t(sold ? 'lf.doneSold' : 'lf.doneOut', { n: entries.length, what }), () => {
+      spawnZuruecknehmen(entries);
+      setTimeout(loadLabStock, 1500);
+    });
+    setTimeout(loadLabStock, 1500);
+    return;
+  }
+  const pick = _lfKulturen(f).slice(0, n);
+  if (pick.length < n) {
+    toast(t('lf.notEnough', { n: pick.length }), 'err');
+    return;
+  }
+  lfClose();
+  const vorher = pick.map((c) => [c, c.status]);
+  const setze = (paare) =>
+    Promise.all(
+      paare.map(([c, status]) => {
+        c.status = status;
+        return apiPatch('/api/cultures/' + encodeURIComponent(c.id), { status });
+      })
+    ).then((rs) => {
+      renderCultures();
+      loadLabStock();
+      const err = rs.find((r) => r && r.error);
+      if (err) toast(t('common.error') + ': ' + err.error, 'err');
+    });
+  await setze(pick.map((c) => [c, sold ? 'sold' : 'used']));
+  showUndoBar(t(sold ? 'lf.doneSold' : 'lf.doneOut', { n: pick.length, what }), () => setze(vorher));
+}
+function lfAct(a) {
+  if (!_lfSheet) return;
+  const f = _lfSheet.fach;
+  if (a === 'close') return lfClose();
+  if (a === 'print') return lfPrint();
+  const n = _lfN();
+  if (Number.isNaN(n)) return toast(t('shelf.wholeNumber'), 'err');
+  if (a === 'count') {
+    const diff = n - f.have;
+    if (!diff) {
+      lfClose();
+      return toast(t('lf.countSame', { n }));
+    }
+    if (diff > 0) {
+      if (f.kind === 'KB') return toast(t('lf.kbNoAdd'), 'err');
+      return lfAdd(f, diff);
+    }
+    return lfOut(f, -diff, false);
+  }
+  if (!n) return toast(t('shelf.amountMissing'), 'err');
+  if (a === 'in') return lfAdd(f, n);
+  if (a === 'out') return lfOut(f, n, false);
+  if (a === 'sold') return lfOut(f, n, true);
+}
+
+// Vom Scanner und aus der Glocke: das Blatt des Fachs, egal welcher Vorgang steht.
+async function lfScanned(id) {
+  const cam = document.getElementById('m-camscan');
+  if (cam && cam.classList.contains('open')) closeCamScan();
+  closeScanModal();
+  let r;
+  try {
+    r = await apiGet('/api/lab-fach/' + encodeURIComponent(id));
+  } catch {
+    r = null;
+  }
+  if (!r || !r.fach) {
+    setFb('err', t('lf.scanUnknown'));
+    return;
+  }
+  if (!_lbData) await loadLabStock();
+  lfOpen(r.fach.strainId, r.fach.slot);
+}
+
+// ── Etikett ── wie am Regal (shelfLabelCanvas): die Art groß, das Gefäß in
+// Großbuchstaben, eine Größe in einer eigenen Zeile.
+function _lfLabelItem(f) {
+  const wort = t('lf.label.' + f.kind).toUpperCase();
+  const groesse =
+    f.kind === 'SY' ? ' ' + f.size + ' ml' : f.kind === 'KB' ? ' ' + String(f.size).replace('.', ',') + ' kg' : '';
+  return { id: f.id, name: f.name + ' ' + wort + groesse, barcode: f.barcode };
+}
+function lfPreview() {
+  const box = document.getElementById('m-lf-preview');
+  if (!box || !_lfSheet) return;
+  const f = _lfSheet.fach;
+  if (!f.barcode) {
+    box.innerHTML = '';
+    return;
+  }
+  if (typeof QRCode === 'undefined') {
+    loadVendorLibs().then(() => {
+      if (_lfSheet && _lfSheet.fach.id === f.id) lfPreview();
+    });
+    return;
+  }
+  box.innerHTML = '';
+  const x = _lfLabelItem(f);
+  const cv = shelfLabelCanvas(x);
+  cv.className = 'shelf-label-cv';
+  cv.setAttribute('role', 'img');
+  cv.setAttribute('aria-label', t('shelf.labelOf', { name: x.name }));
+  box.appendChild(cv);
+}
+async function lfPrint() {
+  const f = _lfSheet && _lfSheet.fach;
+  if (!f || !f.barcode) return;
+  if (typeof QRCode === 'undefined') await loadVendorLibs();
+  const err = await sendToPrinter(shelfLabelZPL(shelfLabelCanvas(_lfLabelItem(f)), 1));
+  if (err) toast(t('shelf.printFailed', { err }), 'err');
+  else toast(tp('shelf.printed', 1));
+}
+
+function lfWire() {
+  const m = document.getElementById('m-labfach');
+  m.addEventListener('click', (e) => {
+    if (e.target === m) return lfClose();
+    const size = e.target.closest('[data-lf-size]');
+    if (size && _lfSheet) return lfOpen(_lfSheet.strainId, size.dataset.lfSize);
+    const step = e.target.closest('[data-lf-step]');
+    if (step) return lfStep(Number(step.dataset.lfStep));
+    const min = e.target.closest('[data-lf-min]');
+    if (min) return lfMinStep(Number(min.dataset.lfMin));
+    const act = e.target.closest('[data-lf-act]');
+    if (act) lfAct(act.dataset.lfAct);
+  });
+  document.getElementById('m-lf-n').addEventListener('focus', (e) => e.target.select());
 }
 
 function renderInvStock() {
@@ -24785,7 +25186,12 @@ function openBagInfo(bagId, batchId, batch) {
   let currentLoc = t('bagInfo.notPlaced');
   if (bagLogs.length) {
     const last = bagLogs[bagLogs.length - 1];
-    if (last.action === 'REMOVE') currentLoc = istVerbraucht(last) ? t('bagInfo.usedUp') : t('bagInfo.removed');
+    if (last.action === 'REMOVE')
+      currentLoc = istVerbraucht(last)
+        ? t('bagInfo.usedUp')
+        : last.reason === 'sold'
+          ? t('bagInfo.soldState')
+          : t('bagInfo.removed');
     else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
@@ -24967,6 +25373,12 @@ function renderBiActions() {
   html +=
     '<div style="display:flex;gap:8px;margin-bottom:8px">' +
     `<button type="button" data-bi="move" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
+    // Verkauft: ein Growkit oder ein Beutel Körnerbrut ging an einen Kunden.
+    // Welcher Beutel das war, weiß nur, wer ihn scannt; deshalb hier, Beutel
+    // für Beutel, und nicht aus der Bestellung.
+    (cur.removed
+      ? ''
+      : `<button type="button" data-bi="sold" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.sold'))}</button>`) +
     `<button type="button" data-bi="remove" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
     '</div>';
   html += `<button type="button" data-bi="contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('bagInfo.reportContam'))}</button>`;
@@ -25012,17 +25424,28 @@ function biMoveTo(dest) {
 // Umziehen, und ein Fehltipp kostet einen Tipp: Rückgängig, oder ↩ in der
 // Kamera. Die Kamera geht vor dem Buchen auf, damit die Meldung dort steht.
 function biMarkUsed() {
+  biMarkOut('spawn');
+}
+// Verkauft: derselbe Weg hinaus wie Verbraucht, mit dem Grund "sold". Er zählt
+// nicht als Verlust (getContaminationReport) und steht im Beutel als verkauft.
+function biMarkSold() {
+  biMarkOut('sold');
+}
+function biMarkOut(reason) {
   const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
   if (!b || !biBagId) return;
+  const sold = reason === 'sold';
   document.getElementById('m-baginfo').classList.remove('open');
   biRearmScanner();
-  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], 'spawn', { sitzung: true });
+  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], reason, { sitzung: true });
   if (!entries.length) {
-    setFb('warn', t('scanFb.alreadyUsed', { bag: biBagId }));
+    setFb('warn', t('scanFb.alreadyOut', { bag: biBagId }));
     return;
   }
   const msg =
-    entries.length === 1 ? t('bagInfo.usedOne', { bag: entries[0].bag }) : t('bagInfo.usedN', { n: entries.length, id: b.batchId });
+    entries.length === 1
+      ? t(sold ? 'bagInfo.soldOne' : 'bagInfo.usedOne', { bag: entries[0].bag })
+      : t(sold ? 'bagInfo.soldN' : 'bagInfo.usedN', { n: entries.length, id: b.batchId });
   setFb('ok', msg, entries.length === 1 ? entries[0] : undefined);
   showUndoBar(msg, () => spawnZuruecknehmen(entries));
   updateSD();
@@ -28666,6 +29089,11 @@ function processScan(raw, opts) {
       // Eine Forschungsprobe: sie oeffnet sich, egal welcher Vorgang steht.
       prbGescannt(Number(entry.id));
       return;
+    } else if (entry.type === 'labfach') {
+      // Ein Laborfach-Etikett (Petri, FK, Spritzen, Körnerbrut einer Art): sein
+      // Blatt, wie beim Regal, egal welcher Vorgang gerade steht.
+      lfScanned(entry.id);
+      return;
     } else if (entry.type === 'shelf') {
       // Ein Regal-Etikett: das Blatt mit Rein, Raus und Zählen, egal welcher
       // Vorgang gerade steht. Am Fach gibt es nur diese drei.
@@ -29389,7 +29817,8 @@ function ciHerkunftHtml(c) {
   );
 }
 // Was als Kultur auch im Shop steht.
-const CI_VERKAUFBAR = ['SY', 'PD'];
+// Flüssigkultur geht auch an Kunden, im Glas.
+const CI_VERKAUFBAR = ['SY', 'PD', 'LC'];
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
   if (!el) return;
@@ -29402,7 +29831,7 @@ function renderCiActions(c) {
   // Ob aus dieser Kultur überhaupt etwas angesetzt werden kann.
   const alsHerkunft = bmpArten(c.type).length > 0;
   let html = '';
-  // Spritzen und Petrischalen gehen auch in den Versand. Verkauft steht dann
+  // Spritzen, Petrischalen und FK-Gläser gehen auch in den Versand. Verkauft steht dann
   // zuoberst: es ist der haeufigste Weg hinaus, und es haelt die Zahl ehrlich,
   // die Billbee den Shops meldet (syringe-stock.js).
   if (aktiv && CI_VERKAUFBAR.includes(c.type))
@@ -33802,6 +34231,7 @@ function initEventListeners() {
     if (a === 'contam') return biReportContam();
     if (a === 'remove') return biConfirmRemove();
     if (a === 'used') return biMarkUsed();
+    if (a === 'sold') return biMarkSold();
     // Same explicit target as the dashboard one-tap — this button names no tent
     // either, so it must not resolve to a different one.
     if (a === 'fruchtung') return biMoveTo(fruitingTarget());
@@ -34391,6 +34821,8 @@ function initEventListeners() {
       _lbRuhenOffen = !_lbRuhenOffen;
       return renderLabStock();
     }
+    const f = e.target.closest('[data-lf-slot]');
+    if (f) return lfOpen(parseInt(f.dataset.lfStrain, 10), f.dataset.lfSlot);
     const b = e.target.closest('[data-lb-strain]');
     if (b) lbSheetOpen(parseInt(b.dataset.lbStrain, 10));
   });
@@ -34921,6 +35353,7 @@ function initEventListeners() {
     renderShelf();
   });
   shelfWire();
+  lfWire();
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
   });
