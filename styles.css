@@ -12013,19 +12013,13 @@ button.wk-an-zeile:active {
 .lf-sizes[hidden] {
   display: none;
 }
-/* Körnerbrut zählen: name, then 1 / 2 / 5 kg as number fields in three columns. */
-.kbz-head,
+/* Körnerbrut zählen: the name on its own line across the row, so it never has
+   to break inside a word; under it 1 / 2 / 5 kg, each field with its size. */
 .kbz-sp {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 64px);
-  gap: 6px;
-  align-items: center;
-}
-.kbz-head {
-  padding: 0 2px 4px;
-  color: var(--c-text-muted);
-  font-size: max(0.75rem, var(--fs-min));
-  text-align: center;
+  grid-template-columns: repeat(3, 64px);
+  gap: 4px 10px;
+  align-items: start;
 }
 .kbz-list {
   display: grid;
@@ -12036,8 +12030,7 @@ button.wk-an-zeile:active {
   border-bottom: 1px solid var(--c-border-light);
 }
 .kbz-sp b {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  grid-column: 1 / -1;
   font-size: 0.9375rem;
 }
 .kbz-cell {
@@ -12051,6 +12044,10 @@ button.wk-an-zeile:active {
   text-align: center;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.kbz-cell > span {
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
 }
 .kbz-cell small {
   min-height: 1.1em;

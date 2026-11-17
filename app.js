@@ -6316,6 +6316,11 @@ function recurringArrears(today) {
   return out;
 }
 // "jede Woche" / "alle 2 Wochen" -- eine Eins liest sich anders als eine Zahl.
+// Wann eine Aufgabe faellt, in Worten: "monatlich am 1." oder "alle 2 Wochen · Mo".
+function recurWhenLabel(x) {
+  if (x.monthly) return t('recur.monthlyOn', { day: Number(String(x.anchor).slice(8, 10)) });
+  return recurEveryLabel(x.everyWeeks) + ' · ' + t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay());
+}
 function recurEveryLabel(n) {
   return Number(n) === 1 ? t('recur.everyWeek') : t('recur.everyN', { n: Number(n) || 1 });
 }
@@ -6591,7 +6596,7 @@ function buildWeekPlan() {
         kind: 'chore',
         species: '',
         label: f.task.name,
-        detail: recurEveryLabel(f.task.everyWeeks),
+        detail: f.task.monthly ? recurWhenLabel(f.task) : recurEveryLabel(f.task.everyWeeks),
         bags: 0,
         zone: '',
         overdue: false,
@@ -6957,7 +6962,7 @@ function openRhythmEditor() {
 // Festlegung fuer alle und fortan -- dieselbe Grenze, die der Server zwischen
 // /api/recurring-task (Admin) und /api/recurring-done (jeder) zieht. Ein Feld
 // anzubieten, dessen Speichern mit 403 zurueckkommt, waere schlimmer als keins.
-const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12];
+const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12, 'm'];
 // Welche Aufgabe gerade bearbeitet wird, oder null.
 let _ownEdit = null;
 // Die drei Felder einer Aufgabe, einmal geschrieben: die Zeile zum Anlegen und
@@ -6975,9 +6980,12 @@ function _ownFieldsHtml(suffix, wert) {
     '" /><select id="own-every' +
     suffix +
     '">' +
-    RECUR_EVERY_CHOICES.map(
-      (n) => '<option value="' + n + '"' + (Number(w.everyWeeks) === n ? ' selected' : '') + '>' + esc(recurEveryLabel(n)) + '</option>'
-    ).join('') +
+    RECUR_EVERY_CHOICES.map((n) => {
+      // 'm': jeden Monat am 1. -- der Wochentag daneben gilt dann nicht.
+      const an = n === 'm' ? !!w.monthly : !w.monthly && Number(w.everyWeeks) === n;
+      const text = n === 'm' ? t('recur.monthlyOn', { day: 1 }) : recurEveryLabel(n);
+      return '<option value="' + n + '"' + (an ? ' selected' : '') + '>' + esc(text) + '</option>';
+    }).join('') +
     '</select><select id="own-day' +
     suffix +
     '">' +
@@ -7020,12 +7028,7 @@ function _renderRhythmOwn() {
         '"><span class="rhythm-own-name">' +
         esc(x.name) +
         '</span><span class="fs-xs rhythm-own-when">' +
-        esc(
-          recurEveryLabel(x.everyWeeks) +
-            ' · ' +
-            t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay()) +
-            (x.active ? '' : ' · ' + t('recur.paused'))
-        ) +
+        esc(recurWhenLabel(x) + (x.active ? '' : ' · ' + t('recur.paused'))) +
         '</span><button type="button" class="btn btn-sm fs-xs" data-action="own-edit" data-id="' +
         esc(String(x.id)) +
         '">' +
@@ -7071,9 +7074,16 @@ function _ownAnchorFor(weekday) {
 function _ownRead(suffix) {
   const feld = (id) => document.getElementById(id + suffix);
   const name = ((feld('own-name') || {}).value || '').trim();
-  const every = Number((feld('own-every') || {}).value) || 1;
+  const wahl = (feld('own-every') || {}).value;
+  // Monatlich am 1.: der Anker ist der naechste Erste, heute eingeschlossen.
+  if (wahl === 'm') {
+    const h = new Date();
+    const erster = h.getDate() === 1 ? h : new Date(h.getFullYear(), h.getMonth() + 1, 1);
+    return { name, everyWeeks: 4, monthly: true, anchor: _ymd(erster) };
+  }
+  const every = Number(wahl) || 1;
   const wd = Number((feld('own-day') || {}).value);
-  return { name, everyWeeks: every, anchor: _ownAnchorFor(wd) };
+  return { name, everyWeeks: every, monthly: false, anchor: _ownAnchorFor(wd) };
 }
 function _ownSpeichern(daten, fertig) {
   apiPost('/api/recurring-task', daten).then((res) => {
@@ -7116,7 +7126,7 @@ function saveOwnTask(id) {
 function pauseOwnTask(id) {
   const x = (recurringTasks || []).find((y) => String(y.id) === String(id));
   if (!x) return;
-  _ownSpeichern({ id: Number(id), name: x.name, everyWeeks: x.everyWeeks, anchor: x.anchor, active: !x.active }, () => {
+  _ownSpeichern({ id: Number(id), name: x.name, everyWeeks: x.everyWeeks, monthly: !!x.monthly, anchor: x.anchor, active: !x.active }, () => {
     x.active = !x.active;
   });
 }
@@ -17889,7 +17899,7 @@ async function kbzOpen() {
             KBZ_KG.map((kg) => {
               const f = _kbzFach(sp, kg);
               return (
-                `<label class="kbz-cell"><input type="number" inputmode="numeric" min="0" step="1" value="${f.have}"` +
+                `<label class="kbz-cell"><span>${kg} kg</span><input type="number" inputmode="numeric" min="0" step="1" value="${f.have}"` +
                 ` data-kbz-strain="${sp.strainId}" data-kbz-kg="${kg}" data-kbz-alt="${f.have}"` +
                 ` aria-label="${esc(sp.name + ' ' + kg + ' kg')}" />` +
                 `<small>${f.growing ? esc(t('kbz.growing', { n: f.growing })) : ''}</small></label>`
