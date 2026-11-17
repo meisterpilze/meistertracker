@@ -16741,7 +16741,57 @@ function shelfSheetRender() {
         )
         .join('')
     : `<p class="fs-meta muted">${esc(t('shelf.skuNone'))}</p>`;
+  // Beim Beimpfen: für welche Beutelgröße Körnerbrut dieser Artikel abgibt. Ein
+  // Tipp auf die Größe verknüpft, ein Tipp auf „Keine“ löst.
+  document.getElementById('m-shelf-spawn').innerHTML = [null, ...KB_KG]
+    .map((kg) => {
+      const an = kg == null ? x.spawnKg == null : kg === x.spawnKg;
+      return (
+        `<button type="button" class="btn btn-sm${an ? ' btn-p' : ''}" data-shelf-spawn="${kg == null ? '' : kg}"` +
+        ` aria-pressed="${an}">${esc(kg == null ? t('shelf.spawnNone') : kg + ' kg')}</button>`
+      );
+    })
+    .join('');
   shelfLabelPreview(x);
+}
+
+// Welcher Regal-Artikel für eine Beutelgröße Körnerbrut steht, oder keiner.
+const shelfForSpawnKg = (kg) =>
+  shelfItems.find((x) => x.active && x.spawnKg != null && Math.abs(x.spawnKg - kg) < 0.05) || null;
+
+// "Aus dem Regal: 4 \u00d7 Weizen 1 kg (17 \u2192 13)" für die Vorschau der Charge.
+function shelfSpawnPreview(lines) {
+  const je = new Map();
+  for (const l of lines) {
+    const x = shelfForSpawnKg(l.kg);
+    if (x) je.set(x, (je.get(x) || 0) + l.qty);
+  }
+  if (!je.size) return '';
+  return t('shelf.spawnPreview', {
+    list: [...je].map(([x, n]) => n + ' \u00d7 ' + x.name + ' (' + x.stock + ' \u2192 ' + (x.stock - n) + ')').join(', ')
+  });
+}
+
+// Nach dem Anlegen: was aus dem Regal ging, mit dem neuen Stand.
+function shelfSpawnToast(moves) {
+  if (!moves || !moves.length) return;
+  toast(
+    t('shelf.spawnTaken', {
+      list: moves.map((m) => -m.delta + ' \u00d7 ' + m.name + ' \u2192 ' + m.stock).join(', ')
+    })
+  );
+}
+
+async function shelfSetSpawn(kg) {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const r = await apiPatch('/api/shelf/' + x.id, { spawnKg: kg });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  _shelfTake(r.item);
+  toast(r.item.spawnKg == null ? t('shelf.spawnOff') : t('shelf.spawnOn', { kg: r.item.spawnKg }));
 }
 
 // Der Alarm steht unter der Zahl, mit − und +: ein Tipp gilt sofort, gespeichert
@@ -16878,7 +16928,9 @@ async function shelfLogLoad() {
               ? t('shelf.log.count', { stock: e.running })
               : e.kind === 'order'
                 ? t(e.delta < 0 ? 'shelf.log.order' : 'shelf.log.cancel', { n, ref: e.ref || '', stock: e.running })
-                : t('shelf.log.' + e.kind, { n, stock: e.running });
+                : e.kind === 'spawn'
+                  ? t(e.delta < 0 ? 'shelf.log.spawn' : 'shelf.log.spawnBack', { n, ref: e.ref || '', stock: e.running })
+                  : t('shelf.log.' + e.kind, { n, stock: e.running });
           return (
             `<div class="shelf-log-row${e.undone ? ' shelf-undone' : ''}"><span>${esc(was)}</span>` +
             `<small>${esc(fmtDtTime(e.time) + (e.username ? ' · ' + e.username : ''))}</small></div>`
@@ -17066,6 +17118,8 @@ function shelfWire() {
     if (min) shelfMinStep(Number(min.dataset.shelfMin));
     const unsku = e.target.closest('[data-shelf-unsku]');
     if (unsku) shelfSku(unsku.dataset.shelfUnsku, 0);
+    const spawn = e.target.closest('[data-shelf-spawn]');
+    if (spawn) shelfSetSpawn(spawn.dataset.shelfSpawn === '' ? null : Number(spawn.dataset.shelfSpawn));
     const act = e.target.closest('[data-shelf-act]');
     if (!act || !_shelfSheet) return;
     const a = act.dataset.shelfAct;
@@ -24920,7 +24974,12 @@ function gsPreview() {
     grainRh > 0
       ? ` <span class="fs-xs" style="color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
       : '';
-  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
+  // Heute angesetzt: welche Beutel aus dem Regal gehen. Ein früheres Datum ist
+  // Bestand aus der Inventur und nimmt nichts.
+  const vomRegal = document.getElementById('lw-created')?.value ? '' : shelfSpawnPreview(lines);
+  el.innerHTML =
+    `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}` +
+    (vomRegal ? '<br>' + esc(vomRegal) : '');
   el.style.display = 'block';
 }
 // opts.ohneFenster: das Fenster zum Einlagern und für die Etiketten kommt nicht
@@ -25022,7 +25081,10 @@ function createGrainBatch(opts) {
     deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
   }
   // Send bags as [{id, bagKg}] to the server
-  const apiPayload = Object.assign({}, batchObj, { bags, deltas });
+  // shelfDraw: heute angesetzt, also kommen die Beutel aus dem Regal (der
+  // Server weiß, welcher Artikel für welche Größe steht). Bestand aus der
+  // Inventur nimmt nichts, wie beim Korn.
+  const apiPayload = Object.assign({}, batchObj, { bags, deltas, shelfDraw: bucht });
   // Disable while in flight: genGrainBatchId numbers off the local batches array,
   // which already holds this batch, so a double-tap creates a second distinct
   // batch and deducts the grain twice.
@@ -25051,6 +25113,7 @@ function createGrainBatch(opts) {
           barcodeByEntity.set('bag:' + id, bc);
         }
       }
+      shelfSpawnToast(r && r.shelfMoves);
       // Grain spawn is usually made from a liquid culture that survives many
       // uses, so ask rather than assume. Ein Körnerbeutel (Körner aus Körnern)
       // geht dagegen ganz hinein und wird ohne Frage ausgebucht.

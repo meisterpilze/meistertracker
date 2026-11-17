@@ -3311,6 +3311,32 @@ const MIGRATIONS = [
         UNIQUE(strain_id, slot)
       )`);
     }
+  },
+  {
+    version: 116,
+    description: 'Regal: Koernerbrut nimmt beim Beimpfen ihre Beutel aus dem Regal',
+    fn(db) {
+      // Sterile Beutel im Regal gehen in den Versand und werden beimpft, es sind
+      // dieselben. Ein Regal-Artikel kann darum fuer eine Beutelgroesse Koernerbrut
+      // stehen (spawn_kg); eine Charge in dieser Groesse nimmt ihre Beutel dann aus
+      // ihm. spawn_linked ist, seit wann: aeltere Chargen nimmt es nicht nachtraeglich.
+      const col = (t, c) => db.prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('${t}') WHERE name=?`).get(c).c;
+      if (!col('shelf_items', 'spawn_kg')) db.exec('ALTER TABLE shelf_items ADD COLUMN spawn_kg REAL');
+      if (!col('shelf_items', 'spawn_linked')) db.exec('ALTER TABLE shelf_items ADD COLUMN spawn_linked TEXT');
+      // Wann die Charge angelegt wurde, wenn sie aus dem Regal nimmt; leer bei
+      // Bestand aus der Inventur und bei allem von vorher.
+      if (!col('batches', 'shelf_draw')) db.exec('ALTER TABLE batches ADD COLUMN shelf_draw TEXT');
+      // Was je Charge und Beutelgroesse schon abgebucht ist, und aus welchem
+      // Artikel. Ohne Fremdschluessel auf batches: ist die Charge geloescht,
+      // bleibt die Zeile, bis der Abgleich die Beutel zurueckgelegt hat.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_spawn_booked (
+        batch_id TEXT NOT NULL,
+        kg       REAL NOT NULL,
+        item_id  INTEGER NOT NULL REFERENCES shelf_items(id) ON DELETE CASCADE,
+        qty      INTEGER NOT NULL,
+        PRIMARY KEY (batch_id, kg)
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3581,6 +3607,9 @@ function _shelfRow(db, r) {
     sortOrder: r.sort_order,
     barcode: bc ? bc.barcode : null,
     skus,
+    // Fuer welche Beutelgroesse Koernerbrut dieser Artikel beim Beimpfen
+    // abgibt, oder null.
+    spawnKg: r.spawn_kg == null ? null : r.spawn_kg,
     updated: r.updated
   };
 }
@@ -3643,14 +3672,32 @@ function updateShelfItem(db, id, patch) {
     if (!Number.isInteger(min) || min < 0 || min > SHELF_STEP_MAX)
       throw new Error('Der Alarm-Stand ist eine ganze Zahl ab 0.');
   }
+  let spawnKg = cur.spawn_kg;
+  if (patch.spawnKg !== undefined) {
+    if (patch.spawnKg === null || patch.spawnKg === '' || Number(patch.spawnKg) === 0) spawnKg = null;
+    else {
+      const kg = Number(patch.spawnKg);
+      if (!Number.isFinite(kg) || kg <= 0 || kg > 50)
+        throw new Error('Die Beutelgröße ist eine Zahl in kg, größer als 0 und höchstens 50.');
+      spawnKg = _spawnKgKey(kg);
+    }
+  }
   if (active) _shelfNameFrei(db, name, cur.id);
-  db.prepare('UPDATE shelf_items SET name=?, active=?, min_stock=?, updated=? WHERE id=?').run(
-    name,
-    active,
-    min,
-    new Date().toISOString(),
-    cur.id
-  );
+  if (active && spawnKg != null) {
+    const clash = db
+      .prepare('SELECT name FROM shelf_items WHERE active=1 AND ROUND(spawn_kg, 1)=? AND id<>?')
+      .get(spawnKg, cur.id);
+    if (clash)
+      throw new Error(
+        'Körnerbrut ' + String(spawnKg).replace('.', ',') + ' kg nimmt schon aus „' + clash.name + '“. Dort erst lösen.'
+      );
+  }
+  const now = new Date().toISOString();
+  // Neu verknuepft: ab jetzt. Chargen von vorher nimmt der Artikel nicht nachtraeglich.
+  const linked = spawnKg == null ? null : spawnKg === cur.spawn_kg ? cur.spawn_linked : now;
+  db.prepare(
+    'UPDATE shelf_items SET name=?, active=?, min_stock=?, spawn_kg=?, spawn_linked=?, updated=? WHERE id=?'
+  ).run(name, active, min, spawnKg, linked, now, cur.id);
   incrementDataVersion(db);
   return getShelfItem(db, cur.id);
 }
@@ -3703,6 +3750,8 @@ function undoShelfMove(db, logId, userId) {
   if (!row || row.kind === 'undo') throw new Error('Diese Buchung gibt es nicht.');
   if (row.kind === 'order')
     throw new Error('Eine Bestellung nimmt die App selbst zurück, wenn sie storniert wird. Sonst: Fach zählen.');
+  if (row.kind === 'spawn')
+    throw new Error('Das legt die App selbst zurück, wenn die Charge gelöscht wird. Sonst: Fach zählen.');
   if (row.undone) throw new Error('Das ist schon zurückgenommen.');
   const later = db
     .prepare("SELECT id FROM shelf_log WHERE item_id=? AND id>? AND undone=0 AND kind='count' LIMIT 1")
@@ -3837,6 +3886,100 @@ function syncShelfOrders(db) {
         ).run(p.orderId, p.sku, want.itemId, want.qty);
       else if (p.booked) db.prepare('DELETE FROM shelf_order_booked WHERE order_id=? AND sku=?').run(p.orderId, p.sku);
     }
+    if (moves) incrementDataVersion(db);
+  });
+  return moves;
+}
+
+// ── Koernerbrut aus dem Regal ──
+// Die sterilen Beutel im Regal sind dieselben, die beimpft werden. Steht ein
+// Artikel fuer eine Beutelgroesse (spawn_kg), nimmt eine neue Charge Koernerbrut
+// in dieser Groesse ihre Beutel aus ihm, in derselben Transaktion. Gebucht wird
+// wie bei den Bestellungen nur der Unterschied zu dem, was die Charge schon
+// genommen hat: Beutel ergaenzt nimmt mehr, Charge geloescht legt alles zurueck,
+// ein zweiter Lauf tut nichts. Was einmal aus einem Artikel kam, geht auch
+// dorthin zurueck, selbst wenn die Groesse inzwischen an einem anderen haengt.
+//
+// Nimmt nur, wer shelf_draw traegt: eine Charge, die die App beim Anlegen als
+// heute angesetzt bekam. Bestand aus der Inventur (frueheres Datum) und alles von
+// vor dem Verknuepfen bleibt, wie es ist. Der Bestand darf unter 0 gehen: die
+// Beutel sind beimpft, und eine Zahl unter 0 sagt, dass das Fach gezaehlt
+// werden will.
+const _spawnKgKey = (kg) => Math.round(Number(kg) * 10) / 10;
+
+function _bookShelfSpawn(db, batchId, userId) {
+  const batch = db.prepare('SELECT batch_type, shelf_draw FROM batches WHERE batch_id=?').get(batchId);
+  const want = new Map();
+  if (batch && batch.batch_type === 'grain' && batch.shelf_draw) {
+    for (const r of db
+      .prepare(
+        `SELECT COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+          WHERE b.batch_id = ?`
+      )
+      .all(batchId)) {
+      const k = _spawnKgKey(r.kg);
+      want.set(k, (want.get(k) || 0) + 1);
+    }
+  }
+  const booked = new Map(
+    db
+      .prepare('SELECT kg, item_id, qty FROM shelf_spawn_booked WHERE batch_id=?')
+      .all(batchId)
+      .map((r) => [_spawnKgKey(r.kg), r])
+  );
+  const now = new Date().toISOString();
+  const moves = [];
+  for (const kg of new Set([...want.keys(), ...booked.keys()])) {
+    const n = want.get(kg) || 0;
+    const b = booked.get(kg);
+    let itemId;
+    let delta;
+    if (b) {
+      itemId = b.item_id;
+      delta = b.qty - n;
+    } else {
+      if (!n) continue;
+      const item = db
+        .prepare('SELECT id FROM shelf_items WHERE active=1 AND ROUND(spawn_kg, 1)=? AND spawn_linked<=?')
+        .get(kg, batch.shelf_draw);
+      if (!item) continue;
+      itemId = item.id;
+      delta = -n;
+    }
+    if (n)
+      db.prepare(
+        `INSERT INTO shelf_spawn_booked(batch_id, kg, item_id, qty) VALUES(?,?,?,?)
+         ON CONFLICT(batch_id, kg) DO UPDATE SET qty=excluded.qty`
+      ).run(batchId, kg, itemId, n);
+    else db.prepare('DELETE FROM shelf_spawn_booked WHERE batch_id=? AND ROUND(kg, 1)=?').run(batchId, kg);
+    if (!delta) continue;
+    const cur = db.prepare('SELECT name, stock FROM shelf_items WHERE id=?').get(itemId);
+    if (!cur) continue;
+    const running = cur.stock + delta;
+    db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?').run(running, now, itemId);
+    db.prepare(
+      "INSERT INTO shelf_log(time, item_id, kind, delta, running, ref, user_id) VALUES(?,?,'spawn',?,?,?,?)"
+    ).run(now, itemId, delta, running, batchId, userId || null);
+    moves.push({ itemId, name: cur.name, delta, stock: running });
+  }
+  return moves;
+}
+
+// Alle Chargen auf einmal, fuer den Lauf alle 15 Minuten: faengt, was an den
+// Wegen vorbei geaendert wurde (eine Wiederherstellung loescht Chargen ohne
+// deleteBatchById). Gibt die Zahl der Buchungen zurueck.
+function syncShelfSpawn(db) {
+  const ids = db
+    .prepare(
+      `SELECT batch_id FROM batches WHERE batch_type = 'grain' AND shelf_draw IS NOT NULL
+       UNION SELECT batch_id FROM shelf_spawn_booked`
+    )
+    .all()
+    .map((r) => r.batch_id);
+  if (!ids.length) return 0;
+  let moves = 0;
+  _blockTx(db, () => {
+    for (const id of ids) moves += _bookShelfSpawn(db, id, null).length;
     if (moves) incrementDataVersion(db);
   });
   return moves;
@@ -6186,9 +6329,17 @@ function insertBatch(db, b, deltas, userId) {
         applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, d.type || 'batch', d.ref || b.batchId, userId || null);
       }
     }
+    // Koernerbrut, heute angesetzt: die Beutel kommen aus dem Regal
+    // (_bookShelfSpawn). Der Aufrufer sagt es mit shelfDraw, wie er mit deltas
+    // sagt, ob Korn abgeht; Bestand aus der Inventur schickt es nicht.
+    let shelfMoves = [];
+    if (batchType === 'grain' && b.shelfDraw === true) {
+      db.prepare('UPDATE batches SET shelf_draw=? WHERE batch_id=?').run(new Date().toISOString(), b.batchId);
+      shelfMoves = _bookShelfSpawn(db, b.batchId, userId);
+    }
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return { bagBarcodes };
+    return { bagBarcodes, shelfMoves };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -6355,9 +6506,11 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
 
     // Assign numeric barcodes to new bags
     const bagBarcodes = assignBarcodes(db, 'bag', newBags);
+    // Nimmt die Charge aus dem Regal, nehmen die neuen Beutel mit.
+    const shelfMoves = _bookShelfSpawn(db, batchId, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return { bagBarcodes };
+    return { bagBarcodes, shelfMoves };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -6458,6 +6611,8 @@ function deleteBatchById(db, batchId, userId) {
     );
     _verknuepfungGeht(db, 'batchId', [batchId], _werZuId(db, userId));
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
+    // Was die Charge aus dem Regal genommen hat, geht zurueck.
+    _bookShelfSpawn(db, batchId, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -15766,6 +15921,7 @@ module.exports = {
   listShelfLog,
   setShelfSku,
   syncShelfOrders,
+  syncShelfSpawn,
   shelfLowAlerts,
   labFachText,
   getLabFach,

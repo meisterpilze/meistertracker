@@ -1531,6 +1531,10 @@ function checkShelf() {
   try {
     const moves = db.syncShelfOrders(database);
     if (moves) log('info', 'Shelf stock booked from orders', { moves });
+    // Koernerbrut bucht beim Anlegen und Loeschen selbst; das hier faengt nur,
+    // was an diesen Wegen vorbei geaendert wurde. Meist null.
+    const spawnMoves = db.syncShelfSpawn(database);
+    if (spawnMoves) log('info', 'Shelf stock booked from grain spawn', { moves: spawnMoves });
     const low = db.shelfLowAlerts(database);
     if (low.length) {
       const users = db.listUsers(database);
@@ -1550,7 +1554,7 @@ function checkShelf() {
     }
     // Nur wenn sich etwas bewegt hat, damit offene Seiten die neue Zahl holen.
     // Der nächste Lauf bucht nichts mehr, also kein Kreis.
-    if (moves || low.length) broadcastSSE();
+    if (moves || spawnMoves || low.length) broadcastSSE();
   } catch (e) {
     log('warn', 'Shelf check failed', { error: e.message });
   }
@@ -9378,7 +9382,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const result = db.insertBatch(database, data, deltas, userId);
         autoPushBatchCaldav(data);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
+        // shelfMoves: was die Koernerbrut aus dem Regal genommen hat, fuer die Meldung.
+        jsonOk(res, {
+          ok: true,
+          bagBarcodes: result ? result.bagBarcodes : {},
+          shelfMoves: (result && result.shelfMoves) || []
+        });
       } catch (err) {
         safeErr(res, err);
       }
@@ -9425,7 +9434,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         const result = db.addBagsToBatch(database, id, add, data.newQty, bagKg, userId);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
+        jsonOk(res, {
+          ok: true,
+          bagBarcodes: result ? result.bagBarcodes : {},
+          shelfMoves: (result && result.shelfMoves) || []
+        });
       } catch (err) {
         safeErr(res, err);
       }
