@@ -11941,6 +11941,12 @@ button.wk-an-zeile:active {
   font: inherit;
   cursor: pointer;
 }
+/* A size under its Soll: the same amber as the cell in Labor → Bestand. */
+.lf-size.low {
+  border-color: var(--c-amber-border);
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
 .lf-size.on {
   background: var(--c-text);
   border-color: var(--c-text);

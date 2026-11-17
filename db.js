@@ -12687,10 +12687,11 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   // Ebenso "undo": den Grund trägt der Rückweg, mit dem die App eine
   // Verschiebung zurücknimmt (_undoMove in app.js). Ohne die Ausnahme zählte
   // jedes Rückgängig hier als Kontamination. Und "sold": ein Beutel, der an
-  // einen Kunden ging (Verkauft im Beutel-Fenster), ist ebenso kein Verlust.
+  // einen Kunden ging (Verkauft im Beutel-Fenster), ist ebenso kein Verlust;
+  // "count" auch nicht: Beutel, die beim Zählen am Laborfach fehlten.
   let rows = db
     .prepare(
-      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' ORDER BY id"
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' AND reason <> 'count' ORDER BY id"
     )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
@@ -14706,7 +14707,9 @@ function labStock(db, now = new Date()) {
       imProgramm,
       ruht,
       items,
-      fach: faecher.get(ms.id) || []
+      fach: (faecher.get(ms.id) || {}).fach || [],
+      // Das Sammeletikett der Spritzen (Slot 'SY'), mit ihrer Summe.
+      sy: (faecher.get(ms.id) || {}).sy || null
     });
   }
   return out;
@@ -14721,11 +14724,16 @@ function labStock(db, now = new Date()) {
 //
 // Slot: 'LC' (FK-Glas), 'PD' (Petrischale), 'SY10' / 'SY20' / 'SY50' (Spritze je
 // Groesse), 'KB<kg>' (Koernerbrut je Beutelgroesse; 'KB3', auch 'KB1.5').
+// Dazu 'SY' allein: das Etikett fuer das Fach, in dem alle Spritzen einer Art
+// liegen. Es zaehlt nichts und hat keinen Alarm; wer es scannt, waehlt im
+// Blatt die Groesse. Koernerbrut liegt je Groesse woanders und hat deshalb
+// kein solches Sammeletikett.
 function _fachSlot(slot) {
   const s = String(slot == null ? '' : slot)
     .trim()
     .toUpperCase();
   if (s === 'LC' || s === 'PD') return { slot: s, kind: s, size: null };
+  if (s === 'SY') return { slot: s, kind: 'SY', size: null, group: true };
   let m = s.match(/^SY(\d+)$/);
   if (m && SYRINGE_SIZES.includes(Number(m[1]))) return { slot: s, kind: 'SY', size: Number(m[1]) };
   m = s.match(/^KB(\d+(?:\.\d+)?)$/);
@@ -14748,6 +14756,7 @@ function labFachText(slot) {
   const f = _fachSlot(slot);
   if (f.kind === 'LC') return 'FK-Glas';
   if (f.kind === 'PD') return 'Petri';
+  if (f.group) return 'Spritzen';
   if (f.kind === 'SY') return 'Spritze ' + f.size + ' ml';
   return 'Körnerbrut ' + String(f.size).replace('.', ',') + ' kg';
 }
@@ -14846,6 +14855,24 @@ function _fachCtx(db, now) {
 // Knapp (low) heisst dasselbe wie gelb oder rot in Nachproduzieren (saleNeed).
 function _fachView(ctx, ms, slot, row) {
   const f = _fachSlot(slot);
+  const imProgramm = ms.im_programm !== 0;
+  const kopf = {
+    id: row ? row.id : null,
+    barcode: row ? ctx.barcodes.get(String(row.id)) || null : null,
+    strainId: ms.id,
+    name: ms.name,
+    slot: f.slot,
+    kind: f.kind,
+    size: f.size
+  };
+  if (f.group) {
+    // Das Sammelfach der Spritzen: nur das Etikett und, zur Uebersicht, wie
+    // viele es zusammen sind. Alarm und Soll hat jede Groesse selbst.
+    let have = 0;
+    for (const ml of SYRINGE_SIZES) have += (ctx.counts.get(ms.id + ':SY' + ml) || { have: 0 }).have;
+    const leer = { growing: 0, readyAt: null, soll: null, ordered: 0, sku: '', low: false, urgency: null };
+    return { ...kopf, group: true, have, imProgramm, ...leer };
+  }
   const c = ctx.counts.get(ms.id + ':' + f.slot) || { have: 0, growing: 0, readyAt: null };
   let sku = null;
   if (f.kind === 'SY') sku = ctx.skus.get(ms.id + ':SY:' + f.size);
@@ -14854,20 +14881,14 @@ function _fachView(ctx, ms, slot, row) {
   let soll;
   if (f.kind === 'LC') soll = ms.min_lc;
   else if (f.kind === 'PD') soll = ms.min_pd;
-  else if (sku) soll = sku.soll;
-  else soll = row ? row.min_stock : null;
+  // Eine Groesse, die erst spaeter eine Shop-SKU bekam: deren Soll ist dann noch
+  // leer, und der Alarm, der am Fach stand, gilt weiter, bis jemand ihn neu setzt.
+  else soll = (sku && sku.soll) || (row ? row.min_stock : null);
   soll = soll || null;
   const ordered = sku ? ctx.ordered.get(sku.sku) || 0 : 0;
-  const imProgramm = ms.im_programm !== 0;
   const need = saleNeed({ count: c.have, growing: c.growing, ordered, soll: imProgramm ? soll : null });
   return {
-    id: row ? row.id : null,
-    barcode: row ? ctx.barcodes.get(String(row.id)) || null : null,
-    strainId: ms.id,
-    name: ms.name,
-    slot: f.slot,
-    kind: f.kind,
-    size: f.size,
+    ...kopf,
     have: c.have,
     growing: c.growing,
     readyAt: c.readyAt,
@@ -14896,7 +14917,7 @@ function labFaecher(db, now = new Date()) {
     const slots = new Set(['LC', 'PD']);
     const pre = ms.id + ':';
     for (const key of [...ctx.counts.keys(), ...rowBy.keys(), ...ctx.jemals]) {
-      if (key.startsWith(pre) && /^(SY|KB)/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
+      if (key.startsWith(pre) && /^(SY\d|KB)/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
     }
     for (const [key, s] of ctx.skus) {
       if (!key.startsWith(pre)) continue;
@@ -14904,10 +14925,10 @@ function labFaecher(db, now = new Date()) {
       else if (s.type === 'GS') slots.add(_kbSlot(s.ml));
     }
     if (![...slots].some((s) => s.startsWith('SY')) && ms.im_programm !== 0) slots.add('SY10');
-    out.set(
-      ms.id,
-      [...slots].sort(_fachCmp).map((s) => _fachView(ctx, ms, s, rowBy.get(pre + s)))
-    );
+    out.set(ms.id, {
+      fach: [...slots].sort(_fachCmp).map((s) => _fachView(ctx, ms, s, rowBy.get(pre + s))),
+      sy: _fachView(ctx, ms, 'SY', rowBy.get(pre + 'SY'))
+    });
   }
   return out;
 }
@@ -14923,7 +14944,7 @@ function getLabFach(db, id) {
 // Das Fach einer Art holen, und anlegen, wenn es noch keins gibt: mit seiner
 // Nummer aus der Barcode-Liste, fuers Etikett. Das passiert, wenn jemand das
 // Blatt oeffnet; ein Etikett gibt es also fuer jedes Fach, das man sieht.
-function ensureLabFach(db, strainId, slot) {
+function ensureLabFach(db, strainId, slot, info = {}) {
   const f = _fachSlot(slot);
   const ms = db.prepare('SELECT id FROM mushroom_strains WHERE id = ?').get(Number(strainId));
   if (!ms) throw new Error('Diese Art gibt es nicht');
@@ -14937,6 +14958,7 @@ function ensureLabFach(db, strainId, slot) {
       return { id };
     });
     incrementDataVersion(db);
+    info.created = true;
   }
   return getLabFach(db, row.id);
 }
@@ -14949,13 +14971,16 @@ function setLabFachAlarm(db, id, soll) {
   const n = soll == null || soll === '' ? 0 : Number(soll);
   if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('Der Alarm ist eine ganze Zahl von 0 bis 500');
   const f = _fachSlot(row.slot);
+  if (f.group) throw new Error('Den Alarm hat jede Spritzengröße selbst');
   if (f.kind === 'LC') db.prepare('UPDATE mushroom_strains SET min_lc = ? WHERE id = ?').run(n, row.strain_id);
   else if (f.kind === 'PD') db.prepare('UPDATE mushroom_strains SET min_pd = ? WHERE id = ?').run(n, row.strain_id);
   else {
     const r = db
       .prepare('UPDATE syringe_stock_sku SET soll = ? WHERE strain_id = ? AND type = ? AND ml = ?')
       .run(n || null, row.strain_id, f.kind === 'SY' ? 'SY' : 'GS', f.size);
-    if (!r.changes) db.prepare('UPDATE lab_fach SET min_stock = ? WHERE id = ?').run(n || null, row.id);
+    // Mit SKU gilt deren Soll; das am Fach wird geleert, sonst kaeme ein
+    // ausgeschalteter Alarm ueber den Rueckfall in _fachView wieder.
+    db.prepare('UPDATE lab_fach SET min_stock = ? WHERE id = ?').run(r.changes ? null : n || null, row.id);
   }
   incrementDataVersion(db);
   return getLabFach(db, row.id);
@@ -14980,6 +15005,7 @@ function labFachLowAlerts(db, now = new Date()) {
       const ms = strains.get(r.strain_id);
       if (!ms) continue;
       const v = _fachView(ctx, ms, r.slot, r);
+      if (v.group) continue;
       if (v.low && !r.low_alerted) {
         db.prepare('UPDATE lab_fach SET low_alerted = 1 WHERE id = ?').run(r.id);
         out.push({ ...v, text: labFachText(v.slot) });
