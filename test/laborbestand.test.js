@@ -284,11 +284,14 @@ function seite(species, extra = '') {
     'renderWorkNachproduzieren',
     '_lbStat',
     '_lbStatCls',
+    '_lfKurz',
+    '_lfCls',
+    '_lfLang',
     '_lbZeile',
     'renderLabStock',
     'buildLabMinTasks'
   ];
-  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbIstShop', '_lbZahl', 'NP_ZEIGEN'];
+  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbZahl', 'NP_ZEIGEN'];
   const code =
     consts.map((n) => APP.match(new RegExp('^const ' + n + ' = .*;$', 'm'))[0]).join('\n') +
     '\n' +
@@ -318,11 +321,31 @@ function seite(species, extra = '') {
   return { els, aufgaben };
 }
 const it_ = (key, o) => ({ key, have: 0, growing: 0, ordered: 0, soll: null, make: 0, urgency: null, ...o });
+// Ein Fach, wie db.labFaecher es schickt.
+const fach_ = (slot, o) => ({
+  id: null,
+  barcode: null,
+  slot,
+  kind: slot.startsWith('SY') ? 'SY' : slot.startsWith('KB') ? 'KB' : slot,
+  size: /^(SY|KB)/.test(slot) ? Number(slot.slice(2)) : null,
+  have: 0,
+  growing: 0,
+  soll: null,
+  sku: '',
+  low: false,
+  urgency: null,
+  ...o
+});
 const art = (strainId, name, items, o = {}) => ({
   strainId,
   name,
   kuerzel: '',
   imProgramm: true,
+  fach: [
+    fach_('LC', items.LC && { have: items.LC.have || 0, soll: items.LC.soll || null }),
+    fach_('PD', items.PD && { have: items.PD.have || 0, sku: items.PD.shop ? items.PD.shop.sku : '' }),
+    ...(items.SY10 ? [fach_('SY10', { have: items.SY10.have || 0 })] : [])
+  ],
   items: [
     it_('MC', items.MC),
     it_('LC', items.LC),
@@ -339,15 +362,30 @@ describe('Laborbestand: die Liste je Sorte', () => {
     assert.equal(seite([]).els['lb-card'].hidden, true);
   });
 
-  it('fünf Felder je Sorte, gelb unter dem Soll, mit da/Soll', () => {
+  it('Slant und jedes Fach je Sorte, gelb unter dem Soll, mit da/Soll', () => {
     const { els } = seite([
-      art(1, 'Testart Alpha', { MC: { have: 1, soll: 2, make: 1, urgency: 'low' }, PD: { have: 3 } })
+      art(1, 'Testart Alpha', {
+        MC: { have: 1, soll: 2, make: 1, urgency: 'low' },
+        PD: { have: 3 },
+        SY10: { have: 4 }
+      })
     ]);
     const h = els['lb-list'].innerHTML;
     assert.match(h, /data-lb-strain="1"/);
-    assert.equal((h.match(/class="lb-st/g) || []).length, 5);
+    assert.equal((h.match(/class="lb-st/g) || []).length, 4, 'Slant, FK, Petri, 10 ml');
     assert.match(h, /class="lb-st lb-under"><small>lb\.short\.MC<\/small><b>1<em>\/2<\/em><\/b>/);
-    assert.match(h, /lb\.short\.SYall<\/small><b>–<\/b>/, 'eine Sorte ohne Spritzen zeigt einen Strich');
+    // Jedes Fach ist ein Knopf auf sein Blatt.
+    assert.match(h, /data-lf-strain="1" data-lf-slot="PD"[^>]*class="lb-st"><small>lb\.short\.PD<\/small><b>3<\/b>/);
+    assert.match(h, /data-lf-slot="SY10"[^>]*><small>lb\.short\.SY\{"ml":10\}<\/small><b>4<\/b>/);
+    assert.match(h, /data-lf-slot="LC"[^>]*class="lb-st lb-zero"/, 'ein leeres Fach ist grau');
+  });
+
+  it('ein Fach unter dem Soll ist gelb, eine offene Bestellung rot', () => {
+    const sp = art(1, 'Testart Alpha', {});
+    sp.fach = [fach_('PD', { have: 1, soll: 5, low: true }), fach_('SY10', { have: 0, low: true, urgency: 'now' })];
+    const h = seite([sp]).els['lb-list'].innerHTML;
+    assert.match(h, /data-lf-slot="PD"[^>]*class="lb-st lb-under"><small>lb\.short\.PD<\/small><b>1<em>\/5<\/em>/);
+    assert.match(h, /data-lf-slot="SY10"[^>]*class="lb-st lb-now"/);
   });
 
   it('eine ruhende Sorte steht eingeklappt unten, hinter einem Knopf', () => {

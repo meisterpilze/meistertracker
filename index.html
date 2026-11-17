@@ -157,7 +157,20 @@
         <div class="shelf-now" id="m-shelf-now">
           <b id="m-shelf-stock" aria-live="polite">0</b>
           <span data-i18n="shelf.inShelf">im Regal</span>
-          <small id="m-shelf-alarm" class="shelf-alarm"></small>
+        </div>
+        <!-- Der Alarm, gleich unter der Zahl: bei diesem Stand geht einmal eine
+             Glocke an alle (checkShelf). − und + speichern selbst. -->
+        <div class="shelf-alarmrow">
+          <span id="m-shelf-alarm"></span>
+          <span class="shelf-mini">
+            <button type="button" class="btn btn-sm" data-shelf-min="-1" data-i18n-aria-label="shelf.alarmLess" aria-label="Alarm niedriger">
+              −
+            </button>
+            <b id="m-shelf-minv" aria-live="polite">0</b>
+            <button type="button" class="btn btn-sm" data-shelf-min="1" data-i18n-aria-label="shelf.alarmMore" aria-label="Alarm höher">
+              +
+            </button>
+          </span>
         </div>
         <div class="shelf-amt">
           <button type="button" class="btn" data-shelf-step="-1" data-i18n-aria-label="shelf.less" aria-label="Weniger">
@@ -190,20 +203,6 @@
         <details id="m-shelf-more" class="shelf-more">
           <summary data-i18n="shelf.moreTitle">Verlauf und Artikel</summary>
           <div id="m-shelf-log" class="shelf-log"></div>
-          <!-- Bei diesem Stand geht einmal eine Glocke an alle: nachproduzieren. -->
-          <div class="shelf-sub" data-i18n="shelf.minTitle">Alarm: nachproduzieren bei</div>
-          <div class="shelf-rename">
-            <input
-              type="number"
-              id="m-shelf-min"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              data-i18n-aria-label="shelf.minTitle"
-              aria-label="Alarm: nachproduzieren bei"
-            />
-            <button type="button" class="btn btn-sm" data-shelf-act="min" data-i18n="common.save">Speichern</button>
-          </div>
           <!-- Shop-SKUs: eine Bestellung damit nimmt den Bestand runter (checkShelf). -->
           <div class="shelf-sub" data-i18n="shelf.skuTitle">Online-Bestellungen ziehen ab</div>
           <p class="fs-meta shelf-help" data-i18n="shelf.skuHelp">
@@ -255,6 +254,68 @@
         <div class="modal-btns">
           <button type="button" class="btn" data-shelf-act="close" data-i18n="common.close">Schließen</button>
           <button type="button" class="btn" data-shelf-act="print" data-i18n="shelf.print">Etikett drucken</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ein Laborfach: eine Art in einem Gefäß, mit Etikett und Alarm (lfRender).
+         Gezählt werden die Schalen, Spritzen und Beutel selbst; Add legt neue an,
+         Remove und Verkauft nehmen die ältesten. -->
+    <div class="modal-bg" id="m-labfach" role="dialog" aria-modal="true" aria-labelledby="m-lf-title" hidden>
+      <div class="modal">
+        <div class="lf-head">
+          <h3 id="m-lf-title"></h3>
+          <span id="m-lf-what" class="lf-what"></span>
+        </div>
+        <div id="m-lf-sizes" class="lf-sizes" hidden></div>
+        <div class="shelf-now" id="m-lf-now">
+          <b id="m-lf-stock" aria-live="polite">0</b>
+          <span data-i18n="lf.there">da</span>
+          <small id="m-lf-grow" class="shelf-alarm"></small>
+        </div>
+        <div class="shelf-alarmrow">
+          <span id="m-lf-alarm"></span>
+          <span class="shelf-mini">
+            <button type="button" class="btn btn-sm" data-lf-min="-1" data-i18n-aria-label="shelf.alarmLess" aria-label="Alarm niedriger">
+              −
+            </button>
+            <b id="m-lf-minv" aria-live="polite">0</b>
+            <button type="button" class="btn btn-sm" data-lf-min="1" data-i18n-aria-label="shelf.alarmMore" aria-label="Alarm höher">
+              +
+            </button>
+          </span>
+        </div>
+        <div class="shelf-amt">
+          <button type="button" class="btn" data-lf-step="-1" data-i18n-aria-label="shelf.less" aria-label="Weniger">
+            −
+          </button>
+          <input
+            type="number"
+            id="m-lf-n"
+            inputmode="numeric"
+            min="0"
+            step="1"
+            value="0"
+            data-i18n-aria-label="shelf.amount"
+            aria-label="Anzahl"
+          />
+          <button type="button" class="btn" data-lf-step="1" data-i18n-aria-label="shelf.more" aria-label="Mehr">
+            +
+          </button>
+        </div>
+        <div class="shelf-acts">
+          <button type="button" class="btn btn-p" id="m-lf-in" data-lf-act="in" data-i18n="shelf.in">Add</button>
+          <button type="button" class="btn btn-p" data-lf-act="out" data-i18n="shelf.out">Remove</button>
+          <button type="button" class="btn btn-p" data-lf-act="sold" data-i18n="lf.sold">Verkauft</button>
+          <button type="button" class="btn" data-lf-act="count" data-i18n="shelf.count">Das ist der Bestand</button>
+        </div>
+        <p class="fs-meta shelf-help" id="m-lf-help"></p>
+        <div id="m-lf-preview" class="shelf-preview"></div>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-lf-act="close" data-i18n="common.close">Schließen</button>
+          <button type="button" class="btn" id="m-lf-print" data-lf-act="print" data-i18n="shelf.print">
+            Etikett drucken
+          </button>
         </div>
       </div>
     </div>
@@ -4561,7 +4622,9 @@
                  card (renderLabStock). -->
             <div class="card" id="lb-card" hidden>
               <div class="sec" data-i18n="lb.title">Laborbestand</div>
-              <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
+              <p class="lb-tap" data-i18n="lb.tapHint">
+                Tipp auf eine Sorte: ansetzen, Soll, Im Programm. Tipp auf eine Zahl: Add, Remove, Verkauft, Alarm.
+              </p>
               <div id="lb-list"></div>
               <div class="vb-legend">
                 <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
