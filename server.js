@@ -3593,7 +3593,15 @@ function printZPL(zplData, callback) {
   }
   // Every label that left the printer is remembered by its ID, so one whose
   // culture or bag never got saved shows up in the bell the same day.
+  //
+  // And it answers exactly once. When PowerShell overran its 15 seconds the
+  // timeout answered, killed the process, and then the process's own exit
+  // answered a second time; /api/print wrote its headers twice and the server
+  // logged "Cannot write headers after they are sent" (17.11.2026).
+  let beantwortet = false;
   const done = (err) => {
+    if (beantwortet) return;
+    beantwortet = true;
     if (!err) rememberPrintedLabels(zplData);
     callback(err);
   };
@@ -3693,7 +3701,12 @@ public class DOCINFO {
         return callback('Could not write PS script: ' + err2.message);
       }
 
+      // Once: the timeout and the killed process's exit both reach it, and the
+      // second unlink only logged a warning about a file that was already gone.
+      let aufgeraeumt = false;
       const cleanup = () => {
+        if (aufgeraeumt) return;
+        aufgeraeumt = true;
         fs.unlink(tmp, (e) => {
           if (e) log('warn', 'Failed to delete temp ZPL file', { error: e.message });
         });
