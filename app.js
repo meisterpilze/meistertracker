@@ -17288,7 +17288,10 @@ function shelfLabelCanvas(x) {
     ctx.fillStyle = '#000';
   }
 
-  // Der Text: eine Größe, eine Stufe kleiner nur, wenn er sonst nicht passt.
+  // Der Text: eine Größe, eine Stufe kleiner nur, wenn er sonst nicht passt —
+  // in drei Zeilen nicht, oder weil ein einzelnes Wort breiter ist als der Platz
+  // (Zunderschwamm, Schmetterlingstramete). Ein Wort, das auch dann zu breit ist,
+  // wird schmaler gezogen; es läuft nie unter den QR-Code.
   const text = String(x.etikett || x.name || '');
   const maxW = qx - 14 - 12;
   const oben = mitBand ? 92 : 12;
@@ -17301,13 +17304,20 @@ function shelfLabelCanvas(x) {
     const lines = _shelfWrap(ctx, words, maxW);
     const lh = Math.round(px * 1.1);
     wahl = { px, lines, lh };
-    if (lines.length * lh <= hoch) break;
+    if (lines.length * lh <= hoch && lines.every((l) => ctx.measureText(l).width <= maxW)) break;
   }
   ctx.font = 'bold ' + wahl.px + 'px Arial, Helvetica, sans-serif';
   ctx.textBaseline = 'top';
   wahl.lines
     .slice(0, Math.max(1, Math.floor(hoch / wahl.lh)))
-    .forEach((l, i) => ctx.fillText(l, 12, oben + i * wahl.lh));
+    .forEach((l, i) => {
+      const w = ctx.measureText(l).width;
+      ctx.save();
+      ctx.translate(12, oben + i * wahl.lh);
+      if (w > maxW) ctx.scale(maxW / w, 1);
+      ctx.fillText(l, 0, 0);
+      ctx.restore();
+    });
 
   // Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
   const img = ctx.getImageData(0, 0, W, H);
