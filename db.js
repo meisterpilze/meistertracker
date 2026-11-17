@@ -3357,6 +3357,19 @@ const MIGRATIONS = [
       if (!cols.has('band')) db.exec('ALTER TABLE shelf_items ADD COLUMN band TEXT');
       if (!cols.has('etikett')) db.exec('ALTER TABLE shelf_items ADD COLUMN etikett TEXT');
     }
+  },
+  {
+    version: 118,
+    description: 'Wiederkehrende Aufgabe: auch monatlich, am Tag des Ankers',
+    fn(db) {
+      // "Koernerbrut zaehlen" faellt einmal im Monat an, am 1. Alle N Wochen
+      // trifft das nicht: vier Wochen wandern durch den Monat. monthly = 1
+      // heisst: jeden Monat am Tag des Ankers (am 31. im Februar am letzten).
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('recurring_task') WHERE name = 'monthly'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE recurring_task ADD COLUMN monthly INTEGER NOT NULL DEFAULT 0');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -11571,8 +11584,19 @@ function listRhythmTasks(db) {
 // wird, hat nicht rückwirkend seit Januar gefehlt.
 //
 // In UTC gerechnet, damit die Sommerzeit nicht aus sieben Tagen 6,96 macht.
-function recurringDueOn(anchor, everyWeeks, date) {
+// Monatlich: der Tag des Ankers in jedem Monat, im kuerzeren Monat sein letzter.
+function _monatsTag(anchor, jahr, monat) {
+  const tag = Number(anchor.slice(8, 10));
+  const letzter = new Date(Date.UTC(jahr, monat + 1, 0)).getUTCDate();
+  return Math.min(tag, letzter);
+}
+function recurringDueOn(anchor, everyWeeks, date, monthly) {
   if (!anchor || !date || date < anchor) return false;
+  if (monthly) {
+    const j = Number(date.slice(0, 4));
+    const m = Number(date.slice(5, 7)) - 1;
+    return Number(date.slice(8, 10)) === _monatsTag(anchor, j, m);
+  }
   const n = Number(everyWeeks);
   if (!Number.isInteger(n) || n < 1) return false;
   const a = Date.parse(anchor + 'T00:00:00Z');
@@ -11595,8 +11619,25 @@ const RECURRING_AHEAD_DAYS = 6;
 // In UTC gerechnet: eine Woche ist hier 7 x 864e5, und das stimmt nur, solange
 // keine Zeitzone dazwischenfunkt. Ende Maerz hat eine Ortszeitwoche 167
 // Stunden, Ende Oktober 169.
-function recurringDueBetween(anchor, everyWeeks, von, bis) {
+function recurringDueBetween(anchor, everyWeeks, von, bis, monthly) {
   const out = [];
+  if (monthly) {
+    if (!anchor || !von || !bis) return out;
+    let j = Number(von.slice(0, 4));
+    let m = Number(von.slice(5, 7)) - 1;
+    for (let i = 0; i < 24; i++) {
+      const d =
+        String(j) + '-' + String(m + 1).padStart(2, '0') + '-' + String(_monatsTag(anchor, j, m)).padStart(2, '0');
+      if (d > bis) break;
+      if (d >= von && d >= anchor) out.push(d);
+      m++;
+      if (m > 11) {
+        m = 0;
+        j++;
+      }
+    }
+    return out;
+  }
   const n = Number(everyWeeks);
   if (!anchor || !Number.isInteger(n) || n < 1) return out;
   const takt = 7 * n * 864e5;
@@ -11615,7 +11656,7 @@ function recurringDueBetween(anchor, everyWeeks, von, bis) {
 function listRecurringTasks(db, now) {
   const heute = now ? new Date(now) : new Date();
   const zeilen = db
-    .prepare('SELECT id, name, every_weeks, anchor, active, created FROM recurring_task ORDER BY id')
+    .prepare('SELECT id, name, every_weeks, anchor, active, created, monthly FROM recurring_task ORDER BY id')
     .all();
   // Der Zeitraum richtet sich nach dem laengsten Takt, nicht nach einer Zahl
   // aus der Luft.
@@ -11625,7 +11666,10 @@ function listRecurringTasks(db, now) {
   // Ein Termin, der abgehakt WAR, kam ohne seinen Haken an und stand wieder als
   // versaeumt da; nochmal abzuhaken half nicht, weil der Haken auf demselben
   // Datum landete, das weiterhin ausserhalb lag.
-  const zurueck = zeilen.reduce((m, r) => Math.max(m, 7 * (r.every_weeks || 1)), RECURRING_ARREARS_DAYS);
+  const zurueck = zeilen.reduce(
+    (m, r) => Math.max(m, r.monthly ? 31 : 7 * (r.every_weeks || 1)),
+    RECURRING_ARREARS_DAYS
+  );
   const vonD = new Date(heute);
   vonD.setDate(vonD.getDate() - zurueck);
   const bisD = new Date(heute);
@@ -11641,6 +11685,7 @@ function listRecurringTasks(db, now) {
     id: r.id,
     name: r.name,
     everyWeeks: r.every_weeks,
+    monthly: r.monthly === 1,
     anchor: r.anchor,
     active: r.active === 1,
     done: (haken.get(r.id) || []).sort(),
@@ -11648,7 +11693,7 @@ function listRecurringTasks(db, now) {
     // einer zweiten Fassung derselben Regel noch einmal aus, und ein Test hielt
     // die beiden Fassungen gegeneinander -- eine Naht, die nur so lange haelt,
     // wie jemand daran denkt. Jetzt gibt es die Regel einmal.
-    due: recurringDueBetween(r.anchor, r.every_weeks, von, bis)
+    due: recurringDueBetween(r.anchor, r.every_weeks, von, bis, r.monthly === 1)
   }));
 }
 
@@ -11666,16 +11711,20 @@ function saveRecurringTask(db, t) {
   if (t.id !== undefined && t.id !== null && t.id !== '') {
     const id = Number(t.id);
     if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + t.id);
+    // Ohne Angabe bleibt, was die Aufgabe war: Pausieren schickt monthly mit,
+    // ein aelterer Aufrufer nicht, und dann wuerde sie still woechentlich.
+    const alt = db.prepare('SELECT monthly FROM recurring_task WHERE id = ?').get(id);
+    const monat = t.monthly === undefined ? (alt ? alt.monthly : 0) : t.monthly ? 1 : 0;
     const info = db
-      .prepare('UPDATE recurring_task SET name = ?, every_weeks = ?, anchor = ?, active = ? WHERE id = ?')
-      .run(name, every, anchor, aktiv, id);
+      .prepare('UPDATE recurring_task SET name = ?, every_weeks = ?, anchor = ?, active = ?, monthly = ? WHERE id = ?')
+      .run(name, every, anchor, aktiv, monat, id);
     if (!info.changes) throw new Error('No such task: ' + id);
     incrementDataVersion(db);
     return id;
   }
   const info = db
-    .prepare('INSERT INTO recurring_task(name, every_weeks, anchor, active, created) VALUES(?, ?, ?, ?, ?)')
-    .run(name, every, anchor, aktiv, new Date().toISOString());
+    .prepare('INSERT INTO recurring_task(name, every_weeks, anchor, active, created, monthly) VALUES(?, ?, ?, ?, ?, ?)')
+    .run(name, every, anchor, aktiv, new Date().toISOString(), t.monthly ? 1 : 0);
   incrementDataVersion(db);
   return Number(info.lastInsertRowid);
 }
@@ -11702,7 +11751,7 @@ function setRecurringDone(db, taskId, date, done, who) {
   const id = Number(taskId);
   if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + taskId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
-  const t = db.prepare('SELECT every_weeks, anchor FROM recurring_task WHERE id = ?').get(id);
+  const t = db.prepare('SELECT every_weeks, anchor, monthly FROM recurring_task WHERE id = ?').get(id);
   if (!t) throw new Error('No such task: ' + id);
   if (done === false) {
     // Wegnehmen ohne Faelligkeitspruefung.
@@ -11714,7 +11763,8 @@ function setRecurringDone(db, taskId, date, done, who) {
     // Anlegen -- sonst ist genau das nicht aufraeumbar, was nicht mehr passt.
     db.prepare('DELETE FROM recurring_done WHERE task_id = ? AND date = ?').run(id, date);
   } else {
-    if (!recurringDueOn(t.anchor, t.every_weeks, date)) throw new Error('Not a due date for this task: ' + date);
+    if (!recurringDueOn(t.anchor, t.every_weeks, date, t.monthly === 1))
+      throw new Error('Not a due date for this task: ' + date);
     db.prepare('INSERT OR REPLACE INTO recurring_done(task_id, date, done, who) VALUES(?, ?, ?, ?)').run(
       id,
       date,

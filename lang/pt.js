@@ -688,6 +688,7 @@ window.LANG['pt'] = {
   'recur.saveFailed': 'Não foi possível guardar',
   'recur.everyWeek': 'todas as semanas',
   'recur.everyN': 'a cada {n} semanas',
+  'recur.monthlyOn': 'mensal, no dia {day}',
   'recur.tick': 'Feito',
   'recur.undo': 'Anular',
   'recur.missedFrom': 'em aberto desde {date}',

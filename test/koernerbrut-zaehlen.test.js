@@ -158,3 +158,52 @@ describe('Körnerbrut zählen in der App', () => {
     assert.match(APP, /'m-kbz': \(\) => kbzClose\(\)/);
   });
 });
+
+describe('Monatlich wiederkehrende Aufgabe (für "Körnerbrut zählen")', () => {
+  it('fällt jeden Monat am Tag des Ankers an, im kürzeren Monat am letzten', () => {
+    assert.deepEqual(db.recurringDueBetween('2026-12-01', 4, '2026-11-01', '2027-03-15', true), [
+      '2026-12-01',
+      '2027-01-01',
+      '2027-02-01',
+      '2027-03-01'
+    ]);
+    assert.deepEqual(db.recurringDueBetween('2026-01-31', 4, '2027-02-01', '2027-04-30', true), [
+      '2027-02-28',
+      '2027-03-31',
+      '2027-04-30'
+    ]);
+    assert.equal(db.recurringDueOn('2026-12-01', 4, '2027-05-01', true), true);
+    assert.equal(db.recurringDueOn('2026-12-01', 4, '2027-05-02', true), false);
+    assert.equal(db.recurringDueOn('2026-12-01', 4, '2026-11-01', true), false, 'nicht vor dem Anker');
+  });
+  it('bleibt monatlich, wenn man sie pausiert, und lässt sich nur am Termin abhaken', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mon-'));
+    const d = db.openDb(path.join(dir, 'test.db'));
+    try {
+      const id = db.saveRecurringTask(d, { name: 'Testaufgabe', everyWeeks: 4, monthly: true, anchor: '2026-12-01' });
+      db.saveRecurringTask(d, { id, name: 'Testaufgabe', everyWeeks: 4, anchor: '2026-12-01', active: false });
+      assert.equal(db.listRecurringTasks(d)[0].monthly, true);
+      db.setRecurringDone(d, id, '2027-01-01', true, 'erika');
+      assert.throws(() => db.setRecurringDone(d, id, '2027-01-08', true, 'erika'), /Not a due date/);
+      assert.deepEqual(db.listRecurringTasks(d, new Date('2027-01-10T10:00:00Z'))[0].done, ['2027-01-01']);
+    } finally {
+      d.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('im Admin-Formular als "monatlich am 1." wählbar, und so beschriftet', () => {
+    assert.match(APP, /^const RECUR_EVERY_CHOICES = \[1, 2, 3, 4, 6, 8, 12, 'm'\];$/m);
+    assert.match(hebe('_ownRead'), /if \(wahl === 'm'\)/);
+    assert.match(hebe('recurWhenLabel'), /t\('recur\.monthlyOn'/);
+  });
+});
+
+describe('Körnerbrut zählen: Namen brechen nicht mitten im Wort', () => {
+  it('der Name steht auf einer eigenen Zeile über den drei Größen', () => {
+    const CSS = quelle('styles.css');
+    const regel = CSS.slice(CSS.indexOf('.kbz-sp b {'), CSS.indexOf('}', CSS.indexOf('.kbz-sp b {')));
+    assert.match(regel, /grid-column: 1 \/ -1/);
+    assert.doesNotMatch(regel, /overflow-wrap: anywhere/);
+    assert.match(hebe('kbzOpen'), /<span>\$\{kg\} kg<\/span>/);
+  });
+});
