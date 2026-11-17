@@ -318,6 +318,18 @@ describe('Laborfach: ein Etikett für alle Spritzen einer Art', () => {
   });
 });
 
+describe('Laborfach: was verborgen ist, ist verborgen', () => {
+  const CSS = quelle('styles.css');
+  it('jede Zeile, die das Blatt mit hidden ausblendet, hat ihre [hidden]-Regel', () => {
+    // lfRender blendet diese am Spritzen-Etikett aus, bis eine Größe gewählt ist.
+    for (const cls of ['shelf-now', 'shelf-alarmrow', 'shelf-amt', 'shelf-acts', 'lf-sizes']) {
+      const i = CSS.indexOf('.' + cls + '[hidden]');
+      assert.ok(i >= 0, cls);
+      assert.match(CSS.slice(i, CSS.indexOf('}', i)), /display: none/, cls);
+    }
+  });
+});
+
 describe('Laborfach in der App', () => {
   it('das Etikett am Fach öffnet sein Blatt, wie beim Regal', () => {
     assert.match(APP, /entry\.type === 'labfach'\) \{[\s\S]{0,200}lfScanned\(entry\.id\)/);
