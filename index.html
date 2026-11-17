@@ -240,6 +240,30 @@
             Eine neue Charge Körnerbrut in dieser Beutelgröße nimmt ihre Beutel aus diesem Fach.
           </p>
           <div id="m-shelf-spawn" class="shelf-rename"></div>
+          <!-- Das Etikett am Fach: Bild und Wort im schwarzen Band, darunter der
+               Text, auf den es ankommt (shelfLabelCanvas). -->
+          <div class="shelf-sub" data-i18n="shelf.labelTitle">Etikett</div>
+          <div id="m-shelf-bilder" class="shelf-bilder" role="group" data-i18n-aria-label="shelf.labelPicture" aria-label="Bild"></div>
+          <div class="shelf-etikett">
+            <textarea
+              id="m-shelf-band"
+              rows="2"
+              maxlength="33"
+              data-i18n-placeholder="shelf.labelBand"
+              data-i18n-aria-label="shelf.labelBand"
+              placeholder="Band, z. B. WEIZEN"
+              aria-label="Band"
+            ></textarea>
+            <input
+              type="text"
+              id="m-shelf-etikett"
+              maxlength="40"
+              autocomplete="off"
+              data-i18n-aria-label="shelf.labelText"
+              aria-label="Text"
+            />
+            <button type="button" class="btn btn-sm" data-shelf-act="etikett" data-i18n="common.save">Speichern</button>
+          </div>
           <div class="shelf-sub" data-i18n="shelf.itemTitle">Artikel</div>
           <div class="shelf-rename">
             <input
