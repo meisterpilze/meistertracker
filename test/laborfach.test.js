@@ -101,6 +101,12 @@ describe('Laborfach: Bestand und Etikett', () => {
     assert.equal(fach(d, a, 'PD').have, 2);
     assert.equal(fach(d, a, 'LC').have, 1);
     assert.equal(fach(d, a, 'SY20').have, 2);
+    // Die letzte 20er verkauft: das Fach bleibt, mit 0.
+    for (const c of d.prepare("SELECT id FROM cultures WHERE type = 'SY'").all())
+      db.updateCulture(d, c.id, { status: 'sold' });
+    assert.equal(fach(d, a, 'SY20').have, 0);
+    for (const c of d.prepare("SELECT id FROM cultures WHERE type = 'SY'").all())
+      db.updateCulture(d, c.id, { status: 'active' });
     assert.equal(fach(d, a, 'SY10'), undefined, 'mit einer 20er braucht es die 10er nicht mehr');
   });
 
@@ -132,7 +138,7 @@ describe('Laborfach: Bestand und Etikett', () => {
         reason: 'sold'
       }
     ]);
-    assert.equal(fach(d, a, 'KB5'), undefined, 'eine Größe ohne Beutel und ohne Etikett fällt aus der Zeile');
+    assert.equal(fach(d, a, 'KB5').have, 0, 'leer steht mit 0 da, statt aus der Zeile zu fallen');
     assert.equal(db.getContaminationReport(d, 'species').totalContam, 0);
   });
 
