@@ -14794,6 +14794,31 @@ function _labFachCounts(db, nowIso) {
   return out;
 }
 
+// Welche Spritzen- und Beutelgroessen es je Art schon einmal gab, egal ob noch
+// etwas da ist: "<Art>:<Slot>". Eine leere Groesse soll mit 0 dastehen, nicht
+// aus der Zeile fallen; leer ist genau das, was man sehen muss.
+function _labFachJemals(db) {
+  const out = new Set();
+  for (const r of db
+    .prepare(
+      `SELECT DISTINCT ms.id AS strain_id, COALESCE(c.ml, 10) AS ml
+         FROM cultures c JOIN mushroom_strains ms
+           ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
+        WHERE c.type = 'SY'`
+    )
+    .all())
+    out.add(r.strain_id + ':SY' + r.ml);
+  for (const r of db
+    .prepare(
+      `SELECT DISTINCT ba.strain_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all())
+    out.add(r.strain_id + ':' + _kbSlot(r.kg));
+  return out;
+}
+
 function _fachCtx(db, now) {
   const skus = new Map();
   for (const s of db.prepare('SELECT * FROM syringe_stock_sku').all())
@@ -14809,7 +14834,8 @@ function _fachCtx(db, now) {
     skus,
     barcodes,
     ordered: _openOrderedBySku(db),
-    rows: db.prepare('SELECT * FROM lab_fach').all()
+    rows: db.prepare('SELECT * FROM lab_fach').all(),
+    jemals: _labFachJemals(db)
   };
 }
 
@@ -14857,8 +14883,9 @@ function _fachView(ctx, ms, slot, row) {
 const _FACH_STRAIN_COLS = 'id, name, im_programm, min_lc, min_pd';
 
 // Die Faecher je Art (Map Art-id → Liste), fuer Labor → Bestand. FK und Petri
-// hat jede Art. Eine Spritzen- oder Beutelgroesse steht da, sobald es sie gibt:
-// etwas darin, ein Etikett, eine Shop-SKU. Eine Art im Programm ohne jede
+// hat jede Art. Eine Spritzen- oder Beutelgroesse steht da, sobald es sie gibt
+// oder je gab: etwas darin, schon einmal etwas darin (dann mit 0), ein
+// Etikett, eine Shop-SKU. Eine Art im Programm ohne jede
 // Spritze bekommt die 10er, damit man dort anfangen kann; die anderen Groessen
 // erreicht man im Blatt.
 function labFaecher(db, now = new Date()) {
@@ -14868,7 +14895,7 @@ function labFaecher(db, now = new Date()) {
   for (const ms of db.prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains`).all()) {
     const slots = new Set(['LC', 'PD']);
     const pre = ms.id + ':';
-    for (const key of [...ctx.counts.keys(), ...rowBy.keys()]) {
+    for (const key of [...ctx.counts.keys(), ...rowBy.keys(), ...ctx.jemals]) {
       if (key.startsWith(pre) && /^(SY|KB)/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
     }
     for (const [key, s] of ctx.skus) {
