@@ -117,6 +117,11 @@ describe('Etikett: Labor und Regal', () => {
     assert.match(m, /data-shelf-act="etikett"/);
     assert.match(APP, /if \(bild\) shelfEtikett\(\{ bild: bild\.dataset\.shelfBild \}\);/);
   });
+  it('ein Wort, das breiter ist als der Platz, läuft nicht unter den QR-Code', () => {
+    const f = hebe('shelfLabelCanvas');
+    assert.match(f, /lines\.every\(\(l\) => ctx\.measureText\(l\)\.width <= maxW\)/);
+    assert.match(f, /if \(w > maxW\) ctx\.scale\(maxW \/ w, 1\);/);
+  });
   it('eine Größe im Band bleibt klein geschrieben, ein Wort wird groß', () => {
     assert.match(
       hebe('shelfLabelCanvas'),
