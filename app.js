@@ -1213,14 +1213,8 @@ function restoreAfterUpdate() {
     return;
   }
   if (!w || Date.now() - w.at > 60 * 1000) return;
-  if (!w.page || !w.btnId || !document.getElementById('p-' + w.page) || !document.getElementById(w.btnId)) return;
-  go(w.page, w.btnId);
-  // Den Reiter wie mit einem Tipp öffnen. Am Telefon nur, wenn man in ihm
-  // stand — sonst stand man auf der Liste der Reiter, und dort landet go().
-  if (w.stab && (w.drilled || !sbIsPhone())) {
-    const r = document.getElementById(w.stab);
-    if (r) r.click();
-  }
+  // Derselbe Weg wie ein Schritt zurück (gehZuOrt, beim Zurück-Block).
+  gehZuOrt(w);
 }
 
 // Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
@@ -1542,6 +1536,7 @@ let lastMainPage = { page: 'dash', btnId: 'n-dash' };
 
 function go(page, btnId) {
   if (!mayLeavePage()) return;
+  zurueckMerk(page, null);
   if (page !== 'settings') lastMainPage = { page, btnId };
   // Admin borrows the sidebar on a desktop; styles.css reads this flag.
   document.body.classList.toggle('admin-mode', page === 'settings');
@@ -1653,6 +1648,7 @@ function go(page, btnId) {
   sbCloseMobile();
 }
 function openStab(page, sub) {
+  zurueckMerk(page, sub);
   document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
   document.querySelectorAll(`#p-${page} .sp`).forEach((p) => p.classList.remove('active'));
   const stEl = document.getElementById(`st-${page}-${sub}`);
@@ -33179,6 +33175,8 @@ async function pushBatchCaldav(batch) {
       if (el.classList.contains('open')) el.removeAttribute('hidden');
       else el.setAttribute('hidden', '');
     }
+    // Ein Fenster ging auf oder zu: der Verlauf der Zurück-Taste zieht nach.
+    _zAbgleichSpaeter();
   });
   document.querySelectorAll('.modal-bg').forEach((el) => {
     observer.observe(el, { attributes: true, attributeFilter: ['class'] });
@@ -34105,6 +34103,229 @@ document.addEventListener('keydown', function (e) {
     if (opener) opener.focus();
   }
 });
+
+// ═══ ZURÜCK: die Zurück-Taste des Telefons ═════════════════════════════════
+//
+// Die App legte nie etwas in den Verlauf des Browsers. Als installierte App am
+// Telefon hieß das: die Zurück-Geste fand nichts, was sie zurücknehmen konnte,
+// und schloss die App. Wer im Scan-Fenster, in einem Blatt oder auf einer
+// Unterseite stand, musste die App schließen und neu öffnen, um herauszukommen.
+//
+// Jetzt legt jeder Schritt, den ein Tipp öffnet, einen Eintrag in den Verlauf,
+// und die Zurück-Geste nimmt den obersten zurück:
+//   1. ein Fenster, das über der Seite liegt (Dialog, Kamera, Scan, Blatt) —
+//      mit seinem eigenen Schließen, wie Escape: nur die Klasse zu nehmen ließe
+//      die Kamera laufen und Rückfragen offen;
+//   2. die Seitenleiste am Telefon;
+//   3. eine geöffnete Sorte in einer Liste (Chargen, Kulturen, Körnerbrut);
+//   4. eine Unterseite von Admin am Telefon (zurück auf deren Liste);
+//   5. die Seite oder Unterseite, auf der man vorher war.
+// Ist nichts mehr davon da, gibt es keinen Eintrag mehr, und die nächste
+// Zurück-Geste schließt die App wie bei jeder anderen.
+//
+// Gezählt statt verfolgt: zurueckBedarf() sagt, wie viele Schritte es gerade
+// gibt, und zurueckAbgleich() bringt die Einträge im Verlauf auf diese Zahl.
+// Schließt jemand ein Fenster mit seinem eigenen Knopf, nimmt der Abgleich den
+// überzähligen Eintrag still wieder heraus. Neue Einträge legt der Abgleich
+// nach einem Tipp, denn Chrome überspringt Einträge, die eine Seite ohne
+// Berührung anlegt; und genau darum ist ein Tipp auch der Anlass.
+
+const _zSpur = []; // die Orte vorher (whereAmI), der letzte zuletzt
+let _zGerade = false; // ein Schritt zurück läuft: go() und openStab() merken nichts
+let _zBereit = false; // erst nach der ersten Berührung: der Start ist kein Schritt
+let _zZeit = 0;
+let _zTiefe = 0; // so viele Einträge hat die App gerade im Verlauf
+let _zIgnorieren = 0; // so viele popstate kommen von einem eigenen history.go
+let _zAbgleichTimer = null;
+const Z_SPUR_MAX = 20;
+
+// Vor einem Seitenwechsel: wo man war. go() und gleich danach openStab() sind
+// ein Schritt, nicht zwei; deshalb zählt ein zweiter Aufruf kurz danach nicht.
+function zurueckMerk(page, sub) {
+  if (_zGerade || !_zBereit) return;
+  const w = whereAmI();
+  if (!w.page) return;
+  if (page === w.page && (sub == null || 'st-' + page + '-' + sub === w.stab)) return;
+  const jetzt = Date.now();
+  if (jetzt - _zZeit < 400) return;
+  _zZeit = jetzt;
+  _zSpur.push(w);
+  if (_zSpur.length > Z_SPUR_MAX) _zSpur.shift();
+  _zAbgleichSpaeter();
+}
+
+// Dorthin, wo man war. Restore nach einem Update geht denselben Weg.
+function gehZuOrt(w) {
+  if (!w || !w.page || !w.btnId) return;
+  const seite = document.getElementById('p-' + w.page);
+  if (!seite || !document.getElementById(w.btnId)) return;
+  go(w.page, w.btnId);
+  // Den Reiter wie mit einem Tipp öffnen. Auf einer Seite mit Liste der Reiter
+  // (Admin am Telefon) nur, wenn man in ihm stand — sonst stand man auf der Liste.
+  const mitListe = seite.classList.contains('stab-drill') && sbIsPhone();
+  if (w.stab && (w.drilled || !mitListe)) {
+    const r = document.getElementById(w.stab);
+    if (r) r.click();
+  }
+  if (mitListe && !w.drilled) seite.classList.remove('stab-drilled');
+}
+
+// Was gerade über der Seite liegt, sichtbar. GS_OVERLAY_SEL kennt alle Arten
+// (siehe gsCovered); ein Element ohne Rechtecke ist nicht zu sehen.
+function _zOverlays() {
+  return [...document.querySelectorAll(GS_OVERLAY_SEL)].filter((el) => el.getClientRects().length);
+}
+// Das oberste: der höchste z-index, bei Gleichstand das spätere im Dokument —
+// so legt der Browser sie auch übereinander.
+function _zOben(liste) {
+  let oben = null;
+  let hoch = -Infinity;
+  for (const el of liste) {
+    const z = parseInt(window.getComputedStyle(el).zIndex, 10) || 0;
+    if (z >= hoch) {
+      hoch = z;
+      oben = el;
+    }
+  }
+  return oben;
+}
+// Fenster mit eigenem Schließen. Wer hier fehlt, verliert nur die Klasse
+// (oder sein display); das reicht für Fenster ohne Zustand.
+const _Z_SCHLIESSEN = {
+  'm-confirm': () => closeConfirm(),
+  'm-confirm3': () => closeConfirm3(),
+  'm-prompt': () => closePrompt(),
+  'm-search': () => gsClose(),
+  'm-camscan': () => closeCamScan(),
+  'm-bagselect': () => bsClose(),
+  'm-work-flow': () => wkfClose(),
+  'm-dayqty': () => closeDayQty(),
+  'm-rhythm': () => closeRhythmEditor(),
+  'm-note': () => closeNote(),
+  'm-shelf': () => shelfSheetClose(),
+  'm-labfach': () => lfClose(),
+  'm-lb': () => lbSheetClose(),
+  'm-culture-print': () => cprClose(),
+  'm-subinfo': () => closeSubstrateInfo(),
+  'm-photo-annotate': () => closeAnnotate(),
+  'm-cam-edit': () => closeCameraEdit(),
+  'm-batchadd': () => closeBatchAdd(),
+  'm-contam-detail': () => closeContamDetail(),
+  'm-contam-report': () => closeContamReport(),
+  'm-cal-print': () => closeCalPrintModal(),
+  'change-pw-modal': () => hideChangePasswordModal(),
+  'ms-quick-modal': () => msQuickClose(),
+  'm-beimpfen': () => bmpClose(),
+  'ship-modal': () => shipModalClose(),
+  'scan-overlay': () => closeScanModal()
+};
+function _zSchliesse(el) {
+  // Eine frisch angelegte Charge muss erst einen Platz bekommen (wie Escape).
+  if (el.id === 'm-move-batch' && _zpMandatory()) return;
+  const f = _Z_SCHLIESSEN[el.id];
+  if (f) f();
+  else if (el.classList.contains('open')) el.classList.remove('open');
+  else el.style.display = 'none';
+}
+// Die Listen mit einem Blatt für die offene Sorte.
+function _zBlatt() {
+  for (const spec of [SL_CHARGEN, SL_KULTUREN, SL_KOERNER]) {
+    if (document.querySelector('#' + spec.id + '-list.sl-mit-blatt > .sl-grund')) return spec;
+  }
+  return null;
+}
+function _zAdminListe() {
+  const s = document.getElementById('p-settings');
+  return !!(s && s.classList.contains('active') && s.classList.contains('stab-drill') && s.classList.contains('stab-drilled') && sbIsPhone());
+}
+function _zLeiste() {
+  const sb = document.getElementById('sidebar');
+  return !!(sb && sb.classList.contains('sb-open'));
+}
+
+// Wie viele Schritte zurück es gerade gibt.
+function zurueckBedarf() {
+  return (
+    _zOverlays().length +
+    (_zLeiste() ? 1 : 0) +
+    (_zBlatt() ? 1 : 0) +
+    (_zAdminListe() ? 1 : 0) +
+    _zSpur.length
+  );
+}
+
+// Ein Schritt zurück. true, wenn es einen gab.
+function zurueckSchritt() {
+  const oben = _zOben(_zOverlays());
+  if (oben) {
+    _zSchliesse(oben);
+    return true;
+  }
+  if (_zLeiste()) {
+    sbClose();
+    return true;
+  }
+  const blatt = _zBlatt();
+  if (blatt) {
+    slZu(blatt);
+    return true;
+  }
+  if (_zAdminListe()) {
+    document.getElementById('p-settings').classList.remove('stab-drilled');
+    return true;
+  }
+  const w = _zSpur.pop();
+  if (w) {
+    _zGerade = true;
+    try {
+      gehZuOrt(w);
+    } finally {
+      _zGerade = false;
+    }
+    return true;
+  }
+  return false;
+}
+
+// Die Einträge im Verlauf auf die Zahl der Schritte bringen.
+function zurueckAbgleich() {
+  _zAbgleichTimer = null;
+  if (!_zBereit) return;
+  const soll = Math.min(zurueckBedarf(), 40);
+  if (soll > _zTiefe) {
+    while (_zTiefe < soll) window.history.pushState({ mtZurueck: ++_zTiefe }, '');
+  } else if (soll < _zTiefe) {
+    const n = _zTiefe - soll;
+    _zTiefe = soll;
+    _zIgnorieren++;
+    window.history.go(-n);
+  }
+}
+function _zAbgleichSpaeter() {
+  if (_zAbgleichTimer) return;
+  _zAbgleichTimer = setTimeout(zurueckAbgleich, 0);
+}
+
+window.addEventListener('popstate', () => {
+  if (_zIgnorieren > 0) {
+    _zIgnorieren--;
+    return;
+  }
+  _zTiefe = Math.max(0, _zTiefe - 1);
+  zurueckSchritt();
+  _zAbgleichSpaeter();
+});
+// Nach jeder Berührung: was sie geöffnet oder geschlossen hat, in den Verlauf.
+for (const ev of ['click', 'keyup', 'change']) {
+  document.addEventListener(
+    ev,
+    () => {
+      _zBereit = true;
+      _zAbgleichSpaeter();
+    },
+    true
+  );
+}
 
 initEventListeners();
 sbSyncInert();
