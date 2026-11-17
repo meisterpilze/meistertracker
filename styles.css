@@ -12013,6 +12013,62 @@ button.wk-an-zeile:active {
 .lf-sizes[hidden] {
   display: none;
 }
+/* Körnerbrut zählen: name, then 1 / 2 / 5 kg as number fields in three columns. */
+.kbz-head,
+.kbz-sp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 64px);
+  gap: 6px;
+  align-items: center;
+}
+.kbz-head {
+  padding: 0 2px 4px;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  text-align: center;
+}
+.kbz-list {
+  display: grid;
+  gap: 6px;
+}
+.kbz-sp {
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.kbz-sp b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}
+.kbz-cell {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+.kbz-cell input {
+  width: 60px;
+  min-height: 44px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.kbz-cell small {
+  min-height: 1.1em;
+  color: var(--c-text-muted);
+  font-size: max(0.6875rem, var(--fs-min));
+}
+.kbz-cell.kbz-diff input {
+  background: var(--c-amber-light);
+  border-color: var(--c-amber-border);
+  color: var(--c-amber-dark);
+}
+.kbz-cell.kbz-bad input {
+  border-color: var(--c-red);
+}
+.kbz-sum {
+  margin: 10px 0 0;
+  min-height: 1.4em;
+}
 .lf-size:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;

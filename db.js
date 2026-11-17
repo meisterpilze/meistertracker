@@ -14915,7 +14915,9 @@ function labStock(db, now = new Date()) {
       items,
       fach: (faecher.get(ms.id) || {}).fach || [],
       // Das Sammeletikett der Spritzen (Slot 'SY'), mit ihrer Summe.
-      sy: (faecher.get(ms.id) || {}).sy || null
+      sy: (faecher.get(ms.id) || {}).sy || null,
+      // Das Koernerbrut-Etikett der Art (Slot 'KB'), mit allen Beuteln zusammen.
+      kb: (faecher.get(ms.id) || {}).kb || null
     });
   }
   return out;
@@ -14939,7 +14941,9 @@ function _fachSlot(slot) {
     .trim()
     .toUpperCase();
   if (s === 'LC' || s === 'PD') return { slot: s, kind: s, size: null };
-  if (s === 'SY') return { slot: s, kind: 'SY', size: null, group: true };
+  // Das Sammeletikett: alle Spritzen einer Art, und seit der Monatszaehlung
+  // auch alle Beutel Koernerbrut einer Art (ein Etikett je Art statt je Groesse).
+  if (s === 'SY' || s === 'KB') return { slot: s, kind: s, size: null, group: true };
   let m = s.match(/^SY(\d+)$/);
   if (m && SYRINGE_SIZES.includes(Number(m[1]))) return { slot: s, kind: 'SY', size: Number(m[1]) };
   m = s.match(/^KB(\d+(?:\.\d+)?)$/);
@@ -14962,7 +14966,7 @@ function labFachText(slot) {
   const f = _fachSlot(slot);
   if (f.kind === 'LC') return 'FK-Glas';
   if (f.kind === 'PD') return 'Petri';
-  if (f.group) return 'Spritzen';
+  if (f.group) return f.kind === 'KB' ? 'Körnerbrut' : 'Spritzen';
   if (f.kind === 'SY') return 'Spritze ' + f.size + ' ml';
   return 'Körnerbrut ' + String(f.size).replace('.', ',') + ' kg';
 }
@@ -15072,12 +15076,19 @@ function _fachView(ctx, ms, slot, row) {
     size: f.size
   };
   if (f.group) {
-    // Das Sammelfach der Spritzen: nur das Etikett und, zur Uebersicht, wie
-    // viele es zusammen sind. Alarm und Soll hat jede Groesse selbst.
+    // Das Sammelfach (alle Spritzen, alle Beutel Koernerbrut einer Art): nur das
+    // Etikett und, zur Uebersicht, wie viele es zusammen sind. Alarm und Soll hat
+    // jede Groesse selbst.
     let have = 0;
-    for (const ml of SYRINGE_SIZES) have += (ctx.counts.get(ms.id + ':SY' + ml) || { have: 0 }).have;
-    const leer = { growing: 0, readyAt: null, soll: null, ordered: 0, sku: '', low: false, urgency: null };
-    return { ...kopf, group: true, have, imProgramm, ...leer };
+    let growing = 0;
+    const pre = ms.id + ':' + f.kind;
+    for (const [key, c] of ctx.counts) {
+      if (!key.startsWith(pre) || !/\d/.test(key.slice(pre.length, pre.length + 1))) continue;
+      have += c.have;
+      growing += c.growing;
+    }
+    const leer = { readyAt: null, soll: null, ordered: 0, sku: '', low: false, urgency: null };
+    return { ...kopf, group: true, have, growing, imProgramm, ...leer };
   }
   const c = ctx.counts.get(ms.id + ':' + f.slot) || { have: 0, growing: 0, readyAt: null };
   let sku = null;
@@ -15123,7 +15134,7 @@ function labFaecher(db, now = new Date()) {
     const slots = new Set(['LC', 'PD']);
     const pre = ms.id + ':';
     for (const key of [...ctx.counts.keys(), ...rowBy.keys(), ...ctx.jemals]) {
-      if (key.startsWith(pre) && /^(SY\d|KB)/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
+      if (key.startsWith(pre) && /^(SY|KB)\d/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
     }
     for (const [key, s] of ctx.skus) {
       if (!key.startsWith(pre)) continue;
@@ -15133,7 +15144,8 @@ function labFaecher(db, now = new Date()) {
     if (![...slots].some((s) => s.startsWith('SY')) && ms.im_programm !== 0) slots.add('SY10');
     out.set(ms.id, {
       fach: [...slots].sort(_fachCmp).map((s) => _fachView(ctx, ms, s, rowBy.get(pre + s))),
-      sy: _fachView(ctx, ms, 'SY', rowBy.get(pre + 'SY'))
+      sy: _fachView(ctx, ms, 'SY', rowBy.get(pre + 'SY')),
+      kb: _fachView(ctx, ms, 'KB', rowBy.get(pre + 'KB'))
     });
   }
   return out;
@@ -15177,7 +15189,7 @@ function setLabFachAlarm(db, id, soll) {
   const n = soll == null || soll === '' ? 0 : Number(soll);
   if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('Der Alarm ist eine ganze Zahl von 0 bis 500');
   const f = _fachSlot(row.slot);
-  if (f.group) throw new Error('Den Alarm hat jede Spritzengröße selbst');
+  if (f.group) throw new Error('Den Alarm hat jede Größe selbst');
   if (f.kind === 'LC') db.prepare('UPDATE mushroom_strains SET min_lc = ? WHERE id = ?').run(n, row.strain_id);
   else if (f.kind === 'PD') db.prepare('UPDATE mushroom_strains SET min_pd = ? WHERE id = ?').run(n, row.strain_id);
   else {
@@ -15222,6 +15234,140 @@ function labFachLowAlerts(db, now = new Date()) {
     }
   });
   return out;
+}
+
+// ── Koernerbrut zaehlen ───────────────────────────────────────
+// Einmal im Monat: je Art und Beutelgroesse, wie viele fertige Beutel wirklich
+// im Regal stehen. Im Alltag kommt jeder Beutel von selbst in den Bestand, wenn
+// seine Charge angelegt und das Etikett gedruckt wird; gezaehlt wird nur, um zu
+// sehen, ob die Zahl noch stimmt.
+//
+// Weniger als die App meinte: die aeltesten fertigen Beutel gehen hinaus, als
+// REMOVE mit dem Grund "count" (kein Verbrauch, keine Kontamination). Mehr: die
+// App legt sie an, als eigene Charge "aus der Zaehlung", fertig ab sofort, im
+// Spawn-Zelt. Die nimmt weder Korn vom Lager noch Weizen aus dem Regal.
+// Zurueck kommt das Ergebnis mit dem, was eine Rueckgaengig-Taste braucht.
+
+// Fertige Beutel einer Art und Groesse im Regal, die aeltesten zuerst.
+function _fertigeKoernerBeutel(db, strainId, kg, nowIso) {
+  const imRegal = getStockBagZoneMap(db);
+  return db
+    .prepare(
+      `SELECT b.bag_id, b.batch_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.due, ba.species, ba.strain
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id = ?`
+    )
+    .all(Number(strainId))
+    .filter((r) => imRegal.has(r.bag_id) && _kbSlot(r.kg) === _kbSlot(kg) && (!r.due || r.due <= nowIso))
+    .map((r) => ({ ...r, zone: imRegal.get(r.bag_id) }))
+    .sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')) || a.bag_id.localeCompare(b.bag_id));
+}
+
+// changes: [{ strainId, kg, count }] mit der gezaehlten Zahl fertiger Beutel.
+function zaehleKoernerbrut(db, changes, userId, now = new Date()) {
+  const nowIso = now.toISOString();
+  const plan = [];
+  for (const c of Array.isArray(changes) ? changes : []) {
+    const ms = db.prepare('SELECT id, name, kuerzel FROM mushroom_strains WHERE id = ?').get(Number(c.strainId));
+    if (!ms) throw new Error('Diese Art gibt es nicht');
+    const kg = Math.round(Number(c.kg) * 10) / 10;
+    if (!(kg > 0 && kg <= 50)) throw new Error('Die Beutelgröße ist eine Zahl in kg, größer als 0 und höchstens 50.');
+    const count = Number(c.count);
+    if (!Number.isInteger(count) || count < 0 || count > 500)
+      throw new Error('Gezählt wird eine ganze Zahl von 0 bis 500.');
+    const da = _fertigeKoernerBeutel(db, ms.id, kg, nowIso);
+    if (count !== da.length) plan.push({ ms, kg, count, da });
+  }
+  const zone =
+    db.prepare("SELECT id FROM zones WHERE role = 'spawn' ORDER BY id LIMIT 1").get() ||
+    db.prepare("SELECT id FROM zones WHERE role = 'incubation' ORDER BY id LIMIT 1").get();
+  const out = { removed: [], added: [], changes: [] };
+  const tag = _ddmmyy(now);
+  for (const p of plan) {
+    const vorher = p.da.length;
+    if (p.count < vorher) {
+      const weg = p.da.slice(0, vorher - p.count);
+      const ids = appendScanEntries(
+        db,
+        weg.map((b) => ({
+          time: nowIso,
+          action: 'REMOVE',
+          batch: b.batch_id,
+          bag: b.bag_id,
+          from: b.zone,
+          to: null,
+          species: b.species,
+          strain: b.strain,
+          reason: 'count'
+        })),
+        userId
+      );
+      out.removed.push(...ids.filter(Boolean));
+    } else {
+      if (!zone) throw new Error('Es gibt keine Zone für Körnerbrut. Lege unter Admin → Zonen eine an.');
+      const n = p.count - vorher;
+      const kurz = (p.ms.kuerzel || 'XX').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'XX';
+      let seq = 1;
+      let batchId;
+      do {
+        batchId = 'G-' + kurz + '-ZAEHL-' + tag + '-' + String(seq++).padStart(2, '0');
+      } while (db.prepare('SELECT 1 FROM batches WHERE batch_id = ?').get(batchId));
+      const bags = Array.from({ length: n }, (_, i) => ({
+        id: batchId + '-' + String(i + 1).padStart(2, '0'),
+        bagKg: p.kg
+      }));
+      insertBatch(
+        db,
+        {
+          batchId,
+          strainId: p.ms.id,
+          qty: n,
+          days: 1,
+          substrate: {},
+          bagKg: p.kg,
+          batchType: 'grain',
+          notes: 'Aus der Zählung',
+          created: nowIso,
+          due: nowIso,
+          bags
+        },
+        null,
+        userId
+      );
+      appendScanEntries(
+        db,
+        bags.map((b) => ({ time: nowIso, action: 'ADD', batch: batchId, bag: b.id, from: null, to: zone.id })),
+        userId
+      );
+      out.added.push(batchId);
+    }
+    out.changes.push({ strainId: p.ms.id, name: p.ms.name, kg: p.kg, from: vorher, to: p.count });
+  }
+  return out;
+}
+
+// Rueckgaengig: die Ausbuchungen der Zaehlung heraus, ihre Chargen weg. Nur, was
+// wirklich von einer Zaehlung kommt: ein REMOVE mit "count", eine ZAEHL-Charge.
+function zaehlungZurueck(db, { removed = [], added = [] } = {}, userId) {
+  const ids = removed.map(Number).filter(Number.isInteger);
+  if (ids.length) {
+    db.prepare(
+      `DELETE FROM scan_log WHERE reason = 'count' AND action = 'REMOVE' AND id IN (${ids.map(() => '?').join(',')})`
+    ).run(...ids);
+    invalidateBagZoneCache(db);
+    incrementDataVersion(db);
+  }
+  for (const id of added) {
+    if (!/-ZAEHL-/.test(String(id))) continue;
+    const b = db.prepare("SELECT 1 FROM batches WHERE batch_id = ? AND notes = 'Aus der Zählung'").get(String(id));
+    if (b) deleteBatchById(db, String(id), userId);
+  }
+  return { ok: true };
+}
+function _ddmmyy(d) {
+  return (
+    String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear()).slice(2)
+  );
 }
 
 /**
@@ -15980,6 +16126,8 @@ module.exports = {
   ensureLabFach,
   setLabFachAlarm,
   labFachLowAlerts,
+  zaehleKoernerbrut,
+  zaehlungZurueck,
   snapshotDailyKPIs,
   getKpiSnapshots,
   getContaminationReport,

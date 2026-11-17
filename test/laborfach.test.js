@@ -279,7 +279,7 @@ describe('Laborfach: ein Etikett für alle Spritzen einer Art', () => {
 
   it('hat keinen eigenen Alarm und läutet nie', () => {
     const sy = db.ensureLabFach(d, a, 'SY');
-    assert.throws(() => db.setLabFachAlarm(d, sy.id, 4), /jede Spritzengröße/);
+    assert.throws(() => db.setLabFachAlarm(d, sy.id, 4), /jede Größe selbst/);
     assert.equal(db.labFachLowAlerts(d).filter((x) => x.slot === 'SY').length, 0);
   });
 
