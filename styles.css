@@ -11876,6 +11876,56 @@ button.wk-an-zeile:active {
   padding: 4px 0;
   font-size: max(0.8125rem, var(--fs-min));
 }
+/* Label settings on the Regal sheet: the pictures as buttons, then band and text. */
+.shelf-bilder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.shelf-bild {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 3px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-sec);
+  font: inherit;
+  font-size: max(0.75rem, var(--fs-min));
+  cursor: pointer;
+}
+.shelf-bild canvas {
+  width: 40px;
+  height: 40px;
+}
+.shelf-bild.on {
+  border: 2px solid var(--c-text);
+  padding: 2px;
+}
+.shelf-bild:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.shelf-etikett {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.shelf-etikett textarea,
+.shelf-etikett input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.shelf-etikett textarea {
+  resize: none;
+  text-transform: uppercase;
+}
 .shelf-rename input.shelf-per {
   flex: 0 0 72px;
 }

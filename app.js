@@ -16741,7 +16741,47 @@ function shelfSheetRender() {
         )
         .join('')
     : `<p class="fs-meta muted">${esc(t('shelf.skuNone'))}</p>`;
+  shelfEtikettRender(x);
   shelfLabelPreview(x);
+}
+
+// Das Etikett eines Artikels einstellen: ein Tipp auf ein Bild gilt sofort;
+// Band und Text mit Speichern. Die Bilder sind dieselben wie auf dem Etikett.
+function shelfEtikettRender(x) {
+  const box = document.getElementById('m-shelf-bilder');
+  if (!box) return;
+  const jetzt = x.bild || '';
+  box.innerHTML = ['', ...Object.keys(ETIKETT_BILDER)]
+    .map(
+      (n) =>
+        `<button type="button" class="shelf-bild${jetzt === n ? ' on' : ''}" data-shelf-bild="${n}" aria-pressed="${jetzt === n}" aria-label="${esc(t('shelf.bild.' + (n || 'keins')))}">` +
+        (n ? '<canvas width="64" height="64" aria-hidden="true"></canvas>' : esc(t('shelf.bild.keins'))) +
+        '</button>'
+    )
+    .join('');
+  box.querySelectorAll('canvas').forEach((cv) => {
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 64, 64);
+    etikettBild(ctx, cv.parentElement.dataset.shelfBild, 0, 0, '#000', '#fff');
+  });
+  const band = document.getElementById('m-shelf-band');
+  if (document.activeElement !== band) band.value = x.band || '';
+  const text = document.getElementById('m-shelf-etikett');
+  if (document.activeElement !== text) text.value = x.etikett || '';
+  text.placeholder = x.name;
+}
+async function shelfEtikett(patch) {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const r = await apiPatch('/api/shelf/' + x.id, patch);
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  document.activeElement && document.activeElement.blur && document.activeElement.blur();
+  _shelfTake(r.item);
+  toast(t('shelf.labelSaved'));
 }
 
 // Der Alarm steht unter der Zahl, mit − und +: ein Tipp gilt sofort, gespeichert
@@ -16889,12 +16929,22 @@ async function shelfLogLoad() {
 }
 
 // ── Etikett ──
-// 50 × 30 mm wie alle Etiketten der App (labelDims). Rechts der QR-Code mit
-// der Nummer aus der Barcode-Liste, 18 mm groß, damit die Kamera ihn vom Regal
-// aus liest; links der Name, so groß er auf höchstens vier Zeilen passt, und
-// darunter dieselbe Nummer zum Abtippen. Eine Größe am Ende des Namens (1 L,
-// 2 kg) steht immer in einer eigenen Zeile.
-const SHELF_SIZE_RE = /^(.*\S)\s+(\d+(?:[.,]\d+)?\s*(?:kg|g|l|ml))$/i;
+// 50 × 30 mm wie alle Etiketten der App (labelDims), Entwurf "Band": oben links
+// ein schwarzes Band mit einem weißen Bild und einem Wort in Großbuchstaben
+// (WEIZEN, GLÄSER, PETRI, KÖRNERBRUT + Größe), darunter der Text, auf den es
+// ankommt (1 kg, VOLL, Shiitake), immer in derselben Größe: 44 am Regal, wo es
+// kurze Wörter sind, 32 im Labor, wo es Artnamen sind. Nur was in drei Zeilen
+// nicht passt, geht eine Stufe kleiner. Vorher schrumpfte jeder Name, bis er
+// passte, und kein Etikett sah aus wie das nächste.
+//
+// Rechts der QR-Code mit der Nummer aus der Barcode-Liste, 7 Punkte je Modul
+// (bei einer siebenstelligen Nummer 18 mm), damit die Kamera ihn vom Regal aus
+// liest; links unten dieselbe Nummer zum Abtippen.
+//
+// Die Bilder sind in einem Feld von 64 × 64 Punkten gezeichnet, Strich für
+// Strich wie in Printer Labels/Laborfach/band_entwuerfe.py, mit dem die
+// Entwürfe gemacht und gewählt wurden. Ihre Namen stehen in db.js
+// (ETIKETT_BILDER); welches ein Regal-Artikel trägt, legt man am Artikel fest.
 function _shelfWrap(ctx, words, maxW) {
   const lines = [];
   let cur = '';
@@ -16909,13 +16959,224 @@ function _shelfWrap(ctx, words, maxW) {
   if (cur) lines.push(cur);
   return lines;
 }
+// Zeichenstifte im 64er-Feld bei (x, y). Rechtecke schließen ihre letzte Zeile
+// und Spalte ein, wie in Pillow; ein Rand liegt innen.
+function _bildStift(ctx, x, y, ink, paper) {
+  const farbe = (c) => (c === 'ink' ? ink : paper);
+  const rect = (a, b, c, e, f) => {
+    ctx.fillStyle = farbe(f);
+    ctx.fillRect(x + a, y + b, c - a + 1, e - b + 1);
+  };
+  const rand = (a, b, c, e, w) => {
+    rect(a, b, c, b + w - 1, 'ink');
+    rect(a, e - w + 1, c, e, 'ink');
+    rect(a, b, a + w - 1, e, 'ink');
+    rect(c - w + 1, b, c, e, 'ink');
+  };
+  const ellipse = (a, b, c, e, f) => {
+    ctx.fillStyle = farbe(f);
+    ctx.beginPath();
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2, (e - b + 1) / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // Ein Ring: nur der Rand, das Innere bleibt, wie es ist.
+  const ring = (a, b, c, e, w) => {
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2, (e - b + 1) / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2 - w, (e - b + 1) / 2 - w, 0, 0, Math.PI * 2);
+    ctx.fill('evenodd');
+  };
+  const poly = (pts, f, w) => {
+    ctx.beginPath();
+    pts.forEach(([a, b], i) => (i ? ctx.lineTo(x + a, y + b) : ctx.moveTo(x + a, y + b)));
+    ctx.closePath();
+    if (w) {
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = w;
+      ctx.lineJoin = 'miter';
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = farbe(f);
+      ctx.fill();
+    }
+  };
+  const linie = (a, b, c, e, w) => {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x + a + 0.5, y + b + 0.5);
+    ctx.lineTo(x + c + 0.5, y + e + 0.5);
+    ctx.stroke();
+  };
+  // Ein Rand mit runden Ecken; ohne roundRect (alte Browser) eckig.
+  const rrand = (a, b, c, e, r, w) => {
+    if (!ctx.roundRect) return rand(a, b, c, e, w);
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.roundRect(x + a, y + b, c - a + 1, e - b + 1, r);
+    ctx.roundRect(x + a + w, y + b + w, c - a + 1 - 2 * w, e - b + 1 - 2 * w, Math.max(0, r - w));
+    ctx.fill('evenodd');
+  };
+  return { rect, rand, rrand, ellipse, ring, poly, linie, x, y };
+}
+// Ein flacher Beutel: oben die Schweißnaht, darunter das Filterfeld.
+function _bildBeutel(s) {
+  s.rect(12, 2, 52, 9, 'ink');
+  for (const cx of [18, 26, 34, 42]) s.rect(cx, 3, cx, 8, 'paper');
+  s.rand(12, 9, 52, 62, 3);
+  s.rand(20, 14, 44, 22, 2);
+}
+const ETIKETT_BILDER = {
+  glas(s, voll = true) {
+    s.rect(14, 2, 50, 12, 'ink');
+    s.rrand(10, 12, 54, 62, 7, 3);
+    if (voll) {
+      s.rect(14, 30, 50, 58, 'ink');
+      for (const [bx, by, r] of [
+        [22, 42, 3],
+        [34, 50, 2],
+        [42, 38, 3]
+      ])
+        s.ellipse(bx - r, by - r, bx + r, by + r, 'paper');
+    }
+  },
+  'glas-leer'(s) {
+    ETIKETT_BILDER.glas(s, false);
+  },
+  petri(s) {
+    s.ring(2, 22, 62, 56, 3);
+    s.rect(2, 30, 62, 47, 'paper');
+    s.rect(2, 30, 4, 40, 'ink');
+    s.rect(60, 30, 62, 40, 'ink');
+    s.ellipse(2, 12, 62, 46, 'paper');
+    s.ring(2, 12, 62, 46, 3);
+    s.ellipse(14, 19, 50, 39, 'ink');
+    s.ellipse(22, 24, 30, 30, 'paper');
+  },
+  spritze(s) {
+    s.rect(0, 20, 4, 44, 'ink');
+    s.rect(4, 30, 12, 34, 'ink');
+    s.rand(12, 22, 46, 42, 3);
+    s.rect(24, 25, 43, 39, 'ink');
+    s.rect(46, 28, 51, 36, 'ink');
+    s.rect(51, 31, 64, 33, 'ink');
+  },
+  koernerbeutel(s) {
+    _bildBeutel(s);
+    let row = 0;
+    for (let gy = 30; gy < 58; gy += 6, row++)
+      for (let gx = 18 + (row % 2) * 4; gx < 48; gx += 8) s.ellipse(gx - 3, gy - 2, gx + 3, gy + 2, 'ink');
+  },
+  growkit(s) {
+    _bildBeutel(s);
+    s.rect(15, 50, 49, 59, 'ink');
+    // der Hut: ein halber Kreis über dem Stiel
+    s.poly(
+      Array.from({ length: 13 }, (_, i) => {
+        const w = Math.PI + (i / 12) * Math.PI;
+        return [32 + 12 * Math.cos(w), 38 + 10 * Math.sin(w)];
+      }),
+      'ink'
+    );
+    s.rect(29, 37, 35, 50, 'ink');
+  },
+  cvg(s) {
+    // Kokos-Substrat: dunkles Kokos (das Band selbst) mit hellen Flocken Vermiculit.
+    s.rect(8, 4, 56, 11, 'ink');
+    for (const cx of [14, 22, 30, 38, 46]) s.rect(cx, 5, cx, 10, 'paper');
+    s.rand(8, 11, 56, 62, 3);
+    for (const [vx, vy] of [
+      [18, 24],
+      [30, 22],
+      [44, 26],
+      [24, 34],
+      [38, 36],
+      [16, 44],
+      [30, 46],
+      [46, 44],
+      [22, 54],
+      [40, 52]
+    ])
+      s.rect(vx - 3, vy - 2, vx + 3, vy + 2, 'ink');
+  },
+  weizen(s) {
+    s.rect(31, 20, 33, 63, 'ink');
+    for (let i = 0; i < 4; i++) {
+      const gy = 16 + i * 10;
+      s.poly(
+        [
+          [31, gy + 10],
+          [20, gy + 4],
+          [22, gy - 4],
+          [31, gy + 2]
+        ],
+        'ink'
+      );
+      s.poly(
+        [
+          [33, gy + 10],
+          [44, gy + 4],
+          [42, gy - 4],
+          [33, gy + 2]
+        ],
+        'ink'
+      );
+    }
+    s.poly(
+      [
+        [32, 2],
+        [37, 12],
+        [32, 16],
+        [27, 12]
+      ],
+      'ink'
+    );
+    s.linie(22, 10, 16, 0, 2);
+    s.linie(42, 10, 48, 0, 2);
+  },
+  baum(s) {
+    s.rect(28, 40, 36, 62, 'ink');
+    s.poly(
+      [
+        [28, 46],
+        [18, 36],
+        [22, 34],
+        [30, 42]
+      ],
+      'ink'
+    );
+    s.poly(
+      [
+        [36, 44],
+        [46, 34],
+        [42, 32],
+        [34, 40]
+      ],
+      'ink'
+    );
+    for (const [cx, cy, r] of [
+      [32, 18, 15],
+      [18, 28, 13],
+      [46, 28, 13],
+      [32, 32, 12]
+    ])
+      s.ellipse(cx - r, cy - r, cx + r, cy + r, 'ink');
+    s.rect(4, 60, 60, 62, 'ink');
+  }
+};
+// Ein Bild an (x, y), in der Farbe ink auf paper.
+function etikettBild(ctx, name, x, y, ink, paper) {
+  const f = ETIKETT_BILDER[name];
+  if (f) f(_bildStift(ctx, x, y, ink, paper));
+}
+
+// x: { barcode, bild, band (bis zwei Zeilen), etikett oder name, namePx }.
+// Ohne Bild und Band steht der Text oben, sonst ist alles wie immer.
 function shelfLabelCanvas(x) {
   const W = labelDims.widthDots;
   const H = labelDims.heightDots;
-  const ML = 12;
-  const MT = 10;
-  const MR = 16;
-  const MB = 12;
   const cv = document.createElement('canvas');
   cv.width = W;
   cv.height = H;
@@ -16924,51 +17185,77 @@ function shelfLabelCanvas(x) {
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#000';
 
-  // QR: ganze Punkte je Modul, sonst franst er aus. 7 Punkte ≈ 0,9 mm, bei
-  // einer siebenstelligen Nummer 21 Module = 18 mm. Senkrecht mittig, rechts.
+  // QR: ganze Punkte je Modul, sonst franst er aus. Senkrecht mittig, rechts.
   const val = String(x.barcode || '');
-  let qx = W - MR;
+  let qx = W - 14;
   if (val && typeof QRCode !== 'undefined') {
     const holder = document.createElement('div');
     const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
     const m = q._oQRCode;
     const count = m.getModuleCount();
-    const mod = Math.max(1, Math.min(7, Math.floor((H - MT - MB) / count)));
+    const mod = Math.max(1, Math.min(7, Math.floor((H - 24) / count)));
     const size = count * mod;
-    qx = W - MR - size;
-    const qy = MT + Math.floor((H - MT - MB - size) / 2);
+    qx = W - 14 - size;
+    const qy = Math.floor((H - size) / 2);
     for (let r = 0; r < count; r++)
       for (let c = 0; c < count; c++) if (m.isDark(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod);
-    ctx.font = 'bold 22px Consolas, "Courier New", monospace';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(val, ML, H - MB - 2);
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 18px Consolas, "Courier New", monospace';
+  ctx.fillText(val, 12, H - 10);
+
+  // Das Band: Bild und Wort weiß auf Schwarz. Ein Wort, das zu breit ist, wird
+  // schmaler gezogen statt kleiner, damit jedes Band dieselbe Schrifthöhe hat.
+  const band = String(x.band || '')
+    .split('\n')
+    // Wörter in Großbuchstaben; eine Größe (3 kg, 10 ml) bleibt, wie sie ist.
+    .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
+    .filter(Boolean);
+  const mitBand = !!(band.length || x.bild);
+  const bandBreite = qx - 10;
+  if (mitBand) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, bandBreite, 81);
+    etikettBild(ctx, x.bild, 8, 8, '#fff', '#000');
+    const px = 24;
+    const lh = Math.round(px * 1.1);
+    ctx.font = `bold ${px}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#fff';
+    const links = x.bild ? 80 : 12;
+    const platz = bandBreite - links - 6;
+    const top = 40 - Math.floor((band.length * lh) / 2);
+    band.forEach((z, i) => {
+      const w = ctx.measureText(z).width;
+      ctx.save();
+      ctx.translate(links, top + i * lh);
+      if (w > platz) ctx.scale(platz / w, 1);
+      ctx.fillText(z, 0, 0);
+      ctx.restore();
+    });
+    ctx.fillStyle = '#000';
   }
 
-  // Der Name links vom QR-Code: die größte Schrift, mit der er auf höchstens
-  // vier Zeilen über der Nummer Platz hat. Die Größe am Ende bleibt eine Zeile.
-  const maxW = qx - 12 - ML;
-  const maxH = H - MB - 26 - MT;
-  const teil = x.name.match(SHELF_SIZE_RE);
-  const words = (teil ? teil[1] : x.name).split(/\s+/).filter(Boolean);
-  const size = teil ? [teil[2]] : [];
-  let best = null;
-  for (let px = 84; px >= 18; px -= 2) {
+  // Der Text: eine Größe, eine Stufe kleiner nur, wenn er sonst nicht passt.
+  const text = String(x.etikett || x.name || '');
+  const maxW = qx - 14 - 12;
+  const oben = mitBand ? 92 : 12;
+  const hoch = H - 36 - oben;
+  const words = text.split(/\s+/).filter(Boolean);
+  const gross = x.namePx || 44;
+  let wahl = null;
+  for (const px of [gross, Math.round(gross * 0.8)]) {
     ctx.font = 'bold ' + px + 'px Arial, Helvetica, sans-serif';
-    const lines = _shelfWrap(ctx, words, maxW).concat(size);
-    const lh = Math.round(px * 1.08);
-    if (lines.length <= 4 && lines.length * lh <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) {
-      best = { px, lines, lh };
-      break;
-    }
+    const lines = _shelfWrap(ctx, words, maxW);
+    const lh = Math.round(px * 1.1);
+    wahl = { px, lines, lh };
+    if (lines.length * lh <= hoch) break;
   }
-  if (!best) {
-    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-    best = { px: 18, lines: _shelfWrap(ctx, words, maxW).concat(size).slice(0, 4), lh: 19 };
-  }
-  ctx.font = 'bold ' + best.px + 'px Arial, Helvetica, sans-serif';
+  ctx.font = 'bold ' + wahl.px + 'px Arial, Helvetica, sans-serif';
   ctx.textBaseline = 'top';
-  const top = MT + Math.max(0, Math.floor((maxH - best.lines.length * best.lh) / 2));
-  best.lines.forEach((l, i) => ctx.fillText(l, ML, top + i * best.lh));
+  wahl.lines
+    .slice(0, Math.max(1, Math.floor(hoch / wahl.lh)))
+    .forEach((l, i) => ctx.fillText(l, 12, oben + i * wahl.lh));
 
   // Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
   const img = ctx.getImageData(0, 0, W, H);
@@ -17064,6 +17351,8 @@ function shelfWire() {
     if (step) shelfStep(Number(step.dataset.shelfStep));
     const min = e.target.closest('[data-shelf-min]');
     if (min) shelfMinStep(Number(min.dataset.shelfMin));
+    const bild = e.target.closest('[data-shelf-bild]');
+    if (bild) shelfEtikett({ bild: bild.dataset.shelfBild });
     const unsku = e.target.closest('[data-shelf-unsku]');
     if (unsku) shelfSku(unsku.dataset.shelfUnsku, 0);
     const act = e.target.closest('[data-shelf-act]');
@@ -17072,6 +17361,11 @@ function shelfWire() {
     if (a === 'close') shelfSheetClose();
     else if (a === 'print') shelfPrint([_shelfSheet.id]);
     else if (a === 'rename') shelfRename();
+    else if (a === 'etikett')
+      shelfEtikett({
+        band: document.getElementById('m-shelf-band').value,
+        etikett: document.getElementById('m-shelf-etikett').value
+      });
     else if (a === 'hide') shelfSetActive(_shelfSheet.id, false);
     else if (a === 'sku') {
       const sku = document.getElementById('m-shelf-sku').value.trim();
@@ -17446,15 +17740,25 @@ async function lfScanned(id) {
 // ── Etikett ── wie am Regal (shelfLabelCanvas): die Art groß, das Gefäß in
 // Großbuchstaben, eine Größe in einer eigenen Zeile. Das Spritzen-Etikett hat
 // keine Größe.
+// Das Band zeigt das Gefäß (Bild und Wort, bei Körnerbrut die Größe darunter),
+// der Text darunter die Art, in der Größe für Artnamen.
+const LF_BILD = { LC: 'glas', PD: 'petri', SY: 'spritze', KB: 'koernerbeutel' };
 function _lfLabelItem(f) {
-  const wort = t(f.group ? 'lf.label.SYall' : 'lf.label.' + f.kind).toUpperCase();
+  const wort = t(f.group ? 'lf.label.SYall' : 'lf.label.' + f.kind);
   const groesse =
     f.group || f.kind === 'LC' || f.kind === 'PD'
       ? ''
       : f.kind === 'SY'
-        ? ' ' + f.size + ' ml'
-        : ' ' + String(f.size).replace('.', ',') + ' kg';
-  return { id: f.id, name: f.name + ' ' + wort + groesse, barcode: f.barcode };
+        ? f.size + ' ml'
+        : String(f.size).replace('.', ',') + ' kg';
+  return {
+    id: f.id,
+    barcode: f.barcode,
+    bild: LF_BILD[f.kind],
+    band: wort + (groesse ? '\n' + groesse : ''),
+    etikett: f.name,
+    namePx: 32
+  };
 }
 function lfPreview(etikett) {
   const box = document.getElementById('m-lf-preview');
