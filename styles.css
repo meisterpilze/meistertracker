@@ -12003,6 +12003,16 @@ button.wk-an-zeile:active {
   color: var(--c-surface);
   font-weight: 600;
 }
+/* `hidden` has to win over the display these rows set, as with .btn[hidden]:
+   the author rule beats the browser's [hidden]. Without this the Spritzen label
+   showed the count, the alarm and Add / Remove before a size was picked. */
+.shelf-now[hidden],
+.shelf-alarmrow[hidden],
+.shelf-amt[hidden],
+.shelf-acts[hidden],
+.lf-sizes[hidden] {
+  display: none;
+}
 .lf-size:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
