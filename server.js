@@ -12667,7 +12667,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         run(() => fn(data || {}));
       });
     if (req.method === 'POST' && req.url === '/api/lab-fach') {
-      withBody((data) => ({ fach: db.ensureLabFach(database, Number(data.strainId), data.slot) }));
+      // Ein Fach, das es schon gibt, aendert nichts: dann bekommt auch kein
+      // anderes Geraet die Nachricht, alles neu zu laden.
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        try {
+          const info = {};
+          const fach = db.ensureLabFach(database, Number((data || {}).strainId), (data || {}).slot, info);
+          if (info.created) broadcastSSE(res);
+          jsonOk(res, { fach });
+        } catch (err) {
+          jsonErr(res, 400, err.message);
+        }
+      });
     } else if (req.method === 'GET' && idMatch) {
       const fach = db.getLabFach(database, Number(idMatch[1]));
       if (fach) jsonOk(res, { fach });

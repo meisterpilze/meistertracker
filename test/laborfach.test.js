@@ -243,6 +243,81 @@ describe('Laborfach: der Alarm ist das Soll', () => {
   });
 });
 
+describe('Laborfach: ein Etikett für alle Spritzen einer Art', () => {
+  let d, dir, a;
+  before(() => {
+    ({ d, dir } = freshDb());
+    a = Number(db.createMushroomStrain(d, { name: 'Testart Delta', kuerzel: 'TD' }));
+  });
+  after(() => {
+    d.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('das Sammelfach "SY" hat ein Etikett und zählt alle Größen zusammen', () => {
+    kultur(d, a, 'SY', 'active', 10);
+    kultur(d, a, 'SY', 'active', 20);
+    kultur(d, a, 'SY', 'active', 50);
+    kultur(d, a, 'SY', 'sold', 50);
+    const sy = db.ensureLabFach(d, a, 'sy');
+    assert.equal(sy.slot, 'SY');
+    assert.equal(sy.group, true);
+    assert.equal(sy.have, 3);
+    assert.ok(sy.barcode >= 1000000);
+    const sp = db.labStock(d).find((x) => x.strainId === a);
+    assert.equal(sp.sy.barcode, sy.barcode, 'Labor → Bestand trägt das Etikett mit');
+    assert.ok(!sp.fach.some((f) => f.slot === 'SY'), 'in der Zeile stehen weiter die Größen');
+    assert.deepEqual(
+      sp.fach.filter((f) => f.kind === 'SY').map((f) => [f.slot, f.have]),
+      [
+        ['SY10', 1],
+        ['SY20', 1],
+        ['SY50', 1]
+      ]
+    );
+  });
+
+  it('hat keinen eigenen Alarm und läutet nie', () => {
+    const sy = db.ensureLabFach(d, a, 'SY');
+    assert.throws(() => db.setLabFachAlarm(d, sy.id, 4), /jede Spritzengröße/);
+    assert.equal(db.labFachLowAlerts(d).filter((x) => x.slot === 'SY').length, 0);
+  });
+
+  it('ein neues Fach sagt, dass es neu ist; ein bekanntes nicht', () => {
+    const neu = {};
+    db.ensureLabFach(d, a, 'PD', neu);
+    assert.equal(neu.created, true);
+    const alt = {};
+    db.ensureLabFach(d, a, 'PD', alt);
+    assert.equal(alt.created, undefined);
+  });
+
+  it('der Alarm am Fach gilt weiter, wenn die Größe später eine SKU bekommt', () => {
+    const sy20 = db.ensureLabFach(d, a, 'SY20');
+    db.setLabFachAlarm(d, sy20.id, 4);
+    db.setSyringeSku(d, a, 20, 'SPRITZE-TEST-20');
+    assert.equal(db.getLabFach(d, sy20.id).soll, 4);
+    db.setLabFachAlarm(d, sy20.id, 0);
+    assert.equal(db.getLabFach(d, sy20.id).soll, null, 'aus heißt aus, auch mit SKU');
+  });
+
+  it('Beutel, die beim Zählen fehlten, sind keine Kontamination', () => {
+    const [bag] = beutel(d, 'TD-KB-01', a, '2026-11-01T00:00:00.000Z', [3]);
+    db.appendScanEntries(d, [
+      {
+        time: '2026-11-17T11:00:00.000Z',
+        action: 'REMOVE',
+        batch: 'TD-KB-01',
+        bag,
+        from: 'SPAWN',
+        to: null,
+        reason: 'count'
+      }
+    ]);
+    assert.equal(db.getContaminationReport(d, 'species').totalContam, 0);
+  });
+});
+
 describe('Laborfach in der App', () => {
   it('das Etikett am Fach öffnet sein Blatt, wie beim Regal', () => {
     assert.match(APP, /entry\.type === 'labfach'\) \{[\s\S]{0,200}lfScanned\(entry\.id\)/);
@@ -255,8 +330,19 @@ describe('Laborfach in der App', () => {
     assert.ok(m.indexOf('data-lf-min="-1"') < m.indexOf('data-lf-act="in"'), 'der Alarm steht über den Knöpfen');
   });
   it('Remove und Verkauft nehmen die ältesten; Körnerbrut als "spawn" oder "sold"', () => {
-    assert.match(APP, /spawnBuchen\(bags, sold \? 'sold' : 'spawn'\)/);
-    assert.match(APP, /setze\(pick\.map\(\(c\) => \[c, sold \? 'sold' : 'used'\]\)\)/);
+    assert.match(APP, /spawnBuchen\(bags, wie === 'used' \? 'spawn' : wie\)/);
+    assert.match(APP, /setze\(pick\.map\(\(c\) => \[c, wie === 'sold' \? 'sold' : 'used'\]\)\)/);
+    // Zählen nach unten bucht "count", nicht Verbrauch.
+    assert.match(APP, /return lfOut\(f, -diff, 'count'\);/);
+  });
+  it('was der Server abweist, steht auf dem Telefon wieder wie vorher', () => {
+    assert.match(APP, /if \(!r \|\| r\.error\) c\.status = alt;/);
+  });
+  it('ein Fach, das das Telefon schon kennt, fragt den Server nicht noch einmal', () => {
+    assert.match(
+      APP,
+      /lfRender\(\);\n  document\.getElementById\('m-labfach'\)\.classList\.add\('open'\);\n  if \(f\.id\) return;/
+    );
   });
   it('am Regal steht der Alarm unter der Zahl, mit − und +', () => {
     const m = HTML.slice(HTML.indexOf('id="m-shelf"'), HTML.indexOf('id="m-labfach"'));

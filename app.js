@@ -17096,6 +17096,11 @@ function shelfWire() {
 // nehmen die ältesten. Was an einen Kunden geht, scannt man am besten einzeln
 // (Verkauft im Kultur- oder Beutel-Fenster): nur so weiß die App, welches.
 //
+// Die Spritzen einer Art liegen in einem Fach, alle Größen zusammen. Ihr
+// Etikett (Slot 'SY') öffnet das Blatt ohne Größe: erst ein Tipp auf 10, 20
+// oder 50 ml, dann Add oder Remove. So bucht niemand eine 20er als 10er. Zahl
+// und Alarm hat weiter jede Größe selbst, denn der Shop verkauft sie einzeln.
+//
 // Der Alarm ist das Soll, an derselben Stelle gespeichert (db.setLabFachAlarm),
 // und ein Tipp auf − oder + gilt gleich, ohne Speichern-Knopf.
 let _lfSheet = null; // { strainId, slot, fach, min, minTimer }
@@ -17103,15 +17108,19 @@ function _lfSlotKind(slot) {
   const s = String(slot);
   return s.startsWith('SY') ? 'SY' : s.startsWith('KB') ? 'KB' : s;
 }
-// Lang, wie im Blatt: "FK-Glas", "Spritze 10 ml", "Körnerbrut 3 kg".
+// Lang, wie im Blatt: "FK-Glas", "Spritze 10 ml", "Körnerbrut 3 kg", "Spritzen".
 function _lfLang(f) {
+  if (f.group) return t('lf.kind.SYall');
   if (f.kind === 'SY') return t('lf.kind.SY', { ml: f.size });
   if (f.kind === 'KB') return t('lf.kind.KB', { kg: String(f.size).replace('.', ',') });
   return t('lf.kind.' + f.kind);
 }
+const _lfArt = (strainId) => _lbSpecies().find((x) => x.strainId === strainId) || null;
 function _lfFind(strainId, slot) {
-  const sp = _lbSpecies().find((x) => x.strainId === strainId);
-  return sp ? (sp.fach || []).find((f) => f.slot === slot) || null : null;
+  const sp = _lfArt(strainId);
+  if (!sp) return null;
+  if (slot === 'SY') return sp.sy || null;
+  return (sp.fach || []).find((f) => f.slot === slot) || null;
 }
 // Ein Fach, das die Liste (noch) nicht kennt, etwa die 50er, wenn es keine gibt.
 // Der Server schickt es gleich darauf richtig (lfOpen).
@@ -17125,7 +17134,8 @@ function _lfLeer(strainId, slot) {
     name: ms ? ms.name : '',
     slot,
     kind,
-    size: kind === 'SY' || kind === 'KB' ? Number(String(slot).slice(2)) : null,
+    size: slot !== 'SY' && (kind === 'SY' || kind === 'KB') ? Number(String(slot).slice(2)) : null,
+    group: slot === 'SY',
     have: 0,
     growing: 0,
     readyAt: null,
@@ -17143,6 +17153,16 @@ function _lfMerken(f) {
     barcodeByEntity.set('labfach:' + f.id, f.barcode);
   }
 }
+// Das Fach vom Server holen, und beim ersten Mal anlegen, mit der Nummer fürs
+// Etikett. Ein Fach mit Nummer muss nicht gefragt werden.
+async function _lfHolen(strainId, slot) {
+  const r = await apiPost('/api/lab-fach', { strainId, slot });
+  if (!r || r.error || !r.fach) return null;
+  _lfMerken(r.fach);
+  const sp = _lfArt(strainId);
+  if (sp && slot === 'SY') sp.sy = r.fach;
+  return r.fach;
+}
 
 function lfOpen(strainId, slot) {
   strainId = Number(strainId);
@@ -17155,12 +17175,11 @@ function lfOpen(strainId, slot) {
   document.getElementById('m-lf-n').value = '0';
   lfRender();
   document.getElementById('m-labfach').classList.add('open');
-  // Das Fach vom Server: beim ersten Mal legt er es an, mit der Nummer fürs Etikett.
-  apiPost('/api/lab-fach', { strainId, slot }).then((r) => {
-    if (!r || r.error || !r.fach || !_lfSheet || _lfSheet.slot !== slot || _lfSheet.strainId !== strainId) return;
-    _lfMerken(r.fach);
-    _lfSheet.fach = r.fach;
-    if (!_lfSheet.minTimer) _lfSheet.min = r.fach.soll || 0;
+  if (f.id) return;
+  _lfHolen(strainId, slot).then((fach) => {
+    if (!fach || !_lfSheet || _lfSheet.slot !== slot || _lfSheet.strainId !== strainId) return;
+    _lfSheet.fach = fach;
+    if (!_lfSheet.minTimer) _lfSheet.min = fach.soll || 0;
     lfRender();
   });
 }
@@ -17181,58 +17200,70 @@ function lfRefresh() {
   if (!_lfSheet.minTimer) _lfSheet.min = f.soll || 0;
   lfRender();
 }
+// Die Größen einer Art als Knöpfe, mit ihrer Zahl: "10 ml · 3".
+function _lfSizesHtml(f) {
+  const kind = f.kind;
+  const da = (_lfArt(f.strainId) || {}).fach || [];
+  const alle = new Set((kind === 'SY' ? SY_ML : KB_KG).map(Number));
+  for (const x of da) if (x.kind === kind) alle.add(Number(x.size));
+  if (f.size != null) alle.add(Number(f.size));
+  return [...alle]
+    .sort((a, b) => a - b)
+    .map((n) => {
+      const slot = kind + n;
+      const on = slot === f.slot;
+      const x = da.find((y) => y.slot === slot);
+      const groesse = String(n).replace('.', ',') + (kind === 'SY' ? ' ml' : ' kg');
+      return (
+        `<button type="button" class="lf-size${on ? ' on' : ''}${x && x.low ? ' low' : ''}" data-lf-size="${esc(slot)}" aria-pressed="${on}">` +
+        `${esc(t('lf.chip', { size: groesse, n: x ? x.have : 0 }))}</button>`
+      );
+    })
+    .join('');
+}
 function lfRender() {
   if (!_lfSheet) return;
   const f = _lfSheet.fach;
+  const gruppe = !!f.group;
   document.getElementById('m-lf-title').textContent = f.name;
   document.getElementById('m-lf-what').textContent = _lfLang(f);
   // Die anderen Größen derselben Art, ein Tipp entfernt: so erreicht man auch
-  // eine Größe, die es noch gar nicht gibt.
+  // eine Größe, die es noch gar nicht gibt. Vom Spritzen-Etikett aus ist noch
+  // keine gewählt, und nichts lässt sich buchen, bis eine gewählt ist.
   const sizes = document.getElementById('m-lf-sizes');
-  if (f.kind === 'SY' || f.kind === 'KB') {
-    const da = (_lbSpecies().find((x) => x.strainId === f.strainId) || {}).fach || [];
-    const alle = new Set((f.kind === 'SY' ? SY_ML : KB_KG).map(Number));
-    for (const x of da) if (x.kind === f.kind) alle.add(Number(x.size));
-    alle.add(Number(f.size));
-    sizes.innerHTML = [...alle]
-      .sort((a, b) => a - b)
-      .map((n) => {
-        const slot = f.kind + n;
-        const on = slot === f.slot;
-        return (
-          `<button type="button" class="lf-size${on ? ' on' : ''}" data-lf-size="${esc(slot)}" aria-pressed="${on}">` +
-          `${esc(String(n).replace('.', ','))} ${f.kind === 'SY' ? 'ml' : 'kg'}</button>`
-        );
-      })
-      .join('');
-    sizes.hidden = false;
+  sizes.innerHTML = f.kind === 'SY' || f.kind === 'KB' ? _lfSizesHtml(f) : '';
+  sizes.hidden = !sizes.innerHTML;
+  for (const id of ['m-lf-now', 'm-lf-alarmrow', 'm-lf-amt', 'm-lf-acts']) document.getElementById(id).hidden = gruppe;
+  if (gruppe) {
+    document.getElementById('m-lf-help').textContent = t('lf.pickSize');
   } else {
-    sizes.innerHTML = '';
-    sizes.hidden = true;
+    document.getElementById('m-lf-stock').textContent = f.have;
+    document.getElementById('m-lf-now').classList.toggle('shelf-low', !!f.low);
+    document.getElementById('m-lf-grow').textContent = f.growing
+      ? t('lf.growing', { n: f.growing, date: f.readyAt ? fmtDtShort(f.readyAt) : '–' })
+      : '';
+    const min = _lfSheet.min;
+    document.getElementById('m-lf-minv').textContent = min;
+    document.getElementById('m-lf-alarm').textContent = !f.imProgramm
+      ? t('lf.alarmPaused')
+      : min
+        ? t('lf.alarmUnder', { n: min })
+        : t('lf.alarmOff');
+    for (const b of document.querySelectorAll('#m-labfach [data-lf-min]')) b.disabled = !f.id;
+    // Körnerbrut kommt aus einer Charge, nicht aus einem Knopf.
+    document.getElementById('m-lf-in').hidden = f.kind === 'KB';
+    document.getElementById('m-lf-help').textContent = t(f.kind === 'KB' ? 'lf.helpKB' : 'lf.help');
   }
-  document.getElementById('m-lf-stock').textContent = f.have;
-  document.getElementById('m-lf-now').classList.toggle('shelf-low', !!f.low);
-  document.getElementById('m-lf-grow').textContent = f.growing
-    ? t('lf.growing', { n: f.growing, date: f.readyAt ? fmtDtShort(f.readyAt) : '–' })
-    : '';
-  const min = _lfSheet.min;
-  document.getElementById('m-lf-minv').textContent = min;
-  document.getElementById('m-lf-alarm').textContent = !f.imProgramm
-    ? t('lf.alarmPaused')
-    : min
-      ? t('lf.alarmUnder', { n: min })
-      : t('lf.alarmOff');
-  for (const b of document.querySelectorAll('#m-labfach [data-lf-min]')) b.disabled = !f.id;
-  // Körnerbrut kommt aus einer Charge, nicht aus einem Knopf.
-  document.getElementById('m-lf-in').hidden = f.kind === 'KB';
-  document.getElementById('m-lf-help').textContent = t(f.kind === 'KB' ? 'lf.helpKB' : 'lf.help');
-  document.getElementById('m-lf-print').disabled = !f.barcode;
-  lfPreview();
+  // Gedruckt wird bei Spritzen immer das eine Etikett fürs Fach, egal welche
+  // Größe gerade offen ist.
+  const etikett = f.kind === 'SY' ? (_lfArt(f.strainId) || {}).sy || (gruppe ? f : null) : f;
+  document.getElementById('m-lf-print').disabled = !(etikett && etikett.barcode) && f.kind !== 'SY';
+  lfPreview(etikett);
 }
 
 // Der Alarm: − und + gelten sofort, gespeichert wird kurz nach dem letzten Tipp.
 function lfMinStep(d) {
-  if (!_lfSheet || !_lfSheet.fach.id) return;
+  if (!_lfSheet || !_lfSheet.fach.id || _lfSheet.fach.group) return;
   _lfSheet.min = Math.max(0, Math.min(500, _lfSheet.min + d));
   lfRender();
   clearTimeout(_lfSheet.minTimer);
@@ -17240,7 +17271,7 @@ function lfMinStep(d) {
 }
 async function lfMinSave() {
   const sheet = _lfSheet;
-  if (!sheet || !sheet.fach.id) return;
+  if (!sheet || !sheet.fach.id || sheet.fach.group) return;
   sheet.minTimer = null;
   const n = sheet.min;
   const r = await apiPatch('/api/lab-fach/' + sheet.fach.id, { soll: n });
@@ -17304,7 +17335,7 @@ function _lfBeutel(f) {
 // aus einer Charge.
 function lfAdd(f, n) {
   const ms = (mushroomStrains || []).find((x) => x.id === f.strainId);
-  if (!ms || f.kind === 'KB') return;
+  if (!ms || f.kind === 'KB' || f.group) return;
   lfClose();
   const { newC, saved } = kulturenAnlegen({ type: f.kind, ms, wann: new Date(), qty: n, ml: f.size });
   cprShow(
@@ -17313,9 +17344,16 @@ function lfAdd(f, n) {
   );
   saved.then(() => loadLabStock()).catch(() => {});
 }
-// Remove (verbraucht) oder Verkauft: die n ältesten hinaus, mit Rückgängig.
-async function lfOut(f, n, sold) {
+// Die n ältesten hinaus, mit Rückgängig. wie: 'used' (Remove, im Labor
+// verbraucht), 'sold' (Verkauft) oder 'count' (beim Zählen fehlten sie). Ein
+// Beutel trägt das als Grund: verbraucht heißt dort "spawn", und "count" zählt
+// weder als Verbrauch noch als Kontamination. Eine Kultur kennt nur "used".
+async function lfOut(f, n, wie) {
   const what = f.name + ' ' + _lfLang(f);
+  const meldung = t(wie === 'sold' ? 'lf.doneSold' : wie === 'count' ? 'lf.doneCount' : 'lf.doneOut', {
+    n,
+    what
+  });
   if (f.kind === 'KB') {
     const bags = _lfBeutel(f).slice(0, n);
     if (bags.length < n) {
@@ -17323,8 +17361,8 @@ async function lfOut(f, n, sold) {
       return;
     }
     lfClose();
-    const entries = spawnBuchen(bags, sold ? 'sold' : 'spawn');
-    showUndoBar(t(sold ? 'lf.doneSold' : 'lf.doneOut', { n: entries.length, what }), () => {
+    const entries = spawnBuchen(bags, wie === 'used' ? 'spawn' : wie);
+    showUndoBar(meldung, () => {
       spawnZuruecknehmen(entries);
       setTimeout(loadLabStock, 1500);
     });
@@ -17338,26 +17376,34 @@ async function lfOut(f, n, sold) {
   }
   lfClose();
   const vorher = pick.map((c) => [c, c.status]);
+  // Jede Kultur einzeln: was der Server abweist, steht hier wieder wie vorher,
+  // sonst zeigte das Telefon sie als weg und der Server zählte sie weiter.
   const setze = (paare) =>
     Promise.all(
       paare.map(([c, status]) => {
+        const alt = c.status;
         c.status = status;
-        return apiPatch('/api/cultures/' + encodeURIComponent(c.id), { status });
+        return apiPatch('/api/cultures/' + encodeURIComponent(c.id), { status }).then((r) => {
+          if (!r || r.error) c.status = alt;
+          return r || { error: t('shelf.saveFailed') };
+        });
       })
     ).then((rs) => {
       renderCultures();
       loadLabStock();
       const err = rs.find((r) => r && r.error);
       if (err) toast(t('common.error') + ': ' + err.error, 'err');
+      return !err;
     });
-  await setze(pick.map((c) => [c, sold ? 'sold' : 'used']));
-  showUndoBar(t(sold ? 'lf.doneSold' : 'lf.doneOut', { n: pick.length, what }), () => setze(vorher));
+  const ok = await setze(pick.map((c) => [c, wie === 'sold' ? 'sold' : 'used']));
+  if (ok) showUndoBar(meldung, () => setze(vorher));
 }
 function lfAct(a) {
   if (!_lfSheet) return;
   const f = _lfSheet.fach;
   if (a === 'close') return lfClose();
   if (a === 'print') return lfPrint();
+  if (f.group) return toast(t('lf.pickSize'), 'err');
   const n = _lfN();
   if (Number.isNaN(n)) return toast(t('shelf.wholeNumber'), 'err');
   if (a === 'count') {
@@ -17370,12 +17416,12 @@ function lfAct(a) {
       if (f.kind === 'KB') return toast(t('lf.kbNoAdd'), 'err');
       return lfAdd(f, diff);
     }
-    return lfOut(f, -diff, false);
+    return lfOut(f, -diff, 'count');
   }
   if (!n) return toast(t('shelf.amountMissing'), 'err');
   if (a === 'in') return lfAdd(f, n);
-  if (a === 'out') return lfOut(f, n, false);
-  if (a === 'sold') return lfOut(f, n, true);
+  if (a === 'out') return lfOut(f, n, 'used');
+  if (a === 'sold') return lfOut(f, n, 'sold');
 }
 
 // Vom Scanner und aus der Glocke: das Blatt des Fachs, egal welcher Vorgang steht.
@@ -17398,29 +17444,34 @@ async function lfScanned(id) {
 }
 
 // ── Etikett ── wie am Regal (shelfLabelCanvas): die Art groß, das Gefäß in
-// Großbuchstaben, eine Größe in einer eigenen Zeile.
+// Großbuchstaben, eine Größe in einer eigenen Zeile. Das Spritzen-Etikett hat
+// keine Größe.
 function _lfLabelItem(f) {
-  const wort = t('lf.label.' + f.kind).toUpperCase();
+  const wort = t(f.group ? 'lf.label.SYall' : 'lf.label.' + f.kind).toUpperCase();
   const groesse =
-    f.kind === 'SY' ? ' ' + f.size + ' ml' : f.kind === 'KB' ? ' ' + String(f.size).replace('.', ',') + ' kg' : '';
+    f.group || f.kind === 'LC' || f.kind === 'PD'
+      ? ''
+      : f.kind === 'SY'
+        ? ' ' + f.size + ' ml'
+        : ' ' + String(f.size).replace('.', ',') + ' kg';
   return { id: f.id, name: f.name + ' ' + wort + groesse, barcode: f.barcode };
 }
-function lfPreview() {
+function lfPreview(etikett) {
   const box = document.getElementById('m-lf-preview');
   if (!box || !_lfSheet) return;
-  const f = _lfSheet.fach;
-  if (!f.barcode) {
+  if (!etikett || !etikett.barcode) {
     box.innerHTML = '';
     return;
   }
   if (typeof QRCode === 'undefined') {
+    const offen = _lfSheet;
     loadVendorLibs().then(() => {
-      if (_lfSheet && _lfSheet.fach.id === f.id) lfPreview();
+      if (_lfSheet === offen) lfPreview(etikett);
     });
     return;
   }
   box.innerHTML = '';
-  const x = _lfLabelItem(f);
+  const x = _lfLabelItem(etikett);
   const cv = shelfLabelCanvas(x);
   cv.className = 'shelf-label-cv';
   cv.setAttribute('role', 'img');
@@ -17428,8 +17479,12 @@ function lfPreview() {
   box.appendChild(cv);
 }
 async function lfPrint() {
-  const f = _lfSheet && _lfSheet.fach;
-  if (!f || !f.barcode) return;
+  if (!_lfSheet) return;
+  let f = _lfSheet.fach;
+  // Spritzen: das Etikett fürs ganze Fach, angelegt, falls es noch keins gibt.
+  if (f.kind === 'SY' && !f.group) f = (_lfArt(f.strainId) || {}).sy || { kind: 'SY' };
+  if (f.kind === 'SY' && !f.barcode) f = (await _lfHolen(_lfSheet.strainId, 'SY')) || {};
+  if (!f.barcode) return toast(t('shelf.saveFailed'), 'err');
   if (typeof QRCode === 'undefined') await loadVendorLibs();
   const err = await sendToPrinter(shelfLabelZPL(shelfLabelCanvas(_lfLabelItem(f)), 1));
   if (err) toast(t('shelf.printFailed', { err }), 'err');
@@ -25191,7 +25246,9 @@ function openBagInfo(bagId, batchId, batch) {
         ? t('bagInfo.usedUp')
         : last.reason === 'sold'
           ? t('bagInfo.soldState')
-          : t('bagInfo.removed');
+          : last.reason === 'count'
+            ? t('bagInfo.countedOut')
+            : t('bagInfo.removed');
     else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
