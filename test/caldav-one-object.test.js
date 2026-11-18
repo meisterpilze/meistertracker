@@ -319,6 +319,19 @@ describe('text a calendar app hands back unchanged is stored unchanged', () => {
     }
   });
 
+  it('writes the assignees of a task as text and reads them back the same', () => {
+    db.insertTask(d, {
+      text: 'Gemeinsam',
+      assignee: 'erika,max',
+      created: '2026-11-16T08:00:00Z',
+      caldavUid: 'uid-zwei'
+    });
+    const { ics: body } = bau.taskToVTODO(db.readTaskByCaldavUid(d, 'uid-zwei'));
+    assert.match(body, /^X-MEISTERPILZE-ASSIGNEE:erika\\,max\r$/m, 'escaped like every other TEXT value');
+    assert.equal(put('max', 'uid-zwei.ics', body, MAX), 201);
+    assert.equal(db.readTaskByCaldavUid(d, 'uid-zwei').assignee, 'erika,max');
+  });
+
   it('keeps the title and description of an event', () => {
     const ev = {
       id: 'cev-text',

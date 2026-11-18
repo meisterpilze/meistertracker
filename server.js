@@ -4420,7 +4420,8 @@ function taskToVTODO(task) {
   lines.push('STATUS:' + (task.done ? 'COMPLETED' : 'NEEDS-ACTION'));
   if (task.done) lines.push('PERCENT-COMPLETE:100');
   lines.push('X-MEISTERPILZE-TYPE:task');
-  if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + task.assignee);
+  // TEXT like the rest, so the sync-back's icsText reads back what stood here.
+  if (task.assignee) lines.push('X-MEISTERPILZE-ASSIGNEE:' + escapeIcsText(task.assignee));
   if (task.description) lines.push('DESCRIPTION:' + escapeIcsText(task.description));
   lines.push('COLOR:#3b82f6');
   lines.push('END:VTODO', 'END:VCALENDAR');
