@@ -939,6 +939,11 @@ function onNotifItemClick(e) {
     const tid = parseInt(linkId, 10);
     const tk = manualTasks.find((x) => x.id === tid);
     if (tk) openEventDetail({ type: 'task-due', id: tk.created, date: tk.dueDate });
+  } else if (linkType === 'labfach' && linkId) {
+    // "Nachproduzieren" (checkLabFach): Labor → Bestand, mit dem Blatt des Fachs.
+    go('lab', 'n-lab');
+    openStab('lab', 'stock');
+    lfScanned(linkId);
   } else if (linkType === 'shelf' && linkId) {
     // "Nachproduzieren" (checkShelf): das Fach unter Lager → Regal, mit seinem Blatt.
     go('inv', 'n-inv');
@@ -1208,14 +1213,8 @@ function restoreAfterUpdate() {
     return;
   }
   if (!w || Date.now() - w.at > 60 * 1000) return;
-  if (!w.page || !w.btnId || !document.getElementById('p-' + w.page) || !document.getElementById(w.btnId)) return;
-  go(w.page, w.btnId);
-  // Den Reiter wie mit einem Tipp öffnen. Am Telefon nur, wenn man in ihm
-  // stand — sonst stand man auf der Liste der Reiter, und dort landet go().
-  if (w.stab && (w.drilled || !sbIsPhone())) {
-    const r = document.getElementById(w.stab);
-    if (r) r.click();
-  }
+  // Derselbe Weg wie ein Schritt zurück (gehZuOrt, beim Zurück-Block).
+  gehZuOrt(w);
 }
 
 // Coalesce SSE-triggered reconciliation polls. Every scan (by any client)
@@ -1537,6 +1536,7 @@ let lastMainPage = { page: 'dash', btnId: 'n-dash' };
 
 function go(page, btnId) {
   if (!mayLeavePage()) return;
+  zurueckMerk(page, null);
   if (page !== 'settings') lastMainPage = { page, btnId };
   // Admin borrows the sidebar on a desktop; styles.css reads this flag.
   document.body.classList.toggle('admin-mode', page === 'settings');
@@ -1648,6 +1648,7 @@ function go(page, btnId) {
   sbCloseMobile();
 }
 function openStab(page, sub) {
+  zurueckMerk(page, sub);
   document.querySelectorAll(`#p-${page} .stab`).forEach((b) => b.classList.remove('active'));
   document.querySelectorAll(`#p-${page} .sp`).forEach((p) => p.classList.remove('active'));
   const stEl = document.getElementById(`st-${page}-${sub}`);
@@ -6315,6 +6316,11 @@ function recurringArrears(today) {
   return out;
 }
 // "jede Woche" / "alle 2 Wochen" -- eine Eins liest sich anders als eine Zahl.
+// Wann eine Aufgabe faellt, in Worten: "monatlich am 1." oder "alle 2 Wochen · Mo".
+function recurWhenLabel(x) {
+  if (x.monthly) return t('recur.monthlyOn', { day: Number(String(x.anchor).slice(8, 10)) });
+  return recurEveryLabel(x.everyWeeks) + ' · ' + t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay());
+}
 function recurEveryLabel(n) {
   return Number(n) === 1 ? t('recur.everyWeek') : t('recur.everyN', { n: Number(n) || 1 });
 }
@@ -6590,7 +6596,7 @@ function buildWeekPlan() {
         kind: 'chore',
         species: '',
         label: f.task.name,
-        detail: recurEveryLabel(f.task.everyWeeks),
+        detail: f.task.monthly ? recurWhenLabel(f.task) : recurEveryLabel(f.task.everyWeeks),
         bags: 0,
         zone: '',
         overdue: false,
@@ -6956,7 +6962,7 @@ function openRhythmEditor() {
 // Festlegung fuer alle und fortan -- dieselbe Grenze, die der Server zwischen
 // /api/recurring-task (Admin) und /api/recurring-done (jeder) zieht. Ein Feld
 // anzubieten, dessen Speichern mit 403 zurueckkommt, waere schlimmer als keins.
-const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12];
+const RECUR_EVERY_CHOICES = [1, 2, 3, 4, 6, 8, 12, 'm'];
 // Welche Aufgabe gerade bearbeitet wird, oder null.
 let _ownEdit = null;
 // Die drei Felder einer Aufgabe, einmal geschrieben: die Zeile zum Anlegen und
@@ -6974,9 +6980,12 @@ function _ownFieldsHtml(suffix, wert) {
     '" /><select id="own-every' +
     suffix +
     '">' +
-    RECUR_EVERY_CHOICES.map(
-      (n) => '<option value="' + n + '"' + (Number(w.everyWeeks) === n ? ' selected' : '') + '>' + esc(recurEveryLabel(n)) + '</option>'
-    ).join('') +
+    RECUR_EVERY_CHOICES.map((n) => {
+      // 'm': jeden Monat am 1. -- der Wochentag daneben gilt dann nicht.
+      const an = n === 'm' ? !!w.monthly : !w.monthly && Number(w.everyWeeks) === n;
+      const text = n === 'm' ? t('recur.monthlyOn', { day: 1 }) : recurEveryLabel(n);
+      return '<option value="' + n + '"' + (an ? ' selected' : '') + '>' + esc(text) + '</option>';
+    }).join('') +
     '</select><select id="own-day' +
     suffix +
     '">' +
@@ -7019,12 +7028,7 @@ function _renderRhythmOwn() {
         '"><span class="rhythm-own-name">' +
         esc(x.name) +
         '</span><span class="fs-xs rhythm-own-when">' +
-        esc(
-          recurEveryLabel(x.everyWeeks) +
-            ' · ' +
-            t('rhythm.day.' + new Date(x.anchor + 'T00:00:00').getDay()) +
-            (x.active ? '' : ' · ' + t('recur.paused'))
-        ) +
+        esc(recurWhenLabel(x) + (x.active ? '' : ' · ' + t('recur.paused'))) +
         '</span><button type="button" class="btn btn-sm fs-xs" data-action="own-edit" data-id="' +
         esc(String(x.id)) +
         '">' +
@@ -7070,9 +7074,16 @@ function _ownAnchorFor(weekday) {
 function _ownRead(suffix) {
   const feld = (id) => document.getElementById(id + suffix);
   const name = ((feld('own-name') || {}).value || '').trim();
-  const every = Number((feld('own-every') || {}).value) || 1;
+  const wahl = (feld('own-every') || {}).value;
+  // Monatlich am 1.: der Anker ist der naechste Erste, heute eingeschlossen.
+  if (wahl === 'm') {
+    const h = new Date();
+    const erster = h.getDate() === 1 ? h : new Date(h.getFullYear(), h.getMonth() + 1, 1);
+    return { name, everyWeeks: 4, monthly: true, anchor: _ymd(erster) };
+  }
+  const every = Number(wahl) || 1;
   const wd = Number((feld('own-day') || {}).value);
-  return { name, everyWeeks: every, anchor: _ownAnchorFor(wd) };
+  return { name, everyWeeks: every, monthly: false, anchor: _ownAnchorFor(wd) };
 }
 function _ownSpeichern(daten, fertig) {
   apiPost('/api/recurring-task', daten).then((res) => {
@@ -7115,7 +7126,7 @@ function saveOwnTask(id) {
 function pauseOwnTask(id) {
   const x = (recurringTasks || []).find((y) => String(y.id) === String(id));
   if (!x) return;
-  _ownSpeichern({ id: Number(id), name: x.name, everyWeeks: x.everyWeeks, anchor: x.anchor, active: !x.active }, () => {
+  _ownSpeichern({ id: Number(id), name: x.name, everyWeeks: x.everyWeeks, monthly: !!x.monthly, anchor: x.anchor, active: !x.active }, () => {
     x.active = !x.active;
   });
 }
@@ -9175,6 +9186,7 @@ async function loadLabStock() {
   }
   renderLabStock();
   if (_lbSheet) lbSheetRender();
+  if (_lfSheet) lfRefresh();
   // Die Tagesliste nimmt ihre Laboraufgaben aus denselben Zahlen
   // (buildLabMinTasks); sie kamen gerade erst an.
   const work = document.getElementById('p-work');
@@ -9183,7 +9195,6 @@ async function loadLabStock() {
 const _lbSpecies = () => (_lbData && _lbData.species) || [];
 const _lbFehlt = (sp) => sp.items.filter((i) => i.make > 0);
 const _lbDringend = (sp) => sp.items.some((i) => i.urgency === 'now');
-const _lbIstShop = (i) => !!i.shop;
 // Ein Feld kurz, wie es in einer Zeile steht, und lang, wie im Blatt.
 function _lbKurz(i) {
   if (i.key === 'MC' || i.key === 'LC' || i.key === 'PD' || i.key === 'GSKG') return t('lb.short.' + i.key);
@@ -9261,13 +9272,16 @@ function renderWorkNachproduzieren(species) {
 }
 
 // ── Die Liste je Art ──
-// Fünf Felder je Zeile, immer dieselben an derselben Stelle: Slant, FK, Petri,
-// Spritzen (die Größen, die es gibt), Körnerbrut in kg. Gelb unter dem Soll,
-// rot bei einer Bestellung, die nicht gedeckt ist. Ein Tipp öffnet die Art.
-function _lbStat(label, have, soll, cls, shop) {
+// Je Art eine Karte. Der Name oben öffnet die Art (Soll, Ansetzen, Im
+// Programm). Darunter jedes Fach mit seiner Zahl: FK, Petri, jede Spritzen- und
+// jede Beutelgröße, die es gibt. Eine Zahl öffnet ihr Fach, dasselbe Blatt wie
+// das Etikett am Regal (lfOpen). Slant hat kein Fach und öffnet die Art. Gelb
+// unter dem Soll, rot bei einer Bestellung, die nicht gedeckt ist.
+function _lbStat(label, have, soll, cls, shop, attr) {
+  const tag = attr ? 'button' : 'span';
   return (
-    `<span class="lb-st${cls ? ' ' + cls : ''}"><small>${esc(label)}${shop ? '<i class="lb-shopdot" aria-hidden="true"></i>' : ''}</small>` +
-    `<b>${esc(have)}${soll ? '<em>/' + esc(soll) + '</em>' : ''}</b></span>`
+    `<${tag}${attr ? ' type="button" ' + attr : ''} class="lb-st${cls ? ' ' + cls : ''}"><small>${esc(label)}${shop ? '<i class="lb-shopdot" aria-hidden="true"></i>' : ''}</small>` +
+    `<b>${esc(have)}${soll ? '<em>/' + esc(soll) + '</em>' : ''}</b></${tag}>`
   );
 }
 function _lbStatCls(items) {
@@ -9275,32 +9289,46 @@ function _lbStatCls(items) {
   if (items.some((i) => i.make > 0)) return 'lb-under';
   return items.every((i) => !i.have) ? 'lb-zero' : '';
 }
+// Ein Fach, wie es in der Zeile steht: "FK", "Petri", "10 ml", "KB 3 kg".
+function _lfKurz(f) {
+  if (f.kind === 'SY') return t('lb.short.SY', { ml: f.size });
+  if (f.kind === 'KB') return t('lb.short.kb', { kg: String(f.size).replace('.', ',') });
+  return t('lb.short.' + f.kind);
+}
+function _lfCls(f) {
+  if (f.urgency === 'now') return 'lb-now';
+  if (f.low) return 'lb-under';
+  return f.have || f.growing ? '' : 'lb-zero';
+}
 function _lbZeile(sp) {
-  const by = (k) => sp.items.find((i) => i.key === k);
-  const one = (k) => {
-    const i = by(k);
-    return _lbStat(_lbKurz(i), _lbZahl(i, i.have), i.soll ? _lbZahl(i, i.soll) : '', _lbStatCls([i]), _lbIstShop(i));
-  };
-  const sy = sp.items.filter((i) => i.key.startsWith('SY'));
-  const kb = sp.items.filter((i) => i.key === 'GSKG' || i.key.startsWith('kb'));
-  const gskg = by('GSKG');
-  return (
-    `<button type="button" class="lb-sp" data-lb-strain="${sp.strainId}">` +
-    `<span class="lb-sp-h"><b>${esc(sp.name)}</b>` +
-    (sp.imProgramm ? '' : `<small class="lb-paused">${esc(t('lb.paused'))}</small>`) +
-    '<span class="lb-chev" aria-hidden="true">›</span></span><span class="lb-row">' +
-    one('MC') +
-    one('LC') +
-    one('PD') +
-    _lbStat(t('lb.short.SYall'), sy.length ? sy.map((i) => i.have).join('·') : '–', '', sy.length ? _lbStatCls(sy) : 'lb-zero', sy.some(_lbIstShop)) +
+  const mc = sp.items.find((i) => i.key === 'MC');
+  const fach = (sp.fach || []).map((f) =>
     _lbStat(
-      t('lb.short.GSKG'),
-      _lbZahl(gskg, gskg.have),
-      gskg.soll ? _lbZahl(gskg, gskg.soll) : '',
-      _lbStatCls(kb),
-      kb.some(_lbIstShop)
-    ) +
-    '</span></button>'
+      _lfKurz(f),
+      String(f.have),
+      f.soll ? String(f.soll) : '',
+      _lfCls(f),
+      !!f.sku,
+      `data-lf-strain="${sp.strainId}" data-lf-slot="${esc(f.slot)}" aria-label="${esc(sp.name + ' ' + _lfLang(f) + ': ' + f.have)}"`
+    )
+  );
+  return (
+    '<div class="lb-sp">' +
+    `<button type="button" class="lb-sp-h" data-lb-strain="${sp.strainId}"><b>${esc(sp.name)}</b>` +
+    (sp.imProgramm ? '' : `<small class="lb-paused">${esc(t('lb.paused'))}</small>`) +
+    '<span class="lb-chev" aria-hidden="true">›</span></button><div class="lb-row">' +
+    (mc
+      ? _lbStat(
+          _lbKurz(mc),
+          _lbZahl(mc, mc.have),
+          mc.soll ? _lbZahl(mc, mc.soll) : '',
+          _lbStatCls([mc]),
+          false,
+          `data-lb-strain="${sp.strainId}"`
+        )
+      : '') +
+    fach.join('') +
+    '</div></div>'
   );
 }
 let _lbRuhenOffen = false;
@@ -16683,6 +16711,7 @@ function shelfScanned(id) {
 
 function shelfSheetOpen(id) {
   if (!shelfById(id)) return;
+  if (_shelfSheet && _shelfSheet.minTimer) shelfSaveMin();
   _shelfSheet = { id: Number(id) };
   document.getElementById('m-shelf-n').value = '0';
   document.getElementById('m-shelf-more').open = false;
@@ -16691,6 +16720,7 @@ function shelfSheetOpen(id) {
   shelfLogLoad();
 }
 function shelfSheetClose() {
+  if (_shelfSheet && _shelfSheet.minTimer) shelfSaveMin();
   document.getElementById('m-shelf').classList.remove('open');
   _shelfSheet = null;
 }
@@ -16703,11 +16733,11 @@ function shelfSheetRender() {
   document.getElementById('m-shelf-title').textContent = x.name;
   document.getElementById('m-shelf-stock').textContent = x.stock;
   document.getElementById('m-shelf-now').classList.toggle('shelf-low', _shelfLow(x));
-  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: x.minStock });
+  if (_shelfSheet.min == null || !_shelfSheet.minTimer) _shelfSheet.min = x.minStock;
+  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: _shelfSheet.min });
+  document.getElementById('m-shelf-minv').textContent = _shelfSheet.min;
   const rn = document.getElementById('m-shelf-rename');
   if (document.activeElement !== rn) rn.value = x.name;
-  const mn = document.getElementById('m-shelf-min');
-  if (document.activeElement !== mn) mn.value = String(x.minStock);
   document.getElementById('m-shelf-skus').innerHTML = (x.skus || []).length
     ? x.skus
         .map(
@@ -16717,18 +16747,118 @@ function shelfSheetRender() {
         )
         .join('')
     : `<p class="fs-meta muted">${esc(t('shelf.skuNone'))}</p>`;
+  // Beim Beimpfen: für welche Beutelgröße Körnerbrut dieser Artikel abgibt. Ein
+  // Tipp auf die Größe verknüpft, ein Tipp auf „Keine“ löst.
+  document.getElementById('m-shelf-spawn').innerHTML = [null, ...KB_KG]
+    .map((kg) => {
+      const an = kg == null ? x.spawnKg == null : kg === x.spawnKg;
+      return (
+        `<button type="button" class="btn btn-sm${an ? ' btn-p' : ''}" data-shelf-spawn="${kg == null ? '' : kg}"` +
+        ` aria-pressed="${an}">${esc(kg == null ? t('shelf.spawnNone') : kg + ' kg')}</button>`
+      );
+    })
+    .join('');
+  shelfEtikettRender(x);
   shelfLabelPreview(x);
 }
 
-async function shelfSaveMin() {
+// Welcher Regal-Artikel für eine Beutelgröße Körnerbrut steht, oder keiner.
+const shelfForSpawnKg = (kg) =>
+  shelfItems.find((x) => x.active && x.spawnKg != null && Math.abs(x.spawnKg - kg) < 0.05) || null;
+
+// "Aus dem Regal: 4 \u00d7 Weizen 1 kg (17 \u2192 13)" für die Vorschau der Charge.
+function shelfSpawnPreview(lines) {
+  const je = new Map();
+  for (const l of lines) {
+    const x = shelfForSpawnKg(l.kg);
+    if (x) je.set(x, (je.get(x) || 0) + l.qty);
+  }
+  if (!je.size) return '';
+  return t('shelf.spawnPreview', {
+    list: [...je].map(([x, n]) => n + ' \u00d7 ' + x.name + ' (' + x.stock + ' \u2192 ' + (x.stock - n) + ')').join(', ')
+  });
+}
+
+// Nach dem Anlegen: was aus dem Regal ging, mit dem neuen Stand.
+function shelfSpawnToast(moves) {
+  if (!moves || !moves.length) return;
+  toast(
+    t('shelf.spawnTaken', {
+      list: moves.map((m) => -m.delta + ' \u00d7 ' + m.name + ' \u2192 ' + m.stock).join(', ')
+    })
+  );
+}
+
+async function shelfSetSpawn(kg) {
   const x = _shelfSheet && shelfById(_shelfSheet.id);
   if (!x) return;
-  const v = document.getElementById('m-shelf-min').value.trim();
-  const n = Number(v);
-  if (v === '' || !Number.isInteger(n) || n < 0) {
-    toast(t('shelf.minWhole'), 'err');
+  const r = await apiPatch('/api/shelf/' + x.id, { spawnKg: kg });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
     return;
   }
+  _shelfTake(r.item);
+  toast(r.item.spawnKg == null ? t('shelf.spawnOff') : t('shelf.spawnOn', { kg: r.item.spawnKg }));
+}
+
+// Das Etikett eines Artikels einstellen: ein Tipp auf ein Bild gilt sofort;
+// Band und Text mit Speichern. Die Bilder sind dieselben wie auf dem Etikett.
+function shelfEtikettRender(x) {
+  const box = document.getElementById('m-shelf-bilder');
+  if (!box) return;
+  const jetzt = x.bild || '';
+  box.innerHTML = ['', ...Object.keys(ETIKETT_BILDER)]
+    .map(
+      (n) =>
+        `<button type="button" class="shelf-bild${jetzt === n ? ' on' : ''}" data-shelf-bild="${n}" aria-pressed="${jetzt === n}" aria-label="${esc(t('shelf.bild.' + (n || 'keins')))}">` +
+        (n ? '<canvas width="64" height="64" aria-hidden="true"></canvas>' : esc(t('shelf.bild.keins'))) +
+        '</button>'
+    )
+    .join('');
+  box.querySelectorAll('canvas').forEach((cv) => {
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 64, 64);
+    etikettBild(ctx, cv.parentElement.dataset.shelfBild, 0, 0, '#000', '#fff');
+  });
+  const band = document.getElementById('m-shelf-band');
+  if (document.activeElement !== band) band.value = x.band || '';
+  const text = document.getElementById('m-shelf-etikett');
+  if (document.activeElement !== text) text.value = x.etikett || '';
+  text.placeholder = x.name;
+}
+async function shelfEtikett(patch) {
+  const x = _shelfSheet && shelfById(_shelfSheet.id);
+  if (!x) return;
+  const r = await apiPatch('/api/shelf/' + x.id, patch);
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  document.activeElement && document.activeElement.blur && document.activeElement.blur();
+  _shelfTake(r.item);
+  toast(t('shelf.labelSaved'));
+}
+
+// Der Alarm steht unter der Zahl, mit − und +: ein Tipp gilt sofort, gespeichert
+// wird kurz nach dem letzten. Vorher lag er unter "Verlauf und Artikel", mit
+// einem Feld und Speichern, und niemand fand ihn.
+function shelfMinStep(d) {
+  if (!_shelfSheet) return;
+  _shelfSheet.min = Math.max(0, (_shelfSheet.min || 0) + d);
+  document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: _shelfSheet.min });
+  document.getElementById('m-shelf-minv').textContent = _shelfSheet.min;
+  clearTimeout(_shelfSheet.minTimer);
+  _shelfSheet.minTimer = setTimeout(shelfSaveMin, 700);
+}
+async function shelfSaveMin() {
+  const sheet = _shelfSheet;
+  const x = sheet && shelfById(sheet.id);
+  if (!x) return;
+  clearTimeout(sheet.minTimer);
+  sheet.minTimer = null;
+  const n = sheet.min;
+  if (n === x.minStock) return;
   const r = await apiPatch('/api/shelf/' + x.id, { minStock: n });
   if (!r || r.error) {
     toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
@@ -16844,7 +16974,9 @@ async function shelfLogLoad() {
               ? t('shelf.log.count', { stock: e.running })
               : e.kind === 'order'
                 ? t(e.delta < 0 ? 'shelf.log.order' : 'shelf.log.cancel', { n, ref: e.ref || '', stock: e.running })
-                : t('shelf.log.' + e.kind, { n, stock: e.running });
+                : e.kind === 'spawn'
+                  ? t(e.delta < 0 ? 'shelf.log.spawn' : 'shelf.log.spawnBack', { n, ref: e.ref || '', stock: e.running })
+                  : t('shelf.log.' + e.kind, { n, stock: e.running });
           return (
             `<div class="shelf-log-row${e.undone ? ' shelf-undone' : ''}"><span>${esc(was)}</span>` +
             `<small>${esc(fmtDtTime(e.time) + (e.username ? ' · ' + e.username : ''))}</small></div>`
@@ -16855,12 +16987,22 @@ async function shelfLogLoad() {
 }
 
 // ── Etikett ──
-// 50 × 30 mm wie alle Etiketten der App (labelDims). Rechts der QR-Code mit
-// der Nummer aus der Barcode-Liste, 18 mm groß, damit die Kamera ihn vom Regal
-// aus liest; links der Name, so groß er auf höchstens vier Zeilen passt, und
-// darunter dieselbe Nummer zum Abtippen. Eine Größe am Ende des Namens (1 L,
-// 2 kg) steht immer in einer eigenen Zeile.
-const SHELF_SIZE_RE = /^(.*\S)\s+(\d+(?:[.,]\d+)?\s*(?:kg|g|l|ml))$/i;
+// 50 × 30 mm wie alle Etiketten der App (labelDims), Entwurf "Band": oben links
+// ein schwarzes Band mit einem weißen Bild und einem Wort in Großbuchstaben
+// (WEIZEN, GLÄSER, PETRI, KÖRNERBRUT + Größe), darunter der Text, auf den es
+// ankommt (1 kg, VOLL, Shiitake), immer in derselben Größe: 44 am Regal, wo es
+// kurze Wörter sind, 32 im Labor, wo es Artnamen sind. Nur was in drei Zeilen
+// nicht passt, geht eine Stufe kleiner. Vorher schrumpfte jeder Name, bis er
+// passte, und kein Etikett sah aus wie das nächste.
+//
+// Rechts der QR-Code mit der Nummer aus der Barcode-Liste, 7 Punkte je Modul
+// (bei einer siebenstelligen Nummer 18 mm), damit die Kamera ihn vom Regal aus
+// liest; links unten dieselbe Nummer zum Abtippen.
+//
+// Die Bilder sind in einem Feld von 64 × 64 Punkten gezeichnet, Strich für
+// Strich wie in Printer Labels/Laborfach/band_entwuerfe.py, mit dem die
+// Entwürfe gemacht und gewählt wurden. Ihre Namen stehen in db.js
+// (ETIKETT_BILDER); welches ein Regal-Artikel trägt, legt man am Artikel fest.
 function _shelfWrap(ctx, words, maxW) {
   const lines = [];
   let cur = '';
@@ -16875,13 +17017,224 @@ function _shelfWrap(ctx, words, maxW) {
   if (cur) lines.push(cur);
   return lines;
 }
+// Zeichenstifte im 64er-Feld bei (x, y). Rechtecke schließen ihre letzte Zeile
+// und Spalte ein, wie in Pillow; ein Rand liegt innen.
+function _bildStift(ctx, x, y, ink, paper) {
+  const farbe = (c) => (c === 'ink' ? ink : paper);
+  const rect = (a, b, c, e, f) => {
+    ctx.fillStyle = farbe(f);
+    ctx.fillRect(x + a, y + b, c - a + 1, e - b + 1);
+  };
+  const rand = (a, b, c, e, w) => {
+    rect(a, b, c, b + w - 1, 'ink');
+    rect(a, e - w + 1, c, e, 'ink');
+    rect(a, b, a + w - 1, e, 'ink');
+    rect(c - w + 1, b, c, e, 'ink');
+  };
+  const ellipse = (a, b, c, e, f) => {
+    ctx.fillStyle = farbe(f);
+    ctx.beginPath();
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2, (e - b + 1) / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // Ein Ring: nur der Rand, das Innere bleibt, wie es ist.
+  const ring = (a, b, c, e, w) => {
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2, (e - b + 1) / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + (a + c + 1) / 2, y + (b + e + 1) / 2, (c - a + 1) / 2 - w, (e - b + 1) / 2 - w, 0, 0, Math.PI * 2);
+    ctx.fill('evenodd');
+  };
+  const poly = (pts, f, w) => {
+    ctx.beginPath();
+    pts.forEach(([a, b], i) => (i ? ctx.lineTo(x + a, y + b) : ctx.moveTo(x + a, y + b)));
+    ctx.closePath();
+    if (w) {
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = w;
+      ctx.lineJoin = 'miter';
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = farbe(f);
+      ctx.fill();
+    }
+  };
+  const linie = (a, b, c, e, w) => {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x + a + 0.5, y + b + 0.5);
+    ctx.lineTo(x + c + 0.5, y + e + 0.5);
+    ctx.stroke();
+  };
+  // Ein Rand mit runden Ecken; ohne roundRect (alte Browser) eckig.
+  const rrand = (a, b, c, e, r, w) => {
+    if (!ctx.roundRect) return rand(a, b, c, e, w);
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.roundRect(x + a, y + b, c - a + 1, e - b + 1, r);
+    ctx.roundRect(x + a + w, y + b + w, c - a + 1 - 2 * w, e - b + 1 - 2 * w, Math.max(0, r - w));
+    ctx.fill('evenodd');
+  };
+  return { rect, rand, rrand, ellipse, ring, poly, linie, x, y };
+}
+// Ein flacher Beutel: oben die Schweißnaht, darunter das Filterfeld.
+function _bildBeutel(s) {
+  s.rect(12, 2, 52, 9, 'ink');
+  for (const cx of [18, 26, 34, 42]) s.rect(cx, 3, cx, 8, 'paper');
+  s.rand(12, 9, 52, 62, 3);
+  s.rand(20, 14, 44, 22, 2);
+}
+const ETIKETT_BILDER = {
+  glas(s, voll = true) {
+    s.rect(14, 2, 50, 12, 'ink');
+    s.rrand(10, 12, 54, 62, 7, 3);
+    if (voll) {
+      s.rect(14, 30, 50, 58, 'ink');
+      for (const [bx, by, r] of [
+        [22, 42, 3],
+        [34, 50, 2],
+        [42, 38, 3]
+      ])
+        s.ellipse(bx - r, by - r, bx + r, by + r, 'paper');
+    }
+  },
+  'glas-leer'(s) {
+    ETIKETT_BILDER.glas(s, false);
+  },
+  petri(s) {
+    s.ring(2, 22, 62, 56, 3);
+    s.rect(2, 30, 62, 47, 'paper');
+    s.rect(2, 30, 4, 40, 'ink');
+    s.rect(60, 30, 62, 40, 'ink');
+    s.ellipse(2, 12, 62, 46, 'paper');
+    s.ring(2, 12, 62, 46, 3);
+    s.ellipse(14, 19, 50, 39, 'ink');
+    s.ellipse(22, 24, 30, 30, 'paper');
+  },
+  spritze(s) {
+    s.rect(0, 20, 4, 44, 'ink');
+    s.rect(4, 30, 12, 34, 'ink');
+    s.rand(12, 22, 46, 42, 3);
+    s.rect(24, 25, 43, 39, 'ink');
+    s.rect(46, 28, 51, 36, 'ink');
+    s.rect(51, 31, 64, 33, 'ink');
+  },
+  koernerbeutel(s) {
+    _bildBeutel(s);
+    let row = 0;
+    for (let gy = 30; gy < 58; gy += 6, row++)
+      for (let gx = 18 + (row % 2) * 4; gx < 48; gx += 8) s.ellipse(gx - 3, gy - 2, gx + 3, gy + 2, 'ink');
+  },
+  growkit(s) {
+    _bildBeutel(s);
+    s.rect(15, 50, 49, 59, 'ink');
+    // der Hut: ein halber Kreis über dem Stiel
+    s.poly(
+      Array.from({ length: 13 }, (_, i) => {
+        const w = Math.PI + (i / 12) * Math.PI;
+        return [32 + 12 * Math.cos(w), 38 + 10 * Math.sin(w)];
+      }),
+      'ink'
+    );
+    s.rect(29, 37, 35, 50, 'ink');
+  },
+  cvg(s) {
+    // Kokos-Substrat: dunkles Kokos (das Band selbst) mit hellen Flocken Vermiculit.
+    s.rect(8, 4, 56, 11, 'ink');
+    for (const cx of [14, 22, 30, 38, 46]) s.rect(cx, 5, cx, 10, 'paper');
+    s.rand(8, 11, 56, 62, 3);
+    for (const [vx, vy] of [
+      [18, 24],
+      [30, 22],
+      [44, 26],
+      [24, 34],
+      [38, 36],
+      [16, 44],
+      [30, 46],
+      [46, 44],
+      [22, 54],
+      [40, 52]
+    ])
+      s.rect(vx - 3, vy - 2, vx + 3, vy + 2, 'ink');
+  },
+  weizen(s) {
+    s.rect(31, 20, 33, 63, 'ink');
+    for (let i = 0; i < 4; i++) {
+      const gy = 16 + i * 10;
+      s.poly(
+        [
+          [31, gy + 10],
+          [20, gy + 4],
+          [22, gy - 4],
+          [31, gy + 2]
+        ],
+        'ink'
+      );
+      s.poly(
+        [
+          [33, gy + 10],
+          [44, gy + 4],
+          [42, gy - 4],
+          [33, gy + 2]
+        ],
+        'ink'
+      );
+    }
+    s.poly(
+      [
+        [32, 2],
+        [37, 12],
+        [32, 16],
+        [27, 12]
+      ],
+      'ink'
+    );
+    s.linie(22, 10, 16, 0, 2);
+    s.linie(42, 10, 48, 0, 2);
+  },
+  baum(s) {
+    s.rect(28, 40, 36, 62, 'ink');
+    s.poly(
+      [
+        [28, 46],
+        [18, 36],
+        [22, 34],
+        [30, 42]
+      ],
+      'ink'
+    );
+    s.poly(
+      [
+        [36, 44],
+        [46, 34],
+        [42, 32],
+        [34, 40]
+      ],
+      'ink'
+    );
+    for (const [cx, cy, r] of [
+      [32, 18, 15],
+      [18, 28, 13],
+      [46, 28, 13],
+      [32, 32, 12]
+    ])
+      s.ellipse(cx - r, cy - r, cx + r, cy + r, 'ink');
+    s.rect(4, 60, 60, 62, 'ink');
+  }
+};
+// Ein Bild an (x, y), in der Farbe ink auf paper.
+function etikettBild(ctx, name, x, y, ink, paper) {
+  const f = ETIKETT_BILDER[name];
+  if (f) f(_bildStift(ctx, x, y, ink, paper));
+}
+
+// x: { barcode, bild, band (bis zwei Zeilen), etikett oder name, namePx }.
+// Ohne Bild und Band steht der Text oben, sonst ist alles wie immer.
 function shelfLabelCanvas(x) {
   const W = labelDims.widthDots;
   const H = labelDims.heightDots;
-  const ML = 12;
-  const MT = 10;
-  const MR = 16;
-  const MB = 12;
   const cv = document.createElement('canvas');
   cv.width = W;
   cv.height = H;
@@ -16890,51 +17243,87 @@ function shelfLabelCanvas(x) {
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#000';
 
-  // QR: ganze Punkte je Modul, sonst franst er aus. 7 Punkte ≈ 0,9 mm, bei
-  // einer siebenstelligen Nummer 21 Module = 18 mm. Senkrecht mittig, rechts.
+  // QR: ganze Punkte je Modul, sonst franst er aus. Senkrecht mittig, rechts.
   const val = String(x.barcode || '');
-  let qx = W - MR;
+  let qx = W - 14;
   if (val && typeof QRCode !== 'undefined') {
     const holder = document.createElement('div');
     const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
     const m = q._oQRCode;
     const count = m.getModuleCount();
-    const mod = Math.max(1, Math.min(7, Math.floor((H - MT - MB) / count)));
+    const mod = Math.max(1, Math.min(7, Math.floor((H - 24) / count)));
     const size = count * mod;
-    qx = W - MR - size;
-    const qy = MT + Math.floor((H - MT - MB - size) / 2);
+    qx = W - 14 - size;
+    const qy = Math.floor((H - size) / 2);
     for (let r = 0; r < count; r++)
       for (let c = 0; c < count; c++) if (m.isDark(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod);
-    ctx.font = 'bold 22px Consolas, "Courier New", monospace';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(val, ML, H - MB - 2);
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 18px Consolas, "Courier New", monospace';
+  ctx.fillText(val, 12, H - 10);
+
+  // Das Band: Bild und Wort weiß auf Schwarz. Ein Wort, das zu breit ist, wird
+  // schmaler gezogen statt kleiner, damit jedes Band dieselbe Schrifthöhe hat.
+  const band = String(x.band || '')
+    .split('\n')
+    // Wörter in Großbuchstaben; eine Größe (3 kg, 10 ml) bleibt, wie sie ist.
+    .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
+    .filter(Boolean);
+  const mitBand = !!(band.length || x.bild);
+  const bandBreite = qx - 10;
+  if (mitBand) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, bandBreite, 81);
+    etikettBild(ctx, x.bild, 8, 8, '#fff', '#000');
+    const px = 24;
+    const lh = Math.round(px * 1.1);
+    ctx.font = `bold ${px}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#fff';
+    const links = x.bild ? 80 : 12;
+    const platz = bandBreite - links - 6;
+    const top = 40 - Math.floor((band.length * lh) / 2);
+    band.forEach((z, i) => {
+      const w = ctx.measureText(z).width;
+      ctx.save();
+      ctx.translate(links, top + i * lh);
+      if (w > platz) ctx.scale(platz / w, 1);
+      ctx.fillText(z, 0, 0);
+      ctx.restore();
+    });
+    ctx.fillStyle = '#000';
   }
 
-  // Der Name links vom QR-Code: die größte Schrift, mit der er auf höchstens
-  // vier Zeilen über der Nummer Platz hat. Die Größe am Ende bleibt eine Zeile.
-  const maxW = qx - 12 - ML;
-  const maxH = H - MB - 26 - MT;
-  const teil = x.name.match(SHELF_SIZE_RE);
-  const words = (teil ? teil[1] : x.name).split(/\s+/).filter(Boolean);
-  const size = teil ? [teil[2]] : [];
-  let best = null;
-  for (let px = 84; px >= 18; px -= 2) {
+  // Der Text: eine Größe, eine Stufe kleiner nur, wenn er sonst nicht passt —
+  // in drei Zeilen nicht, oder weil ein einzelnes Wort breiter ist als der Platz
+  // (Zunderschwamm, Schmetterlingstramete). Ein Wort, das auch dann zu breit ist,
+  // wird schmaler gezogen; es läuft nie unter den QR-Code.
+  const text = String(x.etikett || x.name || '');
+  const maxW = qx - 14 - 12;
+  const oben = mitBand ? 92 : 12;
+  const hoch = H - 36 - oben;
+  const words = text.split(/\s+/).filter(Boolean);
+  const gross = x.namePx || 44;
+  let wahl = null;
+  for (const px of [gross, Math.round(gross * 0.8)]) {
     ctx.font = 'bold ' + px + 'px Arial, Helvetica, sans-serif';
-    const lines = _shelfWrap(ctx, words, maxW).concat(size);
-    const lh = Math.round(px * 1.08);
-    if (lines.length <= 4 && lines.length * lh <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) {
-      best = { px, lines, lh };
-      break;
-    }
+    const lines = _shelfWrap(ctx, words, maxW);
+    const lh = Math.round(px * 1.1);
+    wahl = { px, lines, lh };
+    if (lines.length * lh <= hoch && lines.every((l) => ctx.measureText(l).width <= maxW)) break;
   }
-  if (!best) {
-    ctx.font = 'bold 18px Arial, Helvetica, sans-serif';
-    best = { px: 18, lines: _shelfWrap(ctx, words, maxW).concat(size).slice(0, 4), lh: 19 };
-  }
-  ctx.font = 'bold ' + best.px + 'px Arial, Helvetica, sans-serif';
+  ctx.font = 'bold ' + wahl.px + 'px Arial, Helvetica, sans-serif';
   ctx.textBaseline = 'top';
-  const top = MT + Math.max(0, Math.floor((maxH - best.lines.length * best.lh) / 2));
-  best.lines.forEach((l, i) => ctx.fillText(l, ML, top + i * best.lh));
+  wahl.lines
+    .slice(0, Math.max(1, Math.floor(hoch / wahl.lh)))
+    .forEach((l, i) => {
+      const w = ctx.measureText(l).width;
+      ctx.save();
+      ctx.translate(12, oben + i * wahl.lh);
+      if (w > maxW) ctx.scale(maxW / w, 1);
+      ctx.fillText(l, 0, 0);
+      ctx.restore();
+    });
 
   // Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
   const img = ctx.getImageData(0, 0, W, H);
@@ -17028,16 +17417,26 @@ function shelfWire() {
     }
     const step = e.target.closest('[data-shelf-step]');
     if (step) shelfStep(Number(step.dataset.shelfStep));
+    const min = e.target.closest('[data-shelf-min]');
+    if (min) shelfMinStep(Number(min.dataset.shelfMin));
+    const bild = e.target.closest('[data-shelf-bild]');
+    if (bild) shelfEtikett({ bild: bild.dataset.shelfBild });
     const unsku = e.target.closest('[data-shelf-unsku]');
     if (unsku) shelfSku(unsku.dataset.shelfUnsku, 0);
+    const spawn = e.target.closest('[data-shelf-spawn]');
+    if (spawn) shelfSetSpawn(spawn.dataset.shelfSpawn === '' ? null : Number(spawn.dataset.shelfSpawn));
     const act = e.target.closest('[data-shelf-act]');
     if (!act || !_shelfSheet) return;
     const a = act.dataset.shelfAct;
     if (a === 'close') shelfSheetClose();
     else if (a === 'print') shelfPrint([_shelfSheet.id]);
     else if (a === 'rename') shelfRename();
+    else if (a === 'etikett')
+      shelfEtikett({
+        band: document.getElementById('m-shelf-band').value,
+        etikett: document.getElementById('m-shelf-etikett').value
+      });
     else if (a === 'hide') shelfSetActive(_shelfSheet.id, false);
-    else if (a === 'min') shelfSaveMin();
     else if (a === 'sku') {
       const sku = document.getElementById('m-shelf-sku').value.trim();
       const per = Number(document.getElementById('m-shelf-per').value || 1);
@@ -17049,6 +17448,554 @@ function shelfWire() {
   });
   // Das Feld öffnet mit 0; beim Antippen ist sie markiert, damit die Zahl sie ersetzt.
   document.getElementById('m-shelf-n').addEventListener('focus', (e) => e.target.select());
+}
+
+// ── Laborfach: eine Art in einem Gefäß ──────────────────────
+// Shiitake-Petrischalen, Austernpilz-Spritzen 10 ml, Körnerbrut 3 kg: was ein
+// Etikett am Regal oder im Kühlschrank hat. Das Blatt sieht aus wie das am
+// Regal (Add, Remove, Das ist der Bestand), zählt aber nichts Eigenes: der
+// Bestand sind die Schalen, Spritzen und Beutel selbst, dieselbe Zahl, die
+// Billbee bekommt und Nachproduzieren liest (db.labFaecher). Add legt neue an
+// und endet im Etiketten-Fenster wie jede Laborarbeit; Remove und Verkauft
+// nehmen die ältesten. Was an einen Kunden geht, scannt man am besten einzeln
+// (Verkauft im Kultur- oder Beutel-Fenster): nur so weiß die App, welches.
+//
+// Die Spritzen einer Art liegen in einem Fach, alle Größen zusammen. Ihr
+// Etikett (Slot 'SY') öffnet das Blatt ohne Größe: erst ein Tipp auf 10, 20
+// oder 50 ml, dann Add oder Remove. So bucht niemand eine 20er als 10er. Zahl
+// und Alarm hat weiter jede Größe selbst, denn der Shop verkauft sie einzeln.
+//
+// Der Alarm ist das Soll, an derselben Stelle gespeichert (db.setLabFachAlarm),
+// und ein Tipp auf − oder + gilt gleich, ohne Speichern-Knopf.
+let _lfSheet = null; // { strainId, slot, fach, min, minTimer }
+function _lfSlotKind(slot) {
+  const s = String(slot);
+  return s.startsWith('SY') ? 'SY' : s.startsWith('KB') ? 'KB' : s;
+}
+// Lang, wie im Blatt: "FK-Glas", "Spritze 10 ml", "Körnerbrut 3 kg", "Spritzen".
+function _lfLang(f) {
+  if (f.group) return t(f.kind === 'KB' ? 'lf.kind.KBall' : 'lf.kind.SYall');
+  if (f.kind === 'SY') return t('lf.kind.SY', { ml: f.size });
+  if (f.kind === 'KB') return t('lf.kind.KB', { kg: String(f.size).replace('.', ',') });
+  return t('lf.kind.' + f.kind);
+}
+const _lfArt = (strainId) => _lbSpecies().find((x) => x.strainId === strainId) || null;
+function _lfFind(strainId, slot) {
+  const sp = _lfArt(strainId);
+  if (!sp) return null;
+  if (slot === 'SY') return sp.sy || null;
+  if (slot === 'KB') return sp.kb || null;
+  return (sp.fach || []).find((f) => f.slot === slot) || null;
+}
+// Ein Fach, das die Liste (noch) nicht kennt, etwa die 50er, wenn es keine gibt.
+// Der Server schickt es gleich darauf richtig (lfOpen).
+function _lfLeer(strainId, slot) {
+  const kind = _lfSlotKind(slot);
+  const ms = (mushroomStrains || []).find((x) => x.id === strainId);
+  return {
+    id: null,
+    barcode: null,
+    strainId,
+    name: ms ? ms.name : '',
+    slot,
+    kind,
+    size: slot !== 'SY' && slot !== 'KB' && (kind === 'SY' || kind === 'KB') ? Number(String(slot).slice(2)) : null,
+    group: slot === 'SY' || slot === 'KB',
+    have: 0,
+    growing: 0,
+    readyAt: null,
+    soll: null,
+    ordered: 0,
+    sku: '',
+    imProgramm: true,
+    low: false,
+    urgency: null
+  };
+}
+function _lfMerken(f) {
+  if (f && f.barcode) {
+    barcodeRegistry.set(f.barcode, { type: 'labfach', id: String(f.id) });
+    barcodeByEntity.set('labfach:' + f.id, f.barcode);
+  }
+}
+// Das Fach vom Server holen, und beim ersten Mal anlegen, mit der Nummer fürs
+// Etikett. Ein Fach mit Nummer muss nicht gefragt werden.
+async function _lfHolen(strainId, slot) {
+  const r = await apiPost('/api/lab-fach', { strainId, slot });
+  if (!r || r.error || !r.fach) return null;
+  _lfMerken(r.fach);
+  const sp = _lfArt(strainId);
+  if (sp && slot === 'SY') sp.sy = r.fach;
+  if (sp && slot === 'KB') sp.kb = r.fach;
+  return r.fach;
+}
+
+function lfOpen(strainId, slot) {
+  strainId = Number(strainId);
+  if (_lfSheet && _lfSheet.minTimer) {
+    clearTimeout(_lfSheet.minTimer);
+    lfMinSave();
+  }
+  const f = _lfFind(strainId, slot) || _lfLeer(strainId, slot);
+  _lfSheet = { strainId, slot, fach: f, min: f.soll || 0, minTimer: null };
+  document.getElementById('m-lf-n').value = '0';
+  lfRender();
+  document.getElementById('m-labfach').classList.add('open');
+  if (f.id) return;
+  _lfHolen(strainId, slot).then((fach) => {
+    if (!fach || !_lfSheet || _lfSheet.slot !== slot || _lfSheet.strainId !== strainId) return;
+    _lfSheet.fach = fach;
+    if (!_lfSheet.minTimer) _lfSheet.min = fach.soll || 0;
+    lfRender();
+  });
+}
+function lfClose() {
+  if (_lfSheet && _lfSheet.minTimer) {
+    clearTimeout(_lfSheet.minTimer);
+    lfMinSave();
+  }
+  document.getElementById('m-labfach').classList.remove('open');
+  _lfSheet = null;
+}
+// Neue Zahlen vom Server: das offene Blatt nimmt sein Fach daraus.
+function lfRefresh() {
+  if (!_lfSheet) return;
+  const f = _lfFind(_lfSheet.strainId, _lfSheet.slot);
+  if (!f) return;
+  _lfSheet.fach = { ...f, barcode: f.barcode || _lfSheet.fach.barcode, id: f.id || _lfSheet.fach.id };
+  if (!_lfSheet.minTimer) _lfSheet.min = f.soll || 0;
+  lfRender();
+}
+// Die Größen einer Art als Knöpfe, mit ihrer Zahl: "10 ml · 3".
+function _lfSizesHtml(f) {
+  const kind = f.kind;
+  const da = (_lfArt(f.strainId) || {}).fach || [];
+  const alle = new Set((kind === 'SY' ? SY_ML : KB_KG).map(Number));
+  for (const x of da) if (x.kind === kind) alle.add(Number(x.size));
+  if (f.size != null) alle.add(Number(f.size));
+  return [...alle]
+    .sort((a, b) => a - b)
+    .map((n) => {
+      const slot = kind + n;
+      const on = slot === f.slot;
+      const x = da.find((y) => y.slot === slot);
+      const groesse = String(n).replace('.', ',') + (kind === 'SY' ? ' ml' : ' kg');
+      return (
+        `<button type="button" class="lf-size${on ? ' on' : ''}${x && x.low ? ' low' : ''}" data-lf-size="${esc(slot)}" aria-pressed="${on}">` +
+        `${esc(t('lf.chip', { size: groesse, n: x ? x.have : 0 }))}</button>`
+      );
+    })
+    .join('');
+}
+function lfRender() {
+  if (!_lfSheet) return;
+  const f = _lfSheet.fach;
+  const gruppe = !!f.group;
+  document.getElementById('m-lf-title').textContent = f.name;
+  document.getElementById('m-lf-what').textContent = _lfLang(f);
+  // Die anderen Größen derselben Art, ein Tipp entfernt: so erreicht man auch
+  // eine Größe, die es noch gar nicht gibt. Vom Spritzen-Etikett aus ist noch
+  // keine gewählt, und nichts lässt sich buchen, bis eine gewählt ist.
+  const sizes = document.getElementById('m-lf-sizes');
+  sizes.innerHTML = f.kind === 'SY' || f.kind === 'KB' ? _lfSizesHtml(f) : '';
+  sizes.hidden = !sizes.innerHTML;
+  for (const id of ['m-lf-now', 'm-lf-alarmrow', 'm-lf-amt', 'm-lf-acts']) document.getElementById(id).hidden = gruppe;
+  if (gruppe) {
+    document.getElementById('m-lf-help').textContent = t('lf.pickSize');
+  } else {
+    document.getElementById('m-lf-stock').textContent = f.have;
+    document.getElementById('m-lf-now').classList.toggle('shelf-low', !!f.low);
+    document.getElementById('m-lf-grow').textContent = f.growing
+      ? t('lf.growing', { n: f.growing, date: f.readyAt ? fmtDtShort(f.readyAt) : '–' })
+      : '';
+    const min = _lfSheet.min;
+    document.getElementById('m-lf-minv').textContent = min;
+    document.getElementById('m-lf-alarm').textContent = !f.imProgramm
+      ? t('lf.alarmPaused')
+      : min
+        ? t('lf.alarmUnder', { n: min })
+        : t('lf.alarmOff');
+    for (const b of document.querySelectorAll('#m-labfach [data-lf-min]')) b.disabled = !f.id;
+    document.getElementById('m-lf-help').textContent = t(f.kind === 'KB' ? 'lf.helpKB' : 'lf.help');
+  }
+  // Gedruckt wird bei Spritzen und Körnerbrut immer das eine Etikett der Art,
+  // egal welche Größe gerade offen ist.
+  const sammel = f.kind === 'SY' || f.kind === 'KB';
+  const etikett = sammel ? (_lfArt(f.strainId) || {})[f.kind.toLowerCase()] || (gruppe ? f : null) : f;
+  document.getElementById('m-lf-print').disabled = !(etikett && etikett.barcode) && !sammel;
+  lfPreview(etikett);
+}
+
+// Der Alarm: − und + gelten sofort, gespeichert wird kurz nach dem letzten Tipp.
+function lfMinStep(d) {
+  if (!_lfSheet || !_lfSheet.fach.id || _lfSheet.fach.group) return;
+  _lfSheet.min = Math.max(0, Math.min(500, _lfSheet.min + d));
+  lfRender();
+  clearTimeout(_lfSheet.minTimer);
+  _lfSheet.minTimer = setTimeout(lfMinSave, 700);
+}
+async function lfMinSave() {
+  const sheet = _lfSheet;
+  if (!sheet || !sheet.fach.id || sheet.fach.group) return;
+  sheet.minTimer = null;
+  const n = sheet.min;
+  const r = await apiPatch('/api/lab-fach/' + sheet.fach.id, { soll: n });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  toast(n ? t('lf.alarmUnder', { n }) : t('lf.alarmOff'));
+  if (_lfSheet === sheet && !sheet.minTimer) {
+    sheet.fach = { ...r.fach, barcode: r.fach.barcode || sheet.fach.barcode };
+    lfRender();
+  }
+  loadLabStock();
+}
+
+function _lfN() {
+  const v = document.getElementById('m-lf-n').value.trim();
+  const n = v === '' ? 0 : Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : NaN;
+}
+function lfStep(d) {
+  const n = _lfN();
+  document.getElementById('m-lf-n').value = String(Math.max(0, (Number.isNaN(n) ? 0 : n) + d));
+}
+
+// Was im Fach ist, das Älteste zuerst. Kulturen: aktiv und gelagert, wie
+// db.labFaecher zählt. Körnerbrut: fertige Beutel, die im Regal stehen.
+function _lfKulturen(f) {
+  return cultures
+    .filter(
+      (c) =>
+        c.type === f.kind &&
+        (c.status === 'active' || c.status === 'stored') &&
+        (c.strainId === f.strainId || (!c.strainId && c.species === f.name)) &&
+        (f.kind !== 'SY' || (Number(c.ml) || 10) === f.size)
+    )
+    .sort((a, b) => String(a.created).localeCompare(String(b.created)) || a.id.localeCompare(b.id));
+}
+function _lfBeutel(f) {
+  const placed = buildLastPlacementByBag();
+  const jetzt = new Date().toISOString();
+  const out = [];
+  for (const b of batches) {
+    if (b.batchType !== 'grain' || b.strainId !== f.strainId) continue;
+    if (b.due && b.due > jetzt) continue;
+    for (const bag of b.bags || []) {
+      const w = b.bagWeights && Number.isFinite(b.bagWeights[bag]) ? b.bagWeights[bag] : b.bagKg || 3;
+      if (Math.round(w * 10) / 10 !== f.size) continue;
+      const last = placed.get(String(bag).toUpperCase());
+      if (!last || last.action === 'REMOVE' || !last.to) continue;
+      const z = ZONE_BY_ID[toZone(last.to)];
+      if (z && z.role === 'contaminated') continue;
+      out.push({ bag, due: b.due || '' });
+    }
+  }
+  return out.sort((a, z) => a.due.localeCompare(z.due) || a.bag.localeCompare(z.bag)).map((x) => x.bag);
+}
+
+// Add: neue Kulturen dieser Art, mit Kennung, und dann ihre Etiketten. Wie
+// jede Laborarbeit endet es im Etiketten-Fenster. Körnerbrut nicht: die kommt
+// aus einer Charge.
+function lfAdd(f, n) {
+  const ms = (mushroomStrains || []).find((x) => x.id === f.strainId);
+  if (!ms || f.group) return;
+  // Körnerbrut: fertige Beutel ohne Etikett dazu, wie beim Zählen (kbzBuchen).
+  if (f.kind === 'KB') {
+    lfClose();
+    return kbzBuchen([{ strainId: f.strainId, kg: f.size, count: f.have + n }]);
+  }
+  lfClose();
+  const { newC, saved } = kulturenAnlegen({ type: f.kind, ms, wann: new Date(), qty: n, ml: f.size });
+  cprShow(
+    newC.map((c) => c.id),
+    saved
+  );
+  saved.then(() => loadLabStock()).catch(() => {});
+}
+// Die n ältesten hinaus, mit Rückgängig. wie: 'used' (Remove, im Labor
+// verbraucht), 'sold' (Verkauft) oder 'count' (beim Zählen fehlten sie). Ein
+// Beutel trägt das als Grund: verbraucht heißt dort "spawn", und "count" zählt
+// weder als Verbrauch noch als Kontamination. Eine Kultur kennt nur "used".
+async function lfOut(f, n, wie) {
+  const what = f.name + ' ' + _lfLang(f);
+  const meldung = t(wie === 'sold' ? 'lf.doneSold' : wie === 'count' ? 'lf.doneCount' : 'lf.doneOut', {
+    n,
+    what
+  });
+  // Beim Zählen gebucht wie die Monatszählung: auf dem Server, mit einem Rückgängig.
+  if (f.kind === 'KB' && wie === 'count') {
+    lfClose();
+    return kbzBuchen([{ strainId: f.strainId, kg: f.size, count: Math.max(0, f.have - n) }]);
+  }
+  if (f.kind === 'KB') {
+    const bags = _lfBeutel(f).slice(0, n);
+    if (bags.length < n) {
+      toast(t('lf.notEnough', { n: bags.length }), 'err');
+      return;
+    }
+    lfClose();
+    const entries = spawnBuchen(bags, wie === 'used' ? 'spawn' : wie);
+    showUndoBar(meldung, () => {
+      spawnZuruecknehmen(entries);
+      setTimeout(loadLabStock, 1500);
+    });
+    setTimeout(loadLabStock, 1500);
+    return;
+  }
+  const pick = _lfKulturen(f).slice(0, n);
+  if (pick.length < n) {
+    toast(t('lf.notEnough', { n: pick.length }), 'err');
+    return;
+  }
+  lfClose();
+  const vorher = pick.map((c) => [c, c.status]);
+  // Jede Kultur einzeln: was der Server abweist, steht hier wieder wie vorher,
+  // sonst zeigte das Telefon sie als weg und der Server zählte sie weiter.
+  const setze = (paare) =>
+    Promise.all(
+      paare.map(([c, status]) => {
+        const alt = c.status;
+        c.status = status;
+        return apiPatch('/api/cultures/' + encodeURIComponent(c.id), { status }).then((r) => {
+          if (!r || r.error) c.status = alt;
+          return r || { error: t('shelf.saveFailed') };
+        });
+      })
+    ).then((rs) => {
+      renderCultures();
+      loadLabStock();
+      const err = rs.find((r) => r && r.error);
+      if (err) toast(t('common.error') + ': ' + err.error, 'err');
+      return !err;
+    });
+  const ok = await setze(pick.map((c) => [c, wie === 'sold' ? 'sold' : 'used']));
+  if (ok) showUndoBar(meldung, () => setze(vorher));
+}
+function lfAct(a) {
+  if (!_lfSheet) return;
+  const f = _lfSheet.fach;
+  if (a === 'close') return lfClose();
+  if (a === 'print') return lfPrint();
+  if (f.group) return toast(t('lf.pickSize'), 'err');
+  const n = _lfN();
+  if (Number.isNaN(n)) return toast(t('shelf.wholeNumber'), 'err');
+  if (a === 'count') {
+    const diff = n - f.have;
+    if (!diff) {
+      lfClose();
+      return toast(t('lf.countSame', { n }));
+    }
+    if (diff > 0) return lfAdd(f, diff);
+    return lfOut(f, -diff, 'count');
+  }
+  if (!n) return toast(t('shelf.amountMissing'), 'err');
+  if (a === 'in') return lfAdd(f, n);
+  if (a === 'out') return lfOut(f, n, 'used');
+  if (a === 'sold') return lfOut(f, n, 'sold');
+}
+
+// Vom Scanner und aus der Glocke: das Blatt des Fachs, egal welcher Vorgang steht.
+async function lfScanned(id) {
+  const cam = document.getElementById('m-camscan');
+  if (cam && cam.classList.contains('open')) closeCamScan();
+  closeScanModal();
+  let r;
+  try {
+    r = await apiGet('/api/lab-fach/' + encodeURIComponent(id));
+  } catch {
+    r = null;
+  }
+  if (!r || !r.fach) {
+    setFb('err', t('lf.scanUnknown'));
+    return;
+  }
+  if (!_lbData) await loadLabStock();
+  lfOpen(r.fach.strainId, r.fach.slot);
+}
+
+// ── Etikett ── wie am Regal (shelfLabelCanvas): die Art groß, das Gefäß in
+// Großbuchstaben, eine Größe in einer eigenen Zeile. Das Spritzen-Etikett hat
+// keine Größe.
+// Das Band zeigt das Gefäß (Bild und Wort, bei Körnerbrut die Größe darunter),
+// der Text darunter die Art, in der Größe für Artnamen.
+const LF_BILD = { LC: 'glas', PD: 'petri', SY: 'spritze', KB: 'koernerbeutel' };
+function _lfLabelItem(f) {
+  const wort = t(f.group ? (f.kind === 'KB' ? 'lf.label.KBall' : 'lf.label.SYall') : 'lf.label.' + f.kind);
+  const groesse =
+    f.group || f.kind === 'LC' || f.kind === 'PD'
+      ? ''
+      : f.kind === 'SY'
+        ? f.size + ' ml'
+        : String(f.size).replace('.', ',') + ' kg';
+  return {
+    id: f.id,
+    barcode: f.barcode,
+    bild: LF_BILD[f.kind],
+    band: wort + (groesse ? '\n' + groesse : ''),
+    etikett: f.name,
+    namePx: 32
+  };
+}
+function lfPreview(etikett) {
+  const box = document.getElementById('m-lf-preview');
+  if (!box || !_lfSheet) return;
+  if (!etikett || !etikett.barcode) {
+    box.innerHTML = '';
+    return;
+  }
+  if (typeof QRCode === 'undefined') {
+    const offen = _lfSheet;
+    loadVendorLibs().then(() => {
+      if (_lfSheet === offen) lfPreview(etikett);
+    });
+    return;
+  }
+  box.innerHTML = '';
+  const x = _lfLabelItem(etikett);
+  const cv = shelfLabelCanvas(x);
+  cv.className = 'shelf-label-cv';
+  cv.setAttribute('role', 'img');
+  cv.setAttribute('aria-label', t('shelf.labelOf', { name: x.name }));
+  box.appendChild(cv);
+}
+async function lfPrint() {
+  if (!_lfSheet) return;
+  let f = _lfSheet.fach;
+  // Spritzen: das Etikett fürs ganze Fach, angelegt, falls es noch keins gibt.
+  // Spritzen und Körnerbrut: das Etikett der Art, angelegt, falls es noch keins gibt.
+  const kind = f.kind;
+  if ((kind === 'SY' || kind === 'KB') && !f.group) f = (_lfArt(f.strainId) || {})[kind.toLowerCase()] || { kind };
+  if ((kind === 'SY' || kind === 'KB') && !f.barcode) f = (await _lfHolen(_lfSheet.strainId, kind)) || {};
+  if (!f.barcode) return toast(t('shelf.saveFailed'), 'err');
+  if (typeof QRCode === 'undefined') await loadVendorLibs();
+  const err = await sendToPrinter(shelfLabelZPL(shelfLabelCanvas(_lfLabelItem(f)), 1));
+  if (err) toast(t('shelf.printFailed', { err }), 'err');
+  else toast(tp('shelf.printed', 1));
+}
+
+// ── Körnerbrut zählen ──────────────────────────────────────
+// Einmal im Monat: je Art die fertigen Beutel zu 1, 2 und 5 kg, vorbelegt mit
+// dem, was die App meint. Man tippt nur die Zahlen um, die nicht stimmen, und
+// bucht alles mit einem Knopf (db.zaehleKoernerbrut): zu wenige gehen als
+// "beim Zählen ausgebucht" hinaus, zu viele kommen als fertige Beutel "aus der
+// Zählung" dazu. Ein Rückgängig nimmt die ganze Zählung zurück.
+const KBZ_KG = [1, 2, 5];
+function _kbzFach(sp, kg) {
+  return (sp.fach || []).find((f) => f.kind === 'KB' && Number(f.size) === kg) || { have: 0, growing: 0 };
+}
+function _kbzArten() {
+  return _lbSpecies().filter((sp) => !sp.ruht || (sp.fach || []).some((f) => f.kind === 'KB' && (f.have || f.growing)));
+}
+async function kbzOpen() {
+  await loadLabStock();
+  const arten = _kbzArten();
+  document.getElementById('kbz-list').innerHTML = arten.length
+    ? arten
+        .map(
+          (sp) =>
+            `<div class="kbz-sp"><b>${esc(sp.name)}</b>` +
+            KBZ_KG.map((kg) => {
+              const f = _kbzFach(sp, kg);
+              return (
+                `<label class="kbz-cell"><span>${kg} kg</span><input type="number" inputmode="numeric" min="0" step="1" value="${f.have}"` +
+                ` data-kbz-strain="${sp.strainId}" data-kbz-kg="${kg}" data-kbz-alt="${f.have}"` +
+                ` aria-label="${esc(sp.name + ' ' + kg + ' kg')}" />` +
+                `<small>${f.growing ? esc(t('kbz.growing', { n: f.growing })) : ''}</small></label>`
+              );
+            }).join('') +
+            '</div>'
+        )
+        .join('')
+    : `<p class="fs-meta muted">${esc(t('kbz.none'))}</p>`;
+  kbzRender();
+  document.getElementById('m-kbz').classList.add('open');
+}
+function kbzClose() {
+  document.getElementById('m-kbz').classList.remove('open');
+}
+function _kbzAenderungen() {
+  const out = [];
+  for (const el of document.querySelectorAll('#kbz-list input[data-kbz-strain]')) {
+    const v = el.value.trim();
+    const n = v === '' ? NaN : Number(v);
+    const alt = Number(el.dataset.kbzAlt);
+    const anders = Number.isInteger(n) && n >= 0 && n !== alt;
+    el.parentElement.classList.toggle('kbz-diff', anders);
+    el.parentElement.classList.toggle('kbz-bad', v !== '' && !(Number.isInteger(n) && n >= 0));
+    if (anders) {
+      const sp = _lbSpecies().find((x) => x.strainId === Number(el.dataset.kbzStrain));
+      out.push({
+        strainId: Number(el.dataset.kbzStrain),
+        kg: Number(el.dataset.kbzKg),
+        count: n,
+        text: (sp ? sp.name : '') + ' ' + el.dataset.kbzKg + ' kg: ' + alt + ' → ' + n
+      });
+    }
+  }
+  return out;
+}
+function kbzRender() {
+  const a = _kbzAenderungen();
+  document.getElementById('kbz-sum').textContent = a.length ? a.map((x) => x.text).join(' · ') : t('kbz.allRight');
+  const go = document.getElementById('kbz-go');
+  go.disabled = !a.length;
+  go.textContent = a.length ? tp('kbz.apply', a.length) : t('kbz.applyNone');
+}
+// Bucht Zählungen auf dem Server; danach Rückgängig für alles zusammen.
+async function kbzBuchen(changes) {
+  const r = await apiPost('/api/lab-fach/zaehlung', { changes: changes.map(({ strainId, kg, count }) => ({ strainId, kg, count })) });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('shelf.saveFailed'), 'err');
+    return;
+  }
+  pollSync();
+  loadLabStock();
+  if (!r.changes || !r.changes.length) {
+    toast(t('kbz.nothing'));
+    return;
+  }
+  showUndoBar(tp('kbz.done', r.changes.length), async () => {
+    const u = await apiPost('/api/lab-fach/zaehlung/zurueck', { removed: r.removed, added: r.added });
+    if (!u || u.error) toast(u && u.error ? u.error : t('shelf.saveFailed'), 'err');
+    else toast(t('kbz.undone'));
+    pollSync();
+    loadLabStock();
+  });
+}
+function kbzWire() {
+  document.getElementById('gr-zaehlen').addEventListener('click', kbzOpen);
+  const m = document.getElementById('m-kbz');
+  m.addEventListener('click', (e) => {
+    if (e.target === m || e.target.closest('[data-kbz-act="close"]')) return kbzClose();
+    if (e.target.closest('#kbz-go')) {
+      const a = _kbzAenderungen();
+      if (!a.length) return;
+      kbzClose();
+      kbzBuchen(a);
+    }
+  });
+  m.addEventListener('input', kbzRender);
+  m.addEventListener('focusin', (e) => {
+    if (e.target.matches('input[data-kbz-strain]')) e.target.select();
+  });
+}
+
+function lfWire() {
+  const m = document.getElementById('m-labfach');
+  m.addEventListener('click', (e) => {
+    if (e.target === m) return lfClose();
+    const size = e.target.closest('[data-lf-size]');
+    if (size && _lfSheet) return lfOpen(_lfSheet.strainId, size.dataset.lfSize);
+    const step = e.target.closest('[data-lf-step]');
+    if (step) return lfStep(Number(step.dataset.lfStep));
+    const min = e.target.closest('[data-lf-min]');
+    if (min) return lfMinStep(Number(min.dataset.lfMin));
+    const act = e.target.closest('[data-lf-act]');
+    if (act) lfAct(act.dataset.lfAct);
+  });
+  document.getElementById('m-lf-n').addEventListener('focus', (e) => e.target.select());
 }
 
 function renderInvStock() {
@@ -24464,7 +25411,12 @@ function gsPreview() {
     grainRh > 0
       ? ` <span class="fs-xs" style="color:var(--c-text-muted)">(${totalWet.toFixed(2)} kg wet − ${grainRh}% water)</span>`
       : '';
-  el.innerHTML = `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}`;
+  // Heute angesetzt: welche Beutel aus dem Regal gehen. Ein früheres Datum ist
+  // Bestand aus der Inventur und nimmt nichts.
+  const vomRegal = document.getElementById('lw-created')?.value ? '' : shelfSpawnPreview(lines);
+  el.innerHTML =
+    `<strong>${t('batch.grainNeeded')}</strong> ${totalDry.toFixed(2)} kg dry${hydrationNote} (${breakdown})<br>${t('batch.inStock')} ${avail.toFixed(2)} kg \u2192 ${enough ? '\u2713 ' + t('batch.sufficient') : '\u26A0 ' + t('batch.notEnough')}` +
+    (vomRegal ? '<br>' + esc(vomRegal) : '');
   el.style.display = 'block';
 }
 // opts.ohneFenster: das Fenster zum Einlagern und für die Etiketten kommt nicht
@@ -24566,7 +25518,10 @@ function createGrainBatch(opts) {
     deltas.push({ mat: 'grain', deltaKg: -grainUsed, type: 'batch', ref: batchId });
   }
   // Send bags as [{id, bagKg}] to the server
-  const apiPayload = Object.assign({}, batchObj, { bags, deltas });
+  // shelfDraw: heute angesetzt, also kommen die Beutel aus dem Regal (der
+  // Server weiß, welcher Artikel für welche Größe steht). Bestand aus der
+  // Inventur nimmt nichts, wie beim Korn.
+  const apiPayload = Object.assign({}, batchObj, { bags, deltas, shelfDraw: bucht });
   // Disable while in flight: genGrainBatchId numbers off the local batches array,
   // which already holds this batch, so a double-tap creates a second distinct
   // batch and deducts the grain twice.
@@ -24595,6 +25550,7 @@ function createGrainBatch(opts) {
           barcodeByEntity.set('bag:' + id, bc);
         }
       }
+      shelfSpawnToast(r && r.shelfMoves);
       // Grain spawn is usually made from a liquid culture that survives many
       // uses, so ask rather than assume. Ein Körnerbeutel (Körner aus Körnern)
       // geht dagegen ganz hinein und wird ohne Frage ausgebucht.
@@ -24785,7 +25741,14 @@ function openBagInfo(bagId, batchId, batch) {
   let currentLoc = t('bagInfo.notPlaced');
   if (bagLogs.length) {
     const last = bagLogs[bagLogs.length - 1];
-    if (last.action === 'REMOVE') currentLoc = istVerbraucht(last) ? t('bagInfo.usedUp') : t('bagInfo.removed');
+    if (last.action === 'REMOVE')
+      currentLoc = istVerbraucht(last)
+        ? t('bagInfo.usedUp')
+        : last.reason === 'sold'
+          ? t('bagInfo.soldState')
+          : last.reason === 'count'
+            ? t('bagInfo.countedOut')
+            : t('bagInfo.removed');
     else if (last.action === 'ADD' || last.action === 'MOVE') currentLoc = last.to || 'Unknown';
   }
   // Harvests for this bag
@@ -24967,6 +25930,12 @@ function renderBiActions() {
   html +=
     '<div style="display:flex;gap:8px;margin-bottom:8px">' +
     `<button type="button" data-bi="move" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.moveElsewhere'))}</button>` +
+    // Verkauft: ein Growkit oder ein Beutel Körnerbrut ging an einen Kunden.
+    // Welcher Beutel das war, weiß nur, wer ihn scannt; deshalb hier, Beutel
+    // für Beutel, und nicht aus der Bestellung.
+    (cur.removed
+      ? ''
+      : `<button type="button" data-bi="sold" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('bagInfo.sold'))}</button>`) +
     `<button type="button" data-bi="remove" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('bagInfo.discard'))}</button>` +
     '</div>';
   html += `<button type="button" data-bi="contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('bagInfo.reportContam'))}</button>`;
@@ -25012,17 +25981,28 @@ function biMoveTo(dest) {
 // Umziehen, und ein Fehltipp kostet einen Tipp: Rückgängig, oder ↩ in der
 // Kamera. Die Kamera geht vor dem Buchen auf, damit die Meldung dort steht.
 function biMarkUsed() {
+  biMarkOut('spawn');
+}
+// Verkauft: derselbe Weg hinaus wie Verbraucht, mit dem Grund "sold". Er zählt
+// nicht als Verlust (getContaminationReport) und steht im Beutel als verkauft.
+function biMarkSold() {
+  biMarkOut('sold');
+}
+function biMarkOut(reason) {
   const b = batches.find((x) => x.batchId && x.batchId.toUpperCase() === (biBatchId || '').toUpperCase());
   if (!b || !biBagId) return;
+  const sold = reason === 'sold';
   document.getElementById('m-baginfo').classList.remove('open');
   biRearmScanner();
-  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], 'spawn', { sitzung: true });
+  const entries = spawnBuchen(biWholeBatch ? b.bags || [] : [biBagId], reason, { sitzung: true });
   if (!entries.length) {
-    setFb('warn', t('scanFb.alreadyUsed', { bag: biBagId }));
+    setFb('warn', t('scanFb.alreadyOut', { bag: biBagId }));
     return;
   }
   const msg =
-    entries.length === 1 ? t('bagInfo.usedOne', { bag: entries[0].bag }) : t('bagInfo.usedN', { n: entries.length, id: b.batchId });
+    entries.length === 1
+      ? t(sold ? 'bagInfo.soldOne' : 'bagInfo.usedOne', { bag: entries[0].bag })
+      : t(sold ? 'bagInfo.soldN' : 'bagInfo.usedN', { n: entries.length, id: b.batchId });
   setFb('ok', msg, entries.length === 1 ? entries[0] : undefined);
   showUndoBar(msg, () => spawnZuruecknehmen(entries));
   updateSD();
@@ -28666,6 +29646,11 @@ function processScan(raw, opts) {
       // Eine Forschungsprobe: sie oeffnet sich, egal welcher Vorgang steht.
       prbGescannt(Number(entry.id));
       return;
+    } else if (entry.type === 'labfach') {
+      // Ein Laborfach-Etikett (Petri, FK, Spritzen, Körnerbrut einer Art): sein
+      // Blatt, wie beim Regal, egal welcher Vorgang gerade steht.
+      lfScanned(entry.id);
+      return;
     } else if (entry.type === 'shelf') {
       // Ein Regal-Etikett: das Blatt mit Rein, Raus und Zählen, egal welcher
       // Vorgang gerade steht. Am Fach gibt es nur diese drei.
@@ -29389,7 +30374,8 @@ function ciHerkunftHtml(c) {
   );
 }
 // Was als Kultur auch im Shop steht.
-const CI_VERKAUFBAR = ['SY', 'PD'];
+// Flüssigkultur geht auch an Kunden, im Glas.
+const CI_VERKAUFBAR = ['SY', 'PD', 'LC'];
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
   if (!el) return;
@@ -29402,7 +30388,7 @@ function renderCiActions(c) {
   // Ob aus dieser Kultur überhaupt etwas angesetzt werden kann.
   const alsHerkunft = bmpArten(c.type).length > 0;
   let html = '';
-  // Spritzen und Petrischalen gehen auch in den Versand. Verkauft steht dann
+  // Spritzen, Petrischalen und FK-Gläser gehen auch in den Versand. Verkauft steht dann
   // zuoberst: es ist der haeufigste Weg hinaus, und es haelt die Zahl ehrlich,
   // die Billbee den Shops meldet (syringe-stock.js).
   if (aktiv && CI_VERKAUFBAR.includes(c.type))
@@ -32354,6 +33340,8 @@ async function pushBatchCaldav(batch) {
       if (el.classList.contains('open')) el.removeAttribute('hidden');
       else el.setAttribute('hidden', '');
     }
+    // Ein Fenster ging auf oder zu: der Verlauf der Zurück-Taste zieht nach.
+    _zAbgleichSpaeter();
   });
   document.querySelectorAll('.modal-bg').forEach((el) => {
     observer.observe(el, { attributes: true, attributeFilter: ['class'] });
@@ -33281,6 +34269,230 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// ═══ ZURÜCK: die Zurück-Taste des Telefons ═════════════════════════════════
+//
+// Die App legte nie etwas in den Verlauf des Browsers. Als installierte App am
+// Telefon hieß das: die Zurück-Geste fand nichts, was sie zurücknehmen konnte,
+// und schloss die App. Wer im Scan-Fenster, in einem Blatt oder auf einer
+// Unterseite stand, musste die App schließen und neu öffnen, um herauszukommen.
+//
+// Jetzt legt jeder Schritt, den ein Tipp öffnet, einen Eintrag in den Verlauf,
+// und die Zurück-Geste nimmt den obersten zurück:
+//   1. ein Fenster, das über der Seite liegt (Dialog, Kamera, Scan, Blatt) —
+//      mit seinem eigenen Schließen, wie Escape: nur die Klasse zu nehmen ließe
+//      die Kamera laufen und Rückfragen offen;
+//   2. die Seitenleiste am Telefon;
+//   3. eine geöffnete Sorte in einer Liste (Chargen, Kulturen, Körnerbrut);
+//   4. eine Unterseite von Admin am Telefon (zurück auf deren Liste);
+//   5. die Seite oder Unterseite, auf der man vorher war.
+// Ist nichts mehr davon da, gibt es keinen Eintrag mehr, und die nächste
+// Zurück-Geste schließt die App wie bei jeder anderen.
+//
+// Gezählt statt verfolgt: zurueckBedarf() sagt, wie viele Schritte es gerade
+// gibt, und zurueckAbgleich() bringt die Einträge im Verlauf auf diese Zahl.
+// Schließt jemand ein Fenster mit seinem eigenen Knopf, nimmt der Abgleich den
+// überzähligen Eintrag still wieder heraus. Neue Einträge legt der Abgleich
+// nach einem Tipp, denn Chrome überspringt Einträge, die eine Seite ohne
+// Berührung anlegt; und genau darum ist ein Tipp auch der Anlass.
+
+const _zSpur = []; // die Orte vorher (whereAmI), der letzte zuletzt
+let _zGerade = false; // ein Schritt zurück läuft: go() und openStab() merken nichts
+let _zBereit = false; // erst nach der ersten Berührung: der Start ist kein Schritt
+let _zZeit = 0;
+let _zTiefe = 0; // so viele Einträge hat die App gerade im Verlauf
+let _zIgnorieren = 0; // so viele popstate kommen von einem eigenen history.go
+let _zAbgleichTimer = null;
+const Z_SPUR_MAX = 20;
+
+// Vor einem Seitenwechsel: wo man war. go() und gleich danach openStab() sind
+// ein Schritt, nicht zwei; deshalb zählt ein zweiter Aufruf kurz danach nicht.
+function zurueckMerk(page, sub) {
+  if (_zGerade || !_zBereit) return;
+  const w = whereAmI();
+  if (!w.page) return;
+  if (page === w.page && (sub == null || 'st-' + page + '-' + sub === w.stab)) return;
+  const jetzt = Date.now();
+  if (jetzt - _zZeit < 400) return;
+  _zZeit = jetzt;
+  _zSpur.push(w);
+  if (_zSpur.length > Z_SPUR_MAX) _zSpur.shift();
+  _zAbgleichSpaeter();
+}
+
+// Dorthin, wo man war. Restore nach einem Update geht denselben Weg.
+function gehZuOrt(w) {
+  if (!w || !w.page || !w.btnId) return;
+  const seite = document.getElementById('p-' + w.page);
+  if (!seite || !document.getElementById(w.btnId)) return;
+  go(w.page, w.btnId);
+  // Den Reiter wie mit einem Tipp öffnen. Auf einer Seite mit Liste der Reiter
+  // (Admin am Telefon) nur, wenn man in ihm stand — sonst stand man auf der Liste.
+  const mitListe = seite.classList.contains('stab-drill') && sbIsPhone();
+  if (w.stab && (w.drilled || !mitListe)) {
+    const r = document.getElementById(w.stab);
+    if (r) r.click();
+  }
+  if (mitListe && !w.drilled) seite.classList.remove('stab-drilled');
+}
+
+// Was gerade über der Seite liegt, sichtbar. GS_OVERLAY_SEL kennt alle Arten
+// (siehe gsCovered); ein Element ohne Rechtecke ist nicht zu sehen.
+function _zOverlays() {
+  return [...document.querySelectorAll(GS_OVERLAY_SEL)].filter((el) => el.getClientRects().length);
+}
+// Das oberste: der höchste z-index, bei Gleichstand das spätere im Dokument —
+// so legt der Browser sie auch übereinander.
+function _zOben(liste) {
+  let oben = null;
+  let hoch = -Infinity;
+  for (const el of liste) {
+    const z = parseInt(window.getComputedStyle(el).zIndex, 10) || 0;
+    if (z >= hoch) {
+      hoch = z;
+      oben = el;
+    }
+  }
+  return oben;
+}
+// Fenster mit eigenem Schließen. Wer hier fehlt, verliert nur die Klasse
+// (oder sein display); das reicht für Fenster ohne Zustand.
+const _Z_SCHLIESSEN = {
+  'm-confirm': () => closeConfirm(),
+  'm-confirm3': () => closeConfirm3(),
+  'm-prompt': () => closePrompt(),
+  'm-search': () => gsClose(),
+  'm-camscan': () => closeCamScan(),
+  'm-bagselect': () => bsClose(),
+  'm-work-flow': () => wkfClose(),
+  'm-dayqty': () => closeDayQty(),
+  'm-rhythm': () => closeRhythmEditor(),
+  'm-note': () => closeNote(),
+  'm-shelf': () => shelfSheetClose(),
+  'm-labfach': () => lfClose(),
+  'm-kbz': () => kbzClose(),
+  'm-lb': () => lbSheetClose(),
+  'm-culture-print': () => cprClose(),
+  'm-subinfo': () => closeSubstrateInfo(),
+  'm-photo-annotate': () => closeAnnotate(),
+  'm-cam-edit': () => closeCameraEdit(),
+  'm-batchadd': () => closeBatchAdd(),
+  'm-contam-detail': () => closeContamDetail(),
+  'm-contam-report': () => closeContamReport(),
+  'm-cal-print': () => closeCalPrintModal(),
+  'change-pw-modal': () => hideChangePasswordModal(),
+  'ms-quick-modal': () => msQuickClose(),
+  'm-beimpfen': () => bmpClose(),
+  'ship-modal': () => shipModalClose(),
+  'scan-overlay': () => closeScanModal()
+};
+function _zSchliesse(el) {
+  // Eine frisch angelegte Charge muss erst einen Platz bekommen (wie Escape).
+  if (el.id === 'm-move-batch' && _zpMandatory()) return;
+  const f = _Z_SCHLIESSEN[el.id];
+  if (f) f();
+  else if (el.classList.contains('open')) el.classList.remove('open');
+  else el.style.display = 'none';
+}
+// Die Listen mit einem Blatt für die offene Sorte.
+function _zBlatt() {
+  for (const spec of [SL_CHARGEN, SL_KULTUREN, SL_KOERNER]) {
+    if (document.querySelector('#' + spec.id + '-list.sl-mit-blatt > .sl-grund')) return spec;
+  }
+  return null;
+}
+function _zAdminListe() {
+  const s = document.getElementById('p-settings');
+  return !!(s && s.classList.contains('active') && s.classList.contains('stab-drill') && s.classList.contains('stab-drilled') && sbIsPhone());
+}
+function _zLeiste() {
+  const sb = document.getElementById('sidebar');
+  return !!(sb && sb.classList.contains('sb-open'));
+}
+
+// Wie viele Schritte zurück es gerade gibt.
+function zurueckBedarf() {
+  return (
+    _zOverlays().length +
+    (_zLeiste() ? 1 : 0) +
+    (_zBlatt() ? 1 : 0) +
+    (_zAdminListe() ? 1 : 0) +
+    _zSpur.length
+  );
+}
+
+// Ein Schritt zurück. true, wenn es einen gab.
+function zurueckSchritt() {
+  const oben = _zOben(_zOverlays());
+  if (oben) {
+    _zSchliesse(oben);
+    return true;
+  }
+  if (_zLeiste()) {
+    sbClose();
+    return true;
+  }
+  const blatt = _zBlatt();
+  if (blatt) {
+    slZu(blatt);
+    return true;
+  }
+  if (_zAdminListe()) {
+    document.getElementById('p-settings').classList.remove('stab-drilled');
+    return true;
+  }
+  const w = _zSpur.pop();
+  if (w) {
+    _zGerade = true;
+    try {
+      gehZuOrt(w);
+    } finally {
+      _zGerade = false;
+    }
+    return true;
+  }
+  return false;
+}
+
+// Die Einträge im Verlauf auf die Zahl der Schritte bringen.
+function zurueckAbgleich() {
+  _zAbgleichTimer = null;
+  if (!_zBereit) return;
+  const soll = Math.min(zurueckBedarf(), 40);
+  if (soll > _zTiefe) {
+    while (_zTiefe < soll) window.history.pushState({ mtZurueck: ++_zTiefe }, '');
+  } else if (soll < _zTiefe) {
+    const n = _zTiefe - soll;
+    _zTiefe = soll;
+    _zIgnorieren++;
+    window.history.go(-n);
+  }
+}
+function _zAbgleichSpaeter() {
+  if (_zAbgleichTimer) return;
+  _zAbgleichTimer = setTimeout(zurueckAbgleich, 0);
+}
+
+window.addEventListener('popstate', () => {
+  if (_zIgnorieren > 0) {
+    _zIgnorieren--;
+    return;
+  }
+  _zTiefe = Math.max(0, _zTiefe - 1);
+  zurueckSchritt();
+  _zAbgleichSpaeter();
+});
+// Nach jeder Berührung: was sie geöffnet oder geschlossen hat, in den Verlauf.
+for (const ev of ['click', 'keyup', 'change']) {
+  document.addEventListener(
+    ev,
+    () => {
+      _zBereit = true;
+      _zAbgleichSpaeter();
+    },
+    true
+  );
+}
+
 initEventListeners();
 sbSyncInert();
 loadCurrentUser();
@@ -33840,6 +35052,7 @@ function initEventListeners() {
     if (a === 'contam') return biReportContam();
     if (a === 'remove') return biConfirmRemove();
     if (a === 'used') return biMarkUsed();
+    if (a === 'sold') return biMarkSold();
     // Same explicit target as the dashboard one-tap — this button names no tent
     // either, so it must not resolve to a different one.
     if (a === 'fruchtung') return biMoveTo(fruitingTarget());
@@ -34429,6 +35642,8 @@ function initEventListeners() {
       _lbRuhenOffen = !_lbRuhenOffen;
       return renderLabStock();
     }
+    const f = e.target.closest('[data-lf-slot]');
+    if (f) return lfOpen(parseInt(f.dataset.lfStrain, 10), f.dataset.lfSlot);
     const b = e.target.closest('[data-lb-strain]');
     if (b) lbSheetOpen(parseInt(b.dataset.lbStrain, 10));
   });
@@ -34959,6 +36174,8 @@ function initEventListeners() {
     renderShelf();
   });
   shelfWire();
+  lfWire();
+  kbzWire();
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
   });

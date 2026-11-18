@@ -5140,31 +5140,33 @@ tr:hover td {
   color: var(--c-amber-dark);
 }
 
-/* A species: a button the width of the card, because the whole row opens it. */
+/* A species: its name opens the species sheet, each number below opens its
+   Fach (lfOpen). */
 .lb-sp {
-  display: block;
-  width: 100%;
   padding: 10px 0;
-  border: 0;
   border-bottom: 1px solid var(--c-border-light);
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 .lb-sp:last-child {
   border-bottom: 0;
-}
-.lb-sp:focus-visible {
-  outline: 2px solid var(--c-primary);
-  outline-offset: 2px;
 }
 .lb-sp-h {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  width: 100%;
   margin-bottom: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lb-sp-h:focus-visible,
+button.lb-st:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
 }
 .lb-sp-h b {
   flex: 0 1 auto;
@@ -5183,8 +5185,14 @@ tr:hover td {
 }
 .lb-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
   gap: 4px;
+}
+button.lb-st {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .lb-st {
   display: flex;
@@ -11868,8 +11876,199 @@ button.wk-an-zeile:active {
   padding: 4px 0;
   font-size: max(0.8125rem, var(--fs-min));
 }
+/* Label settings on the Regal sheet: the pictures as buttons, then band and text. */
+.shelf-bilder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.shelf-bild {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 3px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-sec);
+  font: inherit;
+  font-size: max(0.75rem, var(--fs-min));
+  cursor: pointer;
+}
+.shelf-bild canvas {
+  width: 40px;
+  height: 40px;
+}
+.shelf-bild.on {
+  border: 2px solid var(--c-text);
+  padding: 2px;
+}
+.shelf-bild:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.shelf-etikett {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.shelf-etikett textarea,
+.shelf-etikett input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.shelf-etikett textarea {
+  resize: none;
+  text-transform: uppercase;
+}
 .shelf-rename input.shelf-per {
   flex: 0 0 72px;
+}
+/* The alarm, right under the stock number: the level as words, then − n +.
+   Both the Regal sheet and the lab Fach sheet use it. */
+.shelf-alarmrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0 12px;
+  padding: 6px 8px 6px 12px;
+  border: 1px dashed var(--c-border);
+  border-radius: 10px;
+}
+.shelf-alarmrow > span:first-child {
+  flex: 1;
+  min-width: 0;
+  color: var(--c-text-sec);
+  font-size: max(0.875rem, var(--fs-min));
+}
+.shelf-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shelf-mini .btn {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.125rem;
+}
+.shelf-mini b {
+  min-width: 3ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* Lab Fach sheet: the species, then the container next to it; sizes as chips. */
+.lf-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.lf-head h3 {
+  margin: 0;
+}
+.lf-what {
+  color: var(--c-text-muted);
+  font-weight: 600;
+}
+.lf-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+.lf-size {
+  min-height: 44px;
+  padding: 4px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-sec);
+  font: inherit;
+  cursor: pointer;
+}
+/* A size under its Soll: the same amber as the cell in Labor → Bestand. */
+.lf-size.low {
+  border-color: var(--c-amber-border);
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.lf-size.on {
+  background: var(--c-text);
+  border-color: var(--c-text);
+  color: var(--c-surface);
+  font-weight: 600;
+}
+/* `hidden` has to win over the display these rows set, as with .btn[hidden]:
+   the author rule beats the browser's [hidden]. Without this the Spritzen label
+   showed the count, the alarm and Add / Remove before a size was picked. */
+.shelf-now[hidden],
+.shelf-alarmrow[hidden],
+.shelf-amt[hidden],
+.shelf-acts[hidden],
+.lf-sizes[hidden] {
+  display: none;
+}
+/* Körnerbrut zählen: the name on its own line across the row, so it never has
+   to break inside a word; under it 1 / 2 / 5 kg, each field with its size. */
+.kbz-sp {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 4px 10px;
+  align-items: start;
+}
+.kbz-list {
+  display: grid;
+  gap: 6px;
+}
+.kbz-sp {
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.kbz-sp b {
+  grid-column: 1 / -1;
+  font-size: 0.9375rem;
+}
+.kbz-cell {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+.kbz-cell input {
+  width: 60px;
+  min-height: 44px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.kbz-cell > span {
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+}
+.kbz-cell small {
+  min-height: 1.1em;
+  color: var(--c-text-muted);
+  font-size: max(0.6875rem, var(--fs-min));
+}
+.kbz-cell.kbz-diff input {
+  background: var(--c-amber-light);
+  border-color: var(--c-amber-border);
+  color: var(--c-amber-dark);
+}
+.kbz-cell.kbz-bad input {
+  border-color: var(--c-red);
+}
+.kbz-sum {
+  margin: 10px 0 0;
+  min-height: 1.4em;
+}
+.lf-size:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
 }
 
 /* ── Proben (Vorhaben → Proben) ──────────────────────────────
