@@ -1499,6 +1499,7 @@ const SALE_ALERT_EVERY_MS = 15 * 60 * 1000;
 function checkSaleAlerts() {
   if (WORKTREE_MODE) return;
   checkShelf();
+  checkLabFach();
   try {
     const neu = db.saleAlerts(database);
     if (!neu.length) return;
@@ -1530,6 +1531,10 @@ function checkShelf() {
   try {
     const moves = db.syncShelfOrders(database);
     if (moves) log('info', 'Shelf stock booked from orders', { moves });
+    // Koernerbrut bucht beim Anlegen und Loeschen selbst; das hier faengt nur,
+    // was an diesen Wegen vorbei geaendert wurde. Meist null.
+    const spawnMoves = db.syncShelfSpawn(database);
+    if (spawnMoves) log('info', 'Shelf stock booked from grain spawn', { moves: spawnMoves });
     const low = db.shelfLowAlerts(database);
     if (low.length) {
       const users = db.listUsers(database);
@@ -1549,9 +1554,35 @@ function checkShelf() {
     }
     // Nur wenn sich etwas bewegt hat, damit offene Seiten die neue Zahl holen.
     // Der nächste Lauf bucht nichts mehr, also kein Kreis.
-    if (moves || low.length) broadcastSSE();
+    if (moves || spawnMoves || low.length) broadcastSSE();
   } catch (e) {
     log('warn', 'Shelf check failed', { error: e.message });
+  }
+}
+// Laborfaecher (Petri, FK, Spritzen, Koernerbrut je Art): faellt eines unter
+// sein Soll, bekommt jeder Angemeldete einmal eine Glocke, wie beim Regal. Das
+// Soll ist dasselbe wie in Nachproduzieren; nur Faecher mit Etikett laeuten.
+function checkLabFach() {
+  try {
+    const low = db.labFachLowAlerts(database);
+    if (!low.length) return;
+    const users = db.listUsers(database);
+    for (const a of low) {
+      for (const u of users) {
+        db.createNotificationOnce(database, {
+          userId: u.id,
+          type: 'lab_low',
+          title: 'Nachproduzieren: ' + a.name + ' ' + a.text,
+          body: 'Noch ' + a.have + ' da' + (a.growing ? ', ' + a.growing + ' wachsen' : '') + ' (Soll ' + a.soll + ').',
+          linkType: 'labfach',
+          linkId: String(a.id)
+        });
+      }
+    }
+    log('info', 'Lab Fach low alerts raised', { items: low.length });
+    broadcastSSE();
+  } catch (e) {
+    log('warn', 'Lab Fach check failed', { error: e.message });
   }
 }
 function scheduleSaleAlerts() {
@@ -3562,7 +3593,15 @@ function printZPL(zplData, callback) {
   }
   // Every label that left the printer is remembered by its ID, so one whose
   // culture or bag never got saved shows up in the bell the same day.
+  //
+  // And it answers exactly once. When PowerShell overran its 15 seconds the
+  // timeout answered, killed the process, and then the process's own exit
+  // answered a second time; /api/print wrote its headers twice and the server
+  // logged "Cannot write headers after they are sent" (17.11.2026).
+  let beantwortet = false;
   const done = (err) => {
+    if (beantwortet) return;
+    beantwortet = true;
     if (!err) rememberPrintedLabels(zplData);
     callback(err);
   };
@@ -3662,7 +3701,12 @@ public class DOCINFO {
         return callback('Could not write PS script: ' + err2.message);
       }
 
+      // Once: the timeout and the killed process's exit both reach it, and the
+      // second unlink only logged a warning about a file that was already gone.
+      let aufgeraeumt = false;
       const cleanup = () => {
+        if (aufgeraeumt) return;
+        aufgeraeumt = true;
         fs.unlink(tmp, (e) => {
           if (e) log('warn', 'Failed to delete temp ZPL file', { error: e.message });
         });
@@ -9351,7 +9395,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const result = db.insertBatch(database, data, deltas, userId);
         autoPushBatchCaldav(data);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
+        // shelfMoves: was die Koernerbrut aus dem Regal genommen hat, fuer die Meldung.
+        jsonOk(res, {
+          ok: true,
+          bagBarcodes: result ? result.bagBarcodes : {},
+          shelfMoves: (result && result.shelfMoves) || []
+        });
       } catch (err) {
         safeErr(res, err);
       }
@@ -9398,7 +9447,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         const result = db.addBagsToBatch(database, id, add, data.newQty, bagKg, userId);
         broadcastSSE(res);
-        jsonOk(res, { ok: true, bagBarcodes: result ? result.bagBarcodes : {} });
+        jsonOk(res, {
+          ok: true,
+          bagBarcodes: result ? result.bagBarcodes : {},
+          shelfMoves: (result && result.shelfMoves) || []
+        });
       } catch (err) {
         safeErr(res, err);
       }
@@ -12609,6 +12662,63 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       withBody((data) => ({ item: db.setShelfSku(database, Number(skuMatch[1]), data.sku, data.perUnit) }));
     } else if (req.method === 'POST' && undoMatch) {
       run(() => ({ item: db.undoShelfMove(database, Number(undoMatch[1]), userId) }));
+    } else {
+      jsonErr(res, 404, 'Not found');
+    }
+    return;
+  }
+  // ── Laborfach: Etikett und Alarm je Art und Gefaess ──
+  // Das Blatt holt sein Fach (und legt es beim ersten Mal mit Etikettnummer an);
+  // der Alarm ist das Soll. Rein und raus geht ueber die Kulturen und Beutel
+  // selbst, nicht hier: das Fach zaehlt nichts eigenes.
+  if (req.url === '/api/lab-fach' || req.url.startsWith('/api/lab-fach/')) {
+    const idMatch = req.url.match(/^\/api\/lab-fach\/(\d+)$/);
+    const userId = (checkAuth(req) || {}).user_id || null;
+    const run = (fn) => {
+      try {
+        const out = fn();
+        broadcastSSE(res);
+        jsonOk(res, out);
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    };
+    const withBody = (fn) =>
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        run(() => fn(data || {}));
+      });
+    if (req.method === 'POST' && req.url === '/api/lab-fach') {
+      // Ein Fach, das es schon gibt, aendert nichts: dann bekommt auch kein
+      // anderes Geraet die Nachricht, alles neu zu laden.
+      jsonBody(req, res, (e, data) => {
+        if (e) {
+          jsonErr(res, 400, e.message);
+          return;
+        }
+        try {
+          const info = {};
+          const fach = db.ensureLabFach(database, Number((data || {}).strainId), (data || {}).slot, info);
+          if (info.created) broadcastSSE(res);
+          jsonOk(res, { fach });
+        } catch (err) {
+          jsonErr(res, 400, err.message);
+        }
+      });
+    } else if (req.method === 'POST' && req.url === '/api/lab-fach/zaehlung') {
+      // Koernerbrut zaehlen: { changes: [{ strainId, kg, count }] }.
+      withBody((data) => db.zaehleKoernerbrut(database, data.changes, userId));
+    } else if (req.method === 'POST' && req.url === '/api/lab-fach/zaehlung/zurueck') {
+      withBody((data) => db.zaehlungZurueck(database, data, userId));
+    } else if (req.method === 'GET' && idMatch) {
+      const fach = db.getLabFach(database, Number(idMatch[1]));
+      if (fach) jsonOk(res, { fach });
+      else jsonErr(res, 404, 'Dieses Fach gibt es nicht');
+    } else if (req.method === 'PATCH' && idMatch) {
+      withBody((data) => ({ fach: db.setLabFachAlarm(database, Number(idMatch[1]), data.soll) }));
     } else {
       jsonErr(res, 404, 'Not found');
     }

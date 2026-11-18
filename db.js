@@ -3290,6 +3290,86 @@ const MIGRATIONS = [
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_research_handoffs_sample ON research_handoffs(sample_id)');
     }
+  },
+  {
+    version: 115,
+    description: 'Laborfach: Etikett und Alarm je Art und Gefaess (Petri, FK, Spritze, Koernerbrut)',
+    fn(db) {
+      // Ein Fach im Labor ist eine Art in einem Gefaess: Shiitake-Petrischalen,
+      // Austernpilz-Spritzen 10 ml, Koernerbrut 3 kg. Es hat ein Etikett (Barcode
+      // Typ 'labfach') und einen Alarm. Gezaehlt wird es nicht hier: der Bestand
+      // sind die Schalen, Spritzen und Beutel selbst, wie bisher.
+      // min_stock gilt nur, wo die Art oder die Shop-SKU kein Soll fuehren
+      // (labFachSoll); low_alerted wie bei shelf_items.
+      db.exec(`CREATE TABLE IF NOT EXISTS lab_fach (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        strain_id   INTEGER NOT NULL REFERENCES mushroom_strains(id) ON DELETE CASCADE,
+        slot        TEXT NOT NULL,
+        min_stock   INTEGER,
+        low_alerted INTEGER NOT NULL DEFAULT 0,
+        created     TEXT NOT NULL,
+        UNIQUE(strain_id, slot)
+      )`);
+    }
+  },
+  {
+    version: 116,
+    description: 'Regal: Koernerbrut nimmt beim Beimpfen ihre Beutel aus dem Regal',
+    fn(db) {
+      // Sterile Beutel im Regal gehen in den Versand und werden beimpft, es sind
+      // dieselben. Ein Regal-Artikel kann darum fuer eine Beutelgroesse Koernerbrut
+      // stehen (spawn_kg); eine Charge in dieser Groesse nimmt ihre Beutel dann aus
+      // ihm. spawn_linked ist, seit wann: aeltere Chargen nimmt es nicht nachtraeglich.
+      const col = (t, c) => db.prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('${t}') WHERE name=?`).get(c).c;
+      if (!col('shelf_items', 'spawn_kg')) db.exec('ALTER TABLE shelf_items ADD COLUMN spawn_kg REAL');
+      if (!col('shelf_items', 'spawn_linked')) db.exec('ALTER TABLE shelf_items ADD COLUMN spawn_linked TEXT');
+      // Wann die Charge angelegt wurde, wenn sie aus dem Regal nimmt; leer bei
+      // Bestand aus der Inventur und bei allem von vorher.
+      if (!col('batches', 'shelf_draw')) db.exec('ALTER TABLE batches ADD COLUMN shelf_draw TEXT');
+      // Was je Charge und Beutelgroesse schon abgebucht ist, und aus welchem
+      // Artikel. Ohne Fremdschluessel auf batches: ist die Charge geloescht,
+      // bleibt die Zeile, bis der Abgleich die Beutel zurueckgelegt hat.
+      db.exec(`CREATE TABLE IF NOT EXISTS shelf_spawn_booked (
+        batch_id TEXT NOT NULL,
+        kg       REAL NOT NULL,
+        item_id  INTEGER NOT NULL REFERENCES shelf_items(id) ON DELETE CASCADE,
+        qty      INTEGER NOT NULL,
+        PRIMARY KEY (batch_id, kg)
+      )`);
+    }
+  },
+  {
+    version: 117,
+    description: 'Regal-Etikett: Bild, Band und Etikett-Text je Artikel',
+    fn(db) {
+      // Das Etikett am Regalfach hat oben ein schwarzes Band mit einem Bild und
+      // einem Wort (ALL-IN-ONE, WEIZEN, GLÄSER) und darunter den Text, auf den es
+      // ankommt (Hartholz, 1 kg, VOLL). Was wo steht, legt das Team am Artikel
+      // fest; der Code kennt nur die Bilder. Leer heisst: kein Bild, kein Band,
+      // und der Etikett-Text ist der Name.
+      const cols = new Set(
+        db
+          .prepare("SELECT name FROM pragma_table_info('shelf_items')")
+          .all()
+          .map((r) => r.name)
+      );
+      if (!cols.has('bild')) db.exec('ALTER TABLE shelf_items ADD COLUMN bild TEXT');
+      if (!cols.has('band')) db.exec('ALTER TABLE shelf_items ADD COLUMN band TEXT');
+      if (!cols.has('etikett')) db.exec('ALTER TABLE shelf_items ADD COLUMN etikett TEXT');
+    }
+  },
+  {
+    version: 118,
+    description: 'Wiederkehrende Aufgabe: auch monatlich, am Tag des Ankers',
+    fn(db) {
+      // "Koernerbrut zaehlen" faellt einmal im Monat an, am 1. Alle N Wochen
+      // trifft das nicht: vier Wochen wandern durch den Monat. monthly = 1
+      // heisst: jeden Monat am Tag des Ankers (am 31. im Februar am letzten).
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('recurring_task') WHERE name = 'monthly'")
+        .get();
+      if (!has.c) db.exec('ALTER TABLE recurring_task ADD COLUMN monthly INTEGER NOT NULL DEFAULT 0');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3560,8 +3640,35 @@ function _shelfRow(db, r) {
     sortOrder: r.sort_order,
     barcode: bc ? bc.barcode : null,
     skus,
+    // Fuer welche Beutelgroesse Koernerbrut dieser Artikel beim Beimpfen
+    // abgibt, oder null.
+    spawnKg: r.spawn_kg == null ? null : r.spawn_kg,
+    bild: r.bild || '',
+    band: r.band || '',
+    etikett: r.etikett || '',
     updated: r.updated
   };
+}
+
+// Die Bilder, die ein Etikett im Band tragen kann. Gezeichnet werden sie in
+// app.js (ETIKETT_BILDER), dieselben Namen.
+const ETIKETT_BILDER = ['glas', 'glas-leer', 'petri', 'spritze', 'koernerbeutel', 'growkit', 'cvg', 'weizen', 'baum'];
+// Das Band: hoechstens zwei Zeilen, je eine kurze; der Etikett-Text darunter.
+function _shelfBand(v) {
+  const zeilen = String(v == null ? '' : v)
+    .split(/\r?\n/)
+    .map((z) => z.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+  if (zeilen.length > 2) throw new Error('Das Band hat höchstens zwei Zeilen.');
+  if (zeilen.some((z) => z.length > 16)) throw new Error('Eine Zeile im Band hat höchstens 16 Zeichen.');
+  return zeilen.join('\n');
+}
+function _shelfEtikett(v) {
+  const t = String(v == null ? '' : v)
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (t.length > 40) throw new Error('Der Etikett-Text hat höchstens 40 Zeichen.');
+  return t;
 }
 
 function listShelfItems(db) {
@@ -3622,14 +3729,39 @@ function updateShelfItem(db, id, patch) {
     if (!Number.isInteger(min) || min < 0 || min > SHELF_STEP_MAX)
       throw new Error('Der Alarm-Stand ist eine ganze Zahl ab 0.');
   }
+  let spawnKg = cur.spawn_kg;
+  if (patch.spawnKg !== undefined) {
+    if (patch.spawnKg === null || patch.spawnKg === '' || Number(patch.spawnKg) === 0) spawnKg = null;
+    else {
+      const kg = Number(patch.spawnKg);
+      if (!Number.isFinite(kg) || kg <= 0 || kg > 50)
+        throw new Error('Die Beutelgröße ist eine Zahl in kg, größer als 0 und höchstens 50.');
+      spawnKg = _spawnKgKey(kg);
+    }
+  }
+  let bild = cur.bild || '';
+  if (patch.bild !== undefined) {
+    bild = String(patch.bild || '');
+    if (bild && !ETIKETT_BILDER.includes(bild)) throw new Error('Dieses Bild gibt es nicht.');
+  }
+  const band = patch.band !== undefined ? _shelfBand(patch.band) : cur.band || '';
+  const etikett = patch.etikett !== undefined ? _shelfEtikett(patch.etikett) : cur.etikett || '';
   if (active) _shelfNameFrei(db, name, cur.id);
-  db.prepare('UPDATE shelf_items SET name=?, active=?, min_stock=?, updated=? WHERE id=?').run(
-    name,
-    active,
-    min,
-    new Date().toISOString(),
-    cur.id
-  );
+  if (active && spawnKg != null) {
+    const clash = db
+      .prepare('SELECT name FROM shelf_items WHERE active=1 AND ROUND(spawn_kg, 1)=? AND id<>?')
+      .get(spawnKg, cur.id);
+    if (clash)
+      throw new Error(
+        'Körnerbrut ' + String(spawnKg).replace('.', ',') + ' kg nimmt schon aus „' + clash.name + '“. Dort erst lösen.'
+      );
+  }
+  const now = new Date().toISOString();
+  // Neu verknuepft: ab jetzt. Chargen von vorher nimmt der Artikel nicht nachtraeglich.
+  const linked = spawnKg == null ? null : spawnKg === cur.spawn_kg ? cur.spawn_linked : now;
+  db.prepare(
+    'UPDATE shelf_items SET name=?, active=?, min_stock=?, spawn_kg=?, spawn_linked=?, bild=?, band=?, etikett=?, updated=? WHERE id=?'
+  ).run(name, active, min, spawnKg, linked, bild || null, band || null, etikett || null, now, cur.id);
   incrementDataVersion(db);
   return getShelfItem(db, cur.id);
 }
@@ -3682,6 +3814,8 @@ function undoShelfMove(db, logId, userId) {
   if (!row || row.kind === 'undo') throw new Error('Diese Buchung gibt es nicht.');
   if (row.kind === 'order')
     throw new Error('Eine Bestellung nimmt die App selbst zurück, wenn sie storniert wird. Sonst: Fach zählen.');
+  if (row.kind === 'spawn')
+    throw new Error('Das legt die App selbst zurück, wenn die Charge gelöscht wird. Sonst: Fach zählen.');
   if (row.undone) throw new Error('Das ist schon zurückgenommen.');
   const later = db
     .prepare("SELECT id FROM shelf_log WHERE item_id=? AND id>? AND undone=0 AND kind='count' LIMIT 1")
@@ -3816,6 +3950,100 @@ function syncShelfOrders(db) {
         ).run(p.orderId, p.sku, want.itemId, want.qty);
       else if (p.booked) db.prepare('DELETE FROM shelf_order_booked WHERE order_id=? AND sku=?').run(p.orderId, p.sku);
     }
+    if (moves) incrementDataVersion(db);
+  });
+  return moves;
+}
+
+// ── Koernerbrut aus dem Regal ──
+// Die sterilen Beutel im Regal sind dieselben, die beimpft werden. Steht ein
+// Artikel fuer eine Beutelgroesse (spawn_kg), nimmt eine neue Charge Koernerbrut
+// in dieser Groesse ihre Beutel aus ihm, in derselben Transaktion. Gebucht wird
+// wie bei den Bestellungen nur der Unterschied zu dem, was die Charge schon
+// genommen hat: Beutel ergaenzt nimmt mehr, Charge geloescht legt alles zurueck,
+// ein zweiter Lauf tut nichts. Was einmal aus einem Artikel kam, geht auch
+// dorthin zurueck, selbst wenn die Groesse inzwischen an einem anderen haengt.
+//
+// Nimmt nur, wer shelf_draw traegt: eine Charge, die die App beim Anlegen als
+// heute angesetzt bekam. Bestand aus der Inventur (frueheres Datum) und alles von
+// vor dem Verknuepfen bleibt, wie es ist. Der Bestand darf unter 0 gehen: die
+// Beutel sind beimpft, und eine Zahl unter 0 sagt, dass das Fach gezaehlt
+// werden will.
+const _spawnKgKey = (kg) => Math.round(Number(kg) * 10) / 10;
+
+function _bookShelfSpawn(db, batchId, userId) {
+  const batch = db.prepare('SELECT batch_type, shelf_draw FROM batches WHERE batch_id=?').get(batchId);
+  const want = new Map();
+  if (batch && batch.batch_type === 'grain' && batch.shelf_draw) {
+    for (const r of db
+      .prepare(
+        `SELECT COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+          WHERE b.batch_id = ?`
+      )
+      .all(batchId)) {
+      const k = _spawnKgKey(r.kg);
+      want.set(k, (want.get(k) || 0) + 1);
+    }
+  }
+  const booked = new Map(
+    db
+      .prepare('SELECT kg, item_id, qty FROM shelf_spawn_booked WHERE batch_id=?')
+      .all(batchId)
+      .map((r) => [_spawnKgKey(r.kg), r])
+  );
+  const now = new Date().toISOString();
+  const moves = [];
+  for (const kg of new Set([...want.keys(), ...booked.keys()])) {
+    const n = want.get(kg) || 0;
+    const b = booked.get(kg);
+    let itemId;
+    let delta;
+    if (b) {
+      itemId = b.item_id;
+      delta = b.qty - n;
+    } else {
+      if (!n) continue;
+      const item = db
+        .prepare('SELECT id FROM shelf_items WHERE active=1 AND ROUND(spawn_kg, 1)=? AND spawn_linked<=?')
+        .get(kg, batch.shelf_draw);
+      if (!item) continue;
+      itemId = item.id;
+      delta = -n;
+    }
+    if (n)
+      db.prepare(
+        `INSERT INTO shelf_spawn_booked(batch_id, kg, item_id, qty) VALUES(?,?,?,?)
+         ON CONFLICT(batch_id, kg) DO UPDATE SET qty=excluded.qty`
+      ).run(batchId, kg, itemId, n);
+    else db.prepare('DELETE FROM shelf_spawn_booked WHERE batch_id=? AND ROUND(kg, 1)=?').run(batchId, kg);
+    if (!delta) continue;
+    const cur = db.prepare('SELECT name, stock FROM shelf_items WHERE id=?').get(itemId);
+    if (!cur) continue;
+    const running = cur.stock + delta;
+    db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?').run(running, now, itemId);
+    db.prepare(
+      "INSERT INTO shelf_log(time, item_id, kind, delta, running, ref, user_id) VALUES(?,?,'spawn',?,?,?,?)"
+    ).run(now, itemId, delta, running, batchId, userId || null);
+    moves.push({ itemId, name: cur.name, delta, stock: running });
+  }
+  return moves;
+}
+
+// Alle Chargen auf einmal, fuer den Lauf alle 15 Minuten: faengt, was an den
+// Wegen vorbei geaendert wurde (eine Wiederherstellung loescht Chargen ohne
+// deleteBatchById). Gibt die Zahl der Buchungen zurueck.
+function syncShelfSpawn(db) {
+  const ids = db
+    .prepare(
+      `SELECT batch_id FROM batches WHERE batch_type = 'grain' AND shelf_draw IS NOT NULL
+       UNION SELECT batch_id FROM shelf_spawn_booked`
+    )
+    .all()
+    .map((r) => r.batch_id);
+  if (!ids.length) return 0;
+  let moves = 0;
+  _blockTx(db, () => {
+    for (const id of ids) moves += _bookShelfSpawn(db, id, null).length;
     if (moves) incrementDataVersion(db);
   });
   return moves;
@@ -6165,9 +6393,17 @@ function insertBatch(db, b, deltas, userId) {
         applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, d.type || 'batch', d.ref || b.batchId, userId || null);
       }
     }
+    // Koernerbrut, heute angesetzt: die Beutel kommen aus dem Regal
+    // (_bookShelfSpawn). Der Aufrufer sagt es mit shelfDraw, wie er mit deltas
+    // sagt, ob Korn abgeht; Bestand aus der Inventur schickt es nicht.
+    let shelfMoves = [];
+    if (batchType === 'grain' && b.shelfDraw === true) {
+      db.prepare('UPDATE batches SET shelf_draw=? WHERE batch_id=?').run(new Date().toISOString(), b.batchId);
+      shelfMoves = _bookShelfSpawn(db, b.batchId, userId);
+    }
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return { bagBarcodes };
+    return { bagBarcodes, shelfMoves };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -6334,9 +6570,11 @@ function addBagsToBatch(db, batchId, newBags, newQty, bagKg, userId) {
 
     // Assign numeric barcodes to new bags
     const bagBarcodes = assignBarcodes(db, 'bag', newBags);
+    // Nimmt die Charge aus dem Regal, nehmen die neuen Beutel mit.
+    const shelfMoves = _bookShelfSpawn(db, batchId, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return { bagBarcodes };
+    return { bagBarcodes, shelfMoves };
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -6437,6 +6675,8 @@ function deleteBatchById(db, batchId, userId) {
     );
     _verknuepfungGeht(db, 'batchId', [batchId], _werZuId(db, userId));
     db.prepare('DELETE FROM batches WHERE batch_id=?').run(batchId);
+    // Was die Charge aus dem Regal genommen hat, geht zurueck.
+    _bookShelfSpawn(db, batchId, userId);
     incrementDataVersion(db);
     db.exec('COMMIT');
   } catch (e) {
@@ -11344,8 +11584,19 @@ function listRhythmTasks(db) {
 // wird, hat nicht rückwirkend seit Januar gefehlt.
 //
 // In UTC gerechnet, damit die Sommerzeit nicht aus sieben Tagen 6,96 macht.
-function recurringDueOn(anchor, everyWeeks, date) {
+// Monatlich: der Tag des Ankers in jedem Monat, im kuerzeren Monat sein letzter.
+function _monatsTag(anchor, jahr, monat) {
+  const tag = Number(anchor.slice(8, 10));
+  const letzter = new Date(Date.UTC(jahr, monat + 1, 0)).getUTCDate();
+  return Math.min(tag, letzter);
+}
+function recurringDueOn(anchor, everyWeeks, date, monthly) {
   if (!anchor || !date || date < anchor) return false;
+  if (monthly) {
+    const j = Number(date.slice(0, 4));
+    const m = Number(date.slice(5, 7)) - 1;
+    return Number(date.slice(8, 10)) === _monatsTag(anchor, j, m);
+  }
   const n = Number(everyWeeks);
   if (!Number.isInteger(n) || n < 1) return false;
   const a = Date.parse(anchor + 'T00:00:00Z');
@@ -11368,8 +11619,25 @@ const RECURRING_AHEAD_DAYS = 6;
 // In UTC gerechnet: eine Woche ist hier 7 x 864e5, und das stimmt nur, solange
 // keine Zeitzone dazwischenfunkt. Ende Maerz hat eine Ortszeitwoche 167
 // Stunden, Ende Oktober 169.
-function recurringDueBetween(anchor, everyWeeks, von, bis) {
+function recurringDueBetween(anchor, everyWeeks, von, bis, monthly) {
   const out = [];
+  if (monthly) {
+    if (!anchor || !von || !bis) return out;
+    let j = Number(von.slice(0, 4));
+    let m = Number(von.slice(5, 7)) - 1;
+    for (let i = 0; i < 24; i++) {
+      const d =
+        String(j) + '-' + String(m + 1).padStart(2, '0') + '-' + String(_monatsTag(anchor, j, m)).padStart(2, '0');
+      if (d > bis) break;
+      if (d >= von && d >= anchor) out.push(d);
+      m++;
+      if (m > 11) {
+        m = 0;
+        j++;
+      }
+    }
+    return out;
+  }
   const n = Number(everyWeeks);
   if (!anchor || !Number.isInteger(n) || n < 1) return out;
   const takt = 7 * n * 864e5;
@@ -11388,7 +11656,7 @@ function recurringDueBetween(anchor, everyWeeks, von, bis) {
 function listRecurringTasks(db, now) {
   const heute = now ? new Date(now) : new Date();
   const zeilen = db
-    .prepare('SELECT id, name, every_weeks, anchor, active, created FROM recurring_task ORDER BY id')
+    .prepare('SELECT id, name, every_weeks, anchor, active, created, monthly FROM recurring_task ORDER BY id')
     .all();
   // Der Zeitraum richtet sich nach dem laengsten Takt, nicht nach einer Zahl
   // aus der Luft.
@@ -11398,7 +11666,10 @@ function listRecurringTasks(db, now) {
   // Ein Termin, der abgehakt WAR, kam ohne seinen Haken an und stand wieder als
   // versaeumt da; nochmal abzuhaken half nicht, weil der Haken auf demselben
   // Datum landete, das weiterhin ausserhalb lag.
-  const zurueck = zeilen.reduce((m, r) => Math.max(m, 7 * (r.every_weeks || 1)), RECURRING_ARREARS_DAYS);
+  const zurueck = zeilen.reduce(
+    (m, r) => Math.max(m, r.monthly ? 31 : 7 * (r.every_weeks || 1)),
+    RECURRING_ARREARS_DAYS
+  );
   const vonD = new Date(heute);
   vonD.setDate(vonD.getDate() - zurueck);
   const bisD = new Date(heute);
@@ -11414,6 +11685,7 @@ function listRecurringTasks(db, now) {
     id: r.id,
     name: r.name,
     everyWeeks: r.every_weeks,
+    monthly: r.monthly === 1,
     anchor: r.anchor,
     active: r.active === 1,
     done: (haken.get(r.id) || []).sort(),
@@ -11421,7 +11693,7 @@ function listRecurringTasks(db, now) {
     // einer zweiten Fassung derselben Regel noch einmal aus, und ein Test hielt
     // die beiden Fassungen gegeneinander -- eine Naht, die nur so lange haelt,
     // wie jemand daran denkt. Jetzt gibt es die Regel einmal.
-    due: recurringDueBetween(r.anchor, r.every_weeks, von, bis)
+    due: recurringDueBetween(r.anchor, r.every_weeks, von, bis, r.monthly === 1)
   }));
 }
 
@@ -11439,16 +11711,20 @@ function saveRecurringTask(db, t) {
   if (t.id !== undefined && t.id !== null && t.id !== '') {
     const id = Number(t.id);
     if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + t.id);
+    // Ohne Angabe bleibt, was die Aufgabe war: Pausieren schickt monthly mit,
+    // ein aelterer Aufrufer nicht, und dann wuerde sie still woechentlich.
+    const alt = db.prepare('SELECT monthly FROM recurring_task WHERE id = ?').get(id);
+    const monat = t.monthly === undefined ? (alt ? alt.monthly : 0) : t.monthly ? 1 : 0;
     const info = db
-      .prepare('UPDATE recurring_task SET name = ?, every_weeks = ?, anchor = ?, active = ? WHERE id = ?')
-      .run(name, every, anchor, aktiv, id);
+      .prepare('UPDATE recurring_task SET name = ?, every_weeks = ?, anchor = ?, active = ?, monthly = ? WHERE id = ?')
+      .run(name, every, anchor, aktiv, monat, id);
     if (!info.changes) throw new Error('No such task: ' + id);
     incrementDataVersion(db);
     return id;
   }
   const info = db
-    .prepare('INSERT INTO recurring_task(name, every_weeks, anchor, active, created) VALUES(?, ?, ?, ?, ?)')
-    .run(name, every, anchor, aktiv, new Date().toISOString());
+    .prepare('INSERT INTO recurring_task(name, every_weeks, anchor, active, created, monthly) VALUES(?, ?, ?, ?, ?, ?)')
+    .run(name, every, anchor, aktiv, new Date().toISOString(), t.monthly ? 1 : 0);
   incrementDataVersion(db);
   return Number(info.lastInsertRowid);
 }
@@ -11475,7 +11751,7 @@ function setRecurringDone(db, taskId, date, done, who) {
   const id = Number(taskId);
   if (!Number.isInteger(id) || id <= 0) throw new Error('Not a task id: ' + taskId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('Not a date: ' + date);
-  const t = db.prepare('SELECT every_weeks, anchor FROM recurring_task WHERE id = ?').get(id);
+  const t = db.prepare('SELECT every_weeks, anchor, monthly FROM recurring_task WHERE id = ?').get(id);
   if (!t) throw new Error('No such task: ' + id);
   if (done === false) {
     // Wegnehmen ohne Faelligkeitspruefung.
@@ -11487,7 +11763,8 @@ function setRecurringDone(db, taskId, date, done, who) {
     // Anlegen -- sonst ist genau das nicht aufraeumbar, was nicht mehr passt.
     db.prepare('DELETE FROM recurring_done WHERE task_id = ? AND date = ?').run(id, date);
   } else {
-    if (!recurringDueOn(t.anchor, t.every_weeks, date)) throw new Error('Not a due date for this task: ' + date);
+    if (!recurringDueOn(t.anchor, t.every_weeks, date, t.monthly === 1))
+      throw new Error('Not a due date for this task: ' + date);
     db.prepare('INSERT OR REPLACE INTO recurring_done(task_id, date, done, who) VALUES(?, ?, ?, ?)').run(
       id,
       date,
@@ -12665,10 +12942,12 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   // diese Ausnahme zählte jeder verbrauchte Beutel hier als Kontamination.
   // Ebenso "undo": den Grund trägt der Rückweg, mit dem die App eine
   // Verschiebung zurücknimmt (_undoMove in app.js). Ohne die Ausnahme zählte
-  // jedes Rückgängig hier als Kontamination.
+  // jedes Rückgängig hier als Kontamination. Und "sold": ein Beutel, der an
+  // einen Kunden ging (Verkauft im Beutel-Fenster), ist ebenso kein Verlust;
+  // "count" auch nicht: Beutel, die beim Zählen am Laborfach fehlten.
   let rows = db
     .prepare(
-      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' ORDER BY id"
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' AND reason <> 'count' ORDER BY id"
     )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
@@ -14626,6 +14905,7 @@ function labStock(db, now = new Date()) {
          FROM mushroom_strains ORDER BY name COLLATE NOCASE`
     )
     .all();
+  const faecher = labFaecher(db, now);
   const out = [];
   for (const ms of strains) {
     const imProgramm = ms.im_programm !== 0;
@@ -14676,9 +14956,468 @@ function labStock(db, now = new Date()) {
     // Laborseite nie wieder einschalten.
     const hatWas = items.some((i) => i.have > 0 || i.growing > 0 || i.shop || i.ordered > 0);
     const ruht = !imProgramm && !hatWas;
-    out.push({ strainId: ms.id, name: ms.name, kuerzel: ms.kuerzel || '', imProgramm, ruht, items });
+    out.push({
+      strainId: ms.id,
+      name: ms.name,
+      kuerzel: ms.kuerzel || '',
+      imProgramm,
+      ruht,
+      items,
+      fach: (faecher.get(ms.id) || {}).fach || [],
+      // Das Sammeletikett der Spritzen (Slot 'SY'), mit ihrer Summe.
+      sy: (faecher.get(ms.id) || {}).sy || null,
+      // Das Koernerbrut-Etikett der Art (Slot 'KB'), mit allen Beuteln zusammen.
+      kb: (faecher.get(ms.id) || {}).kb || null
+    });
   }
   return out;
+}
+
+// ── Laborfach: eine Art in einem Gefaess ──────────────────────
+// Ein Fach ist, was auf einem Etikett am Regal oder im Kuehlschrank steht:
+// Shiitake-Petrischalen, Austernpilz-Spritzen 10 ml, Koernerbrut 3 kg. Gezaehlt
+// wird es nicht eigens. Der Bestand sind die Schalen, Spritzen und Beutel selbst,
+// derselbe, den Billbee bekommt und Nachproduzieren liest; das Fach gibt ihm ein
+// Etikett zum Scannen und einen Alarm.
+//
+// Slot: 'LC' (FK-Glas), 'PD' (Petrischale), 'SY10' / 'SY20' / 'SY50' (Spritze je
+// Groesse), 'KB<kg>' (Koernerbrut je Beutelgroesse; 'KB3', auch 'KB1.5').
+// Dazu 'SY' allein: das Etikett fuer das Fach, in dem alle Spritzen einer Art
+// liegen. Es zaehlt nichts und hat keinen Alarm; wer es scannt, waehlt im
+// Blatt die Groesse. Koernerbrut liegt je Groesse woanders und hat deshalb
+// kein solches Sammeletikett.
+function _fachSlot(slot) {
+  const s = String(slot == null ? '' : slot)
+    .trim()
+    .toUpperCase();
+  if (s === 'LC' || s === 'PD') return { slot: s, kind: s, size: null };
+  // Das Sammeletikett: alle Spritzen einer Art, und seit der Monatszaehlung
+  // auch alle Beutel Koernerbrut einer Art (ein Etikett je Art statt je Groesse).
+  if (s === 'SY' || s === 'KB') return { slot: s, kind: s, size: null, group: true };
+  let m = s.match(/^SY(\d+)$/);
+  if (m && SYRINGE_SIZES.includes(Number(m[1]))) return { slot: s, kind: 'SY', size: Number(m[1]) };
+  m = s.match(/^KB(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const kg = Math.round(Number(m[1]) * 10) / 10;
+    if (kg > 0 && kg <= 50) return { slot: 'KB' + kg, kind: 'KB', size: kg };
+  }
+  throw new Error('Dieses Fach gibt es nicht: ' + slot);
+}
+const _kbSlot = (kg) => 'KB' + Math.round(Number(kg) * 10) / 10;
+const _FACH_ORDER = { LC: 0, PD: 1, SY: 2, KB: 3 };
+function _fachCmp(a, b) {
+  const x = _fachSlot(a);
+  const y = _fachSlot(b);
+  return _FACH_ORDER[x.kind] - _FACH_ORDER[y.kind] || (x.size || 0) - (y.size || 0);
+}
+
+// Wie das Fach in Meldungen heisst, nach dem Namen der Art.
+function labFachText(slot) {
+  const f = _fachSlot(slot);
+  if (f.kind === 'LC') return 'FK-Glas';
+  if (f.kind === 'PD') return 'Petri';
+  if (f.group) return f.kind === 'KB' ? 'Körnerbrut' : 'Spritzen';
+  if (f.kind === 'SY') return 'Spritze ' + f.size + ' ml';
+  return 'Körnerbrut ' + String(f.size).replace('.', ',') + ' kg';
+}
+
+// Was in jedem Fach ist, als "<Art>:<Slot>" → { have, growing, readyAt }. Gezaehlt
+// wie ueberall: Kulturen aktiv und gelagert; Koernerbrut, was im Regal steht,
+// fertig ab dem Faelligkeitstag der Charge (wie _grainSaleStock, aber jede
+// Beutelgroesse, auch die fuer die eigenen Bloecke).
+function _labFachCounts(db, nowIso) {
+  const out = new Map();
+  const st = SYRINGE_STOCK_STATUSES.map(() => '?').join(',');
+  const kulturen = db
+    .prepare(
+      `SELECT ms.id AS strain_id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END AS ml, COUNT(*) AS n
+         FROM cultures c JOIN mushroom_strains ms
+           ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
+        WHERE c.type IN ('LC', 'PD', 'SY') AND c.status IN (${st})
+        GROUP BY ms.id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END`
+    )
+    .all(...SYRINGE_STOCK_STATUSES);
+  for (const r of kulturen) {
+    const slot = r.type === 'SY' ? 'SY' + r.ml : r.type;
+    out.set(r.strain_id + ':' + slot, { have: r.n, growing: 0, readyAt: null });
+  }
+  const imRegal = getStockBagZoneMap(db);
+  const beutel = db
+    .prepare(
+      `SELECT b.bag_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.strain_id, ba.due
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all();
+  for (const r of beutel) {
+    if (!imRegal.has(r.bag_id)) continue;
+    const key = r.strain_id + ':' + _kbSlot(r.kg);
+    const z = out.get(key) || { have: 0, growing: 0, readyAt: null };
+    if (!r.due || r.due <= nowIso) z.have++;
+    else {
+      z.growing++;
+      if (!z.readyAt || r.due < z.readyAt) z.readyAt = r.due;
+    }
+    out.set(key, z);
+  }
+  return out;
+}
+
+// Welche Spritzen- und Beutelgroessen es je Art schon einmal gab, egal ob noch
+// etwas da ist: "<Art>:<Slot>". Eine leere Groesse soll mit 0 dastehen, nicht
+// aus der Zeile fallen; leer ist genau das, was man sehen muss.
+function _labFachJemals(db) {
+  const out = new Set();
+  for (const r of db
+    .prepare(
+      `SELECT DISTINCT ms.id AS strain_id, COALESCE(c.ml, 10) AS ml
+         FROM cultures c JOIN mushroom_strains ms
+           ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
+        WHERE c.type = 'SY'`
+    )
+    .all())
+    out.add(r.strain_id + ':SY' + r.ml);
+  for (const r of db
+    .prepare(
+      `SELECT DISTINCT ba.strain_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all())
+    out.add(r.strain_id + ':' + _kbSlot(r.kg));
+  return out;
+}
+
+function _fachCtx(db, now) {
+  const skus = new Map();
+  for (const s of db.prepare('SELECT * FROM syringe_stock_sku').all())
+    skus.set(s.strain_id + ':' + s.type + ':' + s.ml, s);
+  const barcodes = new Map(
+    db
+      .prepare("SELECT entity_id, barcode FROM barcodes WHERE entity_type = 'labfach'")
+      .all()
+      .map((r) => [String(r.entity_id), r.barcode])
+  );
+  return {
+    counts: _labFachCounts(db, now.toISOString()),
+    skus,
+    barcodes,
+    ordered: _openOrderedBySku(db),
+    rows: db.prepare('SELECT * FROM lab_fach').all(),
+    jemals: _labFachJemals(db)
+  };
+}
+
+// Ein Fach, wie die App es zeigt. Das Soll ist sein Alarm, und es steht, wo es
+// schon stand: an der Art fuer FK und Petri (min_lc, min_pd, dieselben Felder
+// wie Nachproduzieren und die Pilzsorten-Seite), an der Shop-SKU fuer eine
+// Spritzen- oder Beutelgroesse, die ein Shop verkauft; nur sonst am Fach selbst.
+// Knapp (low) heisst dasselbe wie gelb oder rot in Nachproduzieren (saleNeed).
+function _fachView(ctx, ms, slot, row) {
+  const f = _fachSlot(slot);
+  const imProgramm = ms.im_programm !== 0;
+  const kopf = {
+    id: row ? row.id : null,
+    barcode: row ? ctx.barcodes.get(String(row.id)) || null : null,
+    strainId: ms.id,
+    name: ms.name,
+    slot: f.slot,
+    kind: f.kind,
+    size: f.size
+  };
+  if (f.group) {
+    // Das Sammelfach (alle Spritzen, alle Beutel Koernerbrut einer Art): nur das
+    // Etikett und, zur Uebersicht, wie viele es zusammen sind. Alarm und Soll hat
+    // jede Groesse selbst.
+    let have = 0;
+    let growing = 0;
+    const pre = ms.id + ':' + f.kind;
+    for (const [key, c] of ctx.counts) {
+      if (!key.startsWith(pre) || !/\d/.test(key.slice(pre.length, pre.length + 1))) continue;
+      have += c.have;
+      growing += c.growing;
+    }
+    const leer = { readyAt: null, soll: null, ordered: 0, sku: '', low: false, urgency: null };
+    return { ...kopf, group: true, have, growing, imProgramm, ...leer };
+  }
+  const c = ctx.counts.get(ms.id + ':' + f.slot) || { have: 0, growing: 0, readyAt: null };
+  let sku = null;
+  if (f.kind === 'SY') sku = ctx.skus.get(ms.id + ':SY:' + f.size);
+  else if (f.kind === 'KB') sku = ctx.skus.get(ms.id + ':GS:' + f.size);
+  else if (f.kind === 'PD') sku = ctx.skus.get(ms.id + ':PD:0');
+  let soll;
+  if (f.kind === 'LC') soll = ms.min_lc;
+  else if (f.kind === 'PD') soll = ms.min_pd;
+  // Eine Groesse, die erst spaeter eine Shop-SKU bekam: deren Soll ist dann noch
+  // leer, und der Alarm, der am Fach stand, gilt weiter, bis jemand ihn neu setzt.
+  else soll = (sku && sku.soll) || (row ? row.min_stock : null);
+  soll = soll || null;
+  const ordered = sku ? ctx.ordered.get(sku.sku) || 0 : 0;
+  const need = saleNeed({ count: c.have, growing: c.growing, ordered, soll: imProgramm ? soll : null });
+  return {
+    ...kopf,
+    have: c.have,
+    growing: c.growing,
+    readyAt: c.readyAt,
+    soll,
+    ordered,
+    sku: sku ? sku.sku : '',
+    imProgramm,
+    low: need.make > 0,
+    urgency: need.urgency
+  };
+}
+
+const _FACH_STRAIN_COLS = 'id, name, im_programm, min_lc, min_pd';
+
+// Die Faecher je Art (Map Art-id → Liste), fuer Labor → Bestand. FK und Petri
+// hat jede Art. Eine Spritzen- oder Beutelgroesse steht da, sobald es sie gibt
+// oder je gab: etwas darin, schon einmal etwas darin (dann mit 0), ein
+// Etikett, eine Shop-SKU. Eine Art im Programm ohne jede
+// Spritze bekommt die 10er, damit man dort anfangen kann; die anderen Groessen
+// erreicht man im Blatt.
+function labFaecher(db, now = new Date()) {
+  const ctx = _fachCtx(db, now);
+  const rowBy = new Map(ctx.rows.map((r) => [r.strain_id + ':' + r.slot, r]));
+  const out = new Map();
+  for (const ms of db.prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains`).all()) {
+    const slots = new Set(['LC', 'PD']);
+    const pre = ms.id + ':';
+    for (const key of [...ctx.counts.keys(), ...rowBy.keys(), ...ctx.jemals]) {
+      if (key.startsWith(pre) && /^(SY|KB)\d/.test(key.slice(pre.length))) slots.add(key.slice(pre.length));
+    }
+    for (const [key, s] of ctx.skus) {
+      if (!key.startsWith(pre)) continue;
+      if (s.type === 'SY') slots.add('SY' + s.ml);
+      else if (s.type === 'GS') slots.add(_kbSlot(s.ml));
+    }
+    if (![...slots].some((s) => s.startsWith('SY')) && ms.im_programm !== 0) slots.add('SY10');
+    out.set(ms.id, {
+      fach: [...slots].sort(_fachCmp).map((s) => _fachView(ctx, ms, s, rowBy.get(pre + s))),
+      sy: _fachView(ctx, ms, 'SY', rowBy.get(pre + 'SY')),
+      kb: _fachView(ctx, ms, 'KB', rowBy.get(pre + 'KB'))
+    });
+  }
+  return out;
+}
+
+function getLabFach(db, id) {
+  const row = db.prepare('SELECT * FROM lab_fach WHERE id = ?').get(Number(id));
+  if (!row) return null;
+  const ms = db.prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains WHERE id = ?`).get(row.strain_id);
+  if (!ms) return null;
+  return _fachView(_fachCtx(db, new Date()), ms, row.slot, row);
+}
+
+// Das Fach einer Art holen, und anlegen, wenn es noch keins gibt: mit seiner
+// Nummer aus der Barcode-Liste, fuers Etikett. Das passiert, wenn jemand das
+// Blatt oeffnet; ein Etikett gibt es also fuer jedes Fach, das man sieht.
+function ensureLabFach(db, strainId, slot, info = {}) {
+  const f = _fachSlot(slot);
+  const ms = db.prepare('SELECT id FROM mushroom_strains WHERE id = ?').get(Number(strainId));
+  if (!ms) throw new Error('Diese Art gibt es nicht');
+  let row = db.prepare('SELECT id FROM lab_fach WHERE strain_id = ? AND slot = ?').get(ms.id, f.slot);
+  if (!row) {
+    row = _blockTx(db, () => {
+      const id = db
+        .prepare('INSERT INTO lab_fach(strain_id, slot, created) VALUES(?, ?, ?)')
+        .run(ms.id, f.slot, new Date().toISOString()).lastInsertRowid;
+      assignBarcode(db, 'labfach', String(id));
+      return { id };
+    });
+    incrementDataVersion(db);
+    info.created = true;
+  }
+  return getLabFach(db, row.id);
+}
+
+// Den Alarm eines Fachs setzen: 0 schaltet ihn aus. Geschrieben wird dorthin,
+// wo _fachView das Soll liest.
+function setLabFachAlarm(db, id, soll) {
+  const row = db.prepare('SELECT * FROM lab_fach WHERE id = ?').get(Number(id));
+  if (!row) throw new Error('Dieses Fach gibt es nicht');
+  const n = soll == null || soll === '' ? 0 : Number(soll);
+  if (!Number.isInteger(n) || n < 0 || n > 500) throw new Error('Der Alarm ist eine ganze Zahl von 0 bis 500');
+  const f = _fachSlot(row.slot);
+  if (f.group) throw new Error('Den Alarm hat jede Größe selbst');
+  if (f.kind === 'LC') db.prepare('UPDATE mushroom_strains SET min_lc = ? WHERE id = ?').run(n, row.strain_id);
+  else if (f.kind === 'PD') db.prepare('UPDATE mushroom_strains SET min_pd = ? WHERE id = ?').run(n, row.strain_id);
+  else {
+    const r = db
+      .prepare('UPDATE syringe_stock_sku SET soll = ? WHERE strain_id = ? AND type = ? AND ml = ?')
+      .run(n || null, row.strain_id, f.kind === 'SY' ? 'SY' : 'GS', f.size);
+    // Mit SKU gilt deren Soll; das am Fach wird geleert, sonst kaeme ein
+    // ausgeschalteter Alarm ueber den Rueckfall in _fachView wieder.
+    db.prepare('UPDATE lab_fach SET min_stock = ? WHERE id = ?').run(r.changes ? null : n || null, row.id);
+  }
+  incrementDataVersion(db);
+  return getLabFach(db, row.id);
+}
+
+// Welche Faecher gerade unter ihr Soll gefallen sind, wie shelfLowAlerts: jedes
+// nur einmal, bis es wieder reicht; dann ist der Alarm wieder scharf und die
+// Meldung in der Glocke erledigt. Nur Faecher mit Etikett: eine Art, die nie
+// jemand angesehen hat, laeutet nicht.
+function labFachLowAlerts(db, now = new Date()) {
+  const ctx = _fachCtx(db, now);
+  if (!ctx.rows.length) return [];
+  const strains = new Map(
+    db
+      .prepare(`SELECT ${_FACH_STRAIN_COLS} FROM mushroom_strains`)
+      .all()
+      .map((m) => [m.id, m])
+  );
+  const out = [];
+  _blockTx(db, () => {
+    for (const r of ctx.rows) {
+      const ms = strains.get(r.strain_id);
+      if (!ms) continue;
+      const v = _fachView(ctx, ms, r.slot, r);
+      if (v.group) continue;
+      if (v.low && !r.low_alerted) {
+        db.prepare('UPDATE lab_fach SET low_alerted = 1 WHERE id = ?').run(r.id);
+        out.push({ ...v, text: labFachText(v.slot) });
+      } else if (!v.low && r.low_alerted) {
+        db.prepare('UPDATE lab_fach SET low_alerted = 0 WHERE id = ?').run(r.id);
+        dismissNotificationsFor(db, 'lab_low', 'labfach', String(r.id));
+      }
+    }
+  });
+  return out;
+}
+
+// ── Koernerbrut zaehlen ───────────────────────────────────────
+// Einmal im Monat: je Art und Beutelgroesse, wie viele fertige Beutel wirklich
+// im Regal stehen. Im Alltag kommt jeder Beutel von selbst in den Bestand, wenn
+// seine Charge angelegt und das Etikett gedruckt wird; gezaehlt wird nur, um zu
+// sehen, ob die Zahl noch stimmt.
+//
+// Weniger als die App meinte: die aeltesten fertigen Beutel gehen hinaus, als
+// REMOVE mit dem Grund "count" (kein Verbrauch, keine Kontamination). Mehr: die
+// App legt sie an, als eigene Charge "aus der Zaehlung", fertig ab sofort, im
+// Spawn-Zelt. Die nimmt weder Korn vom Lager noch Weizen aus dem Regal.
+// Zurueck kommt das Ergebnis mit dem, was eine Rueckgaengig-Taste braucht.
+
+// Fertige Beutel einer Art und Groesse im Regal, die aeltesten zuerst.
+function _fertigeKoernerBeutel(db, strainId, kg, nowIso) {
+  const imRegal = getStockBagZoneMap(db);
+  return db
+    .prepare(
+      `SELECT b.bag_id, b.batch_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.due, ba.species, ba.strain
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id = ?`
+    )
+    .all(Number(strainId))
+    .filter((r) => imRegal.has(r.bag_id) && _kbSlot(r.kg) === _kbSlot(kg) && (!r.due || r.due <= nowIso))
+    .map((r) => ({ ...r, zone: imRegal.get(r.bag_id) }))
+    .sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')) || a.bag_id.localeCompare(b.bag_id));
+}
+
+// changes: [{ strainId, kg, count }] mit der gezaehlten Zahl fertiger Beutel.
+function zaehleKoernerbrut(db, changes, userId, now = new Date()) {
+  const nowIso = now.toISOString();
+  const plan = [];
+  for (const c of Array.isArray(changes) ? changes : []) {
+    const ms = db.prepare('SELECT id, name, kuerzel FROM mushroom_strains WHERE id = ?').get(Number(c.strainId));
+    if (!ms) throw new Error('Diese Art gibt es nicht');
+    const kg = Math.round(Number(c.kg) * 10) / 10;
+    if (!(kg > 0 && kg <= 50)) throw new Error('Die Beutelgröße ist eine Zahl in kg, größer als 0 und höchstens 50.');
+    const count = Number(c.count);
+    if (!Number.isInteger(count) || count < 0 || count > 500)
+      throw new Error('Gezählt wird eine ganze Zahl von 0 bis 500.');
+    const da = _fertigeKoernerBeutel(db, ms.id, kg, nowIso);
+    if (count !== da.length) plan.push({ ms, kg, count, da });
+  }
+  const zone =
+    db.prepare("SELECT id FROM zones WHERE role = 'spawn' ORDER BY id LIMIT 1").get() ||
+    db.prepare("SELECT id FROM zones WHERE role = 'incubation' ORDER BY id LIMIT 1").get();
+  const out = { removed: [], added: [], changes: [] };
+  const tag = _ddmmyy(now);
+  for (const p of plan) {
+    const vorher = p.da.length;
+    if (p.count < vorher) {
+      const weg = p.da.slice(0, vorher - p.count);
+      const ids = appendScanEntries(
+        db,
+        weg.map((b) => ({
+          time: nowIso,
+          action: 'REMOVE',
+          batch: b.batch_id,
+          bag: b.bag_id,
+          from: b.zone,
+          to: null,
+          species: b.species,
+          strain: b.strain,
+          reason: 'count'
+        })),
+        userId
+      );
+      out.removed.push(...ids.filter(Boolean));
+    } else {
+      if (!zone) throw new Error('Es gibt keine Zone für Körnerbrut. Lege unter Admin → Zonen eine an.');
+      const n = p.count - vorher;
+      const kurz = (p.ms.kuerzel || 'XX').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'XX';
+      let seq = 1;
+      let batchId;
+      do {
+        batchId = 'G-' + kurz + '-ZAEHL-' + tag + '-' + String(seq++).padStart(2, '0');
+      } while (db.prepare('SELECT 1 FROM batches WHERE batch_id = ?').get(batchId));
+      const bags = Array.from({ length: n }, (_, i) => ({
+        id: batchId + '-' + String(i + 1).padStart(2, '0'),
+        bagKg: p.kg
+      }));
+      insertBatch(
+        db,
+        {
+          batchId,
+          strainId: p.ms.id,
+          qty: n,
+          days: 1,
+          substrate: {},
+          bagKg: p.kg,
+          batchType: 'grain',
+          notes: 'Aus der Zählung',
+          created: nowIso,
+          due: nowIso,
+          bags
+        },
+        null,
+        userId
+      );
+      appendScanEntries(
+        db,
+        bags.map((b) => ({ time: nowIso, action: 'ADD', batch: batchId, bag: b.id, from: null, to: zone.id })),
+        userId
+      );
+      out.added.push(batchId);
+    }
+    out.changes.push({ strainId: p.ms.id, name: p.ms.name, kg: p.kg, from: vorher, to: p.count });
+  }
+  return out;
+}
+
+// Rueckgaengig: die Ausbuchungen der Zaehlung heraus, ihre Chargen weg. Nur, was
+// wirklich von einer Zaehlung kommt: ein REMOVE mit "count", eine ZAEHL-Charge.
+function zaehlungZurueck(db, { removed = [], added = [] } = {}, userId) {
+  const ids = removed.map(Number).filter(Number.isInteger);
+  if (ids.length) {
+    db.prepare(
+      `DELETE FROM scan_log WHERE reason = 'count' AND action = 'REMOVE' AND id IN (${ids.map(() => '?').join(',')})`
+    ).run(...ids);
+    invalidateBagZoneCache(db);
+    incrementDataVersion(db);
+  }
+  for (const id of added) {
+    if (!/-ZAEHL-/.test(String(id))) continue;
+    const b = db.prepare("SELECT 1 FROM batches WHERE batch_id = ? AND notes = 'Aus der Zählung'").get(String(id));
+    if (b) deleteBatchById(db, String(id), userId);
+  }
+  return { ok: true };
+}
+function _ddmmyy(d) {
+  return (
+    String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear()).slice(2)
+  );
 }
 
 /**
@@ -15429,7 +16168,16 @@ module.exports = {
   listShelfLog,
   setShelfSku,
   syncShelfOrders,
+  syncShelfSpawn,
   shelfLowAlerts,
+  ETIKETT_BILDER,
+  labFachText,
+  getLabFach,
+  ensureLabFach,
+  setLabFachAlarm,
+  labFachLowAlerts,
+  zaehleKoernerbrut,
+  zaehlungZurueck,
   snapshotDailyKPIs,
   getKpiSnapshots,
   getContaminationReport,

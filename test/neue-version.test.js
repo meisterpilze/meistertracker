@@ -372,10 +372,12 @@ describe('Telefon: lädt neu, wenn es niemanden stört', () => {
 });
 
 describe('Telefon: zurück auf die Seite, auf der man war', () => {
-  function zurueck(gespeichert, telefonBreite) {
+  // liste: die Seite hat am Telefon eine Liste ihrer Reiter (wie Admin).
+  function zurueck(gespeichert, telefonBreite, liste = false) {
     return new Function(
       'gespeichert',
       'telefonBreite',
+      'liste',
       `
       const wege = [];
       const speicher = new Map(gespeichert ? [['mp-update-where', JSON.stringify(gespeichert)]] : []);
@@ -385,15 +387,26 @@ describe('Telefon: zurück auf die Seite, auf der man war', () => {
       };
       const da = new Set(['p-batch', 'n-batch', 'st-batch-list']);
       const document = {
-        getElementById: (id) => (da.has(id) ? { id, click: () => wege.push('tipp ' + id) } : null)
+        getElementById: (id) =>
+          da.has(id)
+            ? {
+                id,
+                click: () => wege.push('tipp ' + id),
+                classList: {
+                  contains: (c) => liste && c === 'stab-drill',
+                  remove: (c) => wege.push('weg ' + c + ' ' + id)
+                }
+              }
+            : null
       };
       const go = (page, btn) => wege.push('go ' + page + ' ' + btn);
       const sbIsPhone = () => telefonBreite;
+      ${ausDerApp('gehZuOrt')}
       ${ausDerApp('restoreAfterUpdate')}
       restoreAfterUpdate();
       return { wege, uebrig: speicher.has('mp-update-where') };
     `
-    )(gespeichert, telefonBreite);
+    )(gespeichert, telefonBreite, liste);
   }
   const jetzt = () => Date.now();
 
@@ -404,8 +417,17 @@ describe('Telefon: zurück auf die Seite, auf der man war', () => {
   });
 
   it('bleibt am Telefon auf der Reiter-Liste, wenn man dort stand', () => {
+    const r = zurueck(
+      { page: 'batch', btnId: 'n-batch', stab: 'st-batch-list', drilled: false, at: jetzt() },
+      true,
+      true
+    );
+    assert.deepEqual(r.wege, ['go batch n-batch', 'weg stab-drilled p-batch']);
+  });
+
+  it('öffnet am Telefon den Reiter einer Seite ohne Liste (ihre Ansichten stehen in der Navigation)', () => {
     const r = zurueck({ page: 'batch', btnId: 'n-batch', stab: 'st-batch-list', drilled: false, at: jetzt() }, true);
-    assert.deepEqual(r.wege, ['go batch n-batch']);
+    assert.deepEqual(r.wege, ['go batch n-batch', 'tipp st-batch-list']);
   });
 
   it('vergisst eine alte Marke', () => {

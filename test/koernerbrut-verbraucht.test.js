@@ -664,10 +664,14 @@ describe('Das Beutel-Fenster eines Körnerbeutels', () => {
 
   it('der Knopf bucht aus und führt zurück in die Kamera, mit Rückgängig', () => {
     assert.match(APP, /if \(a === 'used'\) return biMarkUsed\(\);/);
-    const f = hebe('biMarkUsed');
+    assert.match(hebe('biMarkUsed'), /biMarkOut\('spawn'\)/);
+    // Verkauft geht denselben Weg, mit dem Grund "sold".
+    assert.match(APP, /if \(a === 'sold'\) return biMarkSold\(\);/);
+    assert.match(hebe('biMarkSold'), /biMarkOut\('sold'\)/);
+    const f = hebe('biMarkOut');
     assert.match(
       f,
-      /biRearmScanner\(\);[\s\S]*spawnBuchen\(biWholeBatch \? b\.bags \|\| \[\] : \[biBagId\], 'spawn', \{ sitzung: true \}\)/
+      /biRearmScanner\(\);[\s\S]*spawnBuchen\(biWholeBatch \? b\.bags \|\| \[\] : \[biBagId\], reason, \{ sitzung: true \}\)/
     );
     assert.match(f, /showUndoBar\(msg, \(\) => spawnZuruecknehmen\(entries\)\)/);
   });

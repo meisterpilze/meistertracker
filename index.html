@@ -157,7 +157,20 @@
         <div class="shelf-now" id="m-shelf-now">
           <b id="m-shelf-stock" aria-live="polite">0</b>
           <span data-i18n="shelf.inShelf">im Regal</span>
-          <small id="m-shelf-alarm" class="shelf-alarm"></small>
+        </div>
+        <!-- Der Alarm, gleich unter der Zahl: bei diesem Stand geht einmal eine
+             Glocke an alle (checkShelf). − und + speichern selbst. -->
+        <div class="shelf-alarmrow">
+          <span id="m-shelf-alarm"></span>
+          <span class="shelf-mini">
+            <button type="button" class="btn btn-sm" data-shelf-min="-1" data-i18n-aria-label="shelf.alarmLess" aria-label="Alarm niedriger">
+              −
+            </button>
+            <b id="m-shelf-minv" aria-live="polite">0</b>
+            <button type="button" class="btn btn-sm" data-shelf-min="1" data-i18n-aria-label="shelf.alarmMore" aria-label="Alarm höher">
+              +
+            </button>
+          </span>
         </div>
         <div class="shelf-amt">
           <button type="button" class="btn" data-shelf-step="-1" data-i18n-aria-label="shelf.less" aria-label="Weniger">
@@ -190,20 +203,6 @@
         <details id="m-shelf-more" class="shelf-more">
           <summary data-i18n="shelf.moreTitle">Verlauf und Artikel</summary>
           <div id="m-shelf-log" class="shelf-log"></div>
-          <!-- Bei diesem Stand geht einmal eine Glocke an alle: nachproduzieren. -->
-          <div class="shelf-sub" data-i18n="shelf.minTitle">Alarm: nachproduzieren bei</div>
-          <div class="shelf-rename">
-            <input
-              type="number"
-              id="m-shelf-min"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              data-i18n-aria-label="shelf.minTitle"
-              aria-label="Alarm: nachproduzieren bei"
-            />
-            <button type="button" class="btn btn-sm" data-shelf-act="min" data-i18n="common.save">Speichern</button>
-          </div>
           <!-- Shop-SKUs: eine Bestellung damit nimmt den Bestand runter (checkShelf). -->
           <div class="shelf-sub" data-i18n="shelf.skuTitle">Online-Bestellungen ziehen ab</div>
           <p class="fs-meta shelf-help" data-i18n="shelf.skuHelp">
@@ -234,6 +233,37 @@
             />
             <button type="button" class="btn btn-sm" data-shelf-act="sku" data-i18n="shelf.skuAdd">Anhängen</button>
           </div>
+          <!-- Körnerbrut: eine Charge in dieser Beutelgröße nimmt ihre Beutel aus
+               diesem Artikel (db._bookShelfSpawn). Knöpfe aus shelfSheetRender. -->
+          <div class="shelf-sub" data-i18n="shelf.spawnTitle">Beim Beimpfen abziehen</div>
+          <p class="fs-meta shelf-help" data-i18n="shelf.spawnHelp">
+            Eine neue Charge Körnerbrut in dieser Beutelgröße nimmt ihre Beutel aus diesem Fach.
+          </p>
+          <div id="m-shelf-spawn" class="shelf-rename"></div>
+          <!-- Das Etikett am Fach: Bild und Wort im schwarzen Band, darunter der
+               Text, auf den es ankommt (shelfLabelCanvas). -->
+          <div class="shelf-sub" data-i18n="shelf.labelTitle">Etikett</div>
+          <div id="m-shelf-bilder" class="shelf-bilder" role="group" data-i18n-aria-label="shelf.labelPicture" aria-label="Bild"></div>
+          <div class="shelf-etikett">
+            <textarea
+              id="m-shelf-band"
+              rows="2"
+              maxlength="33"
+              data-i18n-placeholder="shelf.labelBand"
+              data-i18n-aria-label="shelf.labelBand"
+              placeholder="Band, z. B. WEIZEN"
+              aria-label="Band"
+            ></textarea>
+            <input
+              type="text"
+              id="m-shelf-etikett"
+              maxlength="40"
+              autocomplete="off"
+              data-i18n-aria-label="shelf.labelText"
+              aria-label="Text"
+            />
+            <button type="button" class="btn btn-sm" data-shelf-act="etikett" data-i18n="common.save">Speichern</button>
+          </div>
           <div class="shelf-sub" data-i18n="shelf.itemTitle">Artikel</div>
           <div class="shelf-rename">
             <input
@@ -255,6 +285,85 @@
         <div class="modal-btns">
           <button type="button" class="btn" data-shelf-act="close" data-i18n="common.close">Schließen</button>
           <button type="button" class="btn" data-shelf-act="print" data-i18n="shelf.print">Etikett drucken</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ein Laborfach: eine Art in einem Gefäß, mit Etikett und Alarm (lfRender).
+         Gezählt werden die Schalen, Spritzen und Beutel selbst; Add legt neue an,
+         Remove und Verkauft nehmen die ältesten. -->
+    <div class="modal-bg" id="m-labfach" role="dialog" aria-modal="true" aria-labelledby="m-lf-title" hidden>
+      <div class="modal">
+        <div class="lf-head">
+          <h3 id="m-lf-title"></h3>
+          <span id="m-lf-what" class="lf-what"></span>
+        </div>
+        <div id="m-lf-sizes" class="lf-sizes" hidden></div>
+        <div class="shelf-now" id="m-lf-now">
+          <b id="m-lf-stock" aria-live="polite">0</b>
+          <span data-i18n="lf.there">da</span>
+          <small id="m-lf-grow" class="shelf-alarm"></small>
+        </div>
+        <div class="shelf-alarmrow" id="m-lf-alarmrow">
+          <span id="m-lf-alarm"></span>
+          <span class="shelf-mini">
+            <button type="button" class="btn btn-sm" data-lf-min="-1" data-i18n-aria-label="shelf.alarmLess" aria-label="Alarm niedriger">
+              −
+            </button>
+            <b id="m-lf-minv" aria-live="polite">0</b>
+            <button type="button" class="btn btn-sm" data-lf-min="1" data-i18n-aria-label="shelf.alarmMore" aria-label="Alarm höher">
+              +
+            </button>
+          </span>
+        </div>
+        <div class="shelf-amt" id="m-lf-amt">
+          <button type="button" class="btn" data-lf-step="-1" data-i18n-aria-label="shelf.less" aria-label="Weniger">
+            −
+          </button>
+          <input
+            type="number"
+            id="m-lf-n"
+            inputmode="numeric"
+            min="0"
+            step="1"
+            value="0"
+            data-i18n-aria-label="shelf.amount"
+            aria-label="Anzahl"
+          />
+          <button type="button" class="btn" data-lf-step="1" data-i18n-aria-label="shelf.more" aria-label="Mehr">
+            +
+          </button>
+        </div>
+        <div class="shelf-acts" id="m-lf-acts">
+          <button type="button" class="btn btn-p" id="m-lf-in" data-lf-act="in" data-i18n="shelf.in">Add</button>
+          <button type="button" class="btn btn-p" data-lf-act="out" data-i18n="shelf.out">Remove</button>
+          <button type="button" class="btn btn-p" data-lf-act="sold" data-i18n="lf.sold">Verkauft</button>
+          <button type="button" class="btn" data-lf-act="count" data-i18n="shelf.count">Das ist der Bestand</button>
+        </div>
+        <p class="fs-meta shelf-help" id="m-lf-help"></p>
+        <div id="m-lf-preview" class="shelf-preview"></div>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-lf-act="close" data-i18n="common.close">Schließen</button>
+          <button type="button" class="btn" id="m-lf-print" data-lf-act="print" data-i18n="shelf.print">
+            Etikett drucken
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Körnerbrut zählen (kbzOpen): je Art die fertigen Beutel zu 1, 2 und 5 kg,
+         vorbelegt; was nicht stimmt, umtippen, und mit einem Knopf buchen. -->
+    <div class="modal-bg" id="m-kbz" role="dialog" aria-modal="true" aria-labelledby="kbz-title" hidden>
+      <div class="modal">
+        <h3 id="kbz-title" data-i18n="kbz.open">Körnerbrut zählen</h3>
+        <p class="fs-meta shelf-help" data-i18n="kbz.help">
+          Fertige Beutel im Regal. Tippe nur die Zahlen um, die nicht stimmen.
+        </p>
+        <div id="kbz-list" class="kbz-list"></div>
+        <p class="fs-meta kbz-sum" id="kbz-sum" aria-live="polite"></p>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-kbz-act="close" data-i18n="common.close">Schließen</button>
+          <button type="button" class="btn btn-p" id="kbz-go" disabled data-i18n="kbz.applyNone">Bestand übernehmen</button>
         </div>
       </div>
     </div>
@@ -4561,7 +4670,9 @@
                  card (renderLabStock). -->
             <div class="card" id="lb-card" hidden>
               <div class="sec" data-i18n="lb.title">Laborbestand</div>
-              <p class="lb-tap" data-i18n="lb.tapHint">Tipp auf eine Sorte: ansetzen, Soll, Im Programm.</p>
+              <p class="lb-tap" data-i18n="lb.tapHint">
+                Tipp auf eine Sorte: ansetzen, Soll, Im Programm. Tipp auf eine Zahl: Add, Remove, Verkauft, Alarm.
+              </p>
               <div id="lb-list"></div>
               <div class="vb-legend">
                 <span data-i18n="lb.legendSoll">3/2 = da/Soll</span>
@@ -4582,6 +4693,7 @@
               </div>
               <div class="sl-tools">
                 <button type="button" id="gr-scan" class="btn" data-i18n="gr.scan">Glas scannen</button>
+                <button type="button" id="gr-zaehlen" class="btn" data-i18n="kbz.open">Körnerbrut zählen</button>
                 <button type="button" id="gr-archiv" class="btn" aria-pressed="false"></button>
               </div>
               <p class="lb-tap" data-i18n="gr.help">Tipp auf eine Sorte, dann auf eine Charge: Beutel, Notiz, löschen.</p>
