@@ -35,6 +35,9 @@ const LIMITS = { firstByteMs: 300, headersMs: 600, requestMs: 1200, checkMs: 25,
 const HANDSHAKE_MS = 900;
 // An answer that leaves in one write, as a backup download does.
 const BIG_BYTES = 6 * 1024 * 1024;
+// A handler that waits on an outside service before its first byte, as the
+// certificate request does for minutes: longer than every limit above.
+const SLOW_HANDLER_MS = 1600;
 // How late a close may come on a busy CI machine before it counts as missing.
 const SLACK_MS = 1500;
 // A connection that should have been closed and is still open after this fails.
@@ -44,8 +47,12 @@ const OPEN_MS = 5000;
 const CERT = zertifikat({ cn: 'localhost' });
 
 // The HTTPS side: an event stream like /api/events, a big answer in one write,
-// a body reader, and "ok".
+// a slow handler, a body reader, and "ok".
 function answer(req, res) {
+  if (req.url === '/slow') {
+    setTimeout(() => res.end('done'), SLOW_HANDLER_MS);
+    return;
+  }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     const beat = setInterval(() => res.write('data: {"type":"heartbeat"}\n\n'), 150);
@@ -233,6 +240,14 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     const { text } = await closed;
     assert.match(text, /^HTTP\/1\.1 200 OK\r\n/);
     assert.equal(text.length - text.indexOf('\r\n\r\n') - 4, BIG_BYTES, 'the answer was cut short');
+  });
+
+  it('waits for a handler that works longer than every limit before it answers', async () => {
+    const s = await connectTls(port);
+    const closed = untilClosed(s);
+    s.write('GET /slow HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
+    const { text } = await closed;
+    assert.match(text, /^HTTP\/1\.1 200 OK\r\n[\s\S]*\r\n\r\ndone$/);
   });
 
   it('answers a complete request, over TLS and with a redirect over plain HTTP', async () => {
