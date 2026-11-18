@@ -15316,11 +15316,6 @@ const PORT_LIMITS = {
   // requestTimeout). The largest bodies, an original photo of 40 MB and a
   // backup of 50 MB to restore, still make it at half a megabit per second.
   requestMs: 15 * 60 * 1000,
-  // How long a connection may go without a byte in either direction; the TLS
-  // handshake has to finish within it. Both event streams, /api/events and the
-  // MCP stream, send something every 15 s, and an original's upload gives up
-  // after a minute of silence on its own (ORIGINAL_IDLE_MS).
-  idleMs: 2 * 60 * 1000,
   // How often Node looks for requests past their deadline.
   checkMs: 5 * 1000,
   // Connections at once. A browser opens at most six to one server, plus its
@@ -15340,6 +15335,15 @@ const PORT_LIMITS = {
 // so the loop below sets them and raises the event; without it a request on
 // this port has no deadline. test/port-multiplexer.test.js fails if a Node
 // release stops honouring the event.
+//
+// After the first byte this listener sets no timer of its own; every later
+// phase has one of Node's: the TLS handshake (handshakeTimeout, 120 s), the
+// headers and the body (the deadlines above), the pause between two requests
+// (keepAliveTimeout, 5 s). A handler at work and an answer on its way out have
+// none. A certificate request waits minutes for the certificate authority, and
+// a backup download leaves as one write; on Windows libuv reports such a write
+// as pending until its last byte is out, so an idle timer could not tell a
+// slow download from a stuck one and would cut both.
 function createPortMux(tlsServer, plainServer, limits) {
   for (const inner of [tlsServer, plainServer]) {
     inner.headersTimeout = limits.headersMs;
@@ -15348,17 +15352,13 @@ function createPortMux(tlsServer, plainServer, limits) {
     inner.emit('listening');
   }
   const mux = net.createServer((socket) => {
-    // One timer per socket: the wait for the first byte, then the idle limit.
-    // A TLS connection reads and writes through this socket, so every byte
-    // either way restarts it. On a plain one, Node's keep-alive timeout takes
-    // it over after the first answer.
-    socket.setTimeout(limits.firstByteMs);
-    socket.on('timeout', () => socket.destroy());
     socket.on('error', () => {});
+    const noFirstByte = () => socket.destroy();
+    socket.setTimeout(limits.firstByteMs, noFirstByte);
     socket.once('data', (buf) => {
+      socket.setTimeout(0, noFirstByte);
       socket.pause();
       socket.unshift(buf);
-      socket.setTimeout(limits.idleMs);
       const target = buf[0] === 0x16 ? tlsServer : plainServer;
       target.emit('connection', socket);
       process.nextTick(() => socket.resume());

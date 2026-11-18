@@ -6,8 +6,9 @@
 // emit('connection'). Neither of those listens itself, and Node starts its
 // header and request deadlines from a server's 'listening' event, so
 // createPortMux sets them and raises the event. It also waits only so long for
-// the first byte, gives every connection an idle limit, and caps how many there
-// are at once.
+// the first byte and caps how many connections there are at once. A handler at
+// work and an answer on its way out get no limit: a slow handler and a slow
+// download have to finish.
 //
 // server.js listens on require, so createPortMux is lifted out of its source and
 // put in front of servers of this file's own, with limits short enough to wait
@@ -28,8 +29,12 @@ const createPortMux = new Function('net', hebeFunktion('createPortMux', SRC) + '
 const PORT_LIMITS = new Function(hebeKonstante('PORT_LIMITS', SRC) + '\nreturn PORT_LIMITS;')();
 
 // The real limits, scaled down to wait for, in the same order: first byte,
-// headers, idle, whole request.
-const LIMITS = { firstByteMs: 300, headersMs: 600, idleMs: 900, requestMs: 1200, checkMs: 25, maxConnections: 50 };
+// headers, whole request.
+const LIMITS = { firstByteMs: 300, headersMs: 600, requestMs: 1200, checkMs: 25, maxConnections: 50 };
+// The TLS server's own handshake deadline. server.js leaves it at Node's 120 s.
+const HANDSHAKE_MS = 900;
+// An answer that leaves in one write, as a backup download does.
+const BIG_BYTES = 6 * 1024 * 1024;
 // How late a close may come on a busy CI machine before it counts as missing.
 const SLACK_MS = 1500;
 // A connection that should have been closed and is still open after this fails.
@@ -38,12 +43,17 @@ const OPEN_MS = 5000;
 // Made for this run; the client trusts exactly this certificate.
 const CERT = zertifikat({ cn: 'localhost' });
 
-// The HTTPS side: an event stream like /api/events, a body reader, and "ok".
+// The HTTPS side: an event stream like /api/events, a big answer in one write,
+// a body reader, and "ok".
 function answer(req, res) {
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     const beat = setInterval(() => res.write('data: {"type":"heartbeat"}\n\n'), 150);
     req.on('close', () => clearInterval(beat));
+    return;
+  }
+  if (req.url === '/big') {
+    res.end(Buffer.alloc(BIG_BYTES, 'x'));
     return;
   }
   if (req.method === 'POST') {
@@ -58,7 +68,12 @@ function answer(req, res) {
 // Both servers behind createPortMux, built the way server.js builds them.
 async function openPort(limits) {
   const tlsServer = https.createServer(
-    { key: CERT.privateKey.export({ type: 'pkcs8', format: 'pem' }), cert: CERT.pem, minVersion: 'TLSv1.2' },
+    {
+      key: CERT.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      cert: CERT.pem,
+      minVersion: 'TLSv1.2',
+      handshakeTimeout: HANDSHAKE_MS
+    },
     answer
   );
   const plainServer = http.createServer((req, res) => {
@@ -104,7 +119,7 @@ function connectTls(port) {
 // Resolves once the server has closed the connection: how long after `from`,
 // and with everything it sent. All of it is read, because a socket whose data
 // nobody reads never learns that the other end has gone.
-function untilClosed(s, from = Date.now()) {
+function untilClosed(s, from = Date.now(), openMs = OPEN_MS) {
   return new Promise((resolve, reject) => {
     let text = '';
     s.setEncoding('latin1');
@@ -112,8 +127,8 @@ function untilClosed(s, from = Date.now()) {
     s.on('error', () => {});
     const open = setTimeout(() => {
       s.destroy();
-      reject(new Error('still open after ' + OPEN_MS + ' ms'));
-    }, OPEN_MS);
+      reject(new Error('still open after ' + openMs + ' ms'));
+    }, openMs);
     s.on('close', () => {
       clearTimeout(open);
       resolve({ ms: Date.now() - from, text });
@@ -168,7 +183,7 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
   it('counts the header deadline from the start of the request, however slowly bytes keep coming', async () => {
     const s = await connectTls(port);
     const closed = untilClosed(s);
-    // A byte every 100 ms: the idle timer alone would never run out.
+    // One byte every 100 ms: the connection never goes quiet.
     trickle(s, SLOW_REQUEST, 100);
     const { ms, text } = await closed;
     assert.match(text, /^HTTP\/1\.1 408 /);
@@ -185,7 +200,7 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     assert.match(text, /^HTTP\/1\.1 200 OK\r\n[\s\S]*\r\n\r\nokHTTP\/1\.1 408 /);
   });
 
-  it('cuts off a body still arriving at requestMs, though every byte restarts the idle timer', async () => {
+  it('cuts off a body still arriving at requestMs', async () => {
     const s = await connectTls(port);
     const closed = untilClosed(s);
     s.write('POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n');
@@ -196,14 +211,28 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     assert.ok(ms < LIMITS.requestMs + SLACK_MS, 'closed after ' + ms + ' ms');
   });
 
-  it('closes a connection that stops partway into its TLS handshake once idleMs is up', async () => {
+  it('leaves a TLS handshake that stops partway to the TLS server, which closes it', async () => {
     const s = await connectPlain(port);
     const closed = untilClosed(s);
     // The first bytes of a TLS record, and nothing after them.
     s.write(Buffer.from([0x16, 0x03, 0x01]));
     const { ms } = await closed;
-    assert.ok(ms >= LIMITS.idleMs - 50, 'closed after ' + ms + ' ms, before idleMs');
-    assert.ok(ms < LIMITS.idleMs + SLACK_MS, 'closed after ' + ms + ' ms');
+    assert.ok(ms >= HANDSHAKE_MS - 50, 'closed after ' + ms + ' ms, before the handshake deadline');
+    assert.ok(ms < HANDSHAKE_MS + SLACK_MS, 'closed after ' + ms + ' ms');
+  });
+
+  it('delivers a big answer sent in one write to a client that reads it slowly', async () => {
+    const s = await connectTls(port);
+    const closed = untilClosed(s, Date.now(), 20000);
+    // About 1.6 MB a second: the write stays pending for seconds.
+    s.on('data', () => {
+      s.pause();
+      setTimeout(() => s.resume(), 10);
+    });
+    s.write('GET /big HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
+    const { text } = await closed;
+    assert.match(text, /^HTTP\/1\.1 200 OK\r\n/);
+    assert.equal(text.length - text.indexOf('\r\n\r\n') - 4, BIG_BYTES, 'the answer was cut short');
   });
 
   it('answers a complete request, over TLS and with a redirect over plain HTTP', async () => {
@@ -224,7 +253,7 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     s.on('data', (d) => (text += d));
     s.on('close', () => (closedAfter = Date.now() - from));
     s.write('GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n');
-    await new Promise((resolve) => setTimeout(resolve, Math.max(LIMITS.requestMs, 2 * LIMITS.idleMs) + 300));
+    await new Promise((resolve) => setTimeout(resolve, LIMITS.requestMs + 500));
     assert.equal(closedAfter, null, 'the stream was closed after ' + closedAfter + ' ms');
     assert.match(text, /^HTTP\/1\.1 200 OK\r\n/);
     assert.ok(text.split('data: ').length > 5, 'too few events: ' + JSON.stringify(text));
@@ -236,7 +265,7 @@ describe('the connection limit', { timeout: 30000 }, () => {
   it('closes a connection past maxConnections at once', async () => {
     // The three connections that fill the port send no request, so on a slow
     // machine the header deadline must not free a place before the fourth comes.
-    const limited = await openPort({ ...LIMITS, headersMs: 10000, idleMs: 10000, requestMs: 10000, maxConnections: 3 });
+    const limited = await openPort({ ...LIMITS, headersMs: 10000, requestMs: 10000, maxConnections: 3 });
     // Node raises 'drop' as it closes the extra connection, before the client
     // can see the close; server.js logs it.
     let drops = 0;
@@ -260,16 +289,6 @@ describe('PORT_LIMITS in server.js', () => {
     assert.ok(m, name + ' is gone from server.js, so this test needs updating with it');
     return new Function('return ' + m[1])();
   }
-
-  it('outlast several missed heartbeats on /api/events', () => {
-    const m = SRC.match(/const hb = 'data: \{"type":"heartbeat"\}\\n\\n';[\s\S]*?\n\}, (\d+)\);/);
-    assert.ok(m, 'the heartbeat interval is gone from server.js, so this test needs updating with it');
-    assert.ok(PORT_LIMITS.idleMs >= 4 * Number(m[1]), 'idleMs ' + PORT_LIMITS.idleMs + ', heartbeat ' + m[1]);
-  });
-
-  it('let a stalled original upload end itself before the connection does', () => {
-    assert.ok(PORT_LIMITS.idleMs > constant('ORIGINAL_IDLE_MS'));
-  });
 
   it('take the largest bodies at half a megabit per second', () => {
     const bytesPerSecond = 0.5e6 / 8;
