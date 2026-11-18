@@ -32026,14 +32026,16 @@ function calDayTime(minutes) {
 }
 
 // The end an event is saved with, never before its start. An end day before
-// the start day is dropped, and an end time that does not come after the start
-// time on the same day becomes an hour after it, as on a new event.
+// the start day is dropped. On the start day, an end time before the start time
+// is the next morning, so the end moves to the next day at that time; an end
+// time equal to the start time becomes an hour after it.
 function calEventEnd(ev) {
   let { endDate, endTime } = ev;
   if (!ev.startDate) return { endDate, endTime };
   if (endDate && endDate < ev.startDate) endDate = null;
   if (ev.startTime && endTime && (!endDate || endDate === ev.startDate) && endTime <= ev.startTime) {
-    const end = calDayTime(calMinutes(ev.startDate, ev.startTime) + 60);
+    const start = calMinutes(ev.startDate, ev.startTime);
+    const end = calDayTime(endTime < ev.startTime ? calMinutes(ev.startDate, endTime) + 24 * 60 : start + 60);
     endTime = end.time;
     if (end.date !== ev.startDate) endDate = end.date;
   }
@@ -32042,17 +32044,20 @@ function calEventEnd(ev) {
 
 // Where a timed event ends once a drag has moved its start to newDate at
 // newStart: as long after it as the event ran before, or an hour when its end
-// did not come after its start. Without an end day it stays on its day and
-// ends by 23:59; with one, the end day moves along.
+// did not come after its start. As in calEventEnd, an end time before the
+// start time on the start day is the next morning. An event within one day
+// stays on its day and ends by 23:59; otherwise the end day moves along.
 function calMovedEnd(ev, newDate, newStart) {
-  let length = ev.endTime
-    ? calMinutes(ev.endDate || ev.startDate, ev.endTime) - calMinutes(ev.startDate, ev.startTime)
-    : 0;
-  if (!(length > 0)) length = 60;
-  let end = calMinutes(newDate, newStart) + length;
-  if (!ev.endDate) end = Math.min(end, calMinutes(newDate, '23:59'));
-  const at = calDayTime(end);
-  return { endDate: ev.endDate ? at.date : null, endTime: at.time };
+  const start = calMinutes(ev.startDate, ev.startTime);
+  let end = ev.endTime ? calMinutes(ev.endDate || ev.startDate, ev.endTime) : start;
+  const overnight = (!ev.endDate || ev.endDate === ev.startDate) && end < start;
+  if (overnight) end += 24 * 60;
+  let moved = calMinutes(newDate, newStart) + (end > start ? end - start : 60);
+  if (!ev.endDate && !overnight) moved = Math.min(moved, calMinutes(newDate, '23:59'));
+  const at = calDayTime(moved);
+  // An end on a later day needs its end day, whether or not the event had one.
+  const endDate = ev.endDate || at.date !== newDate ? at.date : null;
+  return { endDate, endTime: at.time };
 }
 
 function pxToTime(px) {
@@ -32197,9 +32202,10 @@ function initEventResize(el, handle, body, viewType) {
       const topPx = parseFloat(el.style.top);
       const endPx = topPx + newHeight;
       const newStart = pxToTime(topPx);
+      let newEnd = pxToTime(endPx);
       // pxToTime stops at the last hour row, so an end pulled below the grid
-      // can come back at or before the start.
-      const newEnd = calEventEnd({ startDate: el.dataset.date, startTime: newStart, endTime: pxToTime(endPx) }).endTime;
+      // can come back at or before the start. It ends with the day instead.
+      if (newEnd <= newStart) newEnd = '23:59';
       updateEventTime(evId, newStart, newEnd, null);
     };
     const mmh = function (e) {
