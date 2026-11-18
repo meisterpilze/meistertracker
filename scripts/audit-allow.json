@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "reason": "Reaches the tree only through the devDependency license-checker-rseidelsohn (CI's license check) via @npmcli/arborist, @npmcli/run-script, node-gyp and tinyglobby; every picomatch release is affected (<= 4.0.7, no patched version), and nothing of it is installed with --omit=dev."
+  }
+]
