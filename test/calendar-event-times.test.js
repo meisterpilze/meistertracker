@@ -15,7 +15,7 @@ const { quelle, hebeFunktion } = require('./helpers/quelle');
 
 const SRC = quelle('app.js');
 const hebe = (...namen) => namen.map((n) => hebeFunktion(n, SRC)).join('\n');
-const ZEIT = hebe('calMinutes', 'calDayTime', 'calShiftDay', 'calEventEnd', 'calMovedEnd');
+const ZEIT = hebe('calMinutes', 'calDayTime', 'calShiftDay', 'calMovedEndDay', 'calEventEnd', 'calMovedEnd');
 // The rule the server checks a clock time against.
 const UHRZEIT = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -247,6 +247,37 @@ describe('dragging and stretching in the week view', () => {
     s.strecke(48);
     assert.equal(s.gesendet[0].startTime, '22:30');
     assert.equal(s.gesendet[0].endTime, '23:59', 'pxToTime alone reads the bottom of the grid as 22:00');
+  });
+});
+
+describe('a drop in the month view', () => {
+  // handleCalendarDrop, as the month grid and the move dialog call it.
+  const DROP = hebe('handleCalendarDrop');
+  function lasse(termin, tag) {
+    const gesendet = [];
+    const nachher = new Function(
+      'apiPatch',
+      `const calendarEvents = [${JSON.stringify(termin)}];
+      const confirmBookedWindow = (id, occurrence, weiter) => weiter();
+      const renderCalendar = () => {};
+      ${ZEIT}
+      ${DROP}
+      handleCalendarDrop('custom', ${JSON.stringify(termin.id)}, ${JSON.stringify(tag)});
+      return calendarEvents[0];`
+    )((url, body) => gesendet.push(body));
+    return { gesendet, nachher };
+  }
+
+  it('moves the end day along with the start day', () => {
+    const termin = { id: 'cev-messe', startDate: '2026-11-16', endDate: '2026-11-18', allDay: true };
+    const { gesendet, nachher } = lasse(termin, '2026-11-20');
+    assert.deepEqual(gesendet, [{ startDate: '2026-11-20', endDate: '2026-11-22', caldavSynced: null }]);
+    assert.equal(nachher.endDate, '2026-11-22');
+  });
+
+  it('leaves an event without an end day without one', () => {
+    const { gesendet } = lasse({ id: 'cev-tag', startDate: '2026-11-16', endDate: null, allDay: true }, '2026-11-20');
+    assert.deepEqual(gesendet, [{ startDate: '2026-11-20', caldavSynced: null }]);
   });
 });
 

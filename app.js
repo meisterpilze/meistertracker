@@ -32005,9 +32005,13 @@ function handleCalendarDrop(type, id, newDateStr) {
     // A dragged window is a moved handover. Only recurrence-free events are
     // draggable, so the whole event and the one occurrence are the same thing.
     confirmBookedWindow(ev.id, null, () => {
+      const patch = { startDate: newDateStr, caldavSynced: null };
+      // The end day moves along, as in the week view.
+      const endDate = calMovedEndDay(ev, newDateStr);
+      if (endDate) ev.endDate = patch.endDate = endDate;
       ev.startDate = newDateStr;
       ev.caldavSynced = null;
-      apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), { startDate: newDateStr, caldavSynced: null });
+      apiPatch('/api/calendar-events/' + encodeURIComponent(ev.id), patch);
       renderCalendar();
       if (typeof pushEventCaldav === 'function') pushEventCaldav(ev);
     });
@@ -32027,6 +32031,13 @@ function calDayTime(minutes) {
 // A day moved by as many days as there are from one day to another.
 function calShiftDay(day, from, to) {
   return calDayTime(calMinutes(day, '00:00') + calMinutes(to, '00:00') - calMinutes(from, '00:00')).date;
+}
+// The end day of an event whose start day moves to newDate: moved by as many
+// days, and never before the new start day. null without an end day.
+function calMovedEndDay(ev, newDate) {
+  if (!ev.endDate) return null;
+  const endDate = calShiftDay(ev.endDate, ev.startDate, newDate);
+  return endDate < newDate ? newDate : endDate;
 }
 
 // The end an event is saved with, never before its start. An end day before
@@ -32053,10 +32064,7 @@ function calEventEnd(ev) {
 // stays on its day and ends by 23:59; otherwise the end day moves along.
 // Without an end time only the end day moves, by as many days as the start.
 function calMovedEnd(ev, newDate, newStart) {
-  if (!ev.endTime) {
-    const endDate = ev.endDate ? calShiftDay(ev.endDate, ev.startDate, newDate) : null;
-    return { endDate: endDate && endDate < newDate ? newDate : endDate, endTime: null };
-  }
+  if (!ev.endTime) return { endDate: calMovedEndDay(ev, newDate), endTime: null };
   const start = calMinutes(ev.startDate, ev.startTime);
   let end = calMinutes(ev.endDate || ev.startDate, ev.endTime);
   const overnight = (!ev.endDate || ev.endDate === ev.startDate) && end < start;
