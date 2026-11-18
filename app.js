@@ -32024,6 +32024,10 @@ function calDayTime(minutes) {
   const iso = new Date(minutes * 60000).toISOString();
   return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
+// A day moved by as many days as there are from one day to another.
+function calShiftDay(day, from, to) {
+  return calDayTime(calMinutes(day, '00:00') + calMinutes(to, '00:00') - calMinutes(from, '00:00')).date;
+}
 
 // The end an event is saved with, never before its start. An end day before
 // the start day is dropped. On the start day, an end time before the start time
@@ -32047,9 +32051,14 @@ function calEventEnd(ev) {
 // did not come after its start. As in calEventEnd, an end time before the
 // start time on the start day is the next morning. An event within one day
 // stays on its day and ends by 23:59; otherwise the end day moves along.
+// Without an end time only the end day moves, by as many days as the start.
 function calMovedEnd(ev, newDate, newStart) {
+  if (!ev.endTime) {
+    const endDate = ev.endDate ? calShiftDay(ev.endDate, ev.startDate, newDate) : null;
+    return { endDate: endDate && endDate < newDate ? newDate : endDate, endTime: null };
+  }
   const start = calMinutes(ev.startDate, ev.startTime);
-  let end = ev.endTime ? calMinutes(ev.endDate || ev.startDate, ev.endTime) : start;
+  let end = calMinutes(ev.endDate || ev.startDate, ev.endTime);
   const overnight = (!ev.endDate || ev.endDate === ev.startDate) && end < start;
   if (overnight) end += 24 * 60;
   let moved = calMinutes(newDate, newStart) + (end > start ? end - start : 60);

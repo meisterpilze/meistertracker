@@ -15,7 +15,7 @@ const { quelle, hebeFunktion } = require('./helpers/quelle');
 
 const SRC = quelle('app.js');
 const hebe = (...namen) => namen.map((n) => hebeFunktion(n, SRC)).join('\n');
-const ZEIT = hebe('calMinutes', 'calDayTime', 'calEventEnd', 'calMovedEnd');
+const ZEIT = hebe('calMinutes', 'calDayTime', 'calShiftDay', 'calEventEnd', 'calMovedEnd');
 // The rule the server checks a clock time against.
 const UHRZEIT = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -96,7 +96,21 @@ describe('the end of a moved event', () => {
       endDate: '2026-11-20',
       endTime: '16:00'
     });
-    assert.deepEqual(calMovedEnd(ev({ endTime: null }), '2026-11-20', '15:00'), { endDate: null, endTime: '16:00' });
+  });
+
+  it('moves only the end day of an event without an end time', () => {
+    const tage = ev({ startDate: '2026-11-16', startTime: '20:00', endDate: '2026-11-18', endTime: null });
+    assert.deepEqual(calMovedEnd(tage, '2026-11-17', '21:00'), { endDate: '2026-11-19', endTime: null });
+    assert.deepEqual(
+      calMovedEnd(ev({ endTime: null }), '2026-11-21', '15:00'),
+      { endDate: null, endTime: null },
+      'one day, and still no end time'
+    );
+    assert.deepEqual(
+      calMovedEnd(ev({ endDate: '2026-11-18', endTime: null }), '2026-11-21', '15:00'),
+      { endDate: '2026-11-21', endTime: null },
+      'an end day before the start day comes up to it'
+    );
   });
 
   it('keeps an event within one day on its day', () => {
@@ -214,6 +228,18 @@ describe('dragging and stretching in the week view', () => {
     assert.equal(s.gesendet[0].startDate, '2026-11-18');
     assert.equal(s.gesendet[0].endDate, '2026-11-19');
     assert.equal(s.gesendet[0].endTime, '06:00');
+  });
+
+  it('keeps the end day of an event without an end time, moved by the same days', () => {
+    const s = seite({ id: 'cev-5', startDate: '2026-11-16', startTime: '20:00', endDate: '2026-11-18', endTime: null });
+    s.ziehe(48, 1);
+    assert.deepEqual(s.gesendet[0], {
+      caldavSynced: null,
+      startTime: '21:00',
+      startDate: '2026-11-17',
+      endDate: '2026-11-19'
+    });
+    assert.equal(s.termin().endTime, null, 'no end time comes in');
   });
 
   it('keeps the end after the start when stretched past the last hour', () => {
