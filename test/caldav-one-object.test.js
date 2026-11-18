@@ -30,6 +30,7 @@ const LESER = [
   'readCalendarObject',
   'icsProp',
   'icsValue',
+  'icsText',
   'icsMaster',
   'icsAppType',
   'icsDateTime'
@@ -70,6 +71,28 @@ function handler(database, DIR, logs) {
     ${teile.join('\n')}
     return { handlePut, handleDelete };`
   )(db, database, path, fs, DIR, (level, msg, meta) => logs.push({ level, msg, meta }));
+}
+
+// The builders the server writes a task and an event into a calendar with.
+function bauer(database) {
+  const teile = [
+    hebeKonstante('CALDAV_CATEGORY_COLORS', SRC),
+    ...[
+      'generateUID',
+      'escapeIcsText',
+      'foldIcsLines',
+      'buildRRuleLine',
+      'formatExceptionDate',
+      'buildExdateLine',
+      'pickupLocationLabel',
+      'taskToVTODO',
+      'customEventToVEVENT'
+    ].map((n) => hebeFunktion(n, SRC))
+  ];
+  return new Function('db', 'database', teile.join('\n') + '\nreturn { taskToVTODO, customEventToVEVENT };')(
+    db,
+    database
+  );
 }
 
 const antwort = () => ({
@@ -259,6 +282,85 @@ describe('CalDAV PUT and DELETE act on the one UID the guard was asked about', (
   });
 });
 
+describe('text a calendar app hands back unchanged is stored unchanged', () => {
+  // The builders escape , ; \ and line breaks in a TEXT value (RFC 5545
+  // §3.3.11). The sync-back read only the line breaks back, so every round
+  // trip through a calendar app put another backslash in front of a comma.
+  const ERIKA = { headers: {}, caldavUser: { username: 'erika', role: 'admin' }, caldavUserSlug: 'erika' };
+  let d, DIR, h, bau;
+  const put = (kalender, datei, body, wer) => {
+    const res = antwort();
+    h.handlePut(['calendars', kalender, datei], body, wer, res);
+    return res.status;
+  };
+
+  before(() => {
+    DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mt_caldav_text_'));
+    d = db.openDb(path.join(DIR, 'test.db'));
+    h = handler(d, DIR, []);
+    bau = bauer(d);
+  });
+  after(() => {
+    d.close();
+    fs.rmSync(DIR, { recursive: true, force: true });
+  });
+
+  it('keeps the text and description of a task', () => {
+    const text = 'Regal auffüllen, oben; links \\ rechts';
+    const description = 'Erste Zeile\nZweite, mit Komma';
+    db.insertTask(d, { text, description, assignee: 'max', created: '2026-11-16T08:00:00Z', caldavUid: 'uid-text' });
+    const { ics: body } = bau.taskToVTODO(db.readTaskByCaldavUid(d, 'uid-text'));
+    assert.match(body, /^SUMMARY:Regal auffüllen\\, oben\\; links \\\\ rechts\r$/m, 'the builder escapes');
+    for (const status of [201, 204]) {
+      assert.equal(put('max', 'uid-text.ics', body, MAX), status);
+      const t = db.readTaskByCaldavUid(d, 'uid-text');
+      assert.equal(t.text, text);
+      assert.equal(t.description, description);
+    }
+  });
+
+  it('writes the assignees of a task as text and reads them back the same', () => {
+    db.insertTask(d, {
+      text: 'Gemeinsam',
+      assignee: 'erika,max',
+      created: '2026-11-16T08:00:00Z',
+      caldavUid: 'uid-zwei'
+    });
+    const { ics: body } = bau.taskToVTODO(db.readTaskByCaldavUid(d, 'uid-zwei'));
+    assert.match(body, /^X-MEISTERPILZE-ASSIGNEE:erika\\,max\r$/m, 'escaped like every other TEXT value');
+    assert.equal(put('max', 'uid-zwei.ics', body, MAX), 201);
+    assert.equal(db.readTaskByCaldavUid(d, 'uid-zwei').assignee, 'erika,max');
+  });
+
+  it('keeps the title and description of an event', () => {
+    const ev = {
+      id: 'cev-text',
+      title: 'Teamsitzung, verschoben; Raum 2',
+      description: 'Bitte mitbringen:\nListe, Stift',
+      startDate: '2026-11-20',
+      startTime: '09:00',
+      endTime: '10:00',
+      category: 'meeting'
+    };
+    db.insertCalendarEvent(d, ev);
+    const { uid, ics: body } = bau.customEventToVEVENT({ ...ev, assignees: [] });
+    for (const status of [201, 204]) {
+      assert.equal(put('meetings', uid + '.ics', body, ERIKA), status);
+      const row = db.getCalendarEventById(d, 'cev-text');
+      assert.equal(row.title, ev.title);
+      assert.equal(row.description, ev.description);
+    }
+  });
+
+  it('reads \\N as a line break and keeps a backslash before anything else', () => {
+    const body = ics(...vtodo('UID:uid-neu', 'SUMMARY:Neu\\, von außen', 'DESCRIPTION:Zeile 1\\NZeile 2\\x'));
+    assert.equal(put('max', 'uid-neu.ics', body, MAX), 201);
+    const t = db.readTaskByCaldavUid(d, 'uid-neu');
+    assert.equal(t.text, 'Neu, von außen');
+    assert.equal(t.description, 'Zeile 1\nZeile 2\\x');
+  });
+});
+
 describe('the import reads calendar files the same way', () => {
   const ABSCHNITT = {
     name: 'kalenderimport',
@@ -284,7 +386,7 @@ describe('the import reads calendar files the same way', () => {
         'END:VTIMEZONE',
         'BEGIN:VEVENT',
         'UID:extern-1@example.com',
-        'SUMMARY:Lieferung',
+        'SUMMARY:Lieferung\\, Tor 2',
         'DTSTART;TZID=Europe/Berlin:20261120T090000',
         'DTEND;TZID=Europe/Berlin:20261120T093000',
         'END:VEVENT'
@@ -334,5 +436,10 @@ describe('the import reads calendar files the same way', () => {
       [['extern-1@example.com', '2026-11-20', '09:00', '09:30', false]]
     );
     assert.ok(ms < 1000, 'took ' + ms.toFixed(0) + ' ms');
+  });
+
+  it('shows the text of an event, not its escapes', async () => {
+    const a = await r.anfrage('GET', '/api/caldav/import', undefined, { user_id: 7, username: 'max', role: 'user' });
+    assert.equal(a.json.find((e) => e.uid === 'extern-1@example.com').summary, 'Lieferung, Tor 2');
   });
 });
