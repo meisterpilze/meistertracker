@@ -16,7 +16,7 @@
 // Node release that stopped starting the deadlines on 'listening'.
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { once } = require('node:events');
+const { once, EventEmitter } = require('node:events');
 const net = require('net');
 const tls = require('tls');
 const http = require('http');
@@ -377,5 +377,68 @@ describe('PORT_LIMITS in server.js', () => {
 
   it('keep the header deadline inside the request deadline, as Node requires', () => {
     assert.ok(PORT_LIMITS.headersMs <= PORT_LIMITS.requestMs);
+  });
+});
+
+// How server.js wires it up: which server goes where, and what gets logged.
+// The lines run here as they stand in server.js, with stand-ins around them.
+describe('the wiring in server.js', () => {
+  const wiring = SRC.match(/\n {2}listenServer = createPortMux\([^)]*\);\n[\s\S]*?\n {2}\}\);\n/);
+
+  function wire() {
+    assert.ok(wiring, 'the createPortMux call is gone from server.js, so this test needs updating with it');
+    const w = { calls: [], logged: [], now: Date.UTC(2026, 0, 1), mux: new EventEmitter() };
+    w.server = { stands: 'for the HTTPS server' };
+    w.samePortRedirect = { stands: 'for the redirect' };
+    w.listenServer = new Function(
+      'createPortMux',
+      'server',
+      'samePortRedirect',
+      'PORT_LIMITS',
+      'log',
+      'Date',
+      'let listenServer;' + wiring[0] + 'return listenServer;'
+    )(
+      (...args) => {
+        w.calls.push(args);
+        return w.mux;
+      },
+      w.server,
+      w.samePortRedirect,
+      PORT_LIMITS,
+      (...args) => w.logged.push(args),
+      { now: () => w.now }
+    );
+    return w;
+  }
+
+  it('puts createPortMux in front of the HTTPS server and the redirect, in that order', () => {
+    const w = wire();
+    assert.equal(w.listenServer, w.mux);
+    assert.equal(w.calls.length, 1);
+    assert.equal(w.calls[0][0], w.server);
+    assert.equal(w.calls[0][1], w.samePortRedirect);
+    assert.equal(w.calls[0][2], PORT_LIMITS);
+    const before = SRC.slice(SRC.indexOf('server = https.createServer('), wiring.index);
+    assert.match(before, /^server = https\.createServer\(tlsOpts, handleRequest\);/);
+    assert.match(before, /\n {2}const samePortRedirect = http\.createServer\(/);
+  });
+
+  it('logs a refused connection at most once a minute, naming the limit and no address', () => {
+    const w = wire();
+    // Node's own 'drop' carries the addresses; none of them may reach the log.
+    w.mux.emit('drop', { remoteAddress: '192.0.2.10', remotePort: 50000 });
+    w.now += 30 * 1000;
+    w.mux.emit('drop', { perAddress: true });
+    assert.deepEqual(w.logged, [
+      ['warn', 'Connection limit reached, closing new connections', { max: PORT_LIMITS.maxConnections }]
+    ]);
+    w.now += 31 * 1000;
+    w.mux.emit('drop', { perAddress: true });
+    assert.deepEqual(w.logged[1], [
+      'warn',
+      'Connection limit per address reached, closing new connections from it',
+      { max: PORT_LIMITS.perAddress }
+    ]);
   });
 });
