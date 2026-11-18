@@ -15321,8 +15321,34 @@ const PORT_LIMITS = {
   // Connections at once. A browser opens at most six to one server, plus its
   // event stream. Past the limit a new connection is closed before it costs a
   // TLS handshake.
-  maxConnections: 500
+  maxConnections: 500,
+  // Connections at once from one address, so that a single source cannot take
+  // all of the above. Addresses many clients share do not count here.
+  perAddress: 50
 };
+
+// Addresses that many clients can share: this machine (a reverse proxy in
+// front of the app), the local network behind a router, a container bridge,
+// a carrier's or a VPN's private range, link-local. Connections from them
+// count towards maxConnections only; perAddress would lock out everybody
+// behind them at once.
+function sharedAddress(address) {
+  const a = String(address).replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(a);
+  if (v4) {
+    const x = Number(v4[1]);
+    const y = Number(v4[2]);
+    return (
+      x === 127 ||
+      x === 10 ||
+      (x === 172 && y >= 16 && y <= 31) ||
+      (x === 192 && y === 168) ||
+      (x === 100 && y >= 64 && y <= 127) ||
+      (x === 169 && y === 254)
+    );
+  }
+  return a === '::1' || /^f[cd][0-9a-f]{2}:/i.test(a) || /^fe[89ab][0-9a-f]:/i.test(a);
+}
 
 // The listener on PORT in HTTPS mode. It reads the first byte of each
 // connection: 0x16 starts a TLS ClientHello and goes to tlsServer, anything
@@ -15351,8 +15377,24 @@ function createPortMux(tlsServer, plainServer, limits) {
     inner.connectionsCheckingInterval = limits.checkMs;
     inner.emit('listening');
   }
+  const openPerAddress = new Map();
   const mux = net.createServer((socket) => {
     socket.on('error', () => {});
+    const address = socket.remoteAddress;
+    if (address && !sharedAddress(address)) {
+      const open = openPerAddress.get(address) || 0;
+      if (open >= limits.perAddress) {
+        socket.destroy();
+        mux.emit('drop', { perAddress: true });
+        return;
+      }
+      openPerAddress.set(address, open + 1);
+      socket.once('close', () => {
+        const left = openPerAddress.get(address) - 1;
+        if (left > 0) openPerAddress.set(address, left);
+        else openPerAddress.delete(address);
+      });
+    }
     const noFirstByte = () => socket.destroy();
     socket.setTimeout(limits.firstByteMs, noFirstByte);
     socket.once('data', (buf) => {
@@ -15387,13 +15429,20 @@ if (fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT)) {
   });
 
   listenServer = createPortMux(server, samePortRedirect, PORT_LIMITS);
-  // Past the limit a new connection is closed before it sends anything, so the
-  // app simply stops loading. This says why, at most once a minute.
+  // Past either limit a new connection is closed before it sends anything, so
+  // the app simply stops loading for whoever opened it. This says why, at most
+  // once a minute.
   let dropLoggedAt = 0;
-  listenServer.on('drop', () => {
+  listenServer.on('drop', (info) => {
     if (Date.now() - dropLoggedAt < 60 * 1000) return;
     dropLoggedAt = Date.now();
-    log('warn', 'Connection limit reached, closing new connections', { max: PORT_LIMITS.maxConnections });
+    if (info && info.perAddress) {
+      log('warn', 'Connection limit per address reached, closing new connections from it', {
+        max: PORT_LIMITS.perAddress
+      });
+    } else {
+      log('warn', 'Connection limit reached, closing new connections', { max: PORT_LIMITS.maxConnections });
+    }
   });
 
   // Legacy redirect on port 80 so users who type `http://host` (no port) still get forwarded to HTTPS.

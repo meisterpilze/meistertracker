@@ -25,12 +25,17 @@ const { quelle, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
 const { zertifikat } = require('./helpers/tsa');
 
 const SRC = quelle('server.js');
-const createPortMux = new Function('net', hebeFunktion('createPortMux', SRC) + '\nreturn createPortMux;')(net);
+const sharedAddress = new Function(hebeFunktion('sharedAddress', SRC) + '\nreturn sharedAddress;')();
+// createPortMux with the sharedAddress it is handed: server.js's own, or one
+// that shares no address, since every client here comes from 127.0.0.1.
+const portMux = (shared) =>
+  new Function('net', 'sharedAddress', hebeFunktion('createPortMux', SRC) + '\nreturn createPortMux;')(net, shared);
+const createPortMux = portMux(sharedAddress);
 const PORT_LIMITS = new Function(hebeKonstante('PORT_LIMITS', SRC) + '\nreturn PORT_LIMITS;')();
 
 // The real limits, scaled down to wait for, in the same order: first byte,
 // headers, whole request.
-const LIMITS = { firstByteMs: 300, headersMs: 600, requestMs: 1200, checkMs: 25, maxConnections: 50 };
+const LIMITS = { firstByteMs: 300, headersMs: 600, requestMs: 1200, checkMs: 25, maxConnections: 50, perAddress: 50 };
 // The TLS server's own handshake deadline. server.js leaves it at Node's 120 s.
 const HANDSHAKE_MS = 900;
 // An answer that leaves in one write, as a backup download does.
@@ -73,7 +78,7 @@ function answer(req, res) {
 }
 
 // Both servers behind createPortMux, built the way server.js builds them.
-async function openPort(limits) {
+async function openPort(limits, makeMux = createPortMux) {
   const tlsServer = https.createServer(
     {
       key: CERT.privateKey.export({ type: 'pkcs8', format: 'pem' }),
@@ -87,7 +92,7 @@ async function openPort(limits) {
     res.writeHead(301, { Location: 'https://localhost' + req.url });
     res.end();
   });
-  const mux = createPortMux(tlsServer, plainServer, limits);
+  const mux = makeMux(tlsServer, plainServer, limits);
   await new Promise((resolve) => mux.listen(0, '127.0.0.1', resolve));
   return {
     mux,
@@ -296,9 +301,66 @@ describe('the connection limit', { timeout: 30000 }, () => {
   });
 });
 
+describe('the connection limit per address', { timeout: 30000 }, () => {
+  it('closes a connection past perAddress at once, and frees the place when one closes', async () => {
+    const limited = await openPort(
+      { ...LIMITS, headersMs: 10000, requestMs: 10000, perAddress: 2 },
+      portMux(() => false)
+    );
+    const drops = [];
+    limited.mux.on('drop', (info) => drops.push(info));
+    const serverSide = new Map();
+    limited.mux.on('connection', (s) => serverSide.set(s.remotePort, s));
+    try {
+      const held = await Promise.all([1, 2].map(() => connectTls(limited.port)));
+      const { text } = await untilClosed(await connectPlain(limited.port));
+      assert.deepEqual(drops, [{ perAddress: true }], 'not closed for the limit per address');
+      assert.equal(text, '');
+      const leaving = serverSide.get(held[0].localPort);
+      held[0].destroy();
+      await once(leaving, 'close');
+      await connectTls(limited.port);
+      assert.equal(drops.length, 1);
+    } finally {
+      limited.close();
+    }
+  });
+
+  it('lets an address that many clients share past perAddress', async () => {
+    const limited = await openPort({ ...LIMITS, headersMs: 10000, requestMs: 10000, perAddress: 2 });
+    let drops = 0;
+    limited.mux.on('drop', () => drops++);
+    try {
+      await Promise.all([1, 2, 3].map(() => connectTls(limited.port)));
+      assert.equal(drops, 0);
+    } finally {
+      limited.close();
+    }
+  });
+});
+
+describe('sharedAddress in server.js', () => {
+  it('counts this machine, local networks, a carrier or VPN range and link-local as shared', () => {
+    const shared = ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.20.30.40', '172.16.0.1', '172.31.255.254'];
+    shared.push('192.168.0.10', '100.64.0.1', '100.127.255.254', '169.254.10.20', 'fd12:3456:789a::1', 'fe80::1');
+    for (const a of shared) assert.equal(sharedAddress(a), true, a);
+  });
+
+  it('counts every other address as a source of its own', () => {
+    for (const a of ['192.0.2.10', '198.51.100.7', '203.0.113.200', '::ffff:203.0.113.5', '2001:db8::1']) {
+      assert.equal(sharedAddress(a), false, a);
+    }
+  });
+});
+
 // The real limits against what runs on the port. Each of these is a claim in
 // the comment above PORT_LIMITS in server.js.
 describe('PORT_LIMITS in server.js', () => {
+  it('let one browser in from any address, and no single address take the whole port', () => {
+    assert.ok(PORT_LIMITS.perAddress >= 7, 'a browser opens six connections, plus its event stream');
+    assert.ok(PORT_LIMITS.perAddress < PORT_LIMITS.maxConnections);
+  });
+
   function constant(name) {
     const m = SRC.match(new RegExp('const ' + name + ' = ([^;]+);'));
     assert.ok(m, name + ' is gone from server.js, so this test needs updating with it');
