@@ -751,6 +751,7 @@ window.LANG['en'] = {
   'orders.scan.ambiguous': 'This code fits several parcels. Tap “Packed” under Pack today.',
   'orders.scan.undone': 'Taken back: open again',
   'orders.scan.nothingToUndo': 'No label scanned yet.',
+  'orders.scan.useSquare': 'No open order has this barcode. Scan the large square code on the label instead.',
   'orders.scan.failed': 'Not saved: the server cannot be reached. Check the Wi-Fi and scan again.',
   'orders.board.markPacked': 'Packed',
   'orders.board.packedMsg': 'Marked as packed',

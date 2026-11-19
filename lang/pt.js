@@ -2176,6 +2176,7 @@ window.LANG['pt'] = {
   'orders.scan.ambiguous': 'Este código serve a vários volumes. Toca em “Embalada” em Embalar hoje.',
   'orders.scan.undone': 'Desfeito: aberta outra vez',
   'orders.scan.nothingToUndo': 'Ainda nenhuma etiqueta lida.',
+  'orders.scan.useSquare': 'Nenhuma encomenda aberta tem este código de barras. Lê o código quadrado grande da etiqueta.',
   'orders.scan.failed': 'Não guardado: o servidor não responde. Verifica o Wi-Fi e lê outra vez.',
   'orders.board.markPacked': 'Embalada',
   'orders.board.packedMsg': 'Marcada como embalada',

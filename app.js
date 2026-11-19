@@ -2444,6 +2444,8 @@ function obScanCode(raw, opts) {
   return _obScanQueue;
 }
 const _OB_SCAN_ERRORS = ['unknown', 'ambiguous', 'severalLabels', 'onlyPacked'];
+// Nur Ziffern, acht bis zehn: so liest sich der Strichcode eines GLS-Etiketts.
+const OB_SCAN_BARCODE_ONLY = /^\d{8,10}$/;
 // Was der letzte Etikett-Scan gesetzt hat: der Rückgängig-Knopf der Kamera
 // nimmt im Etiketten-Modus genau das zurück (camUndoLastScan).
 let _obLastUndo = null;
@@ -2470,8 +2472,17 @@ async function _obScanOne(raw, opts) {
     // Vom Handscanner ohne Knopf: vielleicht gar kein Etikett. Dann so sagen.
     // Passt der Name nur zu schon gepackten Bestellungen, ist es dasselbe
     // Paket noch einmal (Billbee wurde vorher schon gefragt).
+    // Eine reine Ziffernfolge ohne Treffer ist ein Strichcode, den die App
+    // keiner Bestellung zuordnen kann: verlesen, oder nicht von GLS. Der große
+    // quadratische Code trägt die Nummer, die Billbee meldet: den nehmen.
     const key =
-      r.error === 'unknown' && opts.auto ? 'unknownAny' : r.error === 'onlyPacked' ? 'already' : r.error;
+      r.error === 'unknown' && OB_SCAN_BARCODE_ONLY.test(raw.trim())
+        ? 'useSquare'
+        : r.error === 'unknown' && opts.auto
+          ? 'unknownAny'
+          : r.error === 'onlyPacked'
+            ? 'already'
+            : r.error;
     setFb('err', t('orders.scan.' + key, { numbers }));
     return;
   }

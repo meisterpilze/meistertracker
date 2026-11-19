@@ -756,6 +756,7 @@ window.LANG['de'] = {
   'orders.scan.ambiguous': 'Dieser Code passt zu mehreren Paketen. Tippe „Gepackt“ unter Heute packen.',
   'orders.scan.undone': 'Zurückgenommen: wieder offen',
   'orders.scan.nothingToUndo': 'Noch kein Etikett gescannt.',
+  'orders.scan.useSquare': 'Diesen Strichcode findet die App bei keiner offenen Bestellung. Scanne auf dem Etikett den großen quadratischen Code.',
   'orders.scan.failed': 'Nicht gespeichert: der Server ist nicht erreichbar. Prüfe das WLAN und scanne noch einmal.',
   'orders.board.markPacked': 'Gepackt',
   'orders.board.packedMsg': 'Als gepackt markiert',
