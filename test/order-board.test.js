@@ -311,7 +311,7 @@ describe('order board – zusammen packen', () => {
 });
 
 describe('order board – Billbee import', () => {
-  it('keeps the paid date, the tags, an anonymous buyer key and when the label was bought', () => {
+  it('keeps the paid date, the tags, an anonymous buyer key, when the label was bought and its parcel numbers', () => {
     const o = channels._normalizeBillbee(
       billbeeOrder({
         Tags: ['ZUSAMMENFASSEN', ' ', null],
@@ -326,7 +326,9 @@ describe('order board – Billbee import', () => {
     assert.match(o.raw.CustomerKey, /^[0-9a-f]{16}$/);
     assert.equal(o.raw.LabelCount, 2);
     assert.equal(o.raw.LabelAt, '2026-10-19T06:59:00+02:00');
-    assert.equal(JSON.stringify(o).includes('GLS-TEST-0001'), false, 'no tracking numbers');
+    // The parcel numbers, so a scanned label finds its order. Nothing else
+    // from the shipment: the address on the label stays in Billbee.
+    assert.deepEqual(o.raw.LabelIds, ['GLS-TEST-0001', 'GLS-TEST-0002']);
   });
 
   it('gives the same buyer the same key and another buyer another', () => {

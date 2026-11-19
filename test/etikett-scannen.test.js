@@ -1,0 +1,150 @@
+'use strict';
+// Das Etikett auf dem fertigen Paket scannen setzt "Gepackt", wie der Knopf.
+// Ein GLS-Etikett hat drei Codes; welcher es ist, soll egal sein. Paketnummern,
+// Namen und Codes hier sind erfunden.
+const { describe, it, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const db = require('../db.js');
+const board = require('../order-board.js');
+
+// So sieht der große Code aus: viel drumherum, die Paketnummer mittendrin.
+const grossCode = (nr) => 'ADE 000DE00X' + nr + 'ab12cdTESTTRCK          201B000000000  000000000';
+const adressCode = (name) => 'A|' + name + '|Musterweg|Musterstadt|1|||';
+
+describe('Etikett scannen', () => {
+  let d, p;
+  let nr = 5000;
+  const bestellung = (o) =>
+    db.upsertOrder(d, {
+      channel: 'billbee',
+      channelOrderId: String(++nr),
+      status: 'new',
+      customerName: o.name || 'Erika Musterfrau',
+      raw: { OrderNumber: String(nr), State: 3, LabelIds: o.labels || [], CustomerKey: o.key || null },
+      items: o.items || [{ channelSku: 'TEST-SCAN', qty: 1 }]
+    });
+  const gepackt = (id) => db.listBoardOrders(d, {}).find((o) => o.id === id).marks.packed;
+  let fach;
+  before(() => {
+    p = path.join(os.tmpdir(), 'mt_scan_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.db');
+    d = db.openDb(p);
+    fach = db.createShelfItem(d, 'Testbeutel Scan');
+    db.setShelfSku(d, fach.id, 'TEST-SCAN', 1);
+    db.moveShelfStock(d, fach.id, { count: 50 }, null);
+  });
+  after(() => {
+    d.close();
+    fs.unlinkSync(p);
+  });
+
+  it('findet die Bestellung, wenn die Paketnummer im großen Code steckt, und nimmt die Beutel aus dem Regal', () => {
+    const id = bestellung({ labels: ['99000000001'], items: [{ channelSku: 'TEST-SCAN', qty: 3 }] });
+    db.syncShelfOrders(d);
+    assert.equal(db.getShelfItem(d, fach.id).held, 3);
+    const r = db.scanShippingLabel(d, grossCode('99000000001'), 'erika');
+    assert.equal(r.via, 'label');
+    assert.deepEqual(
+      r.orders.map((o) => [o.id, o.packed, o.wasPacked]),
+      [[id, true, false]]
+    );
+    assert.deepEqual(r.bags, [{ name: 'Testbeutel Scan', qty: 3 }]);
+    assert.equal(gepackt(id).by, 'erika');
+    assert.equal(db.getShelfItem(d, fach.id).held, 0, 'gepackt: nichts mehr für sie im Fach');
+  });
+
+  it('findet sie auch, wenn der Strichcode nur einen Teil der Nummer trägt', () => {
+    const id = bestellung({ labels: ['0099000000002'] });
+    const r = db.scanShippingLabel(d, '99000000002', null);
+    assert.deepEqual(
+      r.orders.map((o) => o.id),
+      [id]
+    );
+  });
+
+  it('findet sie über den Namen im kleinen Adress-Code, groß, klein oder mit Akzent', () => {
+    const id = bestellung({ name: 'Max Müller-Muster', labels: ['99000000003'] });
+    const r = db.scanShippingLabel(d, adressCode('MAX MULLER-MUSTER'), null);
+    assert.equal(r.via, 'name');
+    assert.deepEqual(
+      r.orders.map((o) => o.id),
+      [id]
+    );
+    assert.equal(db.scanShippingLabel(d, adressCode('Niemand Bekannt'), null).error, 'unknown');
+  });
+
+  it('packt eine Bestellung mit zwei Paketen erst, wenn beide Etiketten gescannt sind', () => {
+    const id = bestellung({ name: 'Erika Zweipaket', labels: ['99000000011', '99000000012'] });
+    let r = db.scanShippingLabel(d, grossCode('99000000011'), null);
+    assert.deepEqual(
+      r.orders.map((o) => [o.scanned, o.labels, o.packed]),
+      [[1, 2, false]]
+    );
+    assert.equal(gepackt(id), undefined);
+    assert.equal(
+      db.scanShippingLabel(d, adressCode('Erika Zweipaket'), null).error,
+      'severalLabels',
+      'der Adress-Code ist auf beiden Paketen gleich'
+    );
+    r = db.scanShippingLabel(d, grossCode('99000000011'), null);
+    assert.equal(r.orders[0].packed, false, 'dasselbe Etikett zweimal zählt einmal');
+    r = db.scanShippingLabel(d, grossCode('99000000012'), null);
+    assert.deepEqual(
+      r.orders.map((o) => [o.scanned, o.packed]),
+      [[2, true]]
+    );
+  });
+
+  it('sagt, wenn ein Paket schon gepackt ist, und bucht nichts doppelt', () => {
+    const id = bestellung({ labels: ['99000000021'] });
+    db.setOrderMark(d, id, 'packed', true, 'max');
+    const r = db.scanShippingLabel(d, grossCode('99000000021'), 'erika');
+    assert.equal(r.orders[0].wasPacked, true);
+    assert.deepEqual(r.undo.packed, []);
+    assert.equal(gepackt(id).by, 'max');
+  });
+
+  it('nimmt einen Scan genau zurück', () => {
+    const id = bestellung({ labels: ['99000000031'] });
+    const r = db.scanShippingLabel(d, grossCode('99000000031'), null);
+    db.undoShippingLabelScan(d, r.undo, null);
+    assert.equal(gepackt(id), undefined);
+    const again = db.scanShippingLabel(d, grossCode('99000000031'), null);
+    assert.deepEqual(again.undo.scans, [{ id, label: '99000000031' }], 'auch der Scan selbst ist vergessen');
+  });
+
+  it('packt eine Bestellung desselben Käufers ohne eigenes Etikett mit', () => {
+    const mit = bestellung({ labels: ['99000000041'], key: 'kaeufer-a' });
+    const ohne = bestellung({ labels: [], key: 'kaeufer-a' });
+    const fremd = bestellung({ labels: [], key: 'kaeufer-b' });
+    const r = db.scanShippingLabel(d, grossCode('99000000041'), null);
+    assert.deepEqual(r.orders.map((o) => o.id).sort(), [mit, ohne].sort());
+    assert.equal(gepackt(fremd), undefined);
+  });
+
+  it('kennt keine kurzen Codes, keine stornierten und keine zwei Nummern auf einmal', () => {
+    bestellung({ labels: ['99000000051'] });
+    bestellung({ labels: ['99000000052'] });
+    const storniert = bestellung({ labels: ['99000000053'] });
+    d.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(storniert);
+    assert.equal(db.scanShippingLabel(d, '1234567', null).error, 'unknown');
+    assert.equal(db.scanShippingLabel(d, grossCode('99000000053'), null).error, 'unknown');
+    assert.equal(db.scanShippingLabel(d, '99000000051 99000000052', null).error, 'ambiguous');
+  });
+
+  it('hält den Scan nicht fest: in der Datenbank steht nur die Paketnummer', () => {
+    bestellung({ name: 'Erika Spurlos', labels: ['99000000061'] });
+    db.scanShippingLabel(d, grossCode('99000000061'), null);
+    const dump = JSON.stringify(d.prepare('SELECT * FROM order_label_scans').all());
+    assert.equal(dump.includes('TESTTRCK'), false);
+    assert.equal(dump.includes('99000000061'), true);
+  });
+});
+
+describe('Etikett scannen – Abgleich ohne Datenbank', () => {
+  it('trifft nichts, wenn keine Bestellung Paketnummern hat', () => {
+    assert.equal(board.matchLabelScan(grossCode('99000000001'), [{ id: 1, raw: {}, items: [] }]).error, 'unknown');
+  });
+});

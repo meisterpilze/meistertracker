@@ -742,11 +742,19 @@ function _billbeeLabRecord(o) {
     CustomerKey: _billbeeCustomerKey(o),
     // Whether a label has been bought, and when. Billbee's timed rules buy it
     // and set the order to "Versendet" before anyone has packed it, so this is
-    // information for the packer, not a sign the parcel is gone. Only the count
-    // and the time are kept, not the tracking numbers.
+    // information for the packer, not a sign the parcel is gone.
     LabelCount: Array.isArray(o.ShippingIds) ? o.ShippingIds.length : 0,
-    LabelAt: _billbeeFirstLabelAt(o)
+    LabelAt: _billbeeFirstLabelAt(o),
+    // The parcel numbers themselves, so that scanning the label on a packed
+    // parcel can find its order (db.scanShippingLabel). A parcel number names a
+    // parcel, not a person; the address on the label is never stored.
+    LabelIds: _billbeeLabelIds(o)
   };
+}
+
+function _billbeeLabelIds(o) {
+  if (!Array.isArray(o.ShippingIds)) return [];
+  return o.ShippingIds.map((s) => String((s && s.ShippingId) || '').trim()).filter((s) => s && s.length <= 64);
 }
 
 /**
