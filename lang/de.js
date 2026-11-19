@@ -3004,6 +3004,7 @@ window.LANG['de'] = {
   'lf.doneSold': '{n} × {what} verkauft',
   'lf.countSame': 'Stimmt schon: {n}.',
   'lf.scanUnknown': 'Dieses Fach-Etikett kennt die App nicht.',
+  'lf.scanOffline': 'Der Server ist nicht erreichbar, darum öffnet sich das Fach nicht. Ist der PC an? WLAN prüfen, dann nochmal scannen.',
   'bagInfo.sold': 'Verkauft',
   'bagInfo.soldState': 'Verkauft',
   'bagInfo.soldOne': '{bag} verkauft — aus dem Bestand',

@@ -335,6 +335,39 @@ describe('Laborfach in der App', () => {
     assert.match(APP, /entry\.type === 'labfach'\) \{[\s\S]{0,200}lfScanned\(entry\.id\)/);
     assert.match(APP, /linkType === 'labfach' && linkId\) \{[\s\S]{0,200}lfScanned\(linkId\)/);
   });
+  // Mit dem PC aus hieß ein gutes Etikett "kennt die App nicht". Jetzt sagt die
+  // Meldung, dass der Server fehlt; "unbekannt" nur bei einem echten 404.
+  it('ohne Server sagt der Scan, dass der Server fehlt, nicht dass das Etikett unbekannt ist', async () => {
+    const { hebeFunktion } = require('./helpers/quelle');
+    const lauf = async (antwort) => {
+      const out = { fb: null, offen: null };
+      const scan = new Function(
+        'antwort',
+        'out',
+        `const document = { getElementById: () => null };
+        const closeCamScan = () => {};
+        const closeScanModal = () => {};
+        const t = (k) => k;
+        const setFb = (art, text) => { out.fb = [art, text]; };
+        const authFetch = async () => {
+          if (antwort === 'netz') throw new TypeError('Failed to fetch');
+          return antwort;
+        };
+        let _lbData = {};
+        const loadLabStock = async () => {};
+        const lfOpen = (strainId, slot) => { out.offen = [strainId, slot]; };
+        ${hebeFunktion('lfScanned', APP)}
+        return lfScanned(7);`
+      );
+      await scan(antwort, out);
+      return out;
+    };
+    assert.deepEqual((await lauf('netz')).fb, ['err', 'lf.scanOffline'], 'kein Netz');
+    assert.deepEqual((await lauf({ ok: false, status: 503 })).fb, ['err', 'lf.scanOffline'], 'Service Worker: offline');
+    assert.deepEqual((await lauf({ ok: false, status: 404 })).fb, ['err', 'lf.scanUnknown'], 'das Fach gibt es nicht');
+    const da = await lauf({ ok: true, status: 200, json: async () => ({ fach: { strainId: 3, slot: 'KB' } }) });
+    assert.deepEqual([da.fb, da.offen], [null, [3, 'KB']]);
+  });
   it('das Blatt hat Add, Remove, Verkauft und Das ist der Bestand, und den Alarm oben', () => {
     const m = HTML.slice(HTML.indexOf('id="m-labfach"'), HTML.indexOf('<!-- Calendar print range modal -->'));
     for (const a of ['in', 'out', 'sold', 'count', 'print', 'close'])

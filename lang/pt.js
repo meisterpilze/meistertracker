@@ -2998,6 +2998,7 @@ window.LANG['pt'] = {
   'lf.doneSold': '{n} × {what} vendido',
   'lf.countSame': 'Já está certo: {n}.',
   'lf.scanUnknown': 'A app não conhece esta etiqueta.',
+  'lf.scanOffline': 'O servidor não está acessível, por isso o compartimento não abre. O PC está ligado? Verifique o Wi-Fi e leia de novo.',
   'bagInfo.sold': 'Vendido',
   'bagInfo.soldState': 'Vendido',
   'bagInfo.soldOne': '{bag} vendido — fora do estoque',

@@ -2981,6 +2981,7 @@ window.LANG['en'] = {
   'lf.doneSold': '{n} × {what} sold',
   'lf.countSame': 'Already right: {n}.',
   'lf.scanUnknown': 'The app does not know this Fach label.',
+  'lf.scanOffline': 'The server cannot be reached, so the Fach does not open. Is the PC on? Check the Wi-Fi, then scan again.',
   'bagInfo.sold': 'Sold',
   'bagInfo.soldState': 'Sold',
   'bagInfo.soldOne': '{bag} sold — out of stock',

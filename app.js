@@ -17801,12 +17801,21 @@ async function lfScanned(id) {
   const cam = document.getElementById('m-camscan');
   if (cam && cam.classList.contains('open')) closeCamScan();
   closeScanModal();
-  let r;
+  // Das Blatt braucht den Server. Ist er aus (der PC aus, das WLAN weg), sagt
+  // die Meldung das: "kennt die App nicht" ließ ein gutes Etikett kaputt
+  // aussehen. Nur ein 404 heißt, dass es das Fach wirklich nicht gibt.
+  let res;
   try {
-    r = await apiGet('/api/lab-fach/' + encodeURIComponent(id));
-  } catch {
-    r = null;
+    res = await authFetch('/api/lab-fach/' + encodeURIComponent(id));
+  } catch (e) {
+    if (e.message === 'unauthorized') return;
+    res = null;
   }
+  if (!res || (!res.ok && res.status !== 404)) {
+    setFb('err', t('lf.scanOffline'));
+    return;
+  }
+  const r = res.ok ? await res.json().catch(() => null) : null;
   if (!r || !r.fach) {
     setFb('err', t('lf.scanUnknown'));
     return;
