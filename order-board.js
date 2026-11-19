@@ -439,8 +439,97 @@ function _sortKeepingGroups(rows, cmp) {
   rows.splice(0, rows.length, ...out);
 }
 
+// ── Scanning the label on a packed parcel ──────────────────────────────────
+//
+// A GLS label carries three codes: a barcode, a large square code and a small
+// one. Which of them holds the parcel number is the carrier's business, so a
+// scan is matched loosely: it counts when the parcel number Billbee reported
+// for an order (raw.LabelIds) is inside it, or it is inside that number. The
+// small square code holds only the address, fields split by "|"; for that one
+// the recipient's name is matched against the open orders instead. Whatever was
+// scanned is only compared here, never stored or logged: the address is on it.
+
+// Shorter than this, a number matches too much by accident.
+const LABEL_MIN_LEN = 8;
+
+function _labelClean(s) {
+  return String(s == null ? '' : s)
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, '');
+}
+
+function _nameClean(s) {
+  return String(s == null ? '' : s)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/ß/g, 'ss')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The parcel numbers an order has, as Billbee reported them. */
+function labelIds(order) {
+  const ids = order && order.raw && Array.isArray(order.raw.LabelIds) ? order.raw.LabelIds : [];
+  return ids.map((x) => String(x || '').trim()).filter(Boolean);
+}
+
+/**
+ * Which order(s) a scanned label belongs to.
+ *
+ * @param {string} code    what the scanner read
+ * @param {Array} orders   rows from db.listBoardOrders
+ * @returns {{via:'label', label:string, orders:Array}
+ *          |{via:'name', orders:Array}
+ *          |{error:'unknown'|'ambiguous'|'severalLabels', orders?:Array}}
+ *   The address code cannot tell two parcels of one order apart, so an order
+ *   with more than one label answers 'severalLabels' to it.
+ */
+function matchLabelScan(code, orders) {
+  const live = (orders || []).filter(
+    (o) => o.status !== 'cancelled' && !DROPPED_STATES.includes(Number((o.raw || {}).State)) && !isRefundRecord(o.items)
+  );
+  const text = String(code == null ? '' : code);
+  if (text.includes('|')) {
+    const names = new Set(
+      text
+        .split('|')
+        .map(_nameClean)
+        .filter((n) => n.length >= 3)
+    );
+    const hits = live.filter((o) => o.customerName && names.has(_nameClean(o.customerName)));
+    if (!hits.length) return { error: 'unknown' };
+    // Already packed ones only count if nothing else is open for that name:
+    // then this is a parcel being scanned twice.
+    const open = hits.filter((o) => !_mark(o, 'packed'));
+    const use = open.length ? open : hits;
+    if (use.some((o) => labelIds(o).length > 1)) return { error: 'severalLabels', orders: use };
+    return { via: 'name', orders: use };
+  }
+  const scan = _labelClean(text);
+  if (scan.length < LABEL_MIN_LEN) return { error: 'unknown' };
+  const byLabel = new Map();
+  for (const o of live) {
+    for (const id of labelIds(o)) {
+      const c = _labelClean(id);
+      if (c.length < LABEL_MIN_LEN) continue;
+      if (!scan.includes(c) && !c.includes(scan)) continue;
+      if (!byLabel.has(id)) byLabel.set(id, []);
+      byLabel.get(id).push(o);
+    }
+  }
+  if (!byLabel.size) return { error: 'unknown' };
+  // Two orders merged into one parcel can carry the same number; two
+  // different numbers in one scan is a scan that cannot be trusted.
+  if (byLabel.size > 1) return { error: 'ambiguous' };
+  const [[label, hits]] = [...byLabel];
+  return { via: 'label', label, orders: hits };
+}
+
 module.exports = {
   BOARD_WINDOW_DAYS,
+  labelIds,
+  matchLabelScan,
   MADE_TO_ORDER,
   COMBINE_TAG,
   localDay,

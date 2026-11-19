@@ -2409,6 +2409,70 @@ function obSyncNow(btn) {
   });
 }
 
+// ── Etiketten scannen: das fertige Paket sagt selbst, dass es gepackt ist ──
+// "Etiketten scannen" macht die Kamera für die Paketetiketten auf (am Tisch
+// tippt der Handscanner ohnehin); jeder Scan setzt "Gepackt" wie der Knopf,
+// mit Rückgängig. Welcher der drei Codes auf dem GLS-Etikett, ist egal (der
+// Server sucht, db.scanShippingLabel). Der Handscanner braucht den Knopf
+// nicht: ein Code, den die App sonst nicht kennt, wird als Etikett versucht.
+// Was gelesen wurde, zeigt die App nie an: die Adresse steht darauf.
+// Der Modus steht am Scan-Stand (scan.packLabels): resetScan räumt ihn mit ab.
+let _obScanQueue = Promise.resolve();
+function obScanStart() {
+  scan.packLabels = true;
+  const kamera = !window.matchMedia || window.matchMedia('(pointer: coarse)').matches;
+  if (kamera) openCamScan();
+  setFb('info', t('orders.scan.ready'), kamera ? { noModal: true } : undefined);
+  updateCamHud();
+}
+function obScanEnd() {
+  if (!scan.packLabels) return;
+  scan.packLabels = false;
+  if (document.getElementById('m-camscan').classList.contains('open')) updateCamHud();
+}
+// Ein Scan nach dem anderen: zwei Etiketten derselben Bestellung kurz
+// hintereinander sollen in der Reihenfolge ankommen, in der sie gelesen wurden.
+function obScanCode(raw, opts) {
+  _obScanQueue = _obScanQueue.then(() => _obScanOne(String(raw), opts || {}));
+  return _obScanQueue;
+}
+const _OB_SCAN_ERRORS = ['unknown', 'ambiguous', 'severalLabels'];
+async function _obScanOne(raw, opts) {
+  const r = await apiPost('/api/orders/board/scan', { code: raw });
+  if (!r || (r.error && !_OB_SCAN_ERRORS.includes(r.error))) {
+    setFb('err', t('orders.scan.failed'));
+    return;
+  }
+  const numbers = (r.orders || []).map((o) => o.number).join(', ');
+  if (r.error) {
+    // Vom Handscanner ohne Knopf: vielleicht gar kein Etikett. Dann so sagen.
+    const key = r.error === 'unknown' && opts.auto ? 'unknownAny' : r.error;
+    setFb('err', t('orders.scan.' + key, { numbers }));
+    return;
+  }
+  renderOrderBoard();
+  const open = r.orders.filter((o) => !o.packed);
+  if (open.length) {
+    const o = open[0];
+    setFb('ok', t('orders.scan.partial', { number: o.number, scanned: o.scanned, labels: o.labels }));
+  } else if (!r.undo.packed.length) {
+    setFb('warn', t('orders.scan.already', { numbers }));
+    return;
+  } else {
+    let msg = t('orders.scan.packed', { numbers });
+    if (r.bags && r.bags.length)
+      msg += ' · ' + t('orders.scan.bags', { list: r.bags.map((b) => b.qty + ' × ' + b.name).join(', ') });
+    setFb('ok', msg);
+  }
+  if (r.undo.packed.length || r.undo.scans.length)
+    showUndoBar(t('orders.scan.undoMsg', { numbers }), () =>
+      apiPost('/api/orders/board/scan/undo', r.undo).then((u) => {
+        if (u && u.error) toast(t('orders.board.saveFailed'), 'err');
+        renderOrderBoard();
+      })
+    );
+}
+
 function renderOrdersMapping() {
   renderInventoryCard();
   const left = $('orders-unmapped-list');
@@ -2852,6 +2916,8 @@ function ordersActionHandler(e) {
     obMark(btn.dataset.id, btn.dataset.kind, btn.dataset.on === '1');
   } else if (action === 'ob-sync-now') {
     obSyncNow(btn);
+  } else if (action === 'ob-scan') {
+    obScanStart();
   } else if (action === 'oh-filter') {
     setOrdersFilter(btn.dataset.filter || '');
   } else if (action === 'oh-goto-mapping') {
@@ -28828,6 +28894,8 @@ function openScanModal() {
 }
 function closeScanModal() {
   document.getElementById('scan-overlay').classList.remove('open');
+  // Am Tisch ist das Scan-Fenster das Etiketten-Scannen; zu heißt fertig.
+  if (!document.getElementById('m-camscan').classList.contains('open')) scan.packLabels = false;
   document.body.style.overflow = '';
 }
 function _addLogEntry(type, msg, entryData) {
@@ -28927,7 +28995,7 @@ function fbShowMs(type) {
   return type === 'err' ? 7000 : type === 'warn' ? 5000 : 3000;
 }
 function updateCamHud() {
-  document.getElementById('ch-action').textContent = scan.action || '—';
+  document.getElementById('ch-action').textContent = scan.packLabels ? t('orders.scan.mode') : scan.action || '—';
   document.getElementById('ch-from').textContent = scan.from || '—';
   // Der Name des Platzes, wie auf dem Umziehen-Knopf daneben — nicht "TENT1".
   document.getElementById('ch-to').textContent = scan.to ? zoneDisplayName(scan.to) : '—';
@@ -28953,7 +29021,8 @@ function updateCamHud() {
   // Zustand, den er herstellt: am Telefon blieb nur, einen gedruckten
   // MOVE-Barcode zu scannen, und den hat in der Kammer niemand dabei.
   const wantsTo =
-    !scan.action || scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH';
+    !scan.packLabels &&
+    (!scan.action || scan.action === 'ADD' || scan.action === 'MOVE' || scan.action === 'MOVE_BATCH');
   toChip.className = 'cam-chip' + (wantsTo && scan.to ? ' ch-set' : '');
   toChip.style.display = wantsTo ? '' : 'none';
   // Pulsieren nur, wenn ein Vorgang wirklich auf sein Ziel wartet. Ohne Vorgang
@@ -29658,6 +29727,11 @@ function processScan(raw, opts) {
   // use hyphens would break this logic — always use underscores for locations.
   let val = raw.trim().toUpperCase();
   if (!val) return;
+  // Paketetiketten scannen (obScanStart): alles, was jetzt kommt, ist ein Etikett.
+  if (scan.packLabels) {
+    obScanCode(raw);
+    return;
+  }
   // Zweiter Durchlauf nach frischem Stand (scanAfterSync): was jetzt noch
   // unbekannt ist, ist es wirklich, und die Meldung darf das sagen.
   const synced = !!(opts && opts.synced);
@@ -30698,6 +30772,21 @@ function _flushScanBuf() {
   _scanBuf.chars = [];
   if (raw.length < SCAN_MIN_LEN) return;
   const cleaned = raw.trim().toUpperCase();
+  if (scan.packLabels) {
+    obScanCode(raw);
+    return;
+  }
+  // Ein Paketetikett vom Handscanner: der Adress-Code (Felder mit |), eine
+  // Nummer mit acht oder mehr Stellen (die App druckt sieben) oder ein anderer
+  // langer Code. Der Inhalt wird nie angezeigt, die Adresse steht darauf.
+  const etikettArtig =
+    raw.includes('|') ||
+    /^\d{8,}$/.test(cleaned) ||
+    (!isKnownBarcode(cleaned) && cleaned.replace(/[^0-9A-Z]/g, '').length >= 8);
+  if (etikettArtig) {
+    obScanCode(raw, { auto: true });
+    return;
+  }
   if (!isKnownBarcode(cleaned)) {
     setFb(
       'err',
@@ -30709,7 +30798,10 @@ function _flushScanBuf() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // AltGr meldet sich unter Windows als Strg+Alt. Ein Handscanner mit deutscher
+  // Tastaturbelegung tippt so das | im Adress-Code eines Paketetiketts.
+  const altGr = !!(e.getModifierState && e.getModifierState('AltGraph'));
+  if ((e.ctrlKey || e.metaKey || e.altKey) && !altGr) return;
   // Ignore keystrokes while user is typing in form fields — prevents the scan buffer
   // from swallowing Enter on form submits or mis-firing on fast typing in search boxes.
   // The scan modal and camera modal are exceptions: keep the buffer active there.
@@ -34908,6 +35000,8 @@ function openCamScan() {
 }
 function closeCamScan() {
   document.getElementById('m-camscan').classList.remove('open');
+  // Die Kamera zu heißt: fertig mit den Etiketten.
+  scan.packLabels = false;
   // Die Kamera zuzumachen ist am Telefon das Zeichen "fertig" — der grüne Haken
   // tut nichts anderes. Steht CONTAM und liegen Beutel in der Sammelliste, ist
   // das Formular das, was jetzt drankommt; ohne das führte der Haken ins Leere
@@ -35231,6 +35325,12 @@ function initEventListeners() {
   // getrennt aus dem Netz, und jedes fällt nach drei Sekunden auf den Cache
   // zurück (sw.js). Ein neues app.js über einem alten index.html fände sie
   // nicht, und ein Fehler hier bräche jede Bindung darunter ab.
+  // Ein anderer Vorgang in der Kamera beendet das Etiketten-Scannen. In der
+  // Capture-Phase, damit der Vorgang danach auf einem leeren Stand aufsetzt.
+  for (const id of ['btn-cam-move', 'btn-cam-harvest', 'btn-cam-trash', 'btn-cam-contam', 'btn-cam-reset']) {
+    const knopf = $(id);
+    if (knopf) knopf.addEventListener('click', obScanEnd, true);
+  }
   for (const [id, fn] of [
     ['btn-cam-move', toggleMoveScan],
     ['btn-cam-harvest', () => toggleModeScan('HARVEST')],

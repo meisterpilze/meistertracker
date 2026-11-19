@@ -3382,6 +3382,24 @@ const MIGRATIONS = [
       const has = db.prepare("SELECT COUNT(*) AS c FROM pragma_table_info('shelf_log') WHERE name = 'held'").get();
       if (!has.c) db.exec('ALTER TABLE shelf_log ADD COLUMN held INTEGER');
     }
+  },
+  {
+    version: 120,
+    description: 'Packliste: gescannte Paketetiketten, damit ein Paket mit zwei Etiketten erst nach beiden gepackt ist',
+    fn(db) {
+      // Ein Scan des Etiketts auf dem fertigen Paket setzt "Gepackt". Hat eine
+      // Bestellung zwei Pakete (zu schwer fuer eins), ist sie erst gepackt, wenn
+      // beide Etiketten gescannt sind; bis dahin steht hier, welche schon da
+      // waren. label ist die Paketnummer aus Billbee, nie der gescannte Text.
+      db.exec(`CREATE TABLE IF NOT EXISTS order_label_scans (
+        channel          TEXT NOT NULL,
+        channel_order_id TEXT NOT NULL,
+        label            TEXT NOT NULL,
+        scanned_by       TEXT,
+        scanned_at       TEXT NOT NULL,
+        PRIMARY KEY (channel, channel_order_id, label)
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -14420,6 +14438,111 @@ function setOrderMark(db, orderId, kind, on, user) {
   return true;
 }
 
+/**
+ * The label on a packed parcel was scanned: find its order and mark it packed,
+ * the same mark the "Gepackt" button sets. What was scanned is matched by
+ * orderBoard.matchLabelScan and then forgotten; the address on the label is
+ * never stored or logged.
+ *
+ * An order with two labels (two parcels) is packed once both were scanned. An
+ * order of the same buyer that travels in this parcel and has no label of its
+ * own is packed with it.
+ *
+ * Returns { error } when nothing fits, else { via, orders, bags, undo }: orders
+ * as {id, number, labels, scanned, packed, wasPacked}, bags what left the shelf
+ * with them, undo what undoShippingLabelScan needs to put it back.
+ */
+function scanShippingLabel(db, code, user, now) {
+  // Hier geladen, nicht oben: db.js wird auch allein geladen (der DuckDNS-
+  // Ersatz-Timer, CI kopiert nur db.js, duckdns.js und scripts/).
+  const orderBoard = require('./order-board.js');
+  const nowMs = now ? new Date(now).getTime() : Date.now();
+  const since = new Date(nowMs - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
+  const orders = listBoardOrders(db, { sinceIso: since });
+  const m = orderBoard.matchLabelScan(code, orders);
+  const number = (o) => String((o.raw && o.raw.OrderNumber) || o.channelOrderId);
+  if (m.error) {
+    return {
+      error: m.error,
+      orders: (m.orders || []).map((o) => ({ id: o.id, number: number(o), labels: orderBoard.labelIds(o).length }))
+    };
+  }
+  // Same buyer, still open, no label of its own: it is in this parcel.
+  const targets = [...m.orders];
+  for (const hit of m.orders) {
+    const key = hit.raw && hit.raw.CustomerKey;
+    if (!key) continue;
+    for (const o of orders) {
+      if (targets.includes(o) || o.status === 'cancelled') continue;
+      if (!o.raw || o.raw.CustomerKey !== key || (o.marks && o.marks.packed)) continue;
+      if (orderBoard.labelIds(o).length) continue;
+      targets.push(o);
+    }
+  }
+  const at = new Date(nowMs).toISOString();
+  const scannedOf = db.prepare('SELECT label FROM order_label_scans WHERE channel = ? AND channel_order_id = ?');
+  const addScan = db.prepare(
+    `INSERT OR IGNORE INTO order_label_scans(channel, channel_order_id, label, scanned_by, scanned_at)
+     VALUES(?,?,?,?,?)`
+  );
+  const out = { via: m.via, orders: [], bags: [], undo: { packed: [], scans: [] } };
+  _blockTx(db, () => {
+    for (const o of targets) {
+      const ids = orderBoard.labelIds(o);
+      const byLabel = m.via === 'label' && m.orders.includes(o);
+      if (byLabel && addScan.run(o.channel, o.channelOrderId, m.label, user || null, at).changes)
+        out.undo.scans.push({ id: o.id, label: m.label });
+      const seen = new Set(scannedOf.all(o.channel, o.channelOrderId).map((r) => r.label));
+      const scanned = ids.filter((id) => seen.has(id)).length;
+      const wasPacked = !!(o.marks && o.marks.packed);
+      const complete = !byLabel || ids.length <= 1 || scanned >= ids.length;
+      if (complete && !wasPacked) {
+        setOrderMark(db, o.id, 'packed', true, user);
+        out.undo.packed.push(o.id);
+      }
+      out.orders.push({
+        id: o.id,
+        number: number(o),
+        labels: ids.length,
+        scanned,
+        packed: wasPacked || complete,
+        wasPacked
+      });
+    }
+  });
+  if (out.undo.packed.length) {
+    const marks = out.undo.packed.map(() => '?').join(',');
+    out.bags = db
+      .prepare(
+        `SELECT s.name, SUM(b.qty) AS qty FROM shelf_order_booked b JOIN shelf_items s ON s.id = b.item_id
+          WHERE b.order_id IN (${marks}) AND b.qty > 0 GROUP BY s.id ORDER BY s.name COLLATE NOCASE`
+      )
+      .all(...out.undo.packed)
+      .map((r) => ({ name: r.name, qty: r.qty }));
+  }
+  return out;
+}
+
+/** Put a label scan back: its scans forgotten, the marks it set taken off. */
+function undoShippingLabelScan(db, undo, user) {
+  const u = undo || {};
+  const orderOf = db.prepare('SELECT channel, channel_order_id AS coid FROM orders WHERE id = ?');
+  _blockTx(db, () => {
+    for (const s of Array.isArray(u.scans) ? u.scans : []) {
+      const o = orderOf.get(Number(s && s.id));
+      if (!o) continue;
+      db.prepare('DELETE FROM order_label_scans WHERE channel = ? AND channel_order_id = ? AND label = ?').run(
+        o.channel,
+        o.coid,
+        String(s.label || '')
+      );
+    }
+    for (const id of Array.isArray(u.packed) ? u.packed : []) setOrderMark(db, Number(id), 'packed', false, user);
+    incrementDataVersion(db);
+  });
+  return true;
+}
+
 // -- Sales channel config (live order sync: Wix / Etsy / eBay) --
 // Reuses the sales_channel_config table (v42). Rows are created lazily.
 const SALES_CHANNELS = ['wix', 'etsy', 'ebay', 'billbee'];
@@ -15923,6 +16046,8 @@ module.exports = {
   orderMarksSince,
   clearOldBillbeeNames,
   setOrderMark,
+  scanShippingLabel,
+  undoShippingLabelScan,
   getChannelConfig,
   listChannelConfigs,
   updateChannelConfig,

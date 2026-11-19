@@ -1466,6 +1466,29 @@ async function pollSalesChannels() {
     _channelPollBusy = false;
   }
 }
+// A scanned label that no order has yet: Billbee bought it minutes ago and the
+// poll has not been round since. One fetch now, then the scan is tried again.
+// At most once a minute, and never while the poll itself is running, so a
+// stack of unknown scans costs Billbee one request, not one each. Resolves to
+// whether a fetch happened.
+const LABEL_REFRESH_MS = 60 * 1000;
+let _labelRefreshAt = 0;
+async function refreshBillbeeForLabel() {
+  if (WORKTREE_MODE || _channelPollBusy) return false;
+  if (Date.now() - _labelRefreshAt < LABEL_REFRESH_MS) return false;
+  const bb = db.listChannelConfigs(database).find((c) => c.channel === 'billbee');
+  if (!bb || !bb.enabled || !bb.connected) return false;
+  _labelRefreshAt = Date.now();
+  _channelPollBusy = true;
+  try {
+    const r = await syncChannelOrders('billbee');
+    if (r.error) log('warn', 'Billbee fetch for a scanned label failed', { error: r.error });
+    return !r.error || r.imported > 0;
+  } finally {
+    _channelPollBusy = false;
+  }
+}
+
 function startChannelPoll() {
   if (WORKTREE_MODE) return false;
   if (_channelPollTimer) clearInterval(_channelPollTimer);
@@ -10386,6 +10409,51 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           jsonErr(res, 404, 'not found');
           return;
         }
+        broadcastSSE(res);
+        jsonOk(res, { ok: true });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
+  // Orders — packing board: the label on a packed parcel was scanned ({code}).
+  // Finds the order and sets "Gepackt" like the button. A label Billbee has not
+  // reported yet (its sync runs every 15 minutes, the label is bought minutes
+  // before packing) gets one fresh Billbee fetch, at most once a minute.
+  // The code itself is never logged: the recipient's address is on the label.
+  if (req.method === 'POST' && url === '/api/orders/board/scan') {
+    jsonBody(req, res, async (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const code = String((data && data.code) || '');
+      if (!code.trim() || code.length > 2000) {
+        jsonErr(res, 400, 'code required');
+        return;
+      }
+      const user = req.authUser && req.authUser.username;
+      try {
+        let r = db.scanShippingLabel(database, code, user);
+        if (r.error === 'unknown' && (await refreshBillbeeForLabel())) r = db.scanShippingLabel(database, code, user);
+        if (!r.error) broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && url === '/api/orders/board/scan/undo') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        db.undoShippingLabelScan(database, data, req.authUser && req.authUser.username);
         broadcastSSE(res);
         jsonOk(res, { ok: true });
       } catch (err) {
