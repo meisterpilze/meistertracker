@@ -62,7 +62,7 @@ describe('Regal-Bestand', () => {
   it('nimmt nicht mehr raus, als da ist, und sagt, was zu tun ist', () => {
     const a = db.createShelfItem(d, 'Testartikel C');
     db.moveShelfStock(d, a.id, { delta: 2 }, null);
-    assert.throws(() => db.moveShelfStock(d, a.id, { delta: -3 }, null), /nur 2 da.*Zähle/);
+    assert.throws(() => db.moveShelfStock(d, a.id, { delta: -3 }, null), /nur 2,.*Gepackt.*zählen/);
     assert.equal(db.getShelfItem(d, a.id).stock, 2);
   });
 
@@ -187,6 +187,77 @@ describe('Regal und Bestellungen', () => {
     assert.throws(() => db.undoShelfMove(d, order.id, null), /storniert/);
   });
 
+  // Verkauft, aber noch nicht gepackt: die Beutel liegen noch im Fach. Wer dann
+  // zählt, zählt sie mit; frei ist das Gezählte minus sie. Sonst ist die
+  // Bestellung beim Zählen weg und beim Packen geht nichts mehr runter.
+  it('zählt Beutel ungepackter Bestellungen nicht als frei, auch nach dem Auffüllen', () => {
+    const a = db.createShelfItem(d, 'Testbeutel Packen');
+    db.setShelfSku(d, a.id, 'TEST-PACKEN', 1);
+    db.moveShelfStock(d, a.id, { count: 10 }, null);
+    const orderId = bestellung([{ channelSku: 'TEST-PACKEN', qty: 3 }]);
+    db.syncShelfOrders(d);
+    let x = db.getShelfItem(d, a.id);
+    assert.deepEqual([x.stock, x.held], [7, 3], 'frei 7, im Regal 10');
+    assert.deepEqual(
+      x.heldOrders.map((o) => [o.ref, o.qty]),
+      [[String(nr), 3]]
+    );
+    db.moveShelfStock(d, a.id, { delta: 5 }, null);
+    const gezaehlt = db.moveShelfStock(d, a.id, { count: 15 }, null);
+    assert.deepEqual([gezaehlt.counted, gezaehlt.held, gezaehlt.item.stock], [15, 3, 12], '15 gezählt, 3 verkauft');
+    assert.equal(db.listShelfLog(d, a.id, 1)[0].held, 3, 'der Verlauf merkt sich, wie viele dabei verkauft waren');
+    db.setOrderMark(d, orderId, 'packed', true, 'erika');
+    x = db.getShelfItem(d, a.id);
+    assert.deepEqual([x.stock, x.held], [12, 0], 'gepackt: frei bleibt 12, im Regal jetzt 12');
+    assert.equal(db.moveShelfStock(d, a.id, { count: 12 }, null).item.stock, 12);
+  });
+
+  it('lässt beim Zählen frei unter 0 gehen, wenn weniger da ist als verkauft', () => {
+    const a = db.createShelfItem(d, 'Testbeutel Weniger');
+    db.setShelfSku(d, a.id, 'TEST-WENIGER', 1);
+    db.moveShelfStock(d, a.id, { count: 5 }, null);
+    bestellung([{ channelSku: 'TEST-WENIGER', qty: 4 }]);
+    db.syncShelfOrders(d);
+    assert.equal(db.moveShelfStock(d, a.id, { count: 2 }, null).item.stock, -2);
+  });
+
+  it('hält nichts für stornierte, Reklamationen und Bestellungen außerhalb der Packliste', () => {
+    const a = db.createShelfItem(d, 'Testbeutel Halten');
+    db.setShelfSku(d, a.id, 'TEST-HALTEN', 1);
+    db.moveShelfStock(d, a.id, { count: 20 }, null);
+    const items = [{ channelSku: 'TEST-HALTEN', qty: 1 }];
+    bestellung(items);
+    const storniert = String(nr);
+    bestellung(items);
+    const reklamation = String(nr);
+    bestellung(items);
+    const alt = String(nr);
+    bestellung(items);
+    db.syncShelfOrders(d);
+    assert.equal(db.getShelfItem(d, a.id).held, 4);
+    db.upsertOrder(d, { channel: 'billbee', channelOrderId: storniert, status: 'cancelled', items });
+    db.upsertOrder(d, { channel: 'billbee', channelOrderId: reklamation, raw: { State: 5 }, items });
+    d.prepare("UPDATE orders SET order_date='2000-01-01T00:00:00.000Z' WHERE channel_order_id=?").run(alt);
+    db.syncShelfOrders(d);
+    const x = db.getShelfItem(d, a.id);
+    assert.deepEqual(
+      x.heldOrders.map((o) => o.ref),
+      [String(nr)]
+    );
+    assert.equal(x.stock, 17, 'die stornierte ist zurück, die anderen drei sind verkauft');
+  });
+
+  it('nimmt ein Zählen mit Bestellungen wieder genau zurück', () => {
+    const a = db.createShelfItem(d, 'Testbeutel Zaehlen');
+    db.setShelfSku(d, a.id, 'TEST-ZAEHLEN', 1);
+    db.moveShelfStock(d, a.id, { count: 6 }, null);
+    bestellung([{ channelSku: 'TEST-ZAEHLEN', qty: 2 }]);
+    db.syncShelfOrders(d);
+    const z = db.moveShelfStock(d, a.id, { count: 9 }, null);
+    assert.equal(z.item.stock, 7);
+    assert.equal(db.undoShelfMove(d, z.logId, null).stock, 4);
+  });
+
   it('hängt eine SKU nur an ein Fach', () => {
     const a = db.createShelfItem(d, 'Testbeutel X');
     const b = db.createShelfItem(d, 'Testbeutel Y');
@@ -222,5 +293,14 @@ describe('Regal und Bestellungen', () => {
     );
     assert.equal(db.updateShelfItem(d, a.id, { minStock: 2 }).minStock, 2);
     assert.throws(() => db.updateShelfItem(d, a.id, { minStock: -1 }), /Alarm-Stand/);
+  });
+});
+
+// Eine Bestellung hält ihre Beutel, solange die Packliste sie zeigt: dort wird
+// "Gepackt" getippt. Länger zu halten hieße, Beutel für immer festzuhalten, die
+// niemand mehr freigeben kann.
+describe('Regal und Packliste', () => {
+  it('hält Beutel so lange, wie die Packliste Bestellungen zeigt', () => {
+    assert.equal(db.SHELF_HOLD_DAYS, require('../order-board.js').BOARD_WINDOW_DAYS);
   });
 });

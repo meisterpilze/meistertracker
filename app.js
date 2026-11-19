@@ -16636,6 +16636,9 @@ function renderShelf() {
             `<button type="button" class="shelf-row${_shelfLow(x) ? ' shelf-low' : ''}" data-shelf-open="${x.id}">` +
             `<span class="shelf-row-name">${esc(x.name)}` +
             (_shelfLow(x) ? `<small class="shelf-low-tag">${esc(t('shelf.remake'))}</small>` : '') +
+            (x.held > 0
+              ? `<small class="shelf-row-held">${esc(t('shelf.rowHeld', { n: x.stock + x.held }))}</small>`
+              : '') +
             `</span><b class="shelf-row-n${x.stock ? '' : ' shelf-null'}">${x.stock}</b></button>`
         )
         .join('')
@@ -16733,6 +16736,7 @@ function shelfSheetRender() {
   document.getElementById('m-shelf-title').textContent = x.name;
   document.getElementById('m-shelf-stock').textContent = x.stock;
   document.getElementById('m-shelf-now').classList.toggle('shelf-low', _shelfLow(x));
+  shelfHeldRender(x);
   if (_shelfSheet.min == null || !_shelfSheet.minTimer) _shelfSheet.min = x.minStock;
   document.getElementById('m-shelf-alarm').textContent = t('shelf.alarmAt', { n: _shelfSheet.min });
   document.getElementById('m-shelf-minv').textContent = _shelfSheet.min;
@@ -16760,6 +16764,30 @@ function shelfSheetRender() {
     .join('');
   shelfEtikettRender(x);
   shelfLabelPreview(x);
+}
+
+// Liegen noch Beutel für ungepackte Bestellungen im Fach, ist die große Zahl
+// „frei“, und darunter steht, was im Regal steht und für wen. Eine Bestellung,
+// die schon länger wartet, ist wahrscheinlich gepackt und nur nicht getippt.
+const SHELF_HELD_STALE_DAYS = 5;
+function shelfHeldRender(x) {
+  const held = x.held || 0;
+  document.getElementById('m-shelf-nowlabel').textContent = t(held > 0 ? 'shelf.free' : 'shelf.inShelf');
+  const box = document.getElementById('m-shelf-held');
+  box.hidden = !(held > 0);
+  if (!(held > 0)) {
+    box.innerHTML = '';
+    return;
+  }
+  const now = Date.now();
+  const orders = (x.heldOrders || []).map((o) => {
+    const d = o.orderDate ? Math.floor((now - new Date(o.orderDate).getTime()) / 86400000) : 0;
+    return d >= SHELF_HELD_STALE_DAYS
+      ? `<li class="shelf-held-stale">${esc(t('shelf.heldStale', { ref: o.ref, n: o.qty, d }))}</li>`
+      : `<li>${esc(t('shelf.heldOrder', { ref: o.ref, n: o.qty }))}</li>`;
+  });
+  box.innerHTML =
+    `<p>${esc(t('shelf.held', { total: x.stock + held, held }))}</p>` + `<ul>${orders.join('')}</ul>`;
 }
 
 // Welcher Regal-Artikel für eine Beutelgröße Körnerbrut steht, oder keiner.
@@ -16915,7 +16943,10 @@ async function shelfAct(kind) {
   }
   shelfSheetClose();
   _shelfTake(r.item);
-  const msg = t('shelf.done.' + kind, { n, name: r.item.name, stock: r.item.stock });
+  const msg =
+    kind === 'count' && r.held > 0
+      ? t('shelf.done.countHeld', { name: r.item.name, counted: r.counted, held: r.held, stock: r.item.stock })
+      : t('shelf.done.' + kind, { n, name: r.item.name, stock: r.item.stock });
   showUndoBar(msg, async () => {
     const u = await apiPost('/api/shelf/log/' + r.logId + '/undo', {});
     if (!u || u.error) {
@@ -16971,7 +17002,9 @@ async function shelfLogLoad() {
           const n = Math.abs(e.delta);
           const was =
             e.kind === 'count'
-              ? t('shelf.log.count', { stock: e.running })
+              ? e.held > 0
+                ? t('shelf.log.countHeld', { counted: e.running + e.held, held: e.held, stock: e.running })
+                : t('shelf.log.count', { stock: e.running })
               : e.kind === 'order'
                 ? t(e.delta < 0 ? 'shelf.log.order' : 'shelf.log.cancel', { n, ref: e.ref || '', stock: e.running })
                 : e.kind === 'spawn'
