@@ -186,6 +186,24 @@ describe('Etikett scannen', () => {
     assert.equal(r.error, 'onlyPacked', 'der Server fragt dann Billbee nach der neuen Bestellung');
   });
 
+  it('findet ein GLS-Paket auch über den Strichcode, der die Paketnummer trägt', () => {
+    // Erfundene Paketnummer; der Tracking-Code dazu ist daraus gerechnet, so wie
+    // GLS ihn bildet (Basis 36 plus fester Betrag, siehe order-board.js).
+    const track = (41200000002 + 2721109907456).toString(36).toUpperCase();
+    assert.equal(board.glsParcelNumber(track), '41200000002');
+    const id = bestellung({ labels: [track] });
+    for (const strich of ['41200000002', '412000000025']) {
+      const r = db.scanShippingLabel(d, strich, null);
+      assert.deepEqual(
+        r.orders.map((o) => o.id),
+        [id],
+        strich
+      );
+      db.undoShippingLabelScan(d, r.undo, null);
+    }
+    assert.equal(board.glsParcelNumber('99000000001'), null, 'nur ein GLS-Tracking-Code wird umgerechnet');
+  });
+
   it('hält den Scan nicht fest: in der Datenbank steht nur die Paketnummer', () => {
     bestellung({ name: 'Erika Spurlos', labels: ['99000000061'] });
     db.scanShippingLabel(d, grossCode('99000000061'), null);
@@ -223,6 +241,18 @@ describe('Etikett scannen – App', () => {
     const body = app.slice(app.indexOf('function processScan('));
     const pipe = body.indexOf("raw.includes('|')");
     assert.ok(pipe > 0 && pipe < body.indexOf('barcodeRegistry.get'), 'vor allem, was den Text anzeigen könnte');
+  });
+
+  it('sagt beim Strichcode ohne Treffer, dass der große quadratische Code gebraucht wird', () => {
+    const fn = app.slice(
+      app.indexOf('async function _obScanOne('),
+      app.indexOf('renderOrderBoard();', app.indexOf('async function _obScanOne('))
+    );
+    assert.match(fn, /OB_SCAN_BARCODE_ONLY\.test\(raw\.trim\(\)\)\s*\?\s*'useSquare'/);
+    const re = new Function(app.match(/const OB_SCAN_BARCODE_ONLY = [^;]+;/)[0] + ' return OB_SCAN_BARCODE_ONLY;')();
+    assert.equal(re.test('41215106'), true, 'acht Ziffern: der Strichcode');
+    assert.equal(re.test('1234567'), false, 'sieben Ziffern druckt die App selbst');
+    assert.equal(re.test('ADE 410DE78W'), false);
   });
 
   it('lässt nach einem Fehler weiter scannen', () => {

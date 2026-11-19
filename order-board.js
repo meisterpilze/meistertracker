@@ -474,6 +474,23 @@ function labelIds(order) {
   return ids.map((x) => String(x || '').trim()).filter(Boolean);
 }
 
+// GLS: the tracking code Billbee reports for a GLS parcel (eight characters,
+// "Z8Z..." here) is the parcel number written in base 36, plus a fixed amount.
+// The striped barcode on the label carries the parcel number, so knowing the
+// tracking code is knowing the barcode. Worked out from the label files Billbee
+// hands out, which are named <parcel number>_<tracking code>.pdf: every pair
+// gave the same amount. Should GLS ever change it, the barcode simply stops
+// matching and the square code still does.
+const GLS_TRACK_OFFSET = 2721109907456;
+
+/** The GLS parcel number behind a tracking code, or null if it is not one. */
+function glsParcelNumber(id) {
+  const s = String(id || '').trim();
+  if (!/^Z[0-9A-Z]{7}$/i.test(s)) return null;
+  const n = parseInt(s, 36) - GLS_TRACK_OFFSET;
+  return n >= 1e10 && n < 1e11 ? String(n) : null;
+}
+
 /** An order the board still counts: not cancelled, dropped or a refund. */
 function isLiveOrder(o) {
   return o.status !== 'cancelled' && !DROPPED_STATES.includes(Number((o.raw || {}).State)) && !isRefundRecord(o.items);
@@ -509,9 +526,13 @@ function matchLabelScan(code, orders) {
     const byOrder = new Map();
     for (const o of live) {
       for (const id of labelIds(o)) {
-        const c = _labelClean(id);
-        if (c.length < LABEL_MIN_LEN) continue;
-        if (!scan.includes(c) && !c.includes(scan)) continue;
+        // The number Billbee reports, and for GLS also the parcel number the
+        // barcode carries. Either one found counts as that label.
+        const hit = [id, glsParcelNumber(id)].some((alias) => {
+          const c = _labelClean(alias);
+          return c.length >= LABEL_MIN_LEN && (scan.includes(c) || c.includes(scan));
+        });
+        if (!hit) continue;
         if (!byOrder.has(o)) byOrder.set(o, []);
         byOrder.get(o).push(id);
       }
@@ -546,6 +567,7 @@ module.exports = {
   BOARD_WINDOW_DAYS,
   DROPPED_STATES,
   isLiveOrder,
+  glsParcelNumber,
   labelIds,
   matchLabelScan,
   MADE_TO_ORDER,
