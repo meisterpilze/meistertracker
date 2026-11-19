@@ -2433,10 +2433,32 @@ function obScanEnd() {
 // Ein Scan nach dem anderen: zwei Etiketten derselben Bestellung kurz
 // hintereinander sollen in der Reihenfolge ankommen, in der sie gelesen wurden.
 function obScanCode(raw, opts) {
-  _obScanQueue = _obScanQueue.then(() => _obScanOne(String(raw), opts || {}));
+  // Geht ein Scan schief, sagt er es, und der nächste läuft trotzdem: eine
+  // abgelehnte Kette nähme sonst jeden weiteren Scan stumm mit.
+  _obScanQueue = _obScanQueue
+    .then(() => _obScanOne(String(raw), opts || {}))
+    .catch((e) => {
+      console.error('Etikett-Scan:', e);
+      setFb('err', t('orders.scan.failed'));
+    });
   return _obScanQueue;
 }
-const _OB_SCAN_ERRORS = ['unknown', 'ambiguous', 'severalLabels'];
+const _OB_SCAN_ERRORS = ['unknown', 'ambiguous', 'severalLabels', 'onlyPacked'];
+// Was der letzte Etikett-Scan gesetzt hat: der Rückgängig-Knopf der Kamera
+// nimmt im Etiketten-Modus genau das zurück (camUndoLastScan).
+let _obLastUndo = null;
+function obScanUndo(undo) {
+  if (!undo) return Promise.resolve();
+  if (_obLastUndo === undo) _obLastUndo = null;
+  return apiPost('/api/orders/board/scan/undo', undo).then((u) => {
+    if (u && u.error) {
+      setFb('err', t('orders.scan.failed'));
+      return;
+    }
+    setFb('info', t('orders.scan.undone'));
+    renderOrderBoard();
+  });
+}
 async function _obScanOne(raw, opts) {
   const r = await apiPost('/api/orders/board/scan', { code: raw });
   if (!r || (r.error && !_OB_SCAN_ERRORS.includes(r.error))) {
@@ -2446,7 +2468,10 @@ async function _obScanOne(raw, opts) {
   const numbers = (r.orders || []).map((o) => o.number).join(', ');
   if (r.error) {
     // Vom Handscanner ohne Knopf: vielleicht gar kein Etikett. Dann so sagen.
-    const key = r.error === 'unknown' && opts.auto ? 'unknownAny' : r.error;
+    // Passt der Name nur zu schon gepackten Bestellungen, ist es dasselbe
+    // Paket noch einmal (Billbee wurde vorher schon gefragt).
+    const key =
+      r.error === 'unknown' && opts.auto ? 'unknownAny' : r.error === 'onlyPacked' ? 'already' : r.error;
     setFb('err', t('orders.scan.' + key, { numbers }));
     return;
   }
@@ -2464,13 +2489,10 @@ async function _obScanOne(raw, opts) {
       msg += ' · ' + t('orders.scan.bags', { list: r.bags.map((b) => b.qty + ' × ' + b.name).join(', ') });
     setFb('ok', msg);
   }
-  if (r.undo.packed.length || r.undo.scans.length)
-    showUndoBar(t('orders.scan.undoMsg', { numbers }), () =>
-      apiPost('/api/orders/board/scan/undo', r.undo).then((u) => {
-        if (u && u.error) toast(t('orders.board.saveFailed'), 'err');
-        renderOrderBoard();
-      })
-    );
+  if (r.undo.packed.length || r.undo.scans.length) {
+    _obLastUndo = r.undo;
+    showUndoBar(t('orders.scan.undoMsg', { numbers }), () => obScanUndo(r.undo));
+  }
 }
 
 function renderOrdersMapping() {
@@ -16848,6 +16870,8 @@ function shelfHeldRender(x) {
   const now = Date.now();
   const orders = (x.heldOrders || []).map((o) => {
     const d = o.orderDate ? Math.floor((now - new Date(o.orderDate).getTime()) / 86400000) : 0;
+    if (o.onBoard === false)
+      return `<li>${esc(t('shelf.heldUnpaid', { ref: o.ref, n: o.qty }))}</li>`;
     return d >= SHELF_HELD_STALE_DAYS
       ? `<li class="shelf-held-stale">${esc(t('shelf.heldStale', { ref: o.ref, n: o.qty, d }))}</li>`
       : `<li>${esc(t('shelf.heldOrder', { ref: o.ref, n: o.qty }))}</li>`;
@@ -28996,6 +29020,10 @@ function fbShowMs(type) {
 }
 function updateCamHud() {
   document.getElementById('ch-action').textContent = scan.packLabels ? t('orders.scan.mode') : scan.action || '—';
+  // Etiketten scannen braucht keine Vorgänge, kein Ziel und keinen Zähler:
+  // nur Rückgängig und Fertig (styles.css, .cam-labels).
+  const camModal = document.getElementById('m-camscan');
+  if (camModal) camModal.classList.toggle('cam-labels', !!scan.packLabels);
   document.getElementById('ch-from').textContent = scan.from || '—';
   // Der Name des Platzes, wie auf dem Umziehen-Knopf daneben — nicht "TENT1".
   document.getElementById('ch-to').textContent = scan.to ? zoneDisplayName(scan.to) : '—';
@@ -29730,6 +29758,14 @@ function processScan(raw, opts) {
   // Paketetiketten scannen (obScanStart): alles, was jetzt kommt, ist ein Etikett.
   if (scan.packLabels) {
     obScanCode(raw);
+    return;
+  }
+  // Der Adress-Code eines Paketetiketts (Felder mit |), auch ohne den Knopf:
+  // er ist ein Etikett, und sein Text, eine Adresse, darf nie als "unbekannt"
+  // auf dem Schirm oder im Scan-Verlauf landen. Nichts, was diese App druckt,
+  // enthält ein |.
+  if (raw.includes('|')) {
+    obScanCode(raw, { auto: true });
     return;
   }
   // Zweiter Durchlauf nach frischem Stand (scanAfterSync): was jetzt noch
@@ -35090,6 +35126,12 @@ function flipCamera() {
 // Undo the most recent non-HARVEST scan from inside the camera HUD.
 // Reuses undoScanEntry via the hidden scan-log row (created on every successful scan).
 function camUndoLastScan() {
+  // Im Etiketten-Modus ist der letzte Scan ein Etikett: das zurück.
+  if (scan.packLabels) {
+    if (_obLastUndo) obScanUndo(_obLastUndo);
+    else _showCamHudToast('info', t('orders.scan.nothingToUndo'));
+    return;
+  }
   let last = null;
   for (let i = (sessionEntries || []).length - 1; i >= 0; i--) {
     if (sessionEntries[i].action !== 'HARVEST') {

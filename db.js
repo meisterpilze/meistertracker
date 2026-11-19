@@ -3656,44 +3656,70 @@ function getAllBarcodes(db) {
 const SHELF_NAME_MAX = 60;
 const SHELF_STEP_MAX = 10000;
 
-// Wie lange eine Bestellung ihre Beutel im Fach haelt, wenn niemand sie als
-// gepackt markiert. So lange zeigt die Packliste sie (order-board.js,
-// BOARD_WINDOW_DAYS); was dort nicht mehr steht, kann niemand mehr tippen.
-const SHELF_HOLD_DAYS = 30;
-
 // Was noch im Fach liegt, aber verkauft ist: Bestellungen, die das Regal schon
 // abgebucht hat und die auf der Packliste noch nicht "Gepackt" sind. Die Zahl
 // des Artikels (stock) ist, was frei ist; frei plus das hier steht im Regal.
-// Ausgenommen wie auf der Packliste: storniert (die Buchung ist dann schon
-// zurueck), Reklamation und geloescht in Billbee, aelter als SHELF_HOLD_DAYS.
-function _shelfHeldOrders(db, itemId, nowIso) {
-  const since = new Date(new Date(nowIso || Date.now()).getTime() - SHELF_HOLD_DAYS * 86400000).toISOString();
-  return db
+// Welche Bestellungen zaehlen, sagt die Packliste selbst (order-board.js): so
+// lange sie eine zeigt (BOARD_WINDOW_DAYS), nicht storniert, keine Erstattung,
+// nicht in einem der DROPPED_STATES. Wer "Gepackt" nicht tippen kann, weil die
+// Packliste eine unbezahlte Bestellung nur zaehlt, erfaehrt das an onBoard.
+// Eine Abfrage fuer alle Artikel; itemId engt sie auf einen ein.
+// Gibt eine Map item_id -> [{ ref, orderDate, qty, onBoard }].
+function _shelfHeld(db, itemId) {
+  // Hier geladen, nicht oben: db.js wird auch allein geladen (siehe scanShippingLabel).
+  const orderBoard = require('./order-board.js');
+  const since = new Date(Date.now() - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
+  const rows = db
     .prepare(
-      `SELECT COALESCE(json_extract(o.raw_json, '$.OrderNumber'), o.channel_order_id) AS ref,
-              o.order_date AS orderDate, SUM(b.qty) AS qty
+      `SELECT b.item_id AS itemId, o.id AS orderId, o.channel_order_id AS coid, o.channel, o.status, o.raw_json AS rawJson,
+              COALESCE(o.order_date, o.imported) AS orderDate, b.qty
          FROM shelf_order_booked b
          JOIN orders o ON o.id = b.order_id
-        WHERE b.item_id = ? AND b.qty > 0
-          AND o.status <> 'cancelled'
+        WHERE b.qty > 0 AND (? IS NULL OR b.item_id = ?)
           AND COALESCE(o.order_date, o.imported) >= ?
-          AND COALESCE(CAST(json_extract(o.raw_json, '$.State') AS INTEGER), 0) NOT IN (5, 6, 8)
           AND NOT EXISTS (SELECT 1 FROM order_marks m
                            WHERE m.channel = o.channel AND m.channel_order_id = o.channel_order_id
                              AND m.kind = 'packed')
-        GROUP BY o.id
         ORDER BY o.order_date, o.id`
     )
-    .all(Number(itemId), since)
-    .map((r) => ({ ref: r.ref == null ? '' : String(r.ref), orderDate: r.orderDate || null, qty: r.qty }));
+    .all(itemId == null ? null : Number(itemId), itemId == null ? null : Number(itemId), since);
+  const out = new Map();
+  const byOrder = new Map();
+  for (const r of rows) {
+    let raw = {};
+    try {
+      raw = r.rawJson ? JSON.parse(r.rawJson) : {};
+    } catch {
+      raw = {};
+    }
+    const order = { channel: r.channel, status: r.status, raw, items: [{ qty: r.qty }] };
+    if (!orderBoard.isLiveOrder(order)) continue;
+    const key = r.itemId + ':' + r.orderId;
+    let h = byOrder.get(key);
+    if (!h) {
+      h = {
+        ref: String(raw.OrderNumber || r.coid),
+        orderDate: r.orderDate || null,
+        qty: 0,
+        // Unbezahlt und ohne Etikett: die Packliste zeigt sie nicht, Gepackt
+        // gibt es dort fuer sie noch nicht.
+        onBoard: orderBoard.isPaid(order) || orderBoard.billbeeState(order) !== 'open'
+      };
+      byOrder.set(key, h);
+      if (!out.has(r.itemId)) out.set(r.itemId, []);
+      out.get(r.itemId).push(h);
+    }
+    h.qty += r.qty;
+  }
+  return out;
 }
 
-function _shelfRow(db, r) {
+function _shelfRow(db, r, heldMap) {
   const bc = db.prepare("SELECT barcode FROM barcodes WHERE entity_type='shelf' AND entity_id=?").get(String(r.id));
   const skus = db
     .prepare('SELECT sku, per_unit AS perUnit FROM shelf_item_skus WHERE item_id=? ORDER BY sku COLLATE NOCASE')
     .all(r.id);
-  const heldOrders = _shelfHeldOrders(db, r.id);
+  const heldOrders = (heldMap || _shelfHeld(db, r.id)).get(r.id) || [];
   const held = heldOrders.reduce((s, o) => s + o.qty, 0);
   return {
     id: r.id,
@@ -3741,10 +3767,11 @@ function _shelfEtikett(v) {
 }
 
 function listShelfItems(db) {
+  const held = _shelfHeld(db);
   return db
     .prepare('SELECT * FROM shelf_items ORDER BY active DESC, sort_order, name COLLATE NOCASE, id')
     .all()
-    .map((r) => _shelfRow(db, r));
+    .map((r) => _shelfRow(db, r, held));
 }
 
 function getShelfItem(db, id) {
@@ -3854,7 +3881,7 @@ function moveShelfStock(db, id, change, userId) {
     if (!Number.isInteger(n) || n < 0 || n > SHELF_STEP_MAX) throw new Error('Der Bestand ist eine ganze Zahl ab 0.');
     kind = 'count';
     counted = n;
-    held = _shelfHeldOrders(db, cur.id).reduce((s, o) => s + o.qty, 0);
+    held = (_shelfHeld(db, cur.id).get(cur.id) || []).reduce((s, o) => s + o.qty, 0);
     delta = n - held - cur.stock;
   } else {
     const d = Number(change && change.delta);
@@ -14445,8 +14472,9 @@ function setOrderMark(db, orderId, kind, on, user) {
  * never stored or logged.
  *
  * An order with two labels (two parcels) is packed once both were scanned. An
- * order of the same buyer that travels in this parcel and has no label of its
- * own is packed with it.
+ * order of the same buyer that has no label of its own is packed with it, but
+ * only if the board has it under "Heute packen": an order that is unpaid or
+ * still waits to be made is not in this parcel, label or not.
  *
  * Returns { error } when nothing fits, else { via, orders, bags, undo }: orders
  * as {id, number, labels, scanned, packed, wasPacked}, bags what left the shelf
@@ -14467,15 +14495,18 @@ function scanShippingLabel(db, code, user, now) {
       orders: (m.orders || []).map((o) => ({ id: o.id, number: number(o), labels: orderBoard.labelIds(o).length }))
     };
   }
-  // Same buyer, still open, no label of its own: it is in this parcel.
+  // Same buyer, no label of its own, and ready to pack by the board's own
+  // reading (paid, nothing left to make): it is in this parcel.
+  const readyToPack = new Set(
+    orderBoard.buildOrderBoard(orders, { now: new Date(nowMs), marksSince: orderMarksSince(db) }).pack.map((r) => r.id)
+  );
   const targets = [...m.orders];
   for (const hit of m.orders) {
     const key = hit.raw && hit.raw.CustomerKey;
     if (!key) continue;
     for (const o of orders) {
-      if (targets.includes(o) || o.status === 'cancelled') continue;
-      if (!o.raw || o.raw.CustomerKey !== key || (o.marks && o.marks.packed)) continue;
-      if (orderBoard.labelIds(o).length) continue;
+      if (targets.includes(o) || !readyToPack.has(o.id)) continue;
+      if (!o.raw || o.raw.CustomerKey !== key || orderBoard.labelIds(o).length) continue;
       targets.push(o);
     }
   }
@@ -14490,8 +14521,11 @@ function scanShippingLabel(db, code, user, now) {
     for (const o of targets) {
       const ids = orderBoard.labelIds(o);
       const byLabel = m.via === 'label' && m.orders.includes(o);
-      if (byLabel && addScan.run(o.channel, o.channelOrderId, m.label, user || null, at).changes)
-        out.undo.scans.push({ id: o.id, label: m.label });
+      if (byLabel)
+        for (const label of m.labels) {
+          if (ids.includes(label) && addScan.run(o.channel, o.channelOrderId, label, user || null, at).changes)
+            out.undo.scans.push({ id: o.id, label });
+        }
       const seen = new Set(scannedOf.all(o.channel, o.channelOrderId).map((r) => r.label));
       const scanned = ids.filter((id) => seen.has(id)).length;
       const wasPacked = !!(o.marks && o.marks.packed);
@@ -16358,7 +16392,6 @@ module.exports = {
   moveShelfStock,
   undoShelfMove,
   listShelfLog,
-  SHELF_HOLD_DAYS,
   setShelfSku,
   syncShelfOrders,
   syncShelfSpawn,

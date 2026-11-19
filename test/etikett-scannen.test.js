@@ -23,7 +23,12 @@ describe('Etikett scannen', () => {
       channelOrderId: String(++nr),
       status: 'new',
       customerName: o.name || 'Erika Musterfrau',
-      raw: { OrderNumber: String(nr), State: 3, LabelIds: o.labels || [], CustomerKey: o.key || null },
+      raw: {
+        OrderNumber: String(nr),
+        State: o.state || 3,
+        LabelIds: o.labels || [],
+        CustomerKey: o.key || null
+      },
       items: o.items || [{ channelSku: 'TEST-SCAN', qty: 1 }]
     });
   const gepackt = (id) => db.listBoardOrders(d, {}).find((o) => o.id === id).marks.packed;
@@ -134,6 +139,53 @@ describe('Etikett scannen', () => {
     assert.equal(db.scanShippingLabel(d, '99000000051 99000000052', null).error, 'ambiguous');
   });
 
+  it('packt eine Bestellung desselben Käufers nicht mit, die unbezahlt ist oder noch hergestellt wird', () => {
+    const mit = bestellung({ labels: ['99000000071'], key: 'kaeufer-c' });
+    const herzustellen = bestellung({ key: 'kaeufer-c', items: [{ channelSku: 'SPWN-DUBL-TEST', qty: 1 }] });
+    const unbezahlt = bestellung({ key: 'kaeufer-c', state: 1 });
+    const r = db.scanShippingLabel(d, grossCode('99000000071'), null);
+    assert.deepEqual(
+      r.orders.map((o) => o.id),
+      [mit]
+    );
+    assert.equal(gepackt(herzustellen), undefined);
+    assert.equal(gepackt(unbezahlt), undefined);
+  });
+
+  it('nimmt die Paketnummer, auch wenn der Code Felder mit | trägt', () => {
+    const id = bestellung({ name: 'Erika Strich', labels: ['99000000081', '99000000082'] });
+    const r = db.scanShippingLabel(d, 'A|Erika Strich|Musterweg|99000000081|||', null);
+    assert.equal(r.via, 'label');
+    assert.deepEqual(
+      r.orders.map((o) => [o.id, o.scanned, o.labels]),
+      [[id, 1, 2]]
+    );
+  });
+
+  it('findet eine Bestellung, deren zwei Nummern beide im Code stehen', () => {
+    const id = bestellung({ labels: ['99000000091', 'TRACK0000091'] });
+    const r = db.scanShippingLabel(d, 'X 99000000091 Y TRACK0000091', null);
+    assert.deepEqual(
+      r.orders.map((o) => [o.id, o.scanned, o.packed]),
+      [[id, 2, true]]
+    );
+  });
+
+  it('packt über den Adress-Code nicht zwei Pakete derselben Person', () => {
+    const a = bestellung({ name: 'Max Doppelpaket', labels: ['99000000101'] });
+    const b = bestellung({ name: 'Max Doppelpaket', labels: ['99000000102'] });
+    assert.equal(db.scanShippingLabel(d, adressCode('Max Doppelpaket'), null).error, 'ambiguous');
+    assert.equal(gepackt(a), undefined);
+    assert.equal(gepackt(b), undefined);
+  });
+
+  it('meldet für einen Stammkunden, dessen alte Bestellung gepackt ist, keinen Treffer auf die alte', () => {
+    const alt = bestellung({ name: 'Erika Stammkundin', labels: ['99000000111'] });
+    db.setOrderMark(d, alt, 'packed', true, 'max');
+    const r = db.scanShippingLabel(d, adressCode('Erika Stammkundin'), null);
+    assert.equal(r.error, 'onlyPacked', 'der Server fragt dann Billbee nach der neuen Bestellung');
+  });
+
   it('hält den Scan nicht fest: in der Datenbank steht nur die Paketnummer', () => {
     bestellung({ name: 'Erika Spurlos', labels: ['99000000061'] });
     db.scanShippingLabel(d, grossCode('99000000061'), null);
@@ -165,6 +217,26 @@ describe('Etikett scannen – App', () => {
     const body = app.slice(app.indexOf('function processScan('));
     const first = body.indexOf('scan.packLabels');
     assert.ok(first > 0 && first < body.indexOf('barcodeRegistry.get'), 'vor dem Nachschlagen eigener Etiketten');
+  });
+
+  it('gibt einen Adress-Code auch ohne den Knopf an die Etikettensuche, nie als "unbekannt"', () => {
+    const body = app.slice(app.indexOf('function processScan('));
+    const pipe = body.indexOf("raw.includes('|')");
+    assert.ok(pipe > 0 && pipe < body.indexOf('barcodeRegistry.get'), 'vor allem, was den Text anzeigen könnte');
+  });
+
+  it('lässt nach einem Fehler weiter scannen', () => {
+    const fn = app.slice(app.indexOf('function obScanCode('), app.indexOf('const _OB_SCAN_ERRORS'));
+    assert.match(fn, /\.catch\(/);
+  });
+
+  it('zeigt in der Kamera beim Etiketten-Scannen nur Rückgängig und Fertig, und Rückgängig nimmt das Etikett zurück', () => {
+    assert.match(app, /classList\.toggle\('cam-labels', !!scan\.packLabels\)/);
+    const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
+    for (const id of ['cam-hud-chips', 'cam-hud-modes', 'btn-flip-cam', 'btn-cam-reset'])
+      assert.ok(css.includes('#m-camscan.cam-labels #' + id), id);
+    const undo = app.slice(app.indexOf('function camUndoLastScan('));
+    assert.ok(undo.indexOf('scan.packLabels') < undo.indexOf('sessionEntries'));
   });
 
   it('lässt das | eines Adress-Codes durch, das ein deutscher Handscanner mit AltGr tippt', () => {
