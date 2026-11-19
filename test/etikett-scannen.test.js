@@ -148,3 +148,36 @@ describe('Etikett scannen – Abgleich ohne Datenbank', () => {
     assert.equal(board.matchLabelScan(grossCode('99000000001'), [{ id: 1, raw: {}, items: [] }]).error, 'unknown');
   });
 });
+
+// Die App: ein Knopf auf der Packliste, die Kamera liest Etiketten, und der
+// Handscanner geht auch ohne den Knopf. Geprüft an der Quelle, wie die anderen
+// Oberflächen-Tests hier.
+describe('Etikett scannen – App', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+
+  it('hat den Knopf auf der Packliste, und der Knopf tut etwas', () => {
+    assert.match(html, /data-action="ob-scan"/);
+    assert.match(app, /action === 'ob-scan'\) \{\s*obScanStart\(\);/);
+  });
+
+  it('gibt im Etiketten-Modus jeden Scan an die Etikettensuche, vor allem anderen', () => {
+    const body = app.slice(app.indexOf('function processScan('));
+    const first = body.indexOf('scan.packLabels');
+    assert.ok(first > 0 && first < body.indexOf('barcodeRegistry.get'), 'vor dem Nachschlagen eigener Etiketten');
+  });
+
+  it('lässt das | eines Adress-Codes durch, das ein deutscher Handscanner mit AltGr tippt', () => {
+    assert.match(app, /getModifierState\('AltGraph'\)/);
+  });
+
+  it('hat jeden Text, den das Scannen zeigt, in allen drei Sprachen', () => {
+    const keys = new Set(['orders.board.scanLabels', 'orders.board.scanHint']);
+    for (const m of app.matchAll(/'orders\.scan\.(\w+)'/g)) keys.add('orders.scan.' + m[1]);
+    for (const k of ['unknown', 'unknownAny', 'ambiguous', 'severalLabels']) keys.add('orders.scan.' + k);
+    for (const lang of ['de', 'en', 'pt']) {
+      const src = fs.readFileSync(path.join(__dirname, '..', 'lang', lang + '.js'), 'utf8');
+      for (const k of keys) assert.ok(src.includes(`'${k}':`), `${lang}: ${k}`);
+    }
+  });
+});

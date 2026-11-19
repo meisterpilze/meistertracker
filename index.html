@@ -4137,6 +4137,17 @@
                     <div class="sec" data-i18n="orders.board.packTitle">Heute packen</div>
                     <span id="ob-pack-count" class="ob-count"></span>
                   </div>
+                  <!-- Das fertige Paket scannen statt "Gepackt" zu tippen: welcher Code
+                       auf dem Etikett, ist egal (obScanStart). Der Handscanner geht
+                       auch ohne den Knopf. -->
+                  <div class="ob-scanrow">
+                    <button type="button" class="btn btn-p" data-action="ob-scan" data-i18n="orders.board.scanLabels">
+                      Etiketten scannen
+                    </button>
+                    <span class="ob-hint" data-i18n="orders.board.scanHint">
+                      Fertiges Paket: Etikett scannen, das setzt „Gepackt“. Der Handscanner geht auch ohne den Knopf.
+                    </span>
+                  </div>
                   <div id="ob-pack"></div>
                 </div>
                 <div class="card ob-teil ob-teil-later" id="ob-later-card" style="display: none">

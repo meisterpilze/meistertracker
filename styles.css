@@ -2608,6 +2608,18 @@ summary.fs-meta {
   font-size: var(--fs-sm);
   white-space: nowrap;
 }
+/* Scanning the label of a packed parcel: the button and what it does. */
+.ob-scanrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 0 10px;
+}
+.ob-scanrow .ob-hint {
+  flex: 1 1 16ch;
+  margin: 0;
+}
 /* A hint is a sentence somebody reads once, standing at the packing table. */
 .ob-hint {
   max-width: 62ch;
