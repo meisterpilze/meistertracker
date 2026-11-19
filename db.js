@@ -3370,6 +3370,18 @@ const MIGRATIONS = [
         .get();
       if (!has.c) db.exec('ALTER TABLE recurring_task ADD COLUMN monthly INTEGER NOT NULL DEFAULT 0');
     }
+  },
+  {
+    version: 119,
+    description: 'Regal: Zaehlen zieht ab, was fuer ungepackte Bestellungen noch im Fach liegt',
+    fn(db) {
+      // Beim Zaehlen liegen die Beutel offener Bestellungen noch im Fach. Die
+      // Zahl des Artikels ist, was frei ist; gezaehlt wird, was im Regal steht.
+      // held merkt, wie viele davon beim Zaehlen fuer Bestellungen lagen, damit
+      // der Verlauf beide Zahlen zeigen kann. NULL bei allem von vorher.
+      const has = db.prepare("SELECT COUNT(*) AS c FROM pragma_table_info('shelf_log') WHERE name = 'held'").get();
+      if (!has.c) db.exec('ALTER TABLE shelf_log ADD COLUMN held INTEGER');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3626,15 +3638,54 @@ function getAllBarcodes(db) {
 const SHELF_NAME_MAX = 60;
 const SHELF_STEP_MAX = 10000;
 
+// Wie lange eine Bestellung ihre Beutel im Fach haelt, wenn niemand sie als
+// gepackt markiert. So lange zeigt die Packliste sie (order-board.js,
+// BOARD_WINDOW_DAYS); was dort nicht mehr steht, kann niemand mehr tippen.
+const SHELF_HOLD_DAYS = 30;
+
+// Was noch im Fach liegt, aber verkauft ist: Bestellungen, die das Regal schon
+// abgebucht hat und die auf der Packliste noch nicht "Gepackt" sind. Die Zahl
+// des Artikels (stock) ist, was frei ist; frei plus das hier steht im Regal.
+// Ausgenommen wie auf der Packliste: storniert (die Buchung ist dann schon
+// zurueck), Reklamation und geloescht in Billbee, aelter als SHELF_HOLD_DAYS.
+function _shelfHeldOrders(db, itemId, nowIso) {
+  const since = new Date(new Date(nowIso || Date.now()).getTime() - SHELF_HOLD_DAYS * 86400000).toISOString();
+  return db
+    .prepare(
+      `SELECT COALESCE(json_extract(o.raw_json, '$.OrderNumber'), o.channel_order_id) AS ref,
+              o.order_date AS orderDate, SUM(b.qty) AS qty
+         FROM shelf_order_booked b
+         JOIN orders o ON o.id = b.order_id
+        WHERE b.item_id = ? AND b.qty > 0
+          AND o.status <> 'cancelled'
+          AND COALESCE(o.order_date, o.imported) >= ?
+          AND COALESCE(CAST(json_extract(o.raw_json, '$.State') AS INTEGER), 0) NOT IN (5, 6, 8)
+          AND NOT EXISTS (SELECT 1 FROM order_marks m
+                           WHERE m.channel = o.channel AND m.channel_order_id = o.channel_order_id
+                             AND m.kind = 'packed')
+        GROUP BY o.id
+        ORDER BY o.order_date, o.id`
+    )
+    .all(Number(itemId), since)
+    .map((r) => ({ ref: r.ref == null ? '' : String(r.ref), orderDate: r.orderDate || null, qty: r.qty }));
+}
+
 function _shelfRow(db, r) {
   const bc = db.prepare("SELECT barcode FROM barcodes WHERE entity_type='shelf' AND entity_id=?").get(String(r.id));
   const skus = db
     .prepare('SELECT sku, per_unit AS perUnit FROM shelf_item_skus WHERE item_id=? ORDER BY sku COLLATE NOCASE')
     .all(r.id);
+  const heldOrders = _shelfHeldOrders(db, r.id);
+  const held = heldOrders.reduce((s, o) => s + o.qty, 0);
   return {
     id: r.id,
     name: r.name,
+    // Frei: was noch verkauft werden kann. Daran haengen Alarm und Liste.
     stock: r.stock,
+    // Verkauft, aber noch nicht gepackt: liegt noch im Fach. Im Regal steht
+    // stock + held.
+    held,
+    heldOrders,
     minStock: r.min_stock,
     active: r.active === 1,
     sortOrder: r.sort_order,
@@ -3767,26 +3818,37 @@ function updateShelfItem(db, id, patch) {
 }
 
 // Rein, raus oder gezaehlt. { delta: 5 } legt fuenf dazu, { delta: -2 } nimmt
-// zwei raus, { count: 12 } heisst "es sind jetzt zwoelf". Raus darf nicht mehr
-// nehmen, als da ist: dann stimmt die Zahl schon nicht, und das soll gezaehlt
-// werden statt stumm auf 0 zu fallen.
+// zwei raus, { count: 12 } heisst "im Regal stehen jetzt zwoelf". Gezaehlt wird
+// das Fach, wie es ist: die Beutel ungepackter Bestellungen liegen da noch mit
+// drin und sind schon verkauft, frei ist also das Gezaehlte minus die. Das kann
+// unter 0 gehen: dann ist mehr verkauft als da ist, und das soll man sehen.
+// Raus darf nicht mehr nehmen, als frei ist: dann stimmt die Zahl schon nicht,
+// und das soll gezaehlt werden statt stumm auf 0 zu fallen.
 function moveShelfStock(db, id, change, userId) {
   const cur = db.prepare('SELECT * FROM shelf_items WHERE id=?').get(Number(id));
   if (!cur) throw new Error('Den Artikel gibt es nicht mehr. Lade die Seite neu.');
   if (!cur.active) throw new Error('„' + cur.name + '“ ist aus der Regal-Liste genommen. Erst wieder aufnehmen.');
   let kind, delta;
+  let held = null;
+  let counted = null;
   if (change && change.count !== undefined && change.count !== null && change.count !== '') {
     const n = Number(change.count);
     if (!Number.isInteger(n) || n < 0 || n > SHELF_STEP_MAX) throw new Error('Der Bestand ist eine ganze Zahl ab 0.');
     kind = 'count';
-    delta = n - cur.stock;
+    counted = n;
+    held = _shelfHeldOrders(db, cur.id).reduce((s, o) => s + o.qty, 0);
+    delta = n - held - cur.stock;
   } else {
     const d = Number(change && change.delta);
     if (!Number.isInteger(d) || d === 0 || Math.abs(d) > SHELF_STEP_MAX)
       throw new Error('Wie viele? Eine ganze Zahl größer als 0.');
     if (cur.stock + d < 0)
       throw new Error(
-        'Es sind nur ' + cur.stock + ' da, ' + -d + ' können nicht raus. Zähle das Fach und trag den Bestand ein.'
+        'Frei sind nur ' +
+          Math.max(0, cur.stock) +
+          ', ' +
+          -d +
+          ' können nicht raus. Beutel für eine Bestellung gehen mit „Gepackt“ unter Bestellungen raus, nicht hier. Sonst: Fach zählen und den Bestand eintragen.'
       );
     kind = d > 0 ? 'in' : 'out';
     delta = d;
@@ -3797,11 +3859,16 @@ function moveShelfStock(db, id, change, userId) {
   _blockTx(db, () => {
     db.prepare('UPDATE shelf_items SET stock=?, updated=? WHERE id=?').run(running, now, cur.id);
     logId = db
-      .prepare('INSERT INTO shelf_log(time, item_id, kind, delta, running, user_id) VALUES(?,?,?,?,?,?)')
-      .run(now, cur.id, kind, delta, running, userId || null).lastInsertRowid;
+      .prepare('INSERT INTO shelf_log(time, item_id, kind, delta, running, held, user_id) VALUES(?,?,?,?,?,?,?)')
+      .run(now, cur.id, kind, delta, running, held, userId || null).lastInsertRowid;
     incrementDataVersion(db);
   });
-  return { item: getShelfItem(db, cur.id), logId: Number(logId) };
+  const out = { item: getShelfItem(db, cur.id), logId: Number(logId) };
+  if (kind === 'count') {
+    out.counted = counted;
+    out.held = held;
+  }
+  return out;
 }
 
 // Rueckgaengig: die Bewegung wird umgekehrt gebucht und als zurueckgenommen
@@ -3839,7 +3906,7 @@ function undoShelfMove(db, logId, userId) {
 function listShelfLog(db, itemId, limit) {
   return db
     .prepare(
-      `SELECT l.id, l.time, l.kind, l.delta, l.running, l.undone, l.ref, u.username
+      `SELECT l.id, l.time, l.kind, l.delta, l.running, l.held, l.undone, l.ref, u.username
          FROM shelf_log l LEFT JOIN users u ON u.id = l.user_id
         WHERE l.item_id=? AND l.kind<>'undo' ORDER BY l.id DESC LIMIT ?`
     )
@@ -16166,6 +16233,7 @@ module.exports = {
   moveShelfStock,
   undoShelfMove,
   listShelfLog,
+  SHELF_HOLD_DAYS,
   setShelfSku,
   syncShelfOrders,
   syncShelfSpawn,
