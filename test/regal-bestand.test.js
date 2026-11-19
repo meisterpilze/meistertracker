@@ -212,6 +212,36 @@ describe('Regal und Bestellungen', () => {
     assert.equal(db.moveShelfStock(d, a.id, { count: 12 }, null).item.stock, 12);
   });
 
+  it('sagt bei einer unbezahlten Bestellung, dass sie nicht auf der Packliste steht', () => {
+    const a = db.createShelfItem(d, 'Testbeutel Unbezahlt');
+    db.setShelfSku(d, a.id, 'TEST-UNBEZAHLT', 1);
+    db.moveShelfStock(d, a.id, { count: 5 }, null);
+    bestellung([{ channelSku: 'TEST-UNBEZAHLT', qty: 1 }]);
+    const unbezahlt = String(nr);
+    bestellung([{ channelSku: 'TEST-UNBEZAHLT', qty: 1 }]);
+    d.prepare('UPDATE orders SET raw_json = ? WHERE channel_order_id = ?').run(
+      JSON.stringify({ OrderNumber: String(nr), State: 3 }),
+      String(nr)
+    );
+    db.syncShelfOrders(d);
+    const x = db.getShelfItem(d, a.id);
+    assert.deepEqual(
+      x.heldOrders.map((o) => [o.ref, o.onBoard]),
+      [
+        [unbezahlt, false],
+        [String(nr), true]
+      ]
+    );
+    assert.deepEqual(
+      db
+        .listShelfItems(d)
+        .find((y) => y.id === a.id)
+        .heldOrders.map((o) => o.ref),
+      x.heldOrders.map((o) => o.ref),
+      'die Liste rechnet dasselbe in einer Abfrage'
+    );
+  });
+
   it('lässt beim Zählen frei unter 0 gehen, wenn weniger da ist als verkauft', () => {
     const a = db.createShelfItem(d, 'Testbeutel Weniger');
     db.setShelfSku(d, a.id, 'TEST-WENIGER', 1);
@@ -293,14 +323,5 @@ describe('Regal und Bestellungen', () => {
     );
     assert.equal(db.updateShelfItem(d, a.id, { minStock: 2 }).minStock, 2);
     assert.throws(() => db.updateShelfItem(d, a.id, { minStock: -1 }), /Alarm-Stand/);
-  });
-});
-
-// Eine Bestellung hält ihre Beutel, solange die Packliste sie zeigt: dort wird
-// "Gepackt" getippt. Länger zu halten hieße, Beutel für immer festzuhalten, die
-// niemand mehr freigeben kann.
-describe('Regal und Packliste', () => {
-  it('hält Beutel so lange, wie die Packliste Bestellungen zeigt', () => {
-    assert.equal(db.SHELF_HOLD_DAYS, require('../order-board.js').BOARD_WINDOW_DAYS);
   });
 });

@@ -474,60 +474,78 @@ function labelIds(order) {
   return ids.map((x) => String(x || '').trim()).filter(Boolean);
 }
 
+/** An order the board still counts: not cancelled, dropped or a refund. */
+function isLiveOrder(o) {
+  return o.status !== 'cancelled' && !DROPPED_STATES.includes(Number((o.raw || {}).State)) && !isRefundRecord(o.items);
+}
+
 /**
  * Which order(s) a scanned label belongs to.
  *
+ * A parcel number in the code always wins; only a code without one is read as
+ * the address code. Numbers are grouped per order, so a code that carries two
+ * numbers of the same order (parcel number and tracking id, say) still finds
+ * it; numbers of two different orders make it 'ambiguous', unless those orders
+ * share every number (two orders merged into one parcel).
+ *
+ * The address code names a person, not a parcel. It decides only when exactly
+ * one open order of that name has a label: two open parcels for one person
+ * are 'ambiguous', and an order with two labels is 'severalLabels' (the code is
+ * the same on both). No open order with a label is 'unknown', so the caller
+ * can fetch fresh labels from Billbee; 'onlyPacked' says the name fits only
+ * orders that are packed already, which may still be a new order not yet here.
+ *
  * @param {string} code    what the scanner read
  * @param {Array} orders   rows from db.listBoardOrders
- * @returns {{via:'label', label:string, orders:Array}
+ * @returns {{via:'label', labels:string[], orders:Array}
  *          |{via:'name', orders:Array}
- *          |{error:'unknown'|'ambiguous'|'severalLabels', orders?:Array}}
- *   The address code cannot tell two parcels of one order apart, so an order
- *   with more than one label answers 'severalLabels' to it.
+ *          |{error:'unknown'|'ambiguous'|'severalLabels'|'onlyPacked', orders?:Array}}
  */
 function matchLabelScan(code, orders) {
-  const live = (orders || []).filter(
-    (o) => o.status !== 'cancelled' && !DROPPED_STATES.includes(Number((o.raw || {}).State)) && !isRefundRecord(o.items)
-  );
+  const live = (orders || []).filter(isLiveOrder);
   const text = String(code == null ? '' : code);
-  if (text.includes('|')) {
-    const names = new Set(
-      text
-        .split('|')
-        .map(_nameClean)
-        .filter((n) => n.length >= 3)
-    );
-    const hits = live.filter((o) => o.customerName && names.has(_nameClean(o.customerName)));
-    if (!hits.length) return { error: 'unknown' };
-    // Already packed ones only count if nothing else is open for that name:
-    // then this is a parcel being scanned twice.
-    const open = hits.filter((o) => !_mark(o, 'packed'));
-    const use = open.length ? open : hits;
-    if (use.some((o) => labelIds(o).length > 1)) return { error: 'severalLabels', orders: use };
-    return { via: 'name', orders: use };
-  }
   const scan = _labelClean(text);
-  if (scan.length < LABEL_MIN_LEN) return { error: 'unknown' };
-  const byLabel = new Map();
-  for (const o of live) {
-    for (const id of labelIds(o)) {
-      const c = _labelClean(id);
-      if (c.length < LABEL_MIN_LEN) continue;
-      if (!scan.includes(c) && !c.includes(scan)) continue;
-      if (!byLabel.has(id)) byLabel.set(id, []);
-      byLabel.get(id).push(o);
+  if (scan.length >= LABEL_MIN_LEN) {
+    const byOrder = new Map();
+    for (const o of live) {
+      for (const id of labelIds(o)) {
+        const c = _labelClean(id);
+        if (c.length < LABEL_MIN_LEN) continue;
+        if (!scan.includes(c) && !c.includes(scan)) continue;
+        if (!byOrder.has(o)) byOrder.set(o, []);
+        byOrder.get(o).push(id);
+      }
+    }
+    if (byOrder.size) {
+      const sets = [...byOrder.values()].map((ids) => [...new Set(ids)].sort().join('\u0000'));
+      if (new Set(sets).size > 1) return { error: 'ambiguous' };
+      const [ids] = [...byOrder.values()];
+      return { via: 'label', labels: [...new Set(ids)], orders: [...byOrder.keys()] };
     }
   }
-  if (!byLabel.size) return { error: 'unknown' };
-  // Two orders merged into one parcel can carry the same number; two
-  // different numbers in one scan is a scan that cannot be trusted.
-  if (byLabel.size > 1) return { error: 'ambiguous' };
-  const [[label, hits]] = [...byLabel];
-  return { via: 'label', label, orders: hits };
+  if (!text.includes('|')) return { error: 'unknown' };
+  const names = new Set(
+    text
+      .split('|')
+      .map(_nameClean)
+      .filter((n) => n.length >= 3)
+  );
+  const hits = live.filter((o) => o.customerName && names.has(_nameClean(o.customerName)));
+  const open = hits.filter((o) => !_mark(o, 'packed'));
+  const labelled = open.filter((o) => labelIds(o).length > 0);
+  if (labelled.length > 1) return { error: 'ambiguous', orders: labelled };
+  if (labelled.length === 1) {
+    if (labelIds(labelled[0]).length > 1) return { error: 'severalLabels', orders: labelled };
+    return { via: 'name', orders: labelled };
+  }
+  if (!open.length && hits.length) return { error: 'onlyPacked', orders: hits };
+  return { error: 'unknown' };
 }
 
 module.exports = {
   BOARD_WINDOW_DAYS,
+  DROPPED_STATES,
+  isLiveOrder,
   labelIds,
   matchLabelScan,
   MADE_TO_ORDER,

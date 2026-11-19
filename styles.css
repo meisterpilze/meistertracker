@@ -2608,6 +2608,14 @@ summary.fs-meta {
   font-size: var(--fs-sm);
   white-space: nowrap;
 }
+/* The camera while scanning parcel labels: no modes, no target, no counter,
+   no reset or flip; Undo, the torch where there is one, and Done. */
+#m-camscan.cam-labels #cam-hud-chips,
+#m-camscan.cam-labels #cam-hud-modes,
+#m-camscan.cam-labels #btn-flip-cam,
+#m-camscan.cam-labels #btn-cam-reset {
+  display: none;
+}
 /* Scanning the label of a packed parcel: the button and what it does. */
 .ob-scanrow {
   display: flex;

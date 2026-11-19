@@ -10437,7 +10437,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const user = req.authUser && req.authUser.username;
       try {
         let r = db.scanShippingLabel(database, code, user);
-        if (r.error === 'unknown' && (await refreshBillbeeForLabel())) r = db.scanShippingLabel(database, code, user);
+        if ((r.error === 'unknown' || r.error === 'onlyPacked') && (await refreshBillbeeForLabel()))
+          r = db.scanShippingLabel(database, code, user);
         if (!r.error) broadcastSSE(res);
         jsonOk(res, r);
       } catch (err) {
