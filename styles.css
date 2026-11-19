@@ -11859,6 +11859,29 @@ button.wk-an-zeile:active {
   font-size: max(0.75rem, var(--fs-min));
   font-weight: 600;
 }
+/* Verkauft, aber noch nicht gepackt: was dann wirklich im Fach steht. */
+.shelf-row-held {
+  display: block;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 400;
+}
+.shelf-held {
+  margin: -6px 0 12px;
+  color: var(--c-text-muted);
+  font-size: max(0.8125rem, var(--fs-min));
+}
+.shelf-held p {
+  margin: 0 0 4px;
+}
+.shelf-held ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.shelf-held-stale {
+  color: var(--c-amber-strong, #b45309);
+  font-weight: 600;
+}
 .shelf-alarm {
   color: var(--c-text-muted);
   font-size: max(0.75rem, var(--fs-min));

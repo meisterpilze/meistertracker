@@ -156,8 +156,11 @@
         <h3 id="m-shelf-title"></h3>
         <div class="shelf-now" id="m-shelf-now">
           <b id="m-shelf-stock" aria-live="polite">0</b>
-          <span data-i18n="shelf.inShelf">im Regal</span>
+          <span id="m-shelf-nowlabel"></span>
         </div>
+        <!-- Verkauft, aber noch nicht gepackt: was davon noch im Fach liegt, und
+             für welche Bestellungen. Die große Zahl darüber ist dann „frei“. -->
+        <div id="m-shelf-held" class="shelf-held" hidden></div>
         <!-- Der Alarm, gleich unter der Zahl: bei diesem Stand geht einmal eine
              Glocke an alle (checkShelf). − und + speichern selbst. -->
         <div class="shelf-alarmrow">
