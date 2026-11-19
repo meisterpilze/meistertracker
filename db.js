@@ -5,7 +5,6 @@ const { tokenInfo } = require('./scripts/rfc3161.js');
 const { tokenSignature } = require('./scripts/rfc3161-verify.js');
 const fs = require('fs');
 const path = require('path');
-const orderBoard = require('./order-board.js');
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — keep in sync with server.js cookie Max-Age
 const MAX_SESSIONS_PER_USER = 10;
@@ -14454,6 +14453,9 @@ function setOrderMark(db, orderId, kind, on, user) {
  * with them, undo what undoShippingLabelScan needs to put it back.
  */
 function scanShippingLabel(db, code, user, now) {
+  // Hier geladen, nicht oben: db.js wird auch allein geladen (der DuckDNS-
+  // Ersatz-Timer, CI kopiert nur db.js, duckdns.js und scripts/).
+  const orderBoard = require('./order-board.js');
   const nowMs = now ? new Date(now).getTime() : Date.now();
   const since = new Date(nowMs - orderBoard.BOARD_WINDOW_DAYS * 86400000).toISOString();
   const orders = listBoardOrders(db, { sinceIso: since });
