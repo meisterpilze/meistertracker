@@ -122,6 +122,78 @@ describe('Etikett: Labor und Regal', () => {
     assert.match(f, /lines\.every\(\(l\) => ctx\.measureText\(l\)\.width <= maxW\)/);
     assert.match(f, /if \(w > maxW\) ctx\.scale\(maxW \/ w, 1\);/);
   });
+  // Das Etikett gegen eine Leinwand gezeichnet, die mitschreibt, wo es schwarz
+  // wird. Ein QR-Code braucht links vier Module Weiß; mit dem Band bis 10 Punkte
+  // an ihn heran fand die Kamera die Ecke oben links nicht, und das 1-kg-
+  // Körnerbrut-Etikett ließ sich nicht scannen.
+  it('neben dem QR-Code bleiben vier Module weiß, auch mit Band und langem Text', () => {
+    const W = 400;
+    const H = 240;
+    const schwarz = []; // [x0, x1] je Fläche oder Textzeile
+    let qr = null;
+    const ctx = {
+      fillStyle: '#000',
+      font: '',
+      textBaseline: '',
+      _tx: 0,
+      _sx: 1,
+      // Das erste Modul (7 × 7 Punkte) ist die linke Kante des QR-Codes.
+      fillRect(x, y, w, h) {
+        if (w === 7 && h === 7) {
+          if (qr === null) qr = x;
+          return;
+        }
+        if (this.fillStyle === '#000' && !(x === 0 && y === 0 && w === W)) schwarz.push([x, x + w]);
+      },
+      measureText: (s) => ({ width: s.length * 14 }),
+      fillText(s, x) {
+        if (this.fillStyle !== '#000' || !s) return;
+        const x0 = this._tx + x * this._sx;
+        schwarz.push([x0, x0 + s.length * 14 * this._sx]);
+      },
+      save() {
+        this._alt = [this._tx, this._sx];
+      },
+      restore() {
+        [this._tx, this._sx] = this._alt;
+      },
+      translate(x) {
+        this._tx += x;
+      },
+      scale(sx) {
+        this._sx *= sx;
+      },
+      getImageData: () => ({ data: new Uint8ClampedArray(W * H * 4) }),
+      putImageData() {}
+    };
+    class QRCode {
+      constructor() {
+        this._oQRCode = { getModuleCount: () => 21, isDark: () => true };
+      }
+    }
+    QRCode.CorrectLevel = { M: 0 };
+    const zeichne = new Function(
+      'ctx',
+      'QRCode',
+      `const labelDims = { widthDots: ${W}, heightDots: ${H} };
+      const document = { createElement: (n) => (n === 'canvas' ? { getContext: () => ctx } : {}) };
+      const etikettBild = () => {};
+      ${hebe('_shelfWrap')}
+      ${hebe('shelfLabelCanvas')}
+      shelfLabelCanvas({
+        barcode: 1234567,
+        bild: 'koernerbeutel',
+        band: 'Körnerbrut\\n1 kg',
+        etikett: 'Schmetterlingstramete Schmetterlingstramete',
+        namePx: 32
+      });`
+    );
+    zeichne(ctx, QRCode);
+    assert.ok(qr !== null, 'kein QR-Code gezeichnet');
+    const links = schwarz.filter(([x0]) => x0 < qr);
+    assert.ok(links.length > 2, 'Band und Text fehlen');
+    for (const [, x1] of links) assert.ok(x1 <= qr - 4 * 7, `Schwarz bis ${x1}, der QR-Code beginnt bei ${qr}`);
+  });
   it('eine Größe im Band bleibt klein geschrieben, ein Wort wird groß', () => {
     assert.match(
       hebe('shelfLabelCanvas'),

@@ -17244,8 +17244,13 @@ function shelfLabelCanvas(x) {
   ctx.fillStyle = '#000';
 
   // QR: ganze Punkte je Modul, sonst franst er aus. Senkrecht mittig, rechts.
+  // Links davon bleiben vier Module weiß (die Ruhezone, die ein QR-Code
+  // braucht): stand das schwarze Band nur 10 Punkte daneben, fand die Kamera
+  // die Ecke oben links nicht mehr, und das Etikett ließ sich nicht scannen.
+  // Rechts ist die Kante des Etiketts, dahinter das weiße Trägerpapier.
   const val = String(x.barcode || '');
   let qx = W - 14;
+  let frei = 14;
   if (val && typeof QRCode !== 'undefined') {
     const holder = document.createElement('div');
     const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
@@ -17253,6 +17258,7 @@ function shelfLabelCanvas(x) {
     const count = m.getModuleCount();
     const mod = Math.max(1, Math.min(7, Math.floor((H - 24) / count)));
     const size = count * mod;
+    frei = 4 * mod;
     qx = W - 14 - size;
     const qy = Math.floor((H - size) / 2);
     for (let r = 0; r < count; r++)
@@ -17270,7 +17276,7 @@ function shelfLabelCanvas(x) {
     .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
     .filter(Boolean);
   const mitBand = !!(band.length || x.bild);
-  const bandBreite = qx - 10;
+  const bandBreite = qx - frei;
   if (mitBand) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, bandBreite, 81);
@@ -17299,7 +17305,7 @@ function shelfLabelCanvas(x) {
   // (Zunderschwamm, Schmetterlingstramete). Ein Wort, das auch dann zu breit ist,
   // wird schmaler gezogen; es läuft nie unter den QR-Code.
   const text = String(x.etikett || x.name || '');
-  const maxW = qx - 14 - 12;
+  const maxW = qx - frei - 12;
   const oben = mitBand ? 92 : 12;
   const hoch = H - 36 - oben;
   const words = text.split(/\s+/).filter(Boolean);
