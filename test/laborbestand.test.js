@@ -288,10 +288,15 @@ function seite(species, extra = '') {
     '_lfCls',
     '_lfLang',
     '_lbZeile',
+    // Körnerbrut pro Woche (v123): renderLabStock zeichnet die Karte mit.
+    '_kbpZeilen',
+    '_kbpAltText',
+    '_kbpZeile',
+    'renderKbPlan',
     'renderLabStock',
     'buildLabMinTasks'
   ];
-  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbZahl', 'NP_ZEIGEN'];
+  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbZahl', '_kbZahl', 'NP_ZEIGEN'];
   const code =
     consts.map((n) => APP.match(new RegExp('^const ' + n + ' = .*;$', 'm'))[0]).join('\n') +
     '\n' +
