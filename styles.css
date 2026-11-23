@@ -12820,3 +12820,426 @@ button.wk-an-zeile:active {
   flex: none;
   min-height: 44px;
 }
+
+/* ── Regalbretter (v122) ──
+   Das Blatt eines Bretts, die Bretter in Standorte, die Arten im Zelt und der
+   Teil "Regale und Zelt" auf der Startseite. Knöpfe so breit wie ihr Text, mit
+   viel Polster; nur Listenzeilen gehen über die ganze Breite. */
+.brett-sub {
+  margin: -6px 0 10px;
+}
+.brett-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.brett-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  background: var(--c-surface);
+}
+.brett-row + .brett-row {
+  border-top: 1px solid var(--c-border);
+}
+.brett-row > b {
+  font-size: 1.5rem;
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.brett-row-t {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+.brett-row-t small,
+.brett-pick-b small,
+.brett-ziel small {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--c-text-sec);
+}
+.brett-tag {
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: var(--r-tag, 5px);
+  padding: 2px 8px;
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+  white-space: nowrap;
+}
+.brett-tag:empty {
+  display: none;
+}
+.brett-due .brett-tag {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.brett-stale .brett-tag {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
+.brett-row-btns {
+  display: flex;
+  gap: 8px;
+  flex-basis: 100%;
+  justify-content: flex-end;
+}
+.brett-leer {
+  font-style: italic;
+}
+.brett-q {
+  margin: 4px 0 8px;
+  text-align: center;
+}
+.brett-amt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.brett-amt .btn {
+  min-width: var(--tap, 56px);
+  min-height: var(--tap, 56px);
+  font-size: 1.5rem;
+}
+.brett-amt input {
+  width: 96px;
+  min-height: var(--tap, 56px);
+  font-size: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.brett-quick {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.brett-acts,
+.brett-ziele {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.brett-acts .btn {
+  min-height: var(--tap, 56px);
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.brett-ziel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: var(--tap, 56px);
+  padding: 8px 20px;
+  text-align: left;
+}
+.brett-ziel small {
+  color: inherit;
+  opacity: 0.9;
+}
+.brett-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.brett-pick-z {
+  margin: 8px 0 0;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+}
+.brett-pick-b {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap-sm, 48px);
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.brett-pick-b > span {
+  flex: 1;
+  min-width: 0;
+}
+.brett-pick-b:hover {
+  border-color: var(--c-primary);
+}
+.brett-fremd > span {
+  color: var(--c-text-muted);
+}
+.brett-passt {
+  color: var(--c-primary);
+  font-size: 0.875rem;
+}
+.brett-feld {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.brett-feld input,
+.brett-feld select {
+  min-height: var(--tap-sm, 48px);
+}
+.rack-card-bretter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.brett-zeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap-sm, 48px);
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.brett-zeile:hover {
+  border-color: var(--c-primary);
+}
+.brett-zeile-n {
+  flex: none;
+  min-width: 2ch;
+  font-weight: 700;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.brett-zeile-chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.brett-zeile-ohne {
+  margin-bottom: 8px;
+  border-style: dashed;
+}
+.brett-chip {
+  border-radius: 7px;
+  padding: 2px 8px;
+  font-size: 0.875rem;
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+  white-space: nowrap;
+}
+.brett-chip.brett-due {
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+}
+.brett-chip.brett-stale {
+  background: var(--c-red-light);
+  color: var(--c-red-dark);
+}
+.brett-chip-leer {
+  color: var(--c-text-muted);
+  font-style: italic;
+}
+.zelt-karten {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.zelt-karte {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zelt-karte:hover {
+  border-color: var(--c-primary);
+}
+.zelt-karte-kopf {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+.zelt-karte-kopf small {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--c-text-muted);
+}
+.zelt-karte-kopf b {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.zelt-bar {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--c-well);
+  overflow: hidden;
+}
+.zelt-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 5px;
+  background: var(--c-primary);
+}
+.zelt-unter .zelt-bar-fill {
+  background: var(--c-amber);
+}
+.zelt-bar-min {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--c-text);
+  opacity: 0.55;
+}
+.zelt-karte-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 8px;
+  font-size: 0.875rem;
+  color: var(--c-text-sec);
+}
+.zelt-stand {
+  font-weight: 700;
+}
+.zelt-unter .zelt-stand {
+  color: var(--c-amber-dark);
+}
+.zelt-voll .zelt-stand {
+  color: var(--c-green-dark);
+}
+.wk-bretter-h {
+  margin: 14px 0 6px;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-muted);
+}
+.wk-bretter-h:first-child {
+  margin-top: 0;
+}
+.wk-bretter-hint {
+  margin: -2px 0 6px;
+}
+.wk-bretter-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--c-primary);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+.wk-bretter-next .btn {
+  min-height: var(--tap, 56px);
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.wk-bretter-nr {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--c-well);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wk-bretter-next .wk-bretter-nr {
+  background: var(--c-primary);
+  color: #fff;
+}
+.wk-bretter-t {
+  flex: 1;
+  min-width: 12em;
+  display: flex;
+  flex-direction: column;
+}
+.wk-bretter-t > span {
+  color: var(--c-text-sec);
+}
+.wk-bretter-why {
+  color: var(--c-amber-dark) !important;
+  font-weight: 600;
+}
+.wk-bretter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  min-height: var(--tap-sm, 48px);
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--c-amber);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.wk-bretter-row {
+  cursor: pointer;
+}
+.wk-bretter-wait {
+  border-left-color: var(--c-border);
+}
+.wk-bretter-ask {
+  border-left-color: var(--c-red);
+}
+.wk-bretter-btns {
+  display: flex;
+  gap: 8px;
+}
+.zone-rack-bretter {
+  color: var(--c-text-sec);
+}
+.zone-rack-bretter-btn {
+  margin-left: 6px;
+}
+.ms-grenzen {
+  margin: 12px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+}
+.ms-grenzen-t {
+  font-weight: 600;
+  margin-bottom: 6px;
+}

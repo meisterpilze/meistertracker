@@ -292,6 +292,44 @@
       </div>
     </div>
 
+    <!-- Ein Regalbrett, die Beutel eines Raums auf keinem Brett, oder eine Art im
+         Zelt (brettZeichne). Was darauf steht, die ältesten oben, und die
+         Knöpfe dazu; die Ansicht darin wechselt je Knopf. -->
+    <div class="modal-bg" id="m-brett" role="dialog" aria-modal="true" aria-labelledby="m-brett-title" hidden>
+      <div class="modal">
+        <h3 id="m-brett-title"></h3>
+        <p class="fs-meta brett-sub" id="m-brett-sub"></p>
+        <div id="m-brett-body"></div>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-brett-act="close" data-i18n="common.close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ein Regal einstellen: wie viele Bretter, welche Art, und die Etiketten der
+         Bretter (rackEditOpen). Nur ein Admin speichert. -->
+    <div class="modal-bg" id="m-rack-edit" role="dialog" aria-modal="true" aria-labelledby="m-rack-edit-title" hidden>
+      <div class="modal">
+        <h3 id="m-rack-edit-title"></h3>
+        <label class="brett-feld" for="m-rack-edit-levels">
+          <span data-i18n="rackEdit.levels">Bretter</span>
+          <input type="number" id="m-rack-edit-levels" inputmode="numeric" min="0" max="20" step="1" value="0" />
+        </label>
+        <label class="brett-feld" for="m-rack-edit-strain">
+          <span data-i18n="rackEdit.strain">Art auf diesem Regal</span>
+          <select id="m-rack-edit-strain"></select>
+        </label>
+        <p class="fs-meta" data-i18n="rackEdit.help">
+          Jedes Brett bekommt ein eigenes Etikett. Ein Brett, auf dem noch Beutel stehen, lässt sich nicht wegnehmen.
+        </p>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-rack-edit="close" data-i18n="common.cancel">Abbrechen</button>
+          <button type="button" class="btn" data-rack-edit="print" data-i18n="rackEdit.print">Etiketten drucken</button>
+          <button type="button" class="btn btn-p" data-rack-edit="save" data-i18n="common.save">Speichern</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Ein Laborfach: eine Art in einem Gefäß, mit Etikett und Alarm (lfRender).
          Gezählt werden die Schalen, Spritzen und Beutel selbst; Add legt neue an,
          Remove und Verkauft nehmen die ältesten. -->
@@ -3036,6 +3074,16 @@
                the rhythm behind them, opens under the list from "Woche"
                (#wk-today); it lived on the Dashboard once and came here so that
                one screen answers both "what now" and "how". -->
+          <!-- Regale und Zelt (renderWorkBretter): welches Brett als Nächstes ins
+               Zelt geht, was auf keinem Brett steht, was über seiner Zeit ist,
+               was der Server ausgebucht hat, und je Art die Zahl im Zelt. Ohne
+               all das ist der Teil nicht da. -->
+          <section class="wk-teil wk-teil-bretter" id="wk-bretter" hidden>
+            <div class="wk-teil-kopf">
+              <h2 class="wk-teil-t" data-i18n="bretter.title">Regale und Zelt</h2>
+            </div>
+            <div id="wk-bretter-list"></div>
+          </section>
           <div class="wk-unten">
             <section class="wk-teil wk-teil-an">
               <div class="wk-teil-kopf">
@@ -4019,6 +4067,38 @@
                     </label>
                   </div>
                   <div id="ms-rec-need" class="muted fs-meta" style="margin-top: 6px"></div>
+                </div>
+                <!-- Regale und Zelt (v122): wie lange ein Block oder Körnerbeutel
+                     dieser Sorte höchstens steht, und wie viele das Zelt haben
+                     soll. Leer heißt: keine Prüfung bei dieser Sorte. -->
+                <div class="ms-grenzen">
+                  <div class="fs-meta ms-grenzen-t" data-i18n="strains.limitsTitle">Regale und Zelt</div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.incMaxDays">Höchstens in der Inkubation (Tage)</span>
+                      <input id="ms-inc-max" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.grainMaxDays">Körnerbrut höchstens (Tage)</span>
+                      <input id="ms-grain-max" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.tentMaxDays">Höchstens im Zelt (Tage)</span>
+                      <input id="ms-tent-days" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.tentMin">Im Zelt mindestens (Blöcke)</span>
+                      <input id="ms-tent-min" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.tentMax">Im Zelt höchstens (Blöcke)</span>
+                      <input id="ms-tent-max" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                  </div>
+                  <p class="fs-meta muted" data-i18n="strains.limitsHelp">
+                    Leer lassen heißt: keine Prüfung. Danach fragt die App „Noch da?“ und bucht nach einer Woche ohne
+                    Antwort aus; im Zelt bucht sie gleich aus und zeigt es.
+                  </p>
                 </div>
                 <div style="display: flex; gap: 8px">
                   <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>

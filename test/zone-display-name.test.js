@@ -23,12 +23,24 @@ function lift(...names) {
 }
 
 function load(zones) {
-  const src = lift('KNOWN_ZONE_I18N', 'KNOWN_ZONE_SEED_NAME', 'zoneI18nKey', 'zoneDisplayName');
-  const t = (k) => ({ 'dash.zoneTent1': 'Zelt 1', 'dash.zoneInc': 'Inkubation' })[k] || k;
+  // brettVon: a shelf ("INC_R1:2", v122) is named after its rack.
+  const re = APP.match(/^const BRETT_RE = .*$/m);
+  assert.ok(re, 'BRETT_RE not found in app.js');
+  const src =
+    re[0] + '\n' + lift('KNOWN_ZONE_I18N', 'KNOWN_ZONE_SEED_NAME', 'zoneI18nKey', 'brettVon', 'zoneDisplayName');
+  const t = (k, p) => {
+    const s = { 'dash.zoneTent1': 'Zelt 1', 'dash.zoneInc': 'Inkubation', 'brett.levelN': 'Brett {n}' }[k] || k;
+    return p ? s.replace('{n}', p.n) : s;
+  };
   return new Function('zones', 't', `${src}\nreturn zoneDisplayName;`)(zones, t);
 }
 
 describe('zoneDisplayName', () => {
+  it('names a shelf after its rack, then the level', () => {
+    const name = load([{ id: 'INC', name: 'Warmraum', racks: [{ id: 'INC_R1' }] }]);
+    assert.equal(name('INC_R1:2'), 'Warmraum/R1 · Brett 2');
+  });
+
   it('translates a seeded zone that still has its seed name', () => {
     const name = load([{ id: 'TENT1', name: 'Tent 1', racks: [] }]);
     assert.equal(name('TENT1'), 'Zelt 1');
