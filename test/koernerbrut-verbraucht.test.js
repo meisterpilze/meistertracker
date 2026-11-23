@@ -87,6 +87,7 @@ function werkbank(stand) {
     const zoneDisplayName = (id) => id;
     const toZone = (loc) => String(loc).split('_')[0];
     const barcodeRegistry = new Map(stand.barcodes || []);
+    const alteEtiketten = new Map();
     const batches = stand.batches || [];
     const cultures = stand.cultures || [];
     const scanLog = stand.scanLog || [];

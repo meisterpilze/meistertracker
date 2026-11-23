@@ -3400,6 +3400,29 @@ const MIGRATIONS = [
         PRIMARY KEY (channel, channel_order_id, label)
       )`);
     }
+  },
+  {
+    version: 121,
+    description: 'Alte Etiketten: Kulturen samt Nummer, die ein Neustart der Daten geloescht hat',
+    fn(db) {
+      // Nach dem Neustart der Daten (resetOperationalData) gab es die Nummern
+      // wieder neu, und ein altes Etikett am Glas hiess beim Scannen ein
+      // fremder Beutel. Hier steht, was so ein Etikett war: der Scan erkennt
+      // es, nimmt die Kultur wieder auf und druckt ein neues (altesEtikettAufnehmen).
+      // Ihre Nummern vergibt nextBarcodeNumber nie wieder.
+      db.exec(`CREATE TABLE IF NOT EXISTS alte_etiketten (
+        barcode     INTEGER PRIMARY KEY,
+        entity_id   TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        strain_id   INTEGER,
+        species     TEXT,
+        strain_text TEXT,
+        parent_id   TEXT,
+        ml          INTEGER,
+        created     TEXT,
+        archived_at TEXT NOT NULL
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -3596,9 +3619,30 @@ function _dbEinrichten(db, dbPath) {
 }
 
 // ── Barcode Registry ────────────────────────────────────────
+// Nie eine Nummer, die schon auf einem Etikett stand: auch keine, deren Zeile
+// ein Neustart der Daten geloescht hat. Vorher zaehlte nur MAX(barcodes), und
+// nach dem Neustart im August 2026 bekam ein Beutel die Nummer einer Petrischale,
+// die noch im Labor stand. barcode_floor merkt sich der Neustart; die Nummern
+// der alten Etiketten zaehlen ohnehin mit.
 function nextBarcodeNumber(db) {
+  let n = 1000000;
   const row = db.prepare('SELECT MAX(barcode) as m FROM barcodes').get();
-  return row && row.m != null ? row.m + 1 : 1000000;
+  if (row && row.m != null) n = Math.max(n, row.m + 1);
+  const floor = db.prepare("SELECT value FROM meta WHERE key = 'barcode_floor'").get();
+  if (floor && Number.isFinite(Number(floor.value))) n = Math.max(n, Number(floor.value));
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='alte_etiketten'").get()) {
+    const alt = db.prepare('SELECT MAX(barcode) as m FROM alte_etiketten').get();
+    if (alt && alt.m != null) n = Math.max(n, alt.m + 1);
+  }
+  return n;
+}
+function _barcodeFloorAnheben(db, n) {
+  if (!Number.isFinite(n)) return;
+  const floor = db.prepare("SELECT value FROM meta WHERE key = 'barcode_floor'").get();
+  if (floor && Number(floor.value) >= n) return;
+  db.prepare(
+    "INSERT INTO meta(key,value) VALUES('barcode_floor', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+  ).run(String(n));
 }
 
 function assignBarcode(db, entityType, entityId) {
@@ -4536,6 +4580,8 @@ function readAll(db, opts = {}) {
     suppliers,
     pickupLocations,
     barcodes,
+    // Etiketten von vor einem Neustart der Daten: der Scanner erkennt sie.
+    alteEtiketten: listAlteEtiketten(db),
     // Was fertig im Regal steht: eine Zahl je Artikel. Der Scanner braucht sie
     // sofort, wenn ein Regal-Etikett gelesen wird.
     shelf: listShelfItems(db),
@@ -6979,6 +7025,93 @@ function appendScanEntries(db, entries, userId) {
   }
 }
 
+// ── Alte Etiketten (vor einem Neustart der Daten) ────────────
+// Kulturen, die noch im Labor stehen koennen, mit ihrer Nummer. `quelle` ist
+// eine andere Datenbank (die Sicherung von vor dem Neustart), sonst diese.
+// Nur, was es in `db` nicht mehr gibt; schon gesicherte Nummern bleiben.
+// Gibt die Zahl der neu gesicherten zurueck.
+function alteEtikettenSichern(db, quelle, now = new Date()) {
+  const q = quelle || db;
+  const rows = q
+    .prepare(
+      `SELECT b.barcode, c.id, c.type, c.strain_id, c.species, c.strain_text, c.parent_id, c.ml, c.created
+         FROM cultures c JOIN barcodes b ON b.entity_type = 'culture' AND b.entity_id = c.id
+        WHERE c.status IN ('active', 'stored')`
+    )
+    .all();
+  const gibtEs = db.prepare('SELECT 1 FROM cultures WHERE id = ?');
+  const rein = db.prepare(
+    `INSERT INTO alte_etiketten(barcode, entity_id, type, strain_id, species, strain_text, parent_id, ml, created, archived_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(barcode) DO NOTHING`
+  );
+  let n = 0;
+  for (const r of rows) {
+    if (quelle && gibtEs.get(r.id)) continue;
+    const ml = Object.prototype.hasOwnProperty.call(r, 'ml') ? r.ml : null;
+    n += Number(
+      rein.run(
+        r.barcode,
+        r.id,
+        r.type,
+        r.strain_id == null ? null : r.strain_id,
+        r.species || null,
+        r.strain_text || null,
+        r.parent_id || null,
+        ml == null ? null : ml,
+        r.created || null,
+        now.toISOString()
+      ).changes
+    );
+  }
+  if (quelle) {
+    const m = quelle.prepare('SELECT MAX(barcode) AS m FROM barcodes').get();
+    if (m && m.m != null) _barcodeFloorAnheben(db, m.m + 1);
+  }
+  return n;
+}
+
+function listAlteEtiketten(db) {
+  return db
+    .prepare(
+      `SELECT a.barcode, a.entity_id AS id, a.type, COALESCE(s.name, a.species) AS species,
+              a.strain_text AS strainText, a.created
+         FROM alte_etiketten a LEFT JOIN mushroom_strains s ON s.id = a.strain_id
+        ORDER BY a.barcode`
+    )
+    .all();
+}
+
+// Ein altes Etikett wurde gescannt: die Kultur kommt mit ihrer alten Kennung
+// zurueck in die App, mit einer neuen Nummer fuer das neue Etikett. Steht die
+// Kennung schon wieder in der App (jemand hat sie von Hand aufgenommen), bleibt
+// es bei der. Danach ist das alte Etikett erledigt.
+function altesEtikettAufnehmen(db, barcode) {
+  const a = db.prepare('SELECT * FROM alte_etiketten WHERE barcode = ?').get(Number(barcode));
+  if (!a) throw new Error('Dieses alte Etikett kennt die App nicht.');
+  if (!db.prepare('SELECT 1 FROM cultures WHERE id = ?').get(a.entity_id)) {
+    const parent =
+      a.parent_id && db.prepare('SELECT 1 FROM cultures WHERE id = ?').get(a.parent_id) ? a.parent_id : null;
+    const strainOk = a.strain_id != null && db.prepare('SELECT 1 FROM mushroom_strains WHERE id = ?').get(a.strain_id);
+    insertCultures(db, [
+      {
+        id: a.entity_id,
+        type: a.type,
+        species: a.species,
+        strainId: strainOk ? a.strain_id : null,
+        strainText: a.strain_text || '',
+        parentId: parent,
+        status: 'active',
+        notes: '',
+        created: a.created || new Date().toISOString(),
+        ml: a.ml
+      }
+    ]);
+  }
+  db.prepare('DELETE FROM alte_etiketten WHERE barcode = ?').run(a.barcode);
+  const neu = assignBarcode(db, 'culture', a.entity_id);
+  return { id: a.entity_id, barcode: neu };
+}
+
 function deleteLastScanEntries(db, n) {
   db.exec('BEGIN');
   try {
@@ -7034,7 +7167,16 @@ function resetOperationalData(db, opts, wer) {
       // The mixes go with the bags: what is left of a mix is a physical thing
       // on a shelf, and a clean slate means that shelf was emptied too.
       wipe('substrate_batches');
+      // Kulturen im Labor überleben den Neustart oft: die Schale steht noch im
+      // Kühlschrank, mit Etikett. Was sie war, bleibt in alte_etiketten — der
+      // Scan nimmt sie damit wieder auf und druckt ein neues Etikett.
+      alteEtikettenSichern(db);
       wipe('cultures');
+      // Die höchste Nummer bleibt die Untergrenze: ein Etikett, dessen Zeile
+      // gleich weg ist, klebt noch irgendwo, und seine Nummer darf nie ein
+      // anderes Ding bekommen (nextBarcodeNumber).
+      const hoechste = db.prepare('SELECT MAX(barcode) AS m FROM barcodes').get();
+      if (hoechste && hoechste.m != null) _barcodeFloorAnheben(db, hoechste.m + 1);
       // Barcodes pointing at rows we just cleared; zone and rack barcodes stay valid.
       wipe('barcodes', "entity_type IN ('bag','culture','batch')");
     }
@@ -13642,6 +13784,7 @@ const SAFE_ERROR_PREFIXES = [
 ];
 
 const SAFE_ERROR_BARE = new Set([
+  'Dieses alte Etikett kennt die App nicht.',
   'qty must be >= 1',
   'days must be >= 1',
   'grams must be >= 0',
@@ -16206,6 +16349,9 @@ module.exports = {
   saleAlerts,
   labelIdsFromZpl,
   recordPrintedLabels,
+  alteEtikettenSichern,
+  listAlteEtiketten,
+  altesEtikettAufnehmen,
   druckListe,
   druckErledigt,
   unsavedLabels,
@@ -16492,6 +16638,7 @@ module.exports = {
   updateStamm,
   deleteStamm,
   assignBarcode,
+  nextBarcodeNumber,
   assignBarcodes,
   lookupBarcode,
   getAllBarcodes,

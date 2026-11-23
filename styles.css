@@ -6404,7 +6404,10 @@ tr.ms-off .ms-prog {
     opacity: 0;
   }
 }
-#m-confirm {
+/* m-confirm3 auch: die Frage "altes oder neues Etikett?" kommt beim Scannen,
+   oft mit offener Kamera, und muss über ihr stehen. */
+#m-confirm,
+#m-confirm3 {
   z-index: 210;
 }
 /* Die Zielliste über der Kamera. Beide sind .modal-bg mit z-index 200, und bei
