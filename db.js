@@ -3423,6 +3423,46 @@ const MIGRATIONS = [
         archived_at TEXT NOT NULL
       )`);
     }
+  },
+  {
+    version: 122,
+    description: 'Regalbretter: Ebenen und Art je Regal, Hoechstzeiten und Zeltgrenzen je Art',
+    fn(db) {
+      // Ein Regal hat Bretter (levels, 0 = nicht unterteilt) und traegt eine Art.
+      // Ein Beutel steht auf einem Brett, wenn sein Platz "<Regal>:<Ebene>" ist;
+      // zoneIdOfLocation liest den Teil vor dem Doppelpunkt schon heute als Regal.
+      const has = (table, col) =>
+        db.prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('${table}') WHERE name = ?`).get(col).c > 0;
+      if (!has('racks', 'levels')) db.exec('ALTER TABLE racks ADD COLUMN levels INTEGER NOT NULL DEFAULT 0');
+      if (!has('racks', 'strain_id')) db.exec('ALTER TABLE racks ADD COLUMN strain_id INTEGER');
+      // Je Art: wie lange ein Block hoechstens in der Inkubation steht, wie lange
+      // Koernerbrut hoechstens steht, wie lange ein Block im Zelt bleibt, und wie
+      // viele Bloecke das Zelt mindestens und hoechstens haben soll. NULL = aus.
+      // limits_set: wann eine dieser Zahlen zuletzt geaendert wurde. Von da an
+      // laeuft die Frist, bevor die App etwas von selbst ausbucht.
+      for (const col of ['inc_max_days', 'grain_max_days', 'tent_max_days', 'tent_min', 'tent_max']) {
+        if (!has('mushroom_strains', col)) db.exec(`ALTER TABLE mushroom_strains ADD COLUMN ${col} INTEGER`);
+      }
+      if (!has('mushroom_strains', 'limits_set')) db.exec('ALTER TABLE mushroom_strains ADD COLUMN limits_set TEXT');
+      // "Noch da": wer einen Beutel nach seiner Hoechstzeit bestaetigt, verschiebt
+      // die Frage um zwei Wochen.
+      db.exec(`CREATE TABLE IF NOT EXISTS bag_still_there (
+        bag_id       TEXT PRIMARY KEY,
+        confirmed_at TEXT NOT NULL,
+        user_id      INTEGER
+      )`);
+      // Was die App von selbst ausgebucht hat, bis jemand "Stimmt" oder "Noch da"
+      // sagt. scan_log_id ist der REMOVE mit dem Grund "auto".
+      db.exec(`CREATE TABLE IF NOT EXISTS auto_bookouts (
+        scan_log_id INTEGER PRIMARY KEY,
+        bag_id      TEXT NOT NULL,
+        loc         TEXT,
+        created     TEXT NOT NULL,
+        resolved    TEXT,
+        resolved_at TEXT,
+        resolved_by INTEGER
+      )`);
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4504,20 +4544,7 @@ function readAll(db, opts = {}) {
     }));
 
   // Zones + Racks
-  const zoneRows = db.prepare('SELECT * FROM zones ORDER BY sort_order, id').all();
-  const rackStmt = db.prepare(
-    'SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id'
-  );
-  const zones = zoneRows.map((z) => ({
-    id: z.id,
-    name: z.name,
-    role: z.role,
-    color: z.color,
-    sortOrder: z.sort_order,
-    maxCapacity: z.max_capacity || null,
-    created: z.created,
-    racks: rackStmt.all(z.id).map((r) => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
-  }));
+  const zones = getZonesWithRacks(db);
 
   // Suppliers
   const suppliers = db.prepare('SELECT * FROM suppliers ORDER BY mat, name').all();
@@ -4594,6 +4621,12 @@ function readAll(db, opts = {}) {
     // Ob ein Block gut ist und was zu ihm notiert wurde: das Beutel-Fenster
     // braucht es beim Scannen sofort.
     blockNotes: listBlockNotes(db),
+    // Regalbretter (v122): was die App von selbst ausgebucht hat und noch keiner
+    // beantwortet hat, wer wann "Noch da" gesagt hat, und die Fristen, nach denen
+    // der Server rechnet — der Browser rechnet dieselben, um "Noch da?" zu fragen.
+    autoBookouts: listAutoBookouts(db),
+    stillThere: listStillThere(db),
+    brettRules: { confirmDays: BRETT_CONFIRM_DAYS, graceDays: BRETT_GRACE_DAYS },
     version
   };
 }
@@ -4727,6 +4760,17 @@ function invalidateBagZoneCache(db) {
  * breaks the optimistic-concurrency zone check (rack moves wrongly 409) and
  * KPI/pipeline aggregation (rack-placed bags fall out of every zone bucket).
  * Mirrors the client-side toZone() in app.js. */
+// The zone or rack part of a location: "INC_R1:2" (shelf 2 of rack INC_R1,
+// v122) and the legacy "INC:R1" both give what stands before the colon.
+function locationBase(loc) {
+  return loc ? String(loc).split(':')[0] : loc;
+}
+// A shelf location is "<rack>:<level>", level a whole number from 1. Anything
+// else, including the legacy "ZONE:rack" form, is not a shelf.
+function shelfOfLocation(loc) {
+  const m = loc ? /^([A-Z][A-Z0-9_]{0,29}):([1-9][0-9]?)$/.exec(String(loc)) : null;
+  return m ? { rackId: m[1], level: Number(m[2]) } : null;
+}
 function zoneIdOfLocation(db, loc) {
   if (!loc) return null;
   const base = String(loc).split(':')[0];
@@ -5118,9 +5162,15 @@ function writeAll(db, incoming, opts) {
         ON CONFLICT(id) DO UPDATE SET
           zone_id=excluded.zone_id, sort_order=excluded.sort_order, created=excluded.created
       `);
+      // Shelves and species (v122) only when the payload carries them: an older
+      // backup or client has neither, and must not reset what was set since.
+      const setLevels = db.prepare('UPDATE racks SET levels = ? WHERE id = ?');
+      const setRackStrain = db.prepare('UPDATE racks SET strain_id = ? WHERE id = ?');
       for (const z of incoming.zones) {
         for (const r of z.racks || []) {
           upsertRack.run(r.id, z.id, r.sortOrder || 0, r.created || new Date().toISOString());
+          if (r.levels !== undefined) setLevels.run(Math.max(0, parseInt(r.levels, 10) || 0), r.id);
+          if (r.strainId !== undefined) setRackStrain.run(r.strainId ? Number(r.strainId) : null, r.id);
           rackIds.push(r.id);
         }
       }
@@ -7172,6 +7222,10 @@ function resetOperationalData(db, opts, wer) {
       // the harvests gone it would still say it, and keep offering produce that
       // no longer exists in any record.
       wipe('harvest_release');
+      // "Noch da" and the automatic book-outs (v122) are about bags that are
+      // about to be gone.
+      wipe('bag_still_there');
+      wipe('auto_bookouts');
       wipe('scan_log');
       wipe('bags');
       wipe('batches');
@@ -11479,17 +11533,19 @@ function zoneBagCount(db, zoneId) {
     .all(zoneId)
     .map((r) => r.id);
   const allLocs = [zoneId, ...rackIds];
-  // Replay scan_log to count bags currently in this zone
+  // Replay scan_log to count bags currently in this zone. A bag on a shelf sits
+  // at "<rack>:<level>" (v122), so a location counts by the part before the colon.
   const placeholders = allLocs.map(() => '?').join(',');
+  const shelfLike = rackIds.map(() => `"to" LIKE ? OR "from" LIKE ?`).join(' OR ');
   const rows = db
     .prepare(
-      `SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to" IN (${placeholders}) OR "from" IN (${placeholders})) ORDER BY id`
+      `SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to" IN (${placeholders}) OR "from" IN (${placeholders})${shelfLike ? ' OR ' + shelfLike : ''}) ORDER BY id`
     )
-    .all(...allLocs, ...allLocs);
+    .all(...allLocs, ...allLocs, ...rackIds.flatMap((r) => [r + ':%', r + ':%']));
   const bags = new Set();
   for (const r of rows) {
-    const toInZone = allLocs.includes(r.to);
-    const fromInZone = allLocs.includes(r.from);
+    const toInZone = allLocs.includes(locationBase(r.to));
+    const fromInZone = allLocs.includes(locationBase(r.from));
     if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && toInZone) bags.add(r.bag);
     // A rack-to-rack move within the zone has from & to both in-set — a no-op, so only depart when to is outside.
     if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && fromInZone && !toInZone)
@@ -11540,15 +11596,19 @@ function insertRack(db, r) {
 }
 
 function rackBagCount(db, rackId) {
+  // The rack itself and every shelf on it ("<rack>:<level>", v122).
   const rows = db
     .prepare(
-      'SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to"=? OR "from"=?) ORDER BY id'
+      'SELECT bag, action, "from", "to" FROM scan_log WHERE bag IS NOT NULL AND ("to"=? OR "from"=? OR "to" LIKE ? OR "from" LIKE ?) ORDER BY id'
     )
-    .all(rackId, rackId);
+    .all(rackId, rackId, rackId + ':%', rackId + ':%');
   const bags = new Set();
   for (const r of rows) {
-    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && r.to === rackId) bags.add(r.bag);
-    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && r.from === rackId)
+    const toHere = locationBase(r.to) === rackId;
+    const fromHere = locationBase(r.from) === rackId;
+    if ((r.action === 'ADD' || r.action === 'MOVE' || r.action === 'MOVE_BATCH') && toHere) bags.add(r.bag);
+    // A move from one shelf of this rack to another stays on the rack.
+    if ((r.action === 'MOVE' || r.action === 'MOVE_BATCH' || r.action === 'REMOVE') && fromHere && !toHere)
       bags.delete(r.bag);
   }
   return bags.size;
@@ -11592,6 +11652,325 @@ function setZoneCapacity(db, id, cap) {
   db.prepare('UPDATE zones SET max_capacity=? WHERE id=?').run(v, id);
   incrementDataVersion(db);
   return v;
+}
+
+// -- Regalbretter (v122) --
+// Ein Regal hat `levels` Bretter und traegt eine Art (strain_id). Ein Beutel
+// steht auf einem Brett, wenn sein letzter Platz "<Regal>:<Ebene>" ist; steht er
+// auf dem Regal oder in der Zone ohne Ebene, steht er auf keinem Brett. Jedes
+// Brett hat eine Etikett-Nummer (Typ "brett"), die bleibt, auch wenn das Brett
+// wieder wegfaellt: ein gedrucktes Etikett darf nie einem anderen Ding gehoeren.
+//
+// Bewegt wird ueber /api/scan-log wie jeder Umzug; hier stehen nur die Dinge,
+// die kein Umzug sind: wie viele Bretter, "Noch da", und was die App nach der
+// Hoechstzeit einer Art selbst ausbucht.
+const BRETT_CONFIRM_DAYS = 14; // "Noch da" schiebt die Frage so lange auf
+const BRETT_GRACE_DAYS = 7; // so lange fragt die App in der Inkubation, bevor sie ausbucht
+const DAY_MS = 86400000;
+const BRETT_MAX_LEVELS = 20;
+
+function brettId(rackId, level) {
+  return rackId + ':' + level;
+}
+
+// Where every bag stands now: the latest ADD/MOVE/MOVE_BATCH with a place,
+// with that row's time and reason. A REMOVE takes the bag out. The same replay
+// as getBagZoneMap, but keeping the exact place (shelf), not only the zone.
+function _bagPlaces(db) {
+  const map = new Map();
+  const rows = db.prepare(
+    'SELECT id, time, action, batch, bag, "to", reason FROM scan_log WHERE bag IS NOT NULL ORDER BY id'
+  );
+  for (const e of rows.iterate()) {
+    if (e.action === 'REMOVE') map.delete(e.bag);
+    else if ((e.action === 'ADD' || e.action === 'MOVE' || e.action === 'MOVE_BATCH') && e.to) {
+      map.set(e.bag, { id: e.id, loc: e.to, time: e.time, reason: e.reason || null, batch: e.batch || null });
+    }
+  }
+  return map;
+}
+
+function setRackShelves(db, rackId, { levels, strainId } = {}) {
+  const rack = db.prepare('SELECT id, levels, strain_id FROM racks WHERE id = ?').get(rackId);
+  if (!rack) throw new Error('Dieses Regal gibt es nicht mehr. Lade die Seite neu.');
+  let n = rack.levels || 0;
+  if (levels !== undefined) {
+    n = Number(levels);
+    if (!Number.isInteger(n) || n < 0 || n > BRETT_MAX_LEVELS) {
+      throw new Error('Bretter: eine ganze Zahl von 0 bis ' + BRETT_MAX_LEVELS + '.');
+    }
+    if (n < (rack.levels || 0)) {
+      // Ein Brett mit Beuteln darauf faellt nicht weg: die Beutel stuenden sonst
+      // auf einem Brett, das es nicht gibt.
+      const belegt = new Map();
+      for (const at of _bagPlaces(db).values()) {
+        const s = shelfOfLocation(at.loc);
+        if (s && s.rackId === rackId && s.level > n) belegt.set(s.level, (belegt.get(s.level) || 0) + 1);
+      }
+      if (belegt.size) {
+        const [ebene, zahl] = [...belegt].sort((a, b) => a[0] - b[0])[0];
+        throw new Error('Auf Brett ' + ebene + ' stehen noch ' + zahl + ' Beutel. Zieh sie erst um oder buch sie aus.');
+      }
+    }
+  }
+  let sid = rack.strain_id == null ? null : rack.strain_id;
+  if (strainId !== undefined) {
+    sid = strainId === null || strainId === '' ? null : Number(strainId);
+    if (sid !== null && !db.prepare('SELECT 1 FROM mushroom_strains WHERE id = ?').get(sid)) {
+      throw new Error('Diese Art gibt es nicht. Lade die Seite neu.');
+    }
+  }
+  return withSavepoint(db, 'regalbretter', () => {
+    db.prepare('UPDATE racks SET levels = ?, strain_id = ? WHERE id = ?').run(n, sid, rackId);
+    if (n > 0) {
+      assignBarcodes(
+        db,
+        'brett',
+        Array.from({ length: n }, (_, i) => brettId(rackId, i + 1))
+      );
+    }
+    incrementDataVersion(db);
+    return { levels: n, strainId: sid };
+  });
+}
+
+// When each placed bag runs past the time its Sorte allows, and when the app
+// books it out by itself. The client computes the same (brettFristen in
+// app.js) to show "Noch da?"; both follow these rules:
+// - In a fruiting zone: tent_max_days after the bag came in. A "Noch da" given
+//   after it came in counts BRETT_CONFIRM_DAYS from then instead. Booked out
+//   when that time is reached.
+// - In an incubation or spawn zone: inc_max_days (blocks) or grain_max_days
+//   (grain spawn) after the batch was made, or BRETT_CONFIRM_DAYS after the
+//   last "Noch da" if that is later. From then the app asks; it books out
+//   BRETT_GRACE_DAYS later, and never earlier than BRETT_GRACE_DAYS after the
+//   limit was set (so entering a limit never empties a room at once).
+// Contaminated bags, and Sorten without a limit, have no time. The times are
+// absolute (ms), so the caller compares them with whatever "now" it has.
+function brettFristen(db) {
+  const roleOf = new Map(
+    db
+      .prepare('SELECT id, role FROM zones')
+      .all()
+      .map((z) => [z.id, z.role])
+  );
+  const rackZone = new Map(
+    db
+      .prepare('SELECT id, zone_id FROM racks')
+      .all()
+      .map((r) => [r.id, r.zone_id])
+  );
+  const strains = new Map(
+    db
+      .prepare('SELECT * FROM mushroom_strains')
+      .all()
+      .map((s) => [s.id, s])
+  );
+  const confirmed = new Map(
+    db
+      .prepare('SELECT bag_id, confirmed_at FROM bag_still_there')
+      .all()
+      .map((r) => [r.bag_id, Date.parse(r.confirmed_at)])
+  );
+  const batchOf = new Map(
+    db
+      .prepare(
+        'SELECT b.bag_id, ba.batch_id, ba.batch_type, ba.strain_id, ba.created, ba.species, ba.strain FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id'
+      )
+      .all()
+      .map((r) => [r.bag_id, r])
+  );
+  const out = [];
+  for (const [bag, at] of _bagPlaces(db)) {
+    const base = locationBase(at.loc);
+    const role = roleOf.get(roleOf.has(base) ? base : rackZone.get(base));
+    const b = batchOf.get(bag);
+    const s = b && strains.get(b.strain_id);
+    if (!s) continue;
+    const conf = confirmed.get(bag);
+    let kind;
+    let limitAt;
+    let outAt;
+    if (role === 'fruiting') {
+      if (!(s.tent_max_days > 0)) continue;
+      const since = Date.parse(at.time);
+      kind = 'tent';
+      limitAt = conf >= since ? conf + BRETT_CONFIRM_DAYS * DAY_MS : since + s.tent_max_days * DAY_MS;
+      outAt = limitAt;
+    } else if (role === 'incubation' || role === 'spawn') {
+      const max = b.batch_type === 'grain' ? s.grain_max_days : s.inc_max_days;
+      if (!(max > 0)) continue;
+      kind = 'inc';
+      limitAt = Date.parse(b.created) + max * DAY_MS;
+      if (conf) limitAt = Math.max(limitAt, conf + BRETT_CONFIRM_DAYS * DAY_MS);
+      const start = s.limits_set ? Date.parse(s.limits_set) : 0;
+      outAt = Math.max(limitAt, start) + BRETT_GRACE_DAYS * DAY_MS;
+    } else continue;
+    if (!Number.isFinite(limitAt)) continue;
+    out.push({
+      bag,
+      batch: b.batch_id,
+      loc: at.loc,
+      kind,
+      limitAt,
+      outAt,
+      species: b.species || null,
+      strain: b.strain || null
+    });
+  }
+  return out;
+}
+
+// Books out every bag whose time is up (REMOVE, reason "auto") and notes it in
+// auto_bookouts, so the app can show it until someone says "Stimmt" or "Noch
+// da". Runs with the other periodic checks; a second run books nothing twice,
+// because a booked-out bag has no place any more.
+function autoBookOuts(db, now = new Date()) {
+  const faellig = brettFristen(db).filter((f) => f.outAt <= now.getTime());
+  if (!faellig.length) return [];
+  const nowIso = now.toISOString();
+  db.exec('BEGIN');
+  try {
+    const ids = appendScanEntriesNoTxn(
+      db,
+      faellig.map((f) => ({
+        time: nowIso,
+        action: 'REMOVE',
+        batch: f.batch,
+        bag: f.bag,
+        from: f.loc,
+        to: null,
+        species: f.species,
+        strain: f.strain,
+        reason: 'auto'
+      })),
+      null
+    );
+    const ins = db.prepare('INSERT OR IGNORE INTO auto_bookouts(scan_log_id, bag_id, loc, created) VALUES(?,?,?,?)');
+    faellig.forEach((f, i) => {
+      if (ids[i]) ins.run(ids[i], f.bag, f.loc, nowIso);
+    });
+    incrementDataVersion(db);
+    db.exec('COMMIT');
+    return faellig.map((f, i) => ({ ...f, scanLogId: ids[i] || null }));
+  } catch (e) {
+    db.exec('ROLLBACK');
+    invalidateBagZoneCache(db);
+    throw e;
+  }
+}
+
+function listAutoBookouts(db) {
+  return db
+    .prepare(
+      `SELECT a.scan_log_id, a.bag_id, a.loc, a.created, s.batch
+         FROM auto_bookouts a JOIN scan_log s ON s.id = a.scan_log_id
+        WHERE a.resolved IS NULL
+        ORDER BY a.scan_log_id`
+    )
+    .all()
+    .map((r) => ({ id: r.scan_log_id, bag: r.bag_id, batch: r.batch || null, loc: r.loc, created: r.created }));
+}
+
+// "Stimmt" (how = 'correct'): the bags stay out, the note goes. "Noch da"
+// (how = 'still_there'): each bag comes back to the place it was booked out of
+// (ADD, reason "still-there"), and counts BRETT_CONFIRM_DAYS from now. A bag
+// that is back in the app by another way is only noted as done.
+function resolveAutoBookouts(db, ids, how, userId, now = new Date()) {
+  if (how !== 'correct' && how !== 'still_there') throw new Error('Unbekannte Antwort.');
+  const list = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger);
+  const nowIso = now.toISOString();
+  const out = { resolved: 0, restored: 0 };
+  if (!list.length) return out;
+  db.exec('BEGIN');
+  try {
+    const get = db.prepare(
+      'SELECT a.*, s.batch, s.species, s.strain FROM auto_bookouts a JOIN scan_log s ON s.id = a.scan_log_id WHERE a.scan_log_id = ? AND a.resolved IS NULL'
+    );
+    const last = db.prepare(
+      "SELECT id FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE','MOVE_BATCH','REMOVE') ORDER BY id DESC LIMIT 1"
+    );
+    const done = db.prepare(
+      'UPDATE auto_bookouts SET resolved = ?, resolved_at = ?, resolved_by = ? WHERE scan_log_id = ?'
+    );
+    const confirm = db.prepare(
+      'INSERT INTO bag_still_there(bag_id, confirmed_at, user_id) VALUES(?,?,?) ON CONFLICT(bag_id) DO UPDATE SET confirmed_at = excluded.confirmed_at, user_id = excluded.user_id'
+    );
+    for (const id of list) {
+      const a = get.get(id);
+      if (!a) continue;
+      let answer = how;
+      if (how === 'still_there') {
+        const l = last.get(a.bag_id);
+        if (l && l.id === a.scan_log_id && a.loc) {
+          appendScanEntriesNoTxn(
+            db,
+            [
+              {
+                time: nowIso,
+                action: 'ADD',
+                batch: a.batch,
+                bag: a.bag_id,
+                from: null,
+                to: a.loc,
+                species: a.species,
+                strain: a.strain,
+                reason: 'still-there'
+              }
+            ],
+            userId
+          );
+          confirm.run(a.bag_id, nowIso, userId || null);
+          out.restored++;
+        } else answer = 'correct';
+      }
+      done.run(answer, nowIso, userId || null, id);
+      out.resolved++;
+    }
+    if (out.resolved) incrementDataVersion(db);
+    db.exec('COMMIT');
+    return out;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    invalidateBagZoneCache(db);
+    throw e;
+  }
+}
+
+// "Noch da" for bags that still stand where the app has them.
+function confirmStillThere(db, bagIds, userId, now = new Date()) {
+  const ids = [...new Set((Array.isArray(bagIds) ? bagIds : []).map((b) => String(b || '').trim()).filter(Boolean))];
+  if (!ids.length) return 0;
+  const known = new Set(
+    db
+      .prepare('SELECT bag_id FROM bags WHERE bag_id IN (' + ids.map(() => '?').join(',') + ')')
+      .all(...ids)
+      .map((r) => r.bag_id)
+  );
+  const nowIso = now.toISOString();
+  const up = db.prepare(
+    'INSERT INTO bag_still_there(bag_id, confirmed_at, user_id) VALUES(?,?,?) ON CONFLICT(bag_id) DO UPDATE SET confirmed_at = excluded.confirmed_at, user_id = excluded.user_id'
+  );
+  let n = 0;
+  withSavepoint(db, 'nochda', () => {
+    for (const id of ids) {
+      if (!known.has(id)) continue;
+      up.run(id, nowIso, userId || null);
+      n++;
+    }
+    if (n) incrementDataVersion(db);
+  });
+  return n;
+}
+
+// bag -> confirmed_at for the confirmations that can still matter.
+function listStillThere(db, now = new Date()) {
+  const since = new Date(now.getTime() - 60 * DAY_MS).toISOString();
+  const out = {};
+  for (const r of db.prepare('SELECT bag_id, confirmed_at FROM bag_still_there WHERE confirmed_at >= ?').all(since)) {
+    out[r.bag_id] = r.confirmed_at;
+  }
+  return out;
 }
 
 // The themes a weekday can carry. Kept here rather than in the client so the
@@ -12520,6 +12899,32 @@ function _strainMinFields(d) {
   return out;
 }
 
+// v122: how long a Sorte may stand, and how many the tent should hold. Like the
+// minimums, written only when sent, and empty means off (NULL), not 0.
+const STRAIN_LIMIT_FIELDS = {
+  incMaxDays: 'inc_max_days',
+  grainMaxDays: 'grain_max_days',
+  tentMaxDays: 'tent_max_days',
+  tentMin: 'tent_min',
+  tentMax: 'tent_max'
+};
+function _strainLimitFields(d) {
+  const out = {};
+  for (const [key, col] of Object.entries(STRAIN_LIMIT_FIELDS)) {
+    if (!(key in d)) continue;
+    const v = d[key];
+    out[col] = v === null || v === '' || v === undefined ? null : Math.round(Number(v));
+  }
+  return out;
+}
+
+function listMushroomStrainLimits(r) {
+  const out = {};
+  for (const [key, col] of Object.entries(STRAIN_LIMIT_FIELDS)) out[key] = r[col] == null ? null : r[col];
+  out.limitsSet = r.limits_set || null;
+  return out;
+}
+
 function listMushroomStrains(db) {
   return db
     .prepare('SELECT * FROM mushroom_strains ORDER BY name')
@@ -12560,7 +12965,10 @@ function listMushroomStrains(db) {
       minPd: r.min_pd || 0,
       // v78 — is the farm growing this one at the moment? Absent column reads
       // as yes, so a database that has not migrated yet behaves as before.
-      imProgramm: r.im_programm == null ? true : r.im_programm !== 0
+      imProgramm: r.im_programm == null ? true : r.im_programm !== 0,
+      // v122 — max days in incubation / as grain spawn / in the tent, tent min
+      // and max count. null = not set, the check is off for this Sorte.
+      ...listMushroomStrainLimits(r)
     }));
 }
 
@@ -12569,7 +12977,9 @@ function createMushroomStrain(db, data) {
   if (!name || !name.trim()) throw new Error('Name ist Pflichtfeld');
   if (!kuerzel || !kuerzel.trim()) throw new Error('Kürzel ist Pflichtfeld');
   const now = new Date().toISOString();
-  const rec = { ..._strainRecipeFields(data), ..._strainMinFields(data || {}) };
+  const limits = _strainLimitFields(data || {});
+  if (Object.keys(limits).length) limits.limits_set = now;
+  const rec = { ..._strainRecipeFields(data), ..._strainMinFields(data || {}), ...limits };
   const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
   const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
@@ -12616,6 +13026,15 @@ function updateMushroomStrain(db, id, data) {
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   Object.assign(fields, _strainMinFields(data || {}));
+  // A limit that changes restarts the grace period before anything is booked
+  // out on its own; one sent unchanged (the editor sends the whole form) does not.
+  const limits = _strainLimitFields(data || {});
+  if (Object.keys(limits).length) {
+    const before = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(id);
+    if (before && Object.entries(limits).some(([col, v]) => (before[col] == null ? null : before[col]) !== v)) {
+      Object.assign(fields, limits, { limits_set: now });
+    }
+  }
   if (!Object.keys(fields).length) return;
   fields.updated = now;
   const cols = Object.keys(fields);
@@ -12667,7 +13086,11 @@ function deleteMushroomStrain(db, id) {
     throw new Error(`Cannot delete: Pilzsorte is still in use (${batchCount} batches, ${cultureCount} cultures).`);
   }
   const result = db.prepare('DELETE FROM mushroom_strains WHERE id=?').run(id);
-  if (result.changes > 0) incrementDataVersion(db);
+  if (result.changes > 0) {
+    // A rack that held this Sorte holds none now (v122).
+    db.prepare('UPDATE racks SET strain_id = NULL WHERE strain_id = ?').run(id);
+    incrementDataVersion(db);
+  }
   return result.changes > 0;
 }
 
@@ -13027,7 +13450,7 @@ function getInventory(db, logLimit) {
 }
 function getZonesWithRacks(db) {
   const rackStmt = db.prepare(
-    'SELECT id, zone_id, sort_order, created FROM racks WHERE zone_id = ? ORDER BY sort_order, id'
+    'SELECT id, zone_id, sort_order, created, levels, strain_id FROM racks WHERE zone_id = ? ORDER BY sort_order, id'
   );
   return db
     .prepare('SELECT * FROM zones ORDER BY sort_order, id')
@@ -13040,7 +13463,14 @@ function getZonesWithRacks(db) {
       sortOrder: z.sort_order,
       maxCapacity: z.max_capacity || null,
       created: z.created,
-      racks: rackStmt.all(z.id).map((r) => ({ id: r.id, sortOrder: r.sort_order, created: r.created }))
+      racks: rackStmt.all(z.id).map((r) => ({
+        id: r.id,
+        sortOrder: r.sort_order,
+        created: r.created,
+        // v122: how many shelves the rack has (0 = not divided) and the species it holds.
+        levels: r.levels || 0,
+        strainId: r.strain_id || null
+      }))
     }));
 }
 
@@ -13212,7 +13642,7 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
   // "count" auch nicht: Beutel, die beim Zählen am Laborfach fehlten.
   let rows = db
     .prepare(
-      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' AND reason <> 'count' ORDER BY id"
+      "SELECT * FROM scan_log WHERE action IN ('MOVE','REMOVE') AND reason IS NOT NULL AND reason <> 'spawn' AND reason NOT LIKE 'spawn:%' AND reason <> 'undo' AND reason <> 'sold' AND reason <> 'count' AND reason <> 'auto' ORDER BY id"
     )
     .all();
   if (startDate) rows = rows.filter((r) => r.time && r.time.slice(0, 10) >= startDate);
@@ -16386,6 +16816,15 @@ module.exports = {
   getStockBagZoneMap,
   invalidateBagZoneCache,
   zoneIdOfLocation,
+  locationBase,
+  shelfOfLocation,
+  setRackShelves,
+  brettFristen,
+  autoBookOuts,
+  listAutoBookouts,
+  resolveAutoBookouts,
+  confirmStillThere,
+  listStillThere,
   readCaldavConfig,
   updateTaskCaldavUid,
   updateBatchDue,
