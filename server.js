@@ -14986,6 +14986,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // GET /api/print-queue — die Druckseite oben: noch nicht gedruckt (letzte 14
+  // Tage) und zuletzt angelegt (db.druckListe).
+  if (req.method === 'GET' && req.url === '/api/print-queue') {
+    try {
+      jsonOk(res, db.druckListe(database));
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
+  // POST /api/print-queue/erledigt — { ids, zurueck }: "hat schon ein Etikett",
+  // ohne Druck aus der Liste; zurueck nimmt das wieder heraus.
+  if (req.method === 'POST' && req.url === '/api/print-queue/erledigt') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const n = db.druckErledigt(database, data && data.ids, !!(data && data.zurueck));
+        jsonOk(res, { ok: true, n });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // GET /api/printer-status — returns rich state plus legacy `found` boolean
   if (req.method === 'GET' && req.url === '/api/printer-status') {
     getPrinterStatus((err, status) => {

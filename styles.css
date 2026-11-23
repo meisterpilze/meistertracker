@@ -12775,3 +12775,45 @@ button.wk-an-zeile:active {
     grid-column: 1 / -1;
   }
 }
+
+/* Druckseite oben: "Noch nicht gedruckt" und "Zuletzt angelegt" (renderPrintQueue).
+   Haken und Knöpfe mit voller Tippfläche, die Kennungen umbrechen statt die
+   Seite breiter zu machen. */
+.pq-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.pq-row:last-child {
+  border-bottom: 0;
+}
+.pq-text {
+  flex: 1;
+  min-width: 0;
+}
+.pq-ids {
+  font-family: monospace;
+  color: var(--c-text-muted);
+  overflow-wrap: anywhere;
+  margin-top: 2px;
+}
+.pq-tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  cursor: pointer;
+}
+.pq-tick input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+}
+.pq-row .btn-sm {
+  flex: none;
+  min-height: 44px;
+}

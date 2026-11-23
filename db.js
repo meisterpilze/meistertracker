@@ -15041,6 +15041,114 @@ function recordPrintedLabels(db, zpl, now = new Date()) {
   return ids.length;
 }
 
+// Die Druckseite oben: was in den letzten DRUCK_TAGE Tagen angelegt wurde und
+// noch nie aus dem Drucker kam, und das zuletzt Angelegte zum Nachdrucken.
+// "Später" im Etiketten-Fenster heisst damit nur: es steht hier, bis es
+// gedruckt ist. Vorher hiess es: in der Chargenliste suchen, unter allen.
+//
+// Gedruckt ist, was in printed_labels steht (jeder Druck ueber printZPL, seit
+// 28.10.2026). checked = 2 ist "hat schon ein Etikett", ohne Druck abgehakt
+// (druckErledigt) — unsavedLabels prueft nur checked = 0.
+const DRUCK_TAGE = 14;
+const DRUCK_ZULETZT = 8;
+function druckListe(db, now = new Date()) {
+  const seit = new Date(now.getTime() - DRUCK_TAGE * 864e5).toISOString();
+  const gedruckt = new Set(
+    db
+      .prepare('SELECT label_id FROM printed_labels')
+      .all()
+      .map((r) => String(r.label_id).toUpperCase())
+  );
+  const sorte = new Map(
+    db
+      .prepare('SELECT id, name FROM mushroom_strains')
+      .all()
+      .map((r) => [r.id, r.name])
+  );
+  const gruppen = [];
+  // Kulturen: was zusammen angelegt wurde, hat denselben Zeitpunkt, dieselbe
+  // Art und Herkunft — eine Zeile, wie im Etiketten-Fenster.
+  const kulturen = new Map();
+  const kRows = db
+    .prepare(
+      `SELECT id, type, species, strain_id, strain_text, parent_id, created, ml FROM cultures
+        WHERE created >= ? AND status IN ('active', 'stored') ORDER BY created DESC, id`
+    )
+    .all(seit);
+  for (const c of kRows) {
+    const key = [c.type, c.created, c.parent_id || '', c.strain_id || '', c.ml || ''].join('|');
+    let g = kulturen.get(key);
+    if (!g) {
+      g = {
+        kind: 'culture',
+        type: c.type,
+        species: sorte.get(c.strain_id) || c.species || '',
+        strainText: c.strain_text || '',
+        ml: c.ml == null ? null : c.ml,
+        parentId: c.parent_id || null,
+        created: c.created,
+        alle: []
+      };
+      kulturen.set(key, g);
+      gruppen.push(g);
+    }
+    g.alle.push(c.id);
+  }
+  // Beutel je Charge. Nicht: Chargen aus der Zaehlung (die Beutel standen schon
+  // mit Etikett im Regal) und Beutel, die schon wieder weg sind.
+  const zonen = getBagZoneMap(db);
+  const gescannt = db.prepare('SELECT 1 FROM scan_log WHERE bag = ? LIMIT 1');
+  const beutel = db.prepare('SELECT bag_id FROM bags WHERE batch_id = ? ORDER BY bag_id');
+  const bRows = db
+    .prepare(
+      `SELECT batch_id, batch_type, species, strain_id, strain_text, bag_kg, created FROM batches
+        WHERE created >= ? AND batch_id NOT LIKE '%-ZAEHL-%' ORDER BY created DESC`
+    )
+    .all(seit);
+  for (const b of bRows) {
+    const ids = beutel
+      .all(b.batch_id)
+      .map((r) => r.bag_id)
+      .filter((id) => zonen.has(id) || !gescannt.get(id));
+    if (!ids.length) continue;
+    gruppen.push({
+      kind: 'bags',
+      type: b.batch_type || 'block',
+      batchId: b.batch_id,
+      species: sorte.get(b.strain_id) || b.species || '',
+      strainText: b.strain_text || '',
+      bagKg: b.bag_kg == null ? null : b.bag_kg,
+      created: b.created,
+      alle: ids
+    });
+  }
+  gruppen.sort((a, b) => String(b.created).localeCompare(String(a.created)));
+  for (const g of gruppen) g.offen = g.alle.filter((id) => !gedruckt.has(id.toUpperCase()));
+  return { tage: DRUCK_TAGE, offen: gruppen.filter((g) => g.offen.length), zuletzt: gruppen.slice(0, DRUCK_ZULETZT) };
+}
+
+// "Hat schon ein Etikett": aus der Liste oben, ohne zu drucken. zurueck nimmt
+// genau das wieder heraus — nie einen echten Druck (checked 0/1). Nur
+// Kennungen, die es als Kultur oder Beutel gibt. Gibt die Zahl zurueck.
+function druckErledigt(db, ids, zurueck = false, now = new Date()) {
+  const liste = [
+    ...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x.length <= 200))
+  ].slice(0, 500);
+  const da = (id) =>
+    db.prepare('SELECT 1 FROM cultures WHERE id = ?').get(id) ||
+    db.prepare('SELECT 1 FROM bags WHERE bag_id = ?').get(id);
+  const rein = db.prepare(
+    `INSERT INTO printed_labels(label_id, printed_at, checked) VALUES(?, ?, 2) ON CONFLICT(label_id) DO NOTHING`
+  );
+  const raus = db.prepare('DELETE FROM printed_labels WHERE label_id = ? AND checked = 2');
+  let n = 0;
+  for (const id of liste) {
+    if (zurueck) n += Number(raus.run(id).changes);
+    else if (da(id)) n += Number(rein.run(id, now.toISOString()).changes);
+  }
+  return n;
+}
+
 /**
  * Die gedruckten Kennungen, die `graceMs` nach dem Druck nicht in der App
  * stehen: keine Kultur, kein Beutel, keine Charge. Jede wird einmal geprueft;
@@ -16098,6 +16206,8 @@ module.exports = {
   saleAlerts,
   labelIdsFromZpl,
   recordPrintedLabels,
+  druckListe,
+  druckErledigt,
   unsavedLabels,
   labStock,
   getOrder,
