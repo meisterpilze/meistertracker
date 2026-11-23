@@ -13243,3 +13243,59 @@ button.wk-bretter-row {
   font-weight: 600;
   margin-bottom: 6px;
 }
+
+/* Körnerbrut pro Woche (v123) on the lab page: rows like Nachproduzieren,
+   text left, a small button right. */
+.kbp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-border-light);
+}
+.kbp-row:last-child {
+  border-bottom: 0;
+}
+.kbp-l {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.kbp-l b {
+  overflow-wrap: anywhere;
+}
+.kbp-l small {
+  display: block;
+  color: var(--c-text-muted);
+  font-size: max(0.75rem, var(--fs-min));
+  line-height: 1.35;
+}
+.kbp-l small.kbp-alt {
+  color: var(--c-red-dark);
+  font-weight: 600;
+}
+.kbp-make {
+  color: var(--c-amber-dark);
+  font-weight: 600;
+}
+.kbp-ok {
+  color: var(--c-green-dark);
+}
+.kbp-go {
+  flex: 0 0 auto;
+}
+/* The calculation behind the grain spawn target, in the species sheet. */
+.kbp-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--c-well);
+  font-size: max(0.8125rem, var(--fs-min));
+  line-height: 1.45;
+}
+.kbp-plan small {
+  margin-top: 4px;
+  color: var(--c-text-muted);
+}

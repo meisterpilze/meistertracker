@@ -1117,13 +1117,16 @@ function validateMushroomStrain(data) {
   if (data.imProgramm !== undefined && data.imProgramm !== null && typeof data.imProgramm !== 'boolean') {
     return 'imProgramm must be a boolean';
   }
-  // v122: days and counts per Sorte. Empty or null switches the check off.
+  // v122: days and counts per Sorte. Empty or null switches the check off
+  // (v123's weekBlocks: empty means the plan counts the last eight weeks).
   for (const [f, max] of [
     ['incMaxDays', 3650],
     ['grainMaxDays', 3650],
     ['tentMaxDays', 3650],
     ['tentMin', 100000],
-    ['tentMax', 100000]
+    ['tentMax', 100000],
+    // v123: planned blocks per week; empty = the last eight weeks count.
+    ['weekBlocks', 100000]
   ]) {
     const v = data[f];
     if (v === undefined || v === null || v === '') continue;
