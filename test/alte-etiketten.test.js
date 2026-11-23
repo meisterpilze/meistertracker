@@ -134,6 +134,33 @@ describe('Nachtragen aus der Sicherung von vor dem Neustart', () => {
     });
   });
 
+  // Die Sicherung vom Neustart im August 2026 kannte die Spritzengröße (ml)
+  // noch nicht, und das Nachtragen brach mit "no such column" ab.
+  it('auch aus einer Sicherung, der spätere Spalten fehlen', () => {
+    mitDb((d, a, dir) => {
+      const { DatabaseSync } = require('node:sqlite');
+      const altPfad = path.join(dir, 'alt-schema.db');
+      const alt = new DatabaseSync(altPfad);
+      alt.exec(`CREATE TABLE cultures (id TEXT PRIMARY KEY, type TEXT, species TEXT, parent_id TEXT, status TEXT, created TEXT);
+                CREATE TABLE barcodes (barcode INTEGER PRIMARY KEY, entity_type TEXT, entity_id TEXT, created TEXT);
+                INSERT INTO cultures VALUES ('MC-TA-010426-01', 'MC', 'Testart Alpha', NULL, 'active', '${T0}');
+                INSERT INTO barcodes VALUES (1000400, 'culture', 'MC-TA-010426-01', '${T0}');`);
+      try {
+        assert.equal(db.alteEtikettenSichern(d, alt), 1);
+      } finally {
+        alt.close();
+      }
+      const [x] = db.listAlteEtiketten(d);
+      assert.equal(x.id, 'MC-TA-010426-01');
+      assert.equal(x.strainText, null);
+      assert.equal(db.altesEtikettAufnehmen(d, 1000400).id, 'MC-TA-010426-01');
+      assert.equal(
+        d.prepare('SELECT species FROM cultures WHERE id = ?').get('MC-TA-010426-01').species,
+        'Testart Alpha'
+      );
+    });
+  });
+
   it('das Skript schreibt nur mit --write', () => {
     mitDb((d, a, dir) => {
       const altPfad = path.join(dir, 'alt.db');

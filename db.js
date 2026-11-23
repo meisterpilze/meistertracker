@@ -7032,9 +7032,20 @@ function appendScanEntries(db, entries, userId) {
 // Gibt die Zahl der neu gesicherten zurueck.
 function alteEtikettenSichern(db, quelle, now = new Date()) {
   const q = quelle || db;
+  // Eine Sicherung ist so alt wie der Neustart, vor dem sie entstand: Spalten,
+  // die spaeter dazukamen (ml seit Migration 102, strain_text, strain_id), fehlen
+  // dort. Was fehlt, ist leer.
+  const da = new Set(
+    q
+      .prepare("SELECT name FROM pragma_table_info('cultures')")
+      .all()
+      .map((r) => r.name)
+  );
+  const spalte = (n) => (da.has(n) ? 'c.' + n : 'NULL AS ' + n);
   const rows = q
     .prepare(
-      `SELECT b.barcode, c.id, c.type, c.strain_id, c.species, c.strain_text, c.parent_id, c.ml, c.created
+      `SELECT b.barcode, c.id, c.type, ${spalte('strain_id')}, ${spalte('species')}, ${spalte('strain_text')},
+              ${spalte('parent_id')}, ${spalte('ml')}, ${spalte('created')}
          FROM cultures c JOIN barcodes b ON b.entity_type = 'culture' AND b.entity_id = c.id
         WHERE c.status IN ('active', 'stored')`
     )
