@@ -5010,6 +5010,25 @@
             </div>
             <div class="fs-xs" id="printer-status-detail" style="opacity: 0.8; margin-top: 4px"></div>
           </div>
+          <!-- Oben, was zu tun ist: alles der letzten Tage ohne Etikett — auch,
+               was im Etiketten-Fenster mit "Später" liegen blieb — und darunter
+               das zuletzt Angelegte zum Nachdrucken. Die Suche in allen Chargen
+               und Kulturen steht darunter, für das Ältere (renderPrintQueue). -->
+          <div class="card" id="pq-card">
+            <div class="sec" data-i18n="pq.title">Noch nicht gedruckt</div>
+            <p class="fs-xs" id="pq-hint" style="color: var(--c-text-muted); margin: 2px 0 8px"></p>
+            <div id="pq-offen"></div>
+            <div style="margin-top: 10px">
+              <button id="pq-print" class="btn btn-p" type="button" disabled>
+                Nichts ausgewählt
+              </button>
+            </div>
+          </div>
+          <div class="card" id="pq-recent-card">
+            <div class="sec" data-i18n="pq.recent">Zuletzt angelegt</div>
+            <div id="pq-zuletzt" style="margin-top: 6px"></div>
+          </div>
+          <div class="sec" style="margin: 16px 0 6px" data-i18n="pq.older">Etwas Älteres drucken</div>
           <div class="stabs" data-stab-home="nav.print">
             <button class="stab active" id="st-print-bags" data-i18n="print.bagLabels">Bag labels</button>
             <button class="stab" id="st-print-lab" data-i18n="print.labLabels">Lab labels</button>

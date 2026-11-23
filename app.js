@@ -1594,6 +1594,7 @@ function go(page, btnId) {
   }
   if (page === 'zones') renderZones();
   if (page === 'print') {
+    loadPrintQueue();
     fillBatchSelect();
     renderLabList();
     refreshPrinterStatus();
@@ -25343,8 +25344,12 @@ function logLabWork(opts) {
   if (document.getElementById('lw-source')) document.getElementById('lw-source').value = '';
   lwPreview();
   if (intakeId) {
+    // Das Etikett hängt schon: aus "Noch nicht gedruckt" auf der Druckseite.
     saved.then(
-      () => toast(t('intake.done', { id: intakeId })),
+      () => {
+        toast(t('intake.done', { id: intakeId }));
+        apiPost('/api/print-queue/erledigt', { ids: [intakeId] });
+      },
       () => {}
     );
     return;
@@ -28478,6 +28483,170 @@ async function printCultureLabelsInline() {
     cprClose();
   }
 }
+// ─── DRUCKEN: noch nicht gedruckt, zuletzt angelegt ─────────
+// Oben auf der Druckseite, was zu tun ist: alles der letzten Tage ohne Etikett,
+// angehakt, und ein Knopf. "Später" im Etiketten-Fenster legt es genau hierhin.
+// Vorher hieß später drucken: die Charge in der Liste aller Chargen suchen.
+// Was gedruckt ist, weiß der Server (db.druckListe), auch von anderen Geräten.
+let _pq = null; // { tage, offen, zuletzt, aus: Set der abgewählten Zeilen }
+let _pqBusy = false;
+const _pqKey = (g) =>
+  g.kind === 'bags' ? 'B|' + g.batchId : ['C', g.type, g.created, g.parentId || '', g.ml || ''].join('|');
+// Erste und letzte Kennung, dazwischen "…": eine Zeile, auch bei 40 Beuteln.
+const _pqIds = (ids) => (ids.length > 1 ? ids[0] + ' … ' + ids[ids.length - 1] : ids[0] || '');
+function _pqTitel(g, n) {
+  const art =
+    g.kind === 'bags'
+      ? esc(t(g.type === 'grain' ? 'pq.grainBags' : 'pq.bags')) + (g.bagKg ? ' ' + esc(labelKg(g.bagKg)) : '')
+      : ctBadge(g.type) + (g.type === 'SY' && g.ml ? ' ' + esc(g.ml + ' ml') : '');
+  const st = (g.strainText || '').trim();
+  return `<div class="fs-base"><b>${n}×</b> ${art} ${spDot(g.species || '')}${esc(g.species || '')}${st ? ' · ' + esc(st) : ''}</div>`;
+}
+async function loadPrintQueue() {
+  let d;
+  try {
+    d = await apiGet('/api/print-queue');
+  } catch {
+    const el = document.getElementById('pq-offen');
+    if (el) el.innerHTML = '<div class="empty">' + esc(t('pq.loadFailed')) + '</div>';
+    return;
+  }
+  _pq = { tage: d.tage || 14, offen: d.offen || [], zuletzt: d.zuletzt || [], aus: _pq ? _pq.aus : new Set() };
+  renderPrintQueue();
+}
+function renderPrintQueue() {
+  if (!_pq) return;
+  const hint = document.getElementById('pq-hint');
+  if (hint) hint.textContent = t('pq.hint', { n: _pq.tage });
+  const el = document.getElementById('pq-offen');
+  if (el)
+    el.innerHTML = _pq.offen.length
+      ? _pq.offen
+          .map(
+            (g, i) =>
+              `<div class="pq-row"><label class="pq-tick"><input type="checkbox" data-pq-tick="${i}"${_pq.aus.has(_pqKey(g)) ? '' : ' checked'} aria-label="${esc(t('pq.tick'))}" /></label>` +
+              `<div class="pq-text">${_pqTitel(g, g.offen.length)}<div class="fs-micro pq-ids">${esc(_pqIds(g.offen))} · ${esc(fmtDtTime(g.created))}</div></div>` +
+              `<button type="button" class="btn btn-sm" data-pq-weg="${i}">${esc(t('pq.hasLabel'))}</button></div>`
+          )
+          .join('')
+      : '<div class="empty">' + esc(t('pq.empty')) + '</div>';
+  const n = _pq.offen.filter((g) => !_pq.aus.has(_pqKey(g))).reduce((a, g) => a + g.offen.length, 0);
+  const knopf = document.getElementById('pq-print');
+  if (knopf) {
+    knopf.style.display = _pq.offen.length ? '' : 'none';
+    knopf.disabled = !n || _pqBusy;
+    knopf.textContent = !n ? t('pq.noneTicked') : n === 1 ? t('pq.printOne') : t('pq.printN', { n });
+  }
+  const zl = document.getElementById('pq-zuletzt');
+  if (zl)
+    zl.innerHTML = _pq.zuletzt.length
+      ? _pq.zuletzt
+          .map(
+            (g, i) =>
+              `<div class="pq-row"><div class="pq-text">${_pqTitel(g, g.alle.length)}<div class="fs-micro pq-ids">${esc(_pqIds(g.alle))} · ${esc(fmtDtTime(g.created))}` +
+              (g.offen.length
+                ? ` · <span style="color:var(--c-red-dark)">${esc(t('pq.notPrinted', { n: g.offen.length }))}</span>`
+                : '') +
+              `</div></div><button type="button" class="btn btn-sm" data-pq-nochmal="${i}">${esc(t('pq.again'))}</button></div>`
+          )
+          .join('')
+      : '<div class="empty">' + esc(t('pq.recentEmpty', { n: _pq.tage })) + '</div>';
+}
+// Ein Druckauftrag für alle gewählten Zeilen: Kulturen mit den Einstellungen
+// der Labor-Etiketten, Beutel mit denen der Beutel-Etiketten — dieselben, mit
+// denen die Etiketten-Fenster drucken. nochmal: alle Kennungen der Zeile, nicht
+// nur die ungedruckten.
+async function pqDrucken(gruppen, nochmal) {
+  if (_pqBusy || !gruppen.length) return;
+  _pqBusy = true;
+  renderPrintQueue();
+  try {
+    const ids = (g) => (nochmal ? g.alle : g.offen);
+    // Auf einem anderen Gerät angelegt: dann kennt dieses die Kultur oder ihre
+    // Nummer noch nicht, und das Etikett trüge den alten Text-Strichcode.
+    const fehlt = gruppen.some((g) =>
+      g.kind === 'culture'
+        ? ids(g).some((id) => !barcodeByEntity.has('culture:' + id) || !cultures.some((c) => c.id === id))
+        : !batches.some((b) => b.batchId === g.batchId)
+    );
+    if (fehlt) await loadData();
+    const modeL = document.getElementById('lab-mode');
+    const qrL = document.getElementById('lab-qr');
+    const modeB = document.getElementById('print-mode');
+    const qrB = document.getElementById('bag-qr');
+    const teile = [];
+    for (const g of gruppen) {
+      const liste = ids(g);
+      if (g.kind === 'culture') {
+        teile.push(makeLabZPL(liste, modeL ? modeL.value : 'sorte', !!(qrL && qrL.checked)));
+        continue;
+      }
+      const b = batches.find((x) => x.batchId === g.batchId);
+      if (!b) continue;
+      await ensureBagBarcodes(liste);
+      teile.push(makeBagZPL(liste, b, modeB ? modeB.value : 'sorte', !!(qrB && qrB.checked)));
+    }
+    const zpl = teile.filter(Boolean).join('\n');
+    const n = zpl.split('^XA').length - 1;
+    if (!n) {
+      toast(t('print.noLabels'), 'err');
+      return;
+    }
+    const err = await sendToPrinter(zpl);
+    if (err) {
+      toast(t('pq.printFailed', { msg: err }), 'err');
+      return;
+    }
+    printedFb(t('print.printedAll', { n }));
+  } finally {
+    _pqBusy = false;
+    loadPrintQueue();
+  }
+}
+// "Hat schon ein Etikett": aus der Liste, ohne zu drucken. Ein Tipp, mit
+// Rückgängig unten.
+async function pqWeg(g) {
+  if (!g) return;
+  const ids = g.offen.slice();
+  _pq.offen = _pq.offen.filter((x) => x !== g);
+  renderPrintQueue();
+  const r = await apiPost('/api/print-queue/erledigt', { ids });
+  if (!r || r.error) {
+    toast(t('notifications.saveFailed'), 'err');
+    loadPrintQueue();
+    return;
+  }
+  showUndoBar(t('pq.hasLabelDone', { what: _pqIds(ids) }), async () => {
+    await apiPost('/api/print-queue/erledigt', { ids, zurueck: true });
+    loadPrintQueue();
+  });
+}
+(function wirePrintQueue() {
+  document.addEventListener('change', (e) => {
+    const i = e.target && e.target.dataset ? e.target.dataset.pqTick : undefined;
+    if (i == null || !_pq) return;
+    const g = _pq.offen[Number(i)];
+    if (!g) return;
+    if (e.target.checked) _pq.aus.delete(_pqKey(g));
+    else _pq.aus.add(_pqKey(g));
+    renderPrintQueue();
+  });
+  document.addEventListener('click', (e) => {
+    if (!_pq || !e.target.closest('#p-print')) return;
+    const weg = e.target.closest('[data-pq-weg]');
+    if (weg) return pqWeg(_pq.offen[Number(weg.dataset.pqWeg)]);
+    const nochmal = e.target.closest('[data-pq-nochmal]');
+    if (nochmal) {
+      const g = _pq.zuletzt[Number(nochmal.dataset.pqNochmal)];
+      return g ? pqDrucken([g], true) : undefined;
+    }
+    if (e.target.closest('#pq-print'))
+      return pqDrucken(
+        _pq.offen.filter((g) => !_pq.aus.has(_pqKey(g))),
+        false
+      );
+  });
+})();
 function renderLabList() {
   const filter = document.getElementById('lab-filter').value,
     el = document.getElementById('lab-list'),
@@ -35970,7 +36139,11 @@ function initEventListeners() {
     nbpClose();
     goToPrintBatch();
   });
-  $('nbp-later').addEventListener('click', nbpClose);
+  // Später: das Fenster geht zu, die Etiketten warten auf der Druckseite.
+  $('nbp-later').addEventListener('click', () => {
+    nbpClose();
+    toast(t('pq.later'));
+  });
   $('nbp-close').addEventListener('click', nbpClose);
   document.getElementById('m-batch-print').addEventListener('click', (e) => {
     if (e.target.id === 'm-batch-print') nbpClose();
@@ -35981,7 +36154,10 @@ function initEventListeners() {
     cprClose();
     goToPrintLabCulture();
   });
-  $('cpr-later').addEventListener('click', cprClose);
+  $('cpr-later').addEventListener('click', () => {
+    cprClose();
+    toast(t('pq.later'));
+  });
   $('cpr-close').addEventListener('click', cprClose);
   document.getElementById('m-culture-print').addEventListener('click', (e) => {
     if (e.target.id === 'm-culture-print') cprClose();
