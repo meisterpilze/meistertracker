@@ -24903,9 +24903,9 @@ function msqMehrereAnlegen(spec) {
   const ids = [];
   const saves = [];
   for (const [type, qty, ml] of posten) {
-    const r = kulturenAnlegen({ type, ms, wann, qty, parentId: spec.quelle || null, strainText, ml });
+    const r = kulturenAnlegen({ type, ms, wann, qty, parentId: spec.quelle || null, strainText, ml, leise: true });
     ids.push(...r.newC.map((x) => x.id));
-    saves.push(r.saved);
+    saves.push({ ids: r.newC.map((x) => x.id), saved: r.saved });
   }
   let korn = null;
   if (zahlen.kb.length) {
@@ -24925,7 +24925,9 @@ function msqMehrereAnlegen(spec) {
     korn = createGrainBatch({ ohneFenster: true }) || null;
   }
   renderLabLog();
-  etikettenFuerAlles(ids, Promise.all(saves), korn);
+  const stand = speicherStand(saves);
+  stand.then((st) => meldeSpeicherFehler(st, ids, korn));
+  etikettenFuerAlles(ids, stand, korn);
 }
 
 // Das lange Chargenformular aus einem Rezept füllen.
@@ -25397,8 +25399,14 @@ function kulturenAnlegen(spec) {
       const ids = new Set(newC.map((c) => c.id));
       cultures = cultures.filter((c) => !ids.has(c.id));
       renderLabLog();
-      cprClose();
-      toast(t('lab.saveFailed', { msg: r.error }), 'err');
+      // spec.leise: einer von mehreren Posten in einem Fenster (Beimpfen,
+      // Mehrere). Dann sagt meldeSpeicherFehler(), was fehlt, und das Fenster
+      // bleibt für die anderen offen. Am 23.11.2026 schloss ein Fehler bei den
+      // Petrischalen es und nahm die gespeicherten Beutel und Spritzen mit.
+      if (!spec.leise) {
+        cprClose();
+        toast(t('lab.saveFailed', { msg: r.error }), 'err');
+      }
       throw new Error(r.error);
     }
     if (r && r.cultureBarcodes) {
@@ -25413,6 +25421,35 @@ function kulturenAnlegen(spec) {
   fillCultureSelect('nb-culture', ['PD', 'LC', 'G2G', 'GS']);
   fillCultureSelect('gs-culture', ['PD', 'LC', 'SY', 'GS']);
   return { newC, saved };
+}
+// Mehrere Posten in einem Etiketten-Fenster (Beimpfen, Mehrere): jeder speichert
+// für sich. Vorher wartete das Fenster auf Promise.all — schlug ein Posten fehl,
+// druckte es gar nichts, auch nicht, was längst gespeichert war. Das hier wird
+// nie abgewiesen; es sagt, welche Kennungen fehlen, und warum.
+// posten: [{ ids, saved }] → { fehlt: [Kennung], grund }
+function speicherStand(posten) {
+  return Promise.allSettled(posten.map((p) => p.saved)).then((r) => {
+    const fehlt = [];
+    let grund = '';
+    r.forEach((x, i) => {
+      if (x.status !== 'rejected') return;
+      fehlt.push(...posten[i].ids);
+      if (!grund) grund = (x.reason && x.reason.message) || '';
+    });
+    return { fehlt, grund };
+  });
+}
+// Eine Meldung für alle Posten, die nicht gespeichert sind. Ist sonst etwas
+// gespeichert, sagt sie das dazu: dessen Etiketten druckt das Fenster.
+function meldeSpeicherFehler(st, ids, korn) {
+  if (!st || !st.fehlt.length) return;
+  const rest = ids.length - st.fehlt.length + (korn ? korn.bagIds.length : 0);
+  toast(
+    rest > 0
+      ? t('lab.saveFailedPart', { ids: st.fehlt.join(', '), msg: st.grund })
+      : t('lab.saveFailed', { msg: st.grund }),
+    'err'
+  );
 }
 function renderLabLog() {
   const body = document.getElementById('lab-log-body');
@@ -28394,26 +28431,45 @@ function cprShow(ids, saved, korn) {
   _cprSaved = saved || null;
   _cprKorn = korn || null;
   const beutel = korn ? korn.bagIds : [];
-  const head = document.getElementById('cpr-head');
-  if (head)
-    head.textContent = beutel.length
-      ? t('lab.printForAll', { n: ids.length + beutel.length, kulturen: ids.length, beutel: beutel.length })
-      : t('lab.printFor', { n: ids.length });
+  // fehlt: Kennungen, deren Speichern fehlgeschlagen ist. Sie bleiben in der
+  // Liste stehen, durchgestrichen, und zählen nicht mehr mit — gedruckt werden
+  // sie nicht (printCultureLabelsInline).
+  const zeigen = (fehlt) => {
+    const k = ids.filter((id) => !fehlt.has(id)).length;
+    const head = document.getElementById('cpr-head');
+    if (head)
+      head.textContent = beutel.length
+        ? t('lab.printForAll', { n: k + beutel.length, kulturen: k, beutel: beutel.length })
+        : t('lab.printFor', { n: k });
+    const list = document.getElementById('cpr-ids');
+    if (list)
+      list.innerHTML = ids
+        .concat(beutel)
+        .map((id) =>
+          fehlt.has(id)
+            ? `<span class="fs-micro" style="font-family:monospace;background:var(--c-red-light);padding:2px 6px;border-radius:4px;color:var(--c-red-dark);text-decoration:line-through">${esc(id)}</span>`
+            : `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
+        )
+        .join('');
+  };
+  zeigen(new Set());
   const titel = document.getElementById('cpr-ids-title');
   if (titel) titel.textContent = t(beutel.length ? 'lab.createdIdsAll' : 'lab.createdIds');
   const knopf = document.getElementById('prt-cpr');
   if (knopf) knopf.textContent = t(beutel.length ? 'lab.printAllNow' : 'lab.printLabelsNow');
-  const list = document.getElementById('cpr-ids');
-  if (list)
-    list.innerHTML = ids
-      .concat(beutel)
-      .map(
-        (id) =>
-          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(id)}</span>`
-      )
-      .join('');
   const m = document.getElementById('m-culture-print');
   if (m) m.classList.add('open');
+  // Mehrere Posten (speicherStand): sobald alle geantwortet haben, zeigt das
+  // Fenster, was fehlt. Ist gar nichts gespeichert, geht es zu.
+  if (saved && typeof saved.then === 'function')
+    saved.then(
+      (st) => {
+        if (_cprSaved !== saved || !st || !Array.isArray(st.fehlt) || !st.fehlt.length) return;
+        if (st.fehlt.length >= ids.length && !beutel.length) return cprClose();
+        zeigen(new Set(st.fehlt));
+      },
+      () => {}
+    );
 }
 function cprClose() {
   const m = document.getElementById('m-culture-print');
@@ -28432,16 +28488,24 @@ function etikettenFuerAlles(ids, saved, korn) {
   openZonePickModal(korn.batchObj, korn.bagIds, () => cprShow(ids, saved, korn));
 }
 async function printCultureLabelsInline() {
-  const ids = lastCreatedCultureIds;
-  if (!ids.length) {
+  if (!lastCreatedCultureIds.length) {
     toast(t('print.selectCulture'), 'err');
     return;
   }
   // Ein schneller Daumen schlägt sonst die Antwort des Servers: erst speichern
   // lassen, dann drucken. Schlägt das Speichern fehl, gibt es die Kultur nicht —
   // dann kein Etikett: eins am Glas hieße beim nächsten Scan "nicht im System".
-  // Was schiefging, hat logLabWork schon gesagt.
-  if (_cprSaved && !(await _cprSaved.then(() => true).catch(() => false))) return;
+  // Was schiefging, hat kulturenAnlegen bzw. meldeSpeicherFehler schon gesagt.
+  // Ein einzelner Posten weist ab, wenn er fehlschlägt; mehrere (speicherStand)
+  // sagen, welche Kennungen fehlen — die anderen druckt das Fenster trotzdem.
+  const stand = _cprSaved ? await _cprSaved.then((st) => st || {}, () => null) : {};
+  if (stand === null) return;
+  const fehlt = new Set(Array.isArray(stand.fehlt) ? stand.fehlt : []);
+  const ids = lastCreatedCultureIds.filter((id) => !fehlt.has(id));
+  if (!ids.length && !_cprKorn) {
+    cprClose();
+    return;
+  }
   const modeEl = document.getElementById('lab-mode');
   const qrEl = document.getElementById('lab-qr');
   let zpl = makeLabZPL(ids, modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
@@ -30745,10 +30809,11 @@ function bmpGo() {
         qty,
         parentId: c.id,
         strainText: (c.strainText || '').trim(),
-        ml
+        ml,
+        leise: true
       });
       ids.push(...r.newC.map((x) => x.id));
-      saves.push(r.saved);
+      saves.push({ ids: r.newC.map((x) => x.id), saved: r.saved });
     }
   }
   // Dann die Körnerbrut, über denselben Weg wie aus dem Schnelldialog — mit der
@@ -30771,7 +30836,9 @@ function bmpGo() {
     korn = createGrainBatch({ ohneFenster: true }) || null;
   }
   renderLabLog();
-  etikettenFuerAlles(ids, Promise.all(saves), korn);
+  const stand = speicherStand(saves);
+  stand.then((st) => meldeSpeicherFehler(st, ids, korn));
+  etikettenFuerAlles(ids, stand, korn);
 }
 (function wireBeimpfen() {
   document.addEventListener('click', (e) => {

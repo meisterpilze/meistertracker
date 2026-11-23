@@ -1345,6 +1345,7 @@ window.LANG['en'] = {
   'intake.exists': '{id} is already in the system — nothing to take in.',
   'intake.done': '{id} is back in the system. The label on the jar is valid.',
   'lab.saveFailed': 'Not saved, so no label was printed ({msg}). Check the source and create it again; if that does not help, check the Wi-Fi.',
+  'lab.saveFailedPart': 'Not saved: {ids} ({msg}). Those get no label, please create them again. Everything else is saved and prints.',
   'batch.notes': 'Notes (optional)',
   'batch.ph': 'pH (measured, optional)',
   'batch.phNaN': 'pH is a number between 0 and 14, for example 6.5. Or leave the field empty.',

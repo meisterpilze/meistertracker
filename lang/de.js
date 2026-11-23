@@ -1350,6 +1350,7 @@ window.LANG['de'] = {
   'intake.exists': '{id} ist schon im System — nichts aufzunehmen.',
   'intake.done': '{id} ist wieder im System. Das Etikett am Glas gilt.',
   'lab.saveFailed': 'Nicht gespeichert, darum kein Etikett gedruckt ({msg}). Herkunft prüfen und nochmal anlegen; hilft das nicht, WLAN prüfen.',
+  'lab.saveFailedPart': 'Nicht gespeichert: {ids} ({msg}). Dafür gibt es kein Etikett, bitte nochmal anlegen. Alles andere ist gespeichert und wird gedruckt.',
   'batch.notes': 'Notizen (optional)',
   'batch.ph': 'pH (gemessen, optional)',
   'batch.phNaN': 'Der pH ist eine Zahl zwischen 0 und 14, zum Beispiel 6,5. Oder das Feld leer lassen.',
