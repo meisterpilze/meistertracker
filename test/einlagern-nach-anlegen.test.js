@@ -43,17 +43,29 @@ describe('Einlagern nach dem Anlegen', () => {
     });
   }
 
-  it('nbPlaceAndPrint macht beides: Zone, dann Etiketten', () => {
+  it('nbPlaceAndPrint macht beides: Platz, dann Etiketten', () => {
+    // Seit es Regalbretter gibt (v122), fragt die App Blöcke und Körnerbrut
+    // nicht mehr nach dem Platz: wo Platz ist, sieht man erst vor dem Regal.
+    // Sie kommen ohne Frage in ihren Raum (brettStartZone), auf keinem Brett,
+    // und bekommen ihr Brett beim Scannen. Gibt es noch keine Bretter, fragt die
+    // App wie bisher. Ohne Platz bleibt keine Charge: einer der beiden Wege
+    // bucht immer ein ADD.
     const f = hebeFunktion('nbPlaceAndPrint', SRC);
-    assert.match(f, /openZonePickModal\(/, 'ohne Zonenwahl hat die Charge keinen Standort');
-    assert.match(f, /nbpOpen\(\)/, 'ohne Etikettendialog druckt niemand');
-    // Die Reihenfolge ist der Punkt: der Druck steht im Rückruf der Zonenwahl,
-    // nicht daneben. Ein Etikett ohne Standort ist ein Etikett auf einem Beutel,
-    // den die App nicht kennt.
+    assert.match(f, /brettStartZone\(/, 'ohne den Raum für Bretter fragt die App jedes Mal');
+    assert.match(f, /addBagsToLocation\(/, 'ohne Frage gestellt wird mit einem ADD in den Raum');
+    assert.match(f, /openZonePickModal\(/, 'ohne Bretter hat die Charge sonst keinen Standort');
+    // Die Reihenfolge ist der Punkt: gedruckt wird nach dem Platz, auf beiden
+    // Wegen. Ein Etikett ohne Standort ist ein Etikett auf einem Beutel, den die
+    // App nicht kennt.
     assert.ok(
-      f.indexOf('openZonePickModal(') < f.indexOf('nbpOpen()'),
+      f.indexOf('addBagsToLocation(') < f.indexOf('nbEtikettenNachPlatz('),
+      'beim Raum ohne Frage steht der Druck vor dem Einlagern'
+    );
+    assert.ok(
+      f.indexOf('openZonePickModal(') < f.lastIndexOf('nbEtikettenNachPlatz('),
       'der Etikettendialog steht vor der Zonenwahl statt in deren Rückruf'
     );
+    assert.match(hebeFunktion('nbEtikettenNachPlatz', SRC), /nbpOpen\(\)/, 'ohne Etikettendialog druckt niemand');
   });
 
   it('der geführte Ablauf schließt sein Fenster, bevor er einlagert', () => {

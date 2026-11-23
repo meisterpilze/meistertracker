@@ -207,6 +207,13 @@ const toZone = (loc) => {
   if (!loc) return loc;
   if (RACK_ZONE[loc]) return RACK_ZONE[loc];
   if (ZONES.includes(loc)) return loc;
+  // Ein Brett ("INC_R1:2", v122) und das alte "INC:R1": der Teil vor dem
+  // Doppelpunkt ist das Regal oder die Zone, wie in db.zoneIdOfLocation.
+  const base = String(loc).split(':')[0];
+  if (base !== loc) {
+    if (RACK_ZONE[base]) return RACK_ZONE[base];
+    if (ZONES.includes(base)) return base;
+  }
   const z = ZONES.find((z) => loc.startsWith(z + '_'));
   return z || loc;
 };
@@ -288,6 +295,9 @@ function zoneI18nKey(z) {
 }
 function zoneDisplayName(id) {
   if (!id) return id;
+  // Ein Brett: sein Regal, dann die Ebene.
+  const br = brettVon(id);
+  if (br) return zoneDisplayName(br.rackId) + ' · ' + t('brett.levelN', { n: br.level });
   const z = zones.find((x) => x.id === id);
   if (z) {
     const key = zoneI18nKey(z);
@@ -386,6 +396,12 @@ let barcodeRegistry = new Map(),
 let alteEtiketten = new Map();
 // Regal: fertige Ware, eine Zahl je Artikel (renderShelf)
 let shelfItems = [];
+// Regalbretter (v122): was der Server von selbst ausgebucht hat und noch keiner
+// beantwortet hat, wer wann "Noch da" sagte (Beutel → Zeit), und die Fristen,
+// nach denen der Server rechnet (siehe REGALBRETTER).
+let autoBookouts = [];
+let stillThere = {};
+let brettRules = { confirmDays: 14, graceDays: 7 };
 let appUsers = [];
 let calEvSelectedAssignees = [];
 let calTaskSelectedAssignees = [];
@@ -699,6 +715,9 @@ function applyData(d) {
   rhythmTasks = d.rhythmTasks || [];
   recurringTasks = d.recurringTasks || [];
   shelfItems = d.shelf || [];
+  autoBookouts = d.autoBookouts || [];
+  stillThere = d.stillThere || {};
+  if (d.brettRules && d.brettRules.confirmDays > 0 && d.brettRules.graceDays > 0) brettRules = d.brettRules;
   datenGeladen = true;
   // Build barcode registry from server data
   barcodeRegistry = new Map();
@@ -5225,12 +5244,42 @@ function renderRackSection(zone, racks, filtered) {
   // Racks with nothing on them are named in one line under the ones that hold
   // something, not drawn as columns that say "Leer": when one rack holds a
   // whole room, the empty columns beside it took the width from it.
-  const emptyRacks = racks.filter((r) => !Object.keys(getRackBags(r)).length);
+  // Ein Regal mit Brettern bleibt sichtbar, auch leer: seine Bretter sind die
+  // Knöpfe, über die etwas daraufkommt.
+  const emptyRacks = racks.filter((r) => !Object.keys(getRackBags(r)).length && !((rackVon(r) || {}).levels > 0));
   const shownRacks = q || emptyRacks.length === racks.length ? racks : racks.filter((r) => !emptyRacks.includes(r));
+  const now = new Date();
   const rackCards = shownRacks
     .map((rackId) => {
       const bags = getRackBags(rackId);
       const count = Object.keys(bags).length;
+      // Ein Regal mit Brettern: je Brett eine Zeile mit dem, was darauf steht.
+      // Antippen öffnet dasselbe Blatt wie das Etikett.
+      const rk = rackVon(rackId);
+      if (rk && rk.levels > 0) {
+        const art = brettArt(rk.strainId);
+        let zeilen = '';
+        for (let l = 1; l <= rk.levels; l++) {
+          const ort = brettOrt(rackId, l);
+          const list = brettBeutel(ort);
+          const chips = list.length
+            ? brettGruppen(list)
+                .map((g) => {
+                  const z = brettZustand(g.bags[0], now);
+                  return `<span class="brett-chip brett-${z.k}"><b>${g.bags.length}×</b> ${esc(fmtDtShort(g.made))}</span>`;
+                })
+                .join('')
+            : `<span class="brett-chip-leer">${esc(t('brett.emptyShort'))}</span>`;
+          zeilen += `<button type="button" class="brett-zeile" data-brett-open="${esc(ort)}"><span class="brett-zeile-n">${l}</span><span class="brett-zeile-chips">${chips}</span></button>`;
+        }
+        return `<div class="rack-card-new">
+      <div class="rack-card-header">
+        <span class="rack-card-name">${rackLabel(rackId)}${art ? ' · ' + esc(art.name) : ''}</span>
+        <span class="rack-card-count">${tp('dash.bags', count)}</span>
+      </div>
+      <div class="rack-card-bretter">${zeilen}</div>
+    </div>`;
+      }
       const byBatch = {};
       Object.entries(bags).forEach(([bagId, d]) => {
         if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
@@ -5295,6 +5344,12 @@ function renderRackSection(zone, racks, filtered) {
   const late = filtered.filter(
     (d) => d.ov && Object.keys(d.c).some((zid) => (zid === zone || racks.includes(zid)) && d.c[zid] > 0)
   ).length;
+  // Was in einem Raum mit Brettern auf keinem Brett steht: neue Beutel, und
+  // alles von vor den Brettern. Eine Zeile oben; sie öffnet das Blatt dazu.
+  const ohneBrett = brettZoneMitBrettern(zoneObj) ? brettOhne(zone).length : 0;
+  const ohneHtml = ohneBrett
+    ? `<button type="button" class="brett-zeile brett-zeile-ohne" data-brett-frei="${esc(zone)}"><span class="brett-zeile-n">?</span><span class="brett-zeile-chips">${esc(t('brett.notOnShelfN', { n: ohneBrett }))}</span></button>`
+    : '';
   return `<div class="${_locSectionClass(zone, q)}" data-zone="${esc(zone)}">
     <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
       <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
@@ -5302,7 +5357,7 @@ function renderRackSection(zone, racks, filtered) {
       <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
       <button class="fs-xs" type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
     </div>
-    <div class="location-section-body">${capHtml}
+    <div class="location-section-body">${capHtml}${ohneHtml}
       <div class="${gridClass}">${rackCards}</div>${emptyLine}
     </div>
   </div>`;
@@ -5368,8 +5423,13 @@ function renderFruitingSection(fruitingZones, filtered) {
         <span class="fs-micro" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
       </div>`
         : '';
+      // Je Art eine Karte mit Zahl und Grenzen; antippen öffnet Raus und Zählen.
+      const arten = new Map();
+      for (const x of brettZeltBeutel(z.id, null)) if (x.strainId) arten.set(x.strainId, (arten.get(x.strainId) || 0) + 1);
+      const artKarten = [...arten].map(([sid, n]) => zeltKarteHtml(z, brettArt(sid), sid, n)).join('');
       return `<div class="tent-column">
       <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span class="fs-xs" style="font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
+      ${artKarten ? '<div class="zelt-karten">' + artKarten + '</div>' : ''}
       ${cards}
     </div>`;
     })
@@ -7823,6 +7883,7 @@ function renderWorkChain() {
   set('harvest', num(sum('fruiting')), t('work.atHarvest'));
 }
 function renderDashBatchTasks() {
+  renderWorkBretter();
   renderWorkTents();
   renderWorkChain();
   const el = document.getElementById('dash-batch-tasks');
@@ -9790,18 +9851,1223 @@ async function lbProgramm(an) {
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
+// Die Beutel auf einem Regal, auch die auf seinen Brettern ("INC_R1:2", v122).
+// Es gilt der letzte Platz eines Beutels: ein Umzug von Brett zu Brett bleibt
+// auf dem Regal, ein Platz anderswo oder ein REMOVE nimmt ihn herunter.
 function getRackBags(rackId) {
   const bags = {};
+  const hier = (loc) => !!loc && String(loc).split(':')[0] === rackId;
   scanLog.forEach((e) => {
-    if (e.action === 'ADD' && e.to === rackId && e.bag)
-      bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain };
-    if (e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
-      if (e.to === rackId && e.bag) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain };
-      if (e.from === rackId && e.bag) delete bags[e.bag];
-    }
-    if (e.action === 'REMOVE' && e.from === rackId && e.bag) delete bags[e.bag];
+    if (!e.bag) return;
+    if (e.action === 'ADD' || e.action === 'MOVE' || e.action === 'MOVE_BATCH') {
+      if (hier(e.to)) bags[e.bag] = { batchId: e.batch, species: e.species, strain: e.strain, loc: e.to };
+      else delete bags[e.bag];
+    } else if (e.action === 'REMOVE') delete bags[e.bag];
   });
   return bags;
+}
+
+// ─── REGALBRETTER ────────────────────────────────────────────
+// Blöcke und Körnerbrut stehen auf Brettern (v122). Ein Regal trägt eine Art und
+// hat Bretter mit einem großen Etikett; ein Beutel steht auf einem Brett, wenn
+// sein letzter Platz "<Regal>:<Ebene>" ist. Gescannt wird das Brett, nicht der
+// Beutel: das Etikett öffnet ein Blatt mit dem, was darauf steht, die ältesten
+// oben, und vier Knöpfen. Welche Beutel genau gehen, entscheidet die App: immer
+// die ältesten. Im Zelt gibt es keine Bretter, nur eine Zahl je Art mit
+// Mindest- und Höchstzahl. Was länger steht, als seine Art erlaubt, fragt die
+// App ("Noch da?") oder bucht der Server selbst aus (db.autoBookOuts).
+//
+// Welche Zahlen gelten, steht je Art in der Datenbank (Pilzsorten); der Code
+// kennt keine.
+const BRETT_RE = /^([A-Z][A-Z0-9_]{0,29}):([1-9][0-9]?)$/;
+const BRETT_TAG_MS = 86400000;
+
+function brettVon(loc) {
+  const m = loc ? BRETT_RE.exec(String(loc)) : null;
+  return m ? { rackId: m[1], level: Number(m[2]) } : null;
+}
+function brettOrt(rackId, level) {
+  return rackId + ':' + level;
+}
+// Das Regal eines Platzes (Regal oder Brett darauf), mit seiner Zone.
+function rackVon(loc) {
+  const base = loc ? String(loc).split(':')[0] : '';
+  const z = ZONE_BY_ID[RACK_ZONE[base]];
+  const r = z ? z.racks.find((x) => x.id === base) : null;
+  return r ? Object.assign({}, r, { zoneId: z.id }) : null;
+}
+function brettName(loc) {
+  const b = brettVon(loc);
+  return b ? rackLabel(b.rackId) + ' · ' + t('brett.levelN', { n: b.level }) : rackLabel(String(loc || ''));
+}
+// Ein Platz in Worten: Brett, Regal oder Zone.
+function brettPlatzName(loc) {
+  return brettVon(loc) ? brettName(loc) : zoneDisplayName(loc);
+}
+function brettArt(strainId) {
+  return (strainId && mushroomStrains.find((m) => m.id === strainId)) || null;
+}
+// Eine Zone, deren Regale in Bretter geteilt sind: dort gibt es "auf keinem Brett".
+function brettZoneMitBrettern(z) {
+  return !!z && (z.role === 'incubation' || z.role === 'spawn') && z.racks.some((r) => r.levels > 0);
+}
+
+// Was gerade wo steht: Platz → die letzten Platz-Einträge der Beutel dort.
+// Einmal je Stand von placementByBag() gebaut; ein neuer Eintrag im Log setzt
+// den zurück und damit auch diese Karte.
+let _brettP = null;
+let _brettPQuelle = null;
+function brettPlaetze() {
+  const p = placementByBag();
+  if (_brettPQuelle !== p) {
+    _brettPQuelle = p;
+    _brettP = new Map();
+    for (const e of p.values()) {
+      if (e.action === 'REMOVE' || !e.to || !e.bag) continue;
+      let l = _brettP.get(e.to);
+      if (!l) _brettP.set(e.to, (l = []));
+      l.push(e);
+    }
+  }
+  return _brettP;
+}
+function _brettInfo(e) {
+  const b = batchById(e.batch);
+  return {
+    bag: e.bag,
+    batch: e.batch,
+    b,
+    loc: e.to,
+    made: (b && b.created) || e.time,
+    since: e.time,
+    strainId: b ? b.strainId || null : null,
+    type: b ? b.batchType : null,
+    due: b ? b.due : null
+  };
+}
+// Älter zuerst: nach dem Tag, an dem die Charge gemacht wurde, dann nach Beutel.
+function brettAelter(x, y) {
+  return String(x.made).localeCompare(String(y.made)) || String(x.bag || x.batch).localeCompare(String(y.bag || y.batch));
+}
+function brettBeutel(loc) {
+  return (brettPlaetze().get(loc) || []).map(_brettInfo).sort(brettAelter);
+}
+// Je Charge eine Zeile, die älteste zuerst.
+function brettGruppen(list) {
+  const g = new Map();
+  for (const x of list) {
+    let k = g.get(x.batch);
+    if (!k) g.set(x.batch, (k = { batch: x.batch, b: x.b, made: x.made, strainId: x.strainId, bags: [] }));
+    k.bags.push(x);
+  }
+  return [...g.values()].sort(brettAelter);
+}
+// Beutel in einer Zone mit Brettern, die auf keinem Brett stehen: in der Zone
+// selbst oder auf einem geteilten Regal ohne Ebene. Neue Blöcke stehen hier,
+// bis jemand ihr Brett scannt und Dazu tippt.
+function brettOhne(zoneId) {
+  const out = [];
+  for (const [loc, list] of brettPlaetze()) {
+    if (brettVon(loc) || toZone(loc) !== zoneId) continue;
+    const r = rackVon(loc);
+    if (loc === zoneId || (r && r.levels > 0)) out.push(...list.map(_brettInfo));
+  }
+  return out.sort(brettAelter);
+}
+// Die Beutel einer Art in einem Zelt, die zuerst hereingekommenen zuerst.
+function brettZeltBeutel(zoneId, strainId) {
+  const out = [];
+  for (const [loc, list] of brettPlaetze()) {
+    if (toZone(loc) !== zoneId) continue;
+    for (const e of list) {
+      const x = _brettInfo(e);
+      if (strainId == null || x.strainId === strainId) out.push(x);
+    }
+  }
+  return out.sort((x, y) => String(x.since).localeCompare(String(y.since)) || brettAelter(x, y));
+}
+// Je Art, wie viele Blöcke in allen Zelten stehen.
+function brettImZelt() {
+  const m = {};
+  for (const z of zones) {
+    if (z.role !== 'fruiting') continue;
+    for (const x of brettZeltBeutel(z.id, null)) if (x.strainId) m[x.strainId] = (m[x.strainId] || 0) + 1;
+  }
+  return m;
+}
+
+// Dieselben Regeln wie db.brettFristen, ohne Datenbank, damit der Test sie
+// gegen dieselben Fälle halten kann. limitAt: ab dann ist der Beutel über der
+// Zeit; outAt: dann bucht der Server ihn aus.
+function brettFristVon(p) {
+  const tag = 86400000;
+  const conf = p.confirmed ? Date.parse(p.confirmed) : NaN;
+  if (p.role === 'fruiting') {
+    if (!(p.s.tentMaxDays > 0)) return null;
+    const since = Date.parse(p.since);
+    const limitAt = conf >= since ? conf + p.rules.confirmDays * tag : since + p.s.tentMaxDays * tag;
+    return { kind: 'tent', limitAt, outAt: limitAt };
+  }
+  if (p.role === 'incubation' || p.role === 'spawn') {
+    const max = p.batchType === 'grain' ? p.s.grainMaxDays : p.s.incMaxDays;
+    if (!(max > 0)) return null;
+    let limitAt = Date.parse(p.made) + max * tag;
+    if (conf) limitAt = Math.max(limitAt, conf + p.rules.confirmDays * tag);
+    const start = p.limitsSet ? Date.parse(p.limitsSet) : 0;
+    return { kind: 'inc', limitAt, outAt: Math.max(limitAt, start) + p.rules.graceDays * tag };
+  }
+  return null;
+}
+function brettFrist(x) {
+  const s = brettArt(x.strainId);
+  const z = ZONE_BY_ID[toZone(x.loc)];
+  if (!s || !z) return null;
+  return brettFristVon({
+    role: z.role,
+    batchType: x.type,
+    made: x.made,
+    since: x.since,
+    confirmed: stillThere[x.bag] || null,
+    limitsSet: s.limitsSet || null,
+    s,
+    rules: brettRules
+  });
+}
+// Ein Block in der Inkubation: fällig, wenn sein Tag (b.due) heute oder vorbei ist.
+function brettFaellig(x, now) {
+  if (!x.due) return 'ok';
+  const d = new Date(x.due);
+  d.setHours(0, 0, 0, 0);
+  const h = new Date(now);
+  h.setHours(0, 0, 0, 0);
+  if (d.getTime() < h.getTime()) return 'due';
+  if (d.getTime() === h.getTime()) return 'today';
+  return d.getTime() - h.getTime() <= 7 * BRETT_TAG_MS ? 'soon' : 'ok';
+}
+// Was die Zeile über einen Beutel sagt: über der Zeit, fällig oder im Plan.
+function brettZustand(x, now) {
+  const z = ZONE_BY_ID[toZone(x.loc)];
+  const frist = brettFrist(x);
+  if (frist && now.getTime() >= frist.limitAt) return { k: 'stale', txt: t('brett.stale'), frist };
+  if (z && z.role === 'fruiting') return { k: 'ok', txt: t('zelt.since', { d: fmtDtShort(x.since) }), frist };
+  const tag = x.due ? fmtDtShort(x.due) : '';
+  const f = brettFaellig(x, now);
+  if (x.type === 'grain') {
+    return { k: 'ok', txt: f === 'due' || f === 'today' ? t('brett.readySince', { d: tag }) : t('brett.readyOn', { d: tag }), frist };
+  }
+  if (f === 'today') return { k: 'due', txt: t('brett.dueToday'), frist };
+  if (f === 'due') return { k: 'due', txt: t('brett.dueSince', { d: tag }), frist };
+  return { k: 'ok', txt: tag ? t('brett.dueOn', { d: tag }) : '', frist };
+}
+
+// Was als Nächstes ins Zelt kommt. gruppen: [{ ort, zone, strainId, n, due }]
+// (die fälligen Blöcke je Platz und Art), imZelt: { strainId: Zahl },
+// grenzen: { strainId: { min, max } }. Arten unter ihrem Minimum zuerst, dann
+// nach dem Tag; nie mehr, als ins Zelt passt. Ohne Höchstzahl passt alles.
+function zeltPlanVon(gruppen, imZelt, grenzen) {
+  const raum = {};
+  const unter = (sid) => {
+    const g = grenzen[sid];
+    return !!g && g.min > 0 && (imZelt[sid] || 0) < g.min;
+  };
+  const platz = (sid) => {
+    if (!(sid in raum)) {
+      const g = grenzen[sid];
+      raum[sid] = g && g.max > 0 ? Math.max(0, g.max - (imZelt[sid] || 0)) : Infinity;
+    }
+    return raum[sid];
+  };
+  const sortiert = [...gruppen].sort(
+    (a, b) => unter(b.strainId) - unter(a.strainId) || String(a.due).localeCompare(String(b.due))
+  );
+  const go = [];
+  const wait = [];
+  for (const g of sortiert) {
+    const take = Math.min(g.n, platz(g.strainId));
+    if (take > 0) {
+      raum[g.strainId] -= take;
+      go.push(Object.assign({}, g, { take, low: unter(g.strainId), voll: take < g.n }));
+    } else wait.push(g);
+  }
+  return { go, wait };
+}
+function zeltPlan(now) {
+  const gruppen = [];
+  for (const z of zones) {
+    if (z.role !== 'incubation' && z.role !== 'spawn') continue;
+    const mitBrettern = brettZoneMitBrettern(z);
+    const je = new Map();
+    for (const [loc, list] of brettPlaetze()) {
+      if (toZone(loc) !== z.id) continue;
+      // In einer Zone mit Brettern ist alles ohne Ebene ein Platz: "auf keinem Brett".
+      const ort = mitBrettern && !brettVon(loc) ? null : loc;
+      for (const e of list) {
+        const x = _brettInfo(e);
+        if (x.type === 'grain' || !x.strainId) continue;
+        const f = brettFaellig(x, now);
+        if (f !== 'due' && f !== 'today') continue;
+        const frist = brettFrist(x);
+        if (frist && now.getTime() >= frist.limitAt) continue; // steht unter "Noch da?"
+        const key = (ort || '') + '|' + x.strainId;
+        let g = je.get(key);
+        if (!g) je.set(key, (g = { ort, zone: z.id, strainId: x.strainId, n: 0, due: x.due }));
+        g.n++;
+        if (String(x.due) < String(g.due)) g.due = x.due;
+      }
+    }
+    gruppen.push(...je.values());
+  }
+  const grenzen = {};
+  for (const s of mushroomStrains) grenzen[s.id] = { min: s.tentMin || 0, max: s.tentMax || 0 };
+  const imZelt = brettImZelt();
+  return Object.assign(zeltPlanVon(gruppen, imZelt, grenzen), { imZelt, grenzen });
+}
+
+// ── Schreiben ──
+// Platz-Einträge für Beutel aus beliebig vielen Chargen, wie moveBagsTo: lokal
+// ins Log, dann zum Server. items: [{ action, x (aus _brettInfo), to, reason }].
+// Zurück kommen die Einträge, für Rückgängig.
+function brettSchreibe(items) {
+  const now = new Date().toISOString();
+  const entries = items.map((it) => {
+    const b = it.x.b || batchById(it.x.batch);
+    const e = {
+      time: now,
+      action: it.action,
+      batch: it.x.batch,
+      bag: it.x.bag,
+      from: it.x.loc || null,
+      to: it.action === 'REMOVE' ? null : it.to,
+      species: b ? b.species : null,
+      strain: b ? b.strain : null,
+      user: currentUser?.username || null,
+      client_uuid: newScanUuid(),
+      _tempId: 's' + ++_scanTempIdCounter
+    };
+    if (it.action === 'MOVE') e.expected_current_zone = it.x.loc ? toZone(it.x.loc) : null;
+    if (it.reason) e.reason = it.reason;
+    return e;
+  });
+  if (!entries.length) return [];
+  for (const e of entries) {
+    scanLog.push(e);
+    movements.push(e);
+  }
+  _placementByBag = null;
+  _statusByBatch = null;
+  // Höchstens 900 je Anfrage: der Server nimmt 1000, und ein Raum hat mehr.
+  const moves = entries.filter((e) => e.action === 'MOVE');
+  const rest = entries.filter((e) => e.action !== 'MOVE');
+  for (let i = 0; i < moves.length; i += 900) postScanEntries(moves.slice(i, i + 900));
+  for (let i = 0; i < rest.length; i += 900) postScanEntries(rest.slice(i, i + 900), { zoneCheck: false });
+  brettNeuZeichnen();
+  return entries;
+}
+// Rückgängig: derselbe Weg zurück, als eigene Einträge mit dem Grund "undo".
+function brettRueckgaengig(entries) {
+  const items = [];
+  for (const e of entries) {
+    const x = { bag: e.bag, batch: e.batch, b: batchById(e.batch), loc: e.to };
+    if (e.action === 'MOVE' && e.from) items.push({ action: 'MOVE', x, to: e.from, reason: 'undo' });
+    else if (e.action === 'REMOVE' && e.from)
+      items.push({ action: 'ADD', x: Object.assign({}, x, { loc: null }), to: e.from, reason: 'undo' });
+  }
+  brettSchreibe(items);
+  flashUndoBar(t('dash.undone', { n: items.length }));
+}
+function brettNeuZeichnen() {
+  updateSD();
+  renderBatches();
+  renderStatus();
+  renderDashBatchTasks();
+  if (_brett) brettZeichne();
+}
+
+// ── Das Blatt ──
+// Ein Fenster für drei Dinge: ein Platz (Brett oder Regal), die Beutel einer Zone
+// auf keinem Brett, und eine Art in einem Zelt. mode wechselt die Ansicht darin.
+let _brett = null; // { kind: 'platz'|'frei'|'zelt', loc, zone, strainId, mode, n, batch, von, mehr }
+
+function brettScanned(id) {
+  const r = rackVon(id);
+  const b = brettVon(id);
+  if (!r || !b) {
+    setFb('err', t('brett.scanUnknown'));
+    return;
+  }
+  if (b.level > r.levels) {
+    setFb('err', t('brett.scanGone', { name: brettName(id) }));
+    return;
+  }
+  // Steht das Blatt beim Ziel-Brett, ist ein gescanntes Brett das Ziel.
+  if (_brett && _brett.mode === 'target' && id !== _brett.loc) {
+    brettZiehe(id);
+    return;
+  }
+  const cam = document.getElementById('m-camscan');
+  if (cam && cam.classList.contains('open')) closeCamScan();
+  closeScanModal();
+  brettOeffne({ kind: 'platz', loc: id });
+}
+function brettOeffne(s) {
+  _brett = Object.assign({ mode: 'main', n: 0 }, s);
+  brettZeichne();
+  document.getElementById('m-brett').classList.add('open');
+}
+function brettZu() {
+  const m = document.getElementById('m-brett');
+  if (m) m.classList.remove('open');
+  _brett = null;
+}
+function brettQuelle(s) {
+  if (s.kind === 'platz') return brettBeutel(s.loc);
+  if (s.kind === 'frei') return brettOhne(s.zone).filter((x) => !s.strainId || x.strainId === s.strainId);
+  return brettZeltBeutel(s.zone, s.strainId);
+}
+function _bb(attr, val, label, cls, aus) {
+  return (
+    `<button type="button" class="btn${cls ? ' ' + cls : ''}" data-brett-${attr}="${esc(String(val))}"${aus ? ' disabled' : ''}>` +
+    esc(label) +
+    '</button>'
+  );
+}
+function _brettStepper(n) {
+  return (
+    '<div class="brett-amt">' +
+    `<button type="button" class="btn" data-brett-step="-1" aria-label="${esc(t('brett.less'))}">−</button>` +
+    `<input type="number" id="m-brett-n" inputmode="numeric" min="0" step="1" value="${n}" aria-label="${esc(t('brett.amount'))}" />` +
+    `<button type="button" class="btn" data-brett-step="1" aria-label="${esc(t('brett.more'))}">+</button>` +
+    '</div>'
+  );
+}
+function _brettZeilenHtml(list, now) {
+  return brettGruppen(list)
+    .map((g) => {
+      const z = brettZustand(g.bags[0], now);
+      const art = g.b ? sorteName(g.b) : '';
+      const knoepfe =
+        z.k === 'stale'
+          ? '<span class="brett-row-btns">' +
+            _bb('noch', g.batch, t('brett.stillThere'), 'btn-sm', false) +
+            _bb('raus', g.batch, t('brett.gone'), 'btn-sm btn-r', false) +
+            '</span>'
+          : '';
+      return (
+        `<div class="brett-row brett-${z.k}"><b>${g.bags.length}</b>` +
+        `<span class="brett-row-t">${spDot(art)}${esc(art)}<small>${esc(t('brett.made', { d: fmtDtShort(g.made) }))}</small></span>` +
+        `<span class="brett-tag">${esc(z.txt)}</span>${knoepfe}</div>`
+      );
+    })
+    .join('');
+}
+// Was "Ins Zelt" mit den nächsten n Blöcken anrichtet, für die Zeile unter dem Knopf.
+function _brettZeltInfo(wer) {
+  if (!wer.length) return '';
+  const sid = wer[0].strainId;
+  if (!sid || !wer.every((x) => x.strainId === sid)) return tp('dash.bags', wer.length);
+  const art = brettArt(sid);
+  const da = brettImZelt()[sid] || 0;
+  const neu = da + wer.length;
+  const name = art ? art.name : '';
+  if (art && art.tentMax > 0) {
+    const info = t('brett.tentInfo', { species: name, from: da, to: neu, max: art.tentMax });
+    return neu > art.tentMax ? info + ' · ' + t('brett.tentFullWarn', { n: Math.max(0, art.tentMax - da) }) : info;
+  }
+  return t('brett.tentInfoNoMax', { species: name, from: da, to: neu });
+}
+function _zeltGrenzenText(art) {
+  if (!art) return '';
+  if (art.tentMin > 0 && art.tentMax > 0) return t('zelt.limits', { min: art.tentMin, max: art.tentMax });
+  if (art.tentMin > 0) return t('zelt.limitMin', { min: art.tentMin });
+  if (art.tentMax > 0) return t('zelt.limitMax', { max: art.tentMax });
+  return '';
+}
+// Kandidaten für Dazu: Beutel auf keinem Brett, aus jeder Zone mit Brettern,
+// je Charge und Zone eine Zeile.
+function brettKandidaten() {
+  const out = [];
+  for (const z of zones.filter(brettZoneMitBrettern)) {
+    for (const g of brettGruppen(brettOhne(z.id))) out.push(Object.assign(g, { zone: z.id }));
+  }
+  return out;
+}
+
+const BRETT_ANSICHT = {
+  main(s, list, now) {
+    if (s.kind === 'zelt') return _zeltMainHtml(s, list, now);
+    const n = list.length;
+    let h = n
+      ? '<div class="brett-list">' + _brettZeilenHtml(list, now) + '</div>'
+      : `<p class="fs-meta brett-leer">${esc(s.kind === 'frei' ? t('frei.none') : t('brett.empty'))}</p>`;
+    if (s.kind === 'frei') {
+      h += `<p class="fs-meta">${esc(t('frei.help'))}</p>`;
+      return (
+        h + '<div class="brett-acts">' + _bb('mode', 'move', t('brett.move'), 'btn-p', !n) + _bb('act', 'finish', t('frei.finish'), 'btn-r', !n) + '</div>'
+      );
+    }
+    if (n) h += `<p class="fs-meta">${esc(tp('brett.onShelf', n))}</p>`;
+    return (
+      h +
+      '<div class="brett-acts">' +
+      _bb('mode', 'move', t('brett.move'), 'btn-p', !n) +
+      _bb('mode', 'add', t('brett.add'), '', false) +
+      _bb('act', 'empty', t('brett.emptyBtn'), '', !n) +
+      _bb('mode', 'count', t('brett.wrongCount'), '', !n) +
+      '</div>'
+    );
+  },
+  move(s, list) {
+    const total = list.length;
+    const n = Math.min(s.n, total);
+    const wer = list.slice(0, n);
+    const bloecke = wer.length > 0 && wer.every((x) => x.type !== 'grain');
+    const zelte = zones.filter((z) => z.role === 'fruiting');
+    let h =
+      `<h4 class="brett-q">${esc(t('brett.howMany'))}</h4>` +
+      _brettStepper(n) +
+      `<div class="brett-quick">${_bb('n', total, t('brett.all', { n: total }), '', false)}</div>` +
+      `<p class="fs-meta">${esc(t('brett.oldestFirst'))}</p>`;
+    if (bloecke && zelte.length) {
+      const info = _brettZeltInfo(wer);
+      h +=
+        '<div class="brett-ziele">' +
+        zelte
+          .map(
+            (z) =>
+              `<button type="button" class="btn btn-p brett-ziel" data-brett-zu="${esc(z.id)}"><span>${esc(t('brett.intoZone', { zone: zoneDisplayName(z.id) }))}</span><small>${esc(info)}</small></button>`
+          )
+          .join('') +
+        '</div>';
+    }
+    return (
+      h +
+      '<div class="brett-acts">' +
+      _bb('mode', 'target', t('brett.otherShelf'), '', !n) +
+      _bb('mode', 'main', t('brett.back'), '', false) +
+      '</div>'
+    );
+  },
+  target(s, list) {
+    const wer = list.slice(0, Math.min(s.n, list.length));
+    const sid = wer.length && wer.every((x) => x.strainId === wer[0].strainId) ? wer[0].strainId : null;
+    let h = `<p class="fs-meta">${esc(t('brett.pickTarget'))}</p><div class="brett-pick">`;
+    for (const z of zones.filter(brettZoneMitBrettern)) {
+      h += `<h4 class="brett-pick-z">${esc(zoneDisplayName(z.id))}</h4>`;
+      const racks = z.racks
+        .filter((r) => r.levels > 0)
+        .sort((a, b) => (b.strainId === sid) - (a.strainId === sid) || (a.sortOrder || 0) - (b.sortOrder || 0));
+      for (const r of racks) {
+        const art = brettArt(r.strainId);
+        for (let l = 1; l <= r.levels; l++) {
+          const ort = brettOrt(r.id, l);
+          if (ort === s.loc) continue;
+          const da = (brettPlaetze().get(ort) || []).length;
+          const passt = !!sid && r.strainId === sid;
+          const fremd = !!sid && !!r.strainId && r.strainId !== sid;
+          h +=
+            `<button type="button" class="brett-pick-b${fremd ? ' brett-fremd' : ''}" data-brett-nach="${esc(ort)}">` +
+            `<span>${esc(brettName(ort))}<small>${esc((art ? art.name + ' · ' : '') + (da ? tp('dash.bags', da) : t('brett.emptyShort')))}</small></span>` +
+            (passt ? `<b class="brett-passt">${esc(t('brett.fits'))}</b>` : '') +
+            '</button>';
+        }
+      }
+    }
+    return h + '</div><div class="brett-acts">' + _bb('mode', 'move', t('brett.back'), '', false) + '</div>';
+  },
+  count(s, list) {
+    return (
+      `<h4 class="brett-q">${esc(t('brett.countQ'))}</h4>` +
+      _brettStepper(s.n) +
+      `<p class="fs-meta">${esc(t('brett.expects', { n: list.length }))}</p>` +
+      '<div class="brett-acts">' +
+      _bb('act', 'count', t('brett.thatsIt'), 'btn-p', false) +
+      _bb('mode', 'main', t('brett.back'), '', false) +
+      '</div>'
+    );
+  },
+  add(s) {
+    const r = rackVon(s.loc);
+    const sid = r ? r.strainId : null;
+    const hier = r ? r.zoneId : toZone(s.loc);
+    const kand = brettKandidaten().sort(
+      (a, b) =>
+        (b.strainId === sid) - (a.strainId === sid) || (b.zone === hier) - (a.zone === hier) || brettAelter(a, b)
+    );
+    const zurueck = '<div class="brett-acts">' + _bb('mode', 'main', t('brett.back'), '', false) + '</div>';
+    if (!kand.length) return `<p class="fs-meta">${esc(t('brett.addNone'))}</p>` + zurueck;
+    const frage = s.mehr ? t('brett.moreThanExpected', { n: s.mehr }) : t('brett.addQ');
+    return (
+      `<p class="fs-meta">${esc(frage)}</p><div class="brett-pick">` +
+      kand
+        .map((g) => {
+          const name = g.b ? sorteName(g.b) : '';
+          const fremd = !!sid && !!g.strainId && g.strainId !== sid;
+          return (
+            `<button type="button" class="brett-pick-b${fremd ? ' brett-fremd' : ''}" data-brett-charge="${esc(g.batch)}" data-brett-von="${esc(g.zone)}">` +
+            `<span>${spDot(name)}${esc(name)} · ${esc(t('brett.made', { d: fmtDtShort(g.made) }))}` +
+            `<small>${esc(t('brett.addRow', { n: g.bags.length, zone: zoneDisplayName(g.zone) }))}</small></span>` +
+            (sid && g.strainId === sid ? `<b class="brett-passt">${esc(t('brett.fits'))}</b>` : '') +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>' +
+      zurueck
+    );
+  },
+  addn(s) {
+    const g = brettKandidaten().find((k) => k.batch === s.batch && k.zone === s.von);
+    const max = g ? g.bags.length : 0;
+    const name = g && g.b ? sorteName(g.b) : s.batch;
+    return (
+      `<h4 class="brett-q">${esc(name)}${g ? ' · ' + esc(t('brett.made', { d: fmtDtShort(g.made) })) : ''}</h4>` +
+      _brettStepper(s.n) +
+      `<div class="brett-quick">${_bb('n', max, t('brett.allOpen', { n: max }), '', false)}</div>` +
+      `<p class="fs-meta">${esc(t('brett.restOther'))}</p>` +
+      '<div class="brett-acts">' +
+      _bb('act', 'place', t('brett.place'), 'btn-p', !s.n || !max) +
+      _bb('mode', 'add', t('brett.back'), '', false) +
+      '</div>'
+    );
+  },
+  out(s, list) {
+    return (
+      `<h4 class="brett-q">${esc(t('zelt.outQ'))}</h4>` +
+      _brettStepper(s.n) +
+      `<div class="brett-quick">${_bb('n', list.length, t('brett.all', { n: list.length }), '', false)}</div>` +
+      `<p class="fs-meta">${esc(t('zelt.outHelp'))}</p>` +
+      '<div class="brett-acts">' +
+      _bb('act', 'out', t('zelt.bookOut'), 'btn-p', !s.n) +
+      _bb('mode', 'main', t('brett.back'), '', false) +
+      '</div>'
+    );
+  },
+  tcount(s, list) {
+    const art = brettArt(s.strainId);
+    return (
+      `<h4 class="brett-q">${esc(t('zelt.countQ', { species: art ? art.name : '' }))}</h4>` +
+      _brettStepper(s.n) +
+      `<p class="fs-meta">${esc(t('brett.expects', { n: list.length }))}</p>` +
+      '<div class="brett-acts">' +
+      _bb('act', 'tcount', t('brett.thatsIt'), 'btn-p', false) +
+      _bb('mode', 'main', t('brett.back'), '', false) +
+      '</div>'
+    );
+  }
+};
+function _zeltMainHtml(s, list, now) {
+  const art = brettArt(s.strainId);
+  const tage = new Map();
+  for (const x of list) {
+    const k = String(x.since).slice(0, 10);
+    let g = tage.get(k);
+    if (!g) tage.set(k, (g = { since: x.since, xs: [] }));
+    g.xs.push(x);
+  }
+  const zeilen = [...tage.values()]
+    .map((g) => {
+      const frist = brettFrist(g.xs[0]);
+      const k = frist && now.getTime() >= frist.limitAt ? 'stale' : 'ok';
+      return (
+        `<div class="brett-row brett-${k}"><b>${g.xs.length}</b>` +
+        `<span class="brett-row-t">${esc(t('zelt.since', { d: fmtDtShort(g.since) }))}<small>${esc(t('brett.made', { d: fmtDtShort(g.xs[0].made) }))}</small></span>` +
+        `<span class="brett-tag">${frist ? esc(t('zelt.outOn', { d: fmtDtShort(new Date(frist.outAt)) })) : ''}</span></div>`
+      );
+    })
+    .join('');
+  const grenzen = _zeltGrenzenText(art);
+  return (
+    (zeilen
+      ? '<div class="brett-list">' + zeilen + '</div>'
+      : `<p class="fs-meta brett-leer">${esc(t('zelt.empty', { species: art ? art.name : '' }))}</p>`) +
+    `<p class="fs-meta">${esc(tp('dash.bags', list.length))}${grenzen ? ' · ' + esc(grenzen) : ''}</p>` +
+    '<div class="brett-acts">' +
+    _bb('mode', 'out', t('zelt.out'), 'btn-p', !list.length) +
+    _bb('mode', 'tcount', t('zelt.count'), '', false) +
+    '</div>'
+  );
+}
+function brettZeichne() {
+  const s = _brett;
+  if (!s) return;
+  const list = brettQuelle(s);
+  const now = new Date();
+  const title = document.getElementById('m-brett-title');
+  const sub = document.getElementById('m-brett-sub');
+  if (s.kind === 'platz') {
+    // Ein Brett, ein Regal ohne Bretter, oder eine Zone ohne Regale.
+    const r = rackVon(s.loc);
+    const art = r && brettArt(r.strainId);
+    title.textContent = brettVon(s.loc) ? brettName(s.loc) : r ? rackLabel(s.loc) : zoneDisplayName(s.loc);
+    sub.textContent = r
+      ? zoneDisplayName(r.zoneId) + ' · ' + (art ? art.name : t('brett.noSpecies'))
+      : t('frei.wholeRoom');
+  } else if (s.kind === 'frei') {
+    const art = brettArt(s.strainId);
+    title.textContent = t('frei.title', { zone: zoneDisplayName(s.zone) });
+    sub.textContent = art ? art.name : '';
+  } else {
+    const art = brettArt(s.strainId);
+    title.textContent = art ? art.name : '';
+    sub.textContent = zoneDisplayName(s.zone);
+  }
+  document.getElementById('m-brett-body').innerHTML = (BRETT_ANSICHT[s.mode] || BRETT_ANSICHT.main)(s, list, now);
+}
+function _brettN() {
+  const el = document.getElementById('m-brett-n');
+  const n = el ? Number(el.value) : 0;
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+// Die Knöpfe im Blatt. Nach jeder Buchung geht das Blatt zu, unten steht, was
+// passiert ist, mit Rückgängig: ein Vertipper kostet einen Tipp, keine Rückfrage.
+function brettAktion(act) {
+  const s = _brett;
+  if (!s) return;
+  const list = brettQuelle(s);
+  const name = s.kind === 'platz' ? brettName(s.loc) : '';
+  const n = Math.min(_brettN(), list.length);
+  const fertig = (msg, entries) => {
+    brettZu();
+    if (entries && entries.length) showUndoBar(msg, () => brettRueckgaengig(entries));
+    else toast(msg);
+  };
+  if (act === 'empty') {
+    const entries = brettSchreibe(list.map((x) => ({ action: 'REMOVE', x, reason: 'count' })));
+    fertig(t('brett.done.empty', { name, n: entries.length }), entries);
+  } else if (act === 'count') {
+    const want = _brettN();
+    const have = list.length;
+    if (want > have) {
+      // Mehr als gedacht: woher sie kommen, weiß nur, wer davorsteht.
+      Object.assign(s, { mode: 'add', mehr: want - have, n: want - have });
+      brettZeichne();
+      return;
+    }
+    if (want === have) {
+      fertig(t('brett.done.countSame', { name, n: have }));
+      return;
+    }
+    const entries = brettSchreibe(list.slice(0, have - want).map((x) => ({ action: 'REMOVE', x, reason: 'count' })));
+    fertig(t('brett.done.count', { name, n: want, was: have }), entries);
+  } else if (act === 'place') {
+    const g = brettKandidaten().find((k) => k.batch === s.batch && k.zone === s.von);
+    if (!g) return;
+    const wer = g.bags.slice(0, Math.min(_brettN(), g.bags.length));
+    const entries = brettSchreibe(wer.map((x) => ({ action: 'MOVE', x, to: s.loc })));
+    fertig(t('brett.done.add', { n: entries.length, to: brettName(s.loc) }), entries);
+  } else if (act === 'finish') {
+    askConfirm(
+      t('frei.finishTitle'),
+      t('frei.finishMsg', { n: list.length, zone: zoneDisplayName(s.zone) }),
+      t('frei.finish')
+    ).then((ja) => {
+      if (!ja) return;
+      const entries = brettSchreibe(list.map((x) => ({ action: 'REMOVE', x, reason: 'count' })));
+      fertig(t('brett.goneDone', { n: entries.length }), entries);
+    });
+  } else if (act === 'out') {
+    const art = brettArt(s.strainId);
+    const entries = brettSchreibe(list.slice(0, n).map((x) => ({ action: 'REMOVE', x })));
+    fertig(t('zelt.done.out', { n: entries.length, species: art ? art.name : '' }), entries);
+  } else if (act === 'tcount') {
+    brettZeltZaehlen(s, list, _brettN(), fertig);
+  }
+}
+// Im Zelt gezählt. Weniger: die ältesten gehen raus. Mehr: sie sind meist ohne
+// Scan aus der Inkubation gekommen, also kommen die ältesten fälligen Blöcke
+// dieser Art von dort. Was dann noch fehlt, sagt die Meldung.
+function brettZeltZaehlen(s, list, want, fertig) {
+  const art = brettArt(s.strainId);
+  const name = art ? art.name : '';
+  const have = list.length;
+  if (want === have) {
+    fertig(t('brett.done.countSame', { name, n: have }));
+    return;
+  }
+  if (want < have) {
+    const entries = brettSchreibe(list.slice(0, have - want).map((x) => ({ action: 'REMOVE', x, reason: 'count' })));
+    fertig(t('brett.done.count', { name, n: want, was: have }), entries);
+    return;
+  }
+  const quelle = [];
+  for (const z of zones) {
+    if (z.role !== 'incubation' && z.role !== 'spawn') continue;
+    for (const [loc, l] of brettPlaetze()) {
+      if (toZone(loc) !== z.id) continue;
+      for (const e of l) {
+        const x = _brettInfo(e);
+        if (x.strainId === s.strainId && x.type !== 'grain') quelle.push(x);
+      }
+    }
+  }
+  quelle.sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')) || brettAelter(a, b));
+  const wer = quelle.slice(0, want - have);
+  const entries = brettSchreibe(wer.map((x) => ({ action: 'MOVE', x, to: s.zone, reason: 'count' })));
+  const rest = want - have - entries.length;
+  const msg = t('brett.done.count', { name, n: have + entries.length, was: have });
+  fertig(rest > 0 ? msg + ' · ' + t('zelt.noneLeft', { n: rest, species: name }) : msg, entries);
+}
+// Vom Umziehen: die ältesten n an einen Platz (ein Zelt oder ein anderes Brett).
+function brettZiehe(nach) {
+  const s = _brett;
+  if (!s) return;
+  const list = brettQuelle(s);
+  const wer = list.slice(0, Math.min(_brettN(), list.length));
+  if (!wer.length) return;
+  rememberDest(nach);
+  const entries = brettSchreibe(wer.map((x) => ({ action: 'MOVE', x, to: nach })));
+  brettZu();
+  showUndoBar(t('brett.done.move', { n: entries.length, to: brettPlatzName(nach) }), () => brettRueckgaengig(entries));
+}
+
+// ── "Noch da?" und was der Server selbst ausgebucht hat ──
+async function brettNochDa(bags) {
+  if (!bags.length) return;
+  const r = await apiPost('/api/bags/still-there', { bags });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('brett.saveFailed'), 'err');
+    return;
+  }
+  const jetzt = new Date().toISOString();
+  bags.forEach((b) => (stillThere[b] = jetzt));
+  brettNeuZeichnen();
+  toast(t('brett.confirmed', { n: bags.length }));
+}
+function brettSindRaus(list) {
+  const entries = brettSchreibe(list.map((x) => ({ action: 'REMOVE', x, reason: 'count' })));
+  showUndoBar(t('brett.goneDone', { n: entries.length }), () => brettRueckgaengig(entries));
+}
+async function brettAutoAntwort(ids, how) {
+  if (!ids.length) return;
+  const r = await apiPost('/api/auto-bookouts/resolve', { ids, how });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('brett.saveFailed'), 'err');
+    return;
+  }
+  autoBookouts = autoBookouts.filter((a) => !ids.includes(a.id));
+  if (how === 'still_there') {
+    // Zurückgestellt hat der Server; die neuen Einträge holt der nächste Abgleich.
+    syncNow();
+    toast(t('brett.restored', { n: r.restored || 0 }));
+  } else {
+    renderDashBatchTasks();
+    toast(t('brett.autoOk', { n: ids.length }));
+  }
+}
+
+// Je Platz und Charge die Beutel, die über ihrer Zeit stehen (Inkubation und
+// Körnerbrut; im Zelt bucht der Server gleich aus).
+function brettAlteGruppen(now) {
+  const g = new Map();
+  for (const [loc, list] of brettPlaetze()) {
+    const z = ZONE_BY_ID[toZone(loc)];
+    if (!z || (z.role !== 'incubation' && z.role !== 'spawn')) continue;
+    for (const e of list) {
+      const x = _brettInfo(e);
+      const f = brettFrist(x);
+      if (!f || now.getTime() < f.limitAt) continue;
+      const key = loc + '|' + x.batch;
+      let k = g.get(key);
+      if (!k) g.set(key, (k = { loc, batch: x.batch, b: x.b, made: x.made, outAt: f.outAt, xs: [] }));
+      k.xs.push(x);
+      k.outAt = Math.min(k.outAt, f.outAt);
+    }
+  }
+  return [...g.values()].sort((a, b) => a.outAt - b.outAt);
+}
+// Was der Server ausgebucht hat, je Art, Zone und Tag zusammen.
+function brettAutoGruppen() {
+  const g = new Map();
+  for (const a of autoBookouts) {
+    const b = batchById(a.batch);
+    const zone = toZone(a.loc);
+    const key = (b ? b.strainId : '') + '|' + zone + '|' + String(a.created).slice(0, 10);
+    let k = g.get(key);
+    if (!k) g.set(key, (k = { b, zone, created: a.created, ids: [] }));
+    k.ids.push(a.id);
+  }
+  return [...g.values()];
+}
+
+// ── Startseite: Regale und Zelt ──
+function renderWorkBretter() {
+  const card = document.getElementById('wk-bretter');
+  const box = document.getElementById('wk-bretter-list');
+  if (!card || !box) return;
+  const now = new Date();
+  const teile = [];
+  const plan = zeltPlan(now);
+  const zeile = (g) => {
+    const art = brettArt(g.strainId);
+    const ort = g.ort ? brettPlatzName(g.ort) : t('frei.title', { zone: zoneDisplayName(g.zone) });
+    const was = g.voll
+      ? t('bretter.takeOf', { n: g.take, all: g.n, species: art ? art.name : '' })
+      : t('bretter.take', { n: g.take, species: art ? art.name : '' });
+    return { art, ort, was };
+  };
+  if (plan.go.length) {
+    const g = plan.go[0];
+    const z = zeile(g);
+    const why = g.low
+      ? t('bretter.low', { have: plan.imZelt[g.strainId] || 0, min: plan.grenzen[g.strainId].min })
+      : g.voll
+        ? t('bretter.fillsUp')
+        : '';
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.next'))}</h3>` +
+        `<div class="wk-bretter-next"><span class="wk-bretter-nr" aria-hidden="true">1</span>` +
+        `<span class="wk-bretter-t"><b>${esc(z.ort)}</b><span>${esc(z.was)}</span>${why ? `<span class="wk-bretter-why">${esc(why)}</span>` : ''}</span>` +
+        `<button type="button" class="btn btn-p" data-bretter-zieh="${esc(g.ort || '')}" data-bretter-zone="${esc(g.zone)}" data-bretter-art="${g.strainId}" data-bretter-n="${g.take}">${esc(t('brett.move'))}</button></div>`
+    );
+    if (plan.go.length > 1) {
+      teile.push(
+        `<h3 class="wk-bretter-h">${esc(t('bretter.after'))}</h3>` +
+          plan.go
+            .slice(1)
+            .map((g2, i) => {
+              const z2 = zeile(g2);
+              return (
+                `<button type="button" class="wk-bretter-row" data-bretter-zieh="${esc(g2.ort || '')}" data-bretter-zone="${esc(g2.zone)}" data-bretter-art="${g2.strainId}" data-bretter-n="${g2.take}">` +
+                `<span class="wk-bretter-nr" aria-hidden="true">${i + 2}</span><span class="wk-bretter-t"><b>${esc(z2.ort)}</b><span>${esc(z2.was)}${g2.low ? ' · ' + esc(t('bretter.lowShort')) : ''}</span></span></button>`
+              );
+            })
+            .join('')
+      );
+    }
+  }
+  if (plan.wait.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.wait'))}</h3>` +
+        plan.wait
+          .map((g) => {
+            const art = brettArt(g.strainId);
+            const ort = g.ort ? brettPlatzName(g.ort) : t('frei.title', { zone: zoneDisplayName(g.zone) });
+            return (
+              `<div class="wk-bretter-row wk-bretter-wait"><span class="wk-bretter-t"><b>${esc(ort)}</b>` +
+              `<span>${esc(t('bretter.waitRow', { n: g.n, species: art ? art.name : '', have: plan.imZelt[g.strainId] || 0, max: (plan.grenzen[g.strainId] || {}).max || 0 }))}</span></span></div>`
+            );
+          })
+          .join('')
+    );
+  }
+  const frei = zones
+    .filter(brettZoneMitBrettern)
+    .map((z) => ({ z, n: brettOhne(z.id).length }))
+    .filter((x) => x.n);
+  if (frei.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.free'))}</h3>` +
+        frei
+          .map(
+            (f) =>
+              `<button type="button" class="wk-bretter-row" data-bretter-frei="${esc(f.z.id)}"><span class="wk-bretter-t"><b>${esc(zoneDisplayName(f.z.id))}</b><span>${esc(tp('dash.bags', f.n))} · ${esc(t('frei.help'))}</span></span></button>`
+          )
+          .join('')
+    );
+  }
+  const alt = brettAlteGruppen(now);
+  if (alt.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.stale'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.staleHelp'))}</p>` +
+        alt
+          .map((g, i) => {
+            const art = g.b ? sorteName(g.b) : '';
+            return (
+              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${esc(brettPlatzName(g.loc))}: ${g.xs.length} ${esc(art)}</b>` +
+              `<span>${esc(t('bretter.staleRow', { made: fmtDtShort(g.made), out: fmtDtShort(new Date(g.outAt)) }))}</span></span>` +
+              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
+              `<button type="button" class="btn btn-sm btn-r" data-bretter-raus="${i}">${esc(t('brett.gone'))}</button></span></div>`
+            );
+          })
+          .join('')
+    );
+  }
+  const auto = brettAutoGruppen();
+  if (auto.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.auto'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.autoHelp'))}</p>` +
+        auto
+          .map((g, i) => {
+            const art = g.b ? sorteName(g.b) : '';
+            return (
+              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${g.ids.length} ${esc(art)}</b>` +
+              `<span>${esc(t('bretter.autoRow', { zone: zoneDisplayName(g.zone), d: fmtDtShort(g.created) }))}</span></span>` +
+              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-auto-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
+              `<button type="button" class="btn btn-sm" data-bretter-auto-ok="${i}">${esc(t('bretter.correct'))}</button></span></div>`
+            );
+          })
+          .join('')
+    );
+  }
+  // Im Zelt: je Zelt und Art die Zahl, gegen die Grenzen der Art. Antippen
+  // öffnet Raus und Zählen; im Zelt gibt es kein Etikett zum Scannen.
+  const imZelt = [];
+  const zelte = zones
+    .filter((x) => x.role === 'fruiting')
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const gezeigt = new Set();
+  for (const z of zelte) {
+    const je = new Map();
+    for (const x of brettZeltBeutel(z.id, null)) if (x.strainId) je.set(x.strainId, (je.get(x.strainId) || 0) + 1);
+    for (const [sid, n] of je) {
+      imZelt.push({ z, art: brettArt(sid), sid, n });
+      gezeigt.add(sid);
+    }
+  }
+  // Eine Art mit Grenzen, die gerade in keinem Zelt steht, einmal: im ersten Zelt,
+  // mit 0 — sonst sähe niemand, dass sie unter ihrem Minimum ist.
+  if (zelte.length) {
+    for (const s of mushroomStrains) {
+      if (s.imProgramm && (s.tentMin > 0 || s.tentMax > 0) && !gezeigt.has(s.id))
+        imZelt.push({ z: zelte[0], art: s, sid: s.id, n: 0 });
+    }
+  }
+  if (imZelt.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.tents'))}</h3><div class="zelt-karten">` +
+        imZelt
+          .sort((a, b) => (a.art ? a.art.name : '').localeCompare(b.art ? b.art.name : ''))
+          .map((r) => zeltKarteHtml(r.z, r.art, r.sid, r.n))
+          .join('') +
+        '</div>'
+    );
+  }
+  card.hidden = !teile.length;
+  box.innerHTML = teile.join('');
+  box._alt = alt;
+  box._auto = auto;
+  if (!box.dataset.bound) {
+    box.dataset.bound = '1';
+    box.addEventListener('click', brettStartKlick);
+  }
+}
+// Eine Art in einem Zelt: Zahl, Balken bis zur Höchstzahl, Strich beim Minimum.
+function zeltKarteHtml(z, art, sid, n) {
+  const min = art && art.tentMin > 0 ? art.tentMin : 0;
+  const max = art && art.tentMax > 0 ? art.tentMax : 0;
+  const unter = min > 0 && n < min;
+  const voll = max > 0 && n >= max;
+  const stand = unter
+    ? t('zelt.state.low', { n: min - n })
+    : voll
+      ? t('zelt.state.full')
+      : max > 0
+        ? t('zelt.state.room', { n: max - n })
+        : '';
+  const breite = max > 0 ? Math.min(100, Math.round((n / max) * 100)) : 0;
+  const strich = max > 0 && min > 0 ? Math.min(100, Math.round((min / max) * 100)) : null;
+  const name = art ? art.name : '';
+  return (
+    `<button type="button" class="zelt-karte${unter ? ' zelt-unter' : voll ? ' zelt-voll' : ''}" data-zelt-zone="${esc(z.id)}" data-zelt-art="${sid}">` +
+    `<span class="zelt-karte-kopf"><span>${spDot(name)}${esc(name)}<small>${esc(zoneDisplayName(z.id))}</small></span><b>${n}</b></span>` +
+    (max > 0
+      ? `<span class="zelt-bar" aria-hidden="true"><span class="zelt-bar-fill" style="width:${breite}%"></span>${strich != null ? `<span class="zelt-bar-min" style="left:${strich}%"></span>` : ''}</span>`
+      : '') +
+    `<span class="zelt-karte-fuss"><span>${esc(_zeltGrenzenText(art))}</span><span class="zelt-stand">${esc(stand)}</span></span>` +
+    '</button>'
+  );
+}
+function brettStartKlick(ev) {
+  const box = ev.currentTarget;
+  const el = ev.target.closest(
+    '[data-bretter-zieh],[data-bretter-frei],[data-bretter-noch],[data-bretter-raus],[data-bretter-auto-noch],[data-bretter-auto-ok],[data-zelt-zone]'
+  );
+  if (!el) return;
+  const d = el.dataset;
+  if (d.bretterZieh !== undefined) {
+    const n = Number(d.bretterN) || 0;
+    const sid = Number(d.bretterArt) || null;
+    if (d.bretterZieh) brettOeffne({ kind: 'platz', loc: d.bretterZieh, mode: 'move', n });
+    else brettOeffne({ kind: 'frei', zone: d.bretterZone, strainId: sid, mode: 'move', n });
+  } else if (d.bretterFrei) brettOeffne({ kind: 'frei', zone: d.bretterFrei });
+  else if (d.bretterNoch !== undefined) {
+    const g = (box._alt || [])[Number(d.bretterNoch)];
+    if (g) brettNochDa(g.xs.map((x) => x.bag));
+  } else if (d.bretterRaus !== undefined) {
+    const g = (box._alt || [])[Number(d.bretterRaus)];
+    if (g) brettSindRaus(g.xs);
+  } else if (d.bretterAutoNoch !== undefined) {
+    const g = (box._auto || [])[Number(d.bretterAutoNoch)];
+    if (g) brettAutoAntwort(g.ids, 'still_there');
+  } else if (d.bretterAutoOk !== undefined) {
+    const g = (box._auto || [])[Number(d.bretterAutoOk)];
+    if (g) brettAutoAntwort(g.ids, 'correct');
+  } else if (d.zeltZone) brettOeffne({ kind: 'zelt', zone: d.zeltZone, strainId: Number(d.zeltArt) || null });
+}
+// Klicks im Blatt.
+function brettWire() {
+  const m = document.getElementById('m-brett');
+  if (!m) return;
+  m.addEventListener('click', (ev) => {
+    if (ev.target === m) {
+      brettZu();
+      return;
+    }
+    const el = ev.target.closest('button');
+    if (!el || !_brett || el.disabled) return;
+    const d = el.dataset;
+    if (d.brettAct === 'close') brettZu();
+    else if (d.brettStep) {
+      const inp = document.getElementById('m-brett-n');
+      if (inp) inp.value = String(Math.max(0, _brettN() + Number(d.brettStep)));
+      _brett.n = _brettN();
+      brettZeichne();
+    } else if (d.brettN !== undefined) {
+      _brett.n = Number(d.brettN) || 0;
+      brettZeichne();
+    } else if (d.brettMode) {
+      const nach = d.brettMode;
+      // Ein Zähler beginnt bei 0. Nur Umziehen behält, was schon eingetippt war.
+      _brett.n = nach === 'move' || nach === 'target' ? _brett.n : 0;
+      if (nach !== 'add' && nach !== 'addn') _brett.mehr = 0;
+      _brett.mode = nach;
+      brettZeichne();
+    } else if (d.brettAct) brettAktion(d.brettAct);
+    else if (d.brettZu) brettZiehe(d.brettZu);
+    else if (d.brettNach) brettZiehe(d.brettNach);
+    else if (d.brettCharge) {
+      Object.assign(_brett, { mode: 'addn', batch: d.brettCharge, von: d.brettVon, n: _brett.mehr || 0 });
+      brettZeichne();
+    } else if (d.brettNoch) {
+      brettNochDa(brettQuelle(_brett).filter((x) => x.batch === d.brettNoch).map((x) => x.bag));
+    } else if (d.brettRaus) {
+      brettSindRaus(brettQuelle(_brett).filter((x) => x.batch === d.brettRaus));
+    }
+  });
+  // Getippt statt geklickt: die Zahl gilt, die Ansicht zeichnet beim Verlassen neu.
+  m.addEventListener('change', (ev) => {
+    if (ev.target && ev.target.id === 'm-brett-n' && _brett) {
+      _brett.n = _brettN();
+      brettZeichne();
+    }
+  });
+  // Standorte: ein Brett, "auf keinem Brett" oder eine Art im Zelt antippen.
+  const orte = document.getElementById('dash-locations');
+  if (orte)
+    orte.addEventListener('click', (ev) => {
+      const el = ev.target.closest('[data-brett-open],[data-brett-frei],[data-zelt-zone]');
+      if (!el) return;
+      const d = el.dataset;
+      if (d.brettOpen) brettOeffne({ kind: 'platz', loc: d.brettOpen });
+      else if (d.brettFrei) brettOeffne({ kind: 'frei', zone: d.brettFrei });
+      else if (d.zeltZone) brettOeffne({ kind: 'zelt', zone: d.zeltZone, strainId: Number(d.zeltArt) || null });
+    });
+  rackEditWire();
+}
+
+// ── Regal einstellen: Bretter, Art, Etiketten ──
+let _rackEdit = null; // rack id
+function rackEditOpen(rackId) {
+  const r = rackVon(rackId);
+  if (!r) return;
+  _rackEdit = rackId;
+  document.getElementById('m-rack-edit-title').textContent = zoneDisplayName(r.zoneId) + ' · ' + rackLabel(rackId);
+  document.getElementById('m-rack-edit-levels').value = String(r.levels || 0);
+  const sel = document.getElementById('m-rack-edit-strain');
+  sel.innerHTML =
+    `<option value="">${esc(t('rackEdit.noStrain'))}</option>` +
+    mushroomStrains
+      .filter((m) => m.imProgramm || m.id === r.strainId)
+      .map((m) => `<option value="${m.id}"${m.id === r.strainId ? ' selected' : ''}>${esc(m.name)}</option>`)
+      .join('');
+  document.getElementById('m-rack-edit').classList.add('open');
+}
+function rackEditClose() {
+  const m = document.getElementById('m-rack-edit');
+  if (m) m.classList.remove('open');
+  _rackEdit = null;
+}
+async function rackEditSave() {
+  if (!_rackEdit) return;
+  const levels = Number(document.getElementById('m-rack-edit-levels').value);
+  if (!Number.isInteger(levels) || levels < 0 || levels > 20) {
+    fieldError('m-rack-edit-levels', t('rackEdit.levelsRange'));
+    return;
+  }
+  const v = document.getElementById('m-rack-edit-strain').value;
+  const strainId = v ? Number(v) : null;
+  const r = await apiPatch('/api/racks/' + encodeURIComponent(_rackEdit), { levels, strainId });
+  if (!r || r.error) {
+    toast(r && r.error ? r.error : t('brett.saveFailed'), 'err');
+    return;
+  }
+  const rack = (ZONE_BY_ID[RACK_ZONE[_rackEdit]] || { racks: [] }).racks.find((x) => x.id === _rackEdit);
+  if (rack) Object.assign(rack, { levels: r.levels, strainId: r.strainId });
+  // Die Etikett-Nummern der neuen Bretter kommen mit dem nächsten Abgleich.
+  syncNow();
+  rackEditClose();
+  renderZones();
+  renderStatus();
+  toast(t('rackEdit.saved', { n: r.levels }));
+}
+// Ein Etikett je Brett: oben schwarz die Zone und das Regal, darunter groß das
+// Brett und die Art, rechts der QR-Code mit der Nummer.
+function brettEtikett(ort) {
+  const r = rackVon(ort);
+  const b = brettVon(ort);
+  const art = r && brettArt(r.strainId);
+  return {
+    barcode: barcodeByEntity.get('brett:' + ort),
+    band: zoneDisplayName(r ? r.zoneId : '') + '\n' + rackLabel(b ? b.rackId : ort),
+    etikett: t('brett.levelN', { n: b ? b.level : '' }) + (art ? ' ' + art.name : '')
+  };
+}
+async function brettEtikettenDrucken(rackId) {
+  const r = rackVon(rackId);
+  if (!r || !(r.levels > 0)) {
+    toast(t('rackEdit.noLevels'), 'err');
+    return;
+  }
+  const orte = Array.from({ length: r.levels }, (_, i) => brettOrt(rackId, i + 1));
+  const fehlt = orte.filter((o) => !barcodeByEntity.get('brett:' + o));
+  if (fehlt.length) {
+    toast(t('rackEdit.notSynced'), 'err');
+    syncNow();
+    return;
+  }
+  if (typeof QRCode === 'undefined') await loadVendorLibs();
+  const zpl = orte.map((o) => shelfLabelZPL(shelfLabelCanvas(brettEtikett(o)), 1)).join('\n');
+  const err = await sendToPrinter(zpl);
+  if (err) toast(t('rackEdit.printFailed', { err }), 'err');
+  else toast(t('rackEdit.printed', { n: orte.length }));
+}
+function rackEditWire() {
+  const m = document.getElementById('m-rack-edit');
+  if (!m) return;
+  m.addEventListener('click', (ev) => {
+    if (ev.target === m) {
+      rackEditClose();
+      return;
+    }
+    const el = ev.target.closest('[data-rack-edit]');
+    if (!el) return;
+    const a = el.dataset.rackEdit;
+    if (a === 'close') rackEditClose();
+    else if (a === 'save') rackEditSave();
+    else if (a === 'print' && _rackEdit) brettEtikettenDrucken(_rackEdit);
+  });
+}
+
+// Neue Blöcke und Körnerbrut: in welchen Raum sie ohne Frage kommen. Der Raum,
+// der ein Regal ihrer Art hat (Körnerbrut zuerst in der Körnerbrut, Blöcke in
+// der Inkubation), sonst der erste Raum dieser Art. null, solange noch kein Regal
+// Bretter hat: dann fragt die App wie bisher.
+function brettStartZone(batch) {
+  if (!zones.some(brettZoneMitBrettern)) return null;
+  const rollen = batch && batch.batchType === 'grain' ? ['spawn', 'incubation'] : ['incubation', 'spawn'];
+  const sid = batch ? batch.strainId : null;
+  for (const role of rollen) {
+    const z = zones.find((x) => x.role === role && x.racks.some((r) => sid && r.strainId === sid));
+    if (z) return z.id;
+  }
+  for (const role of rollen) {
+    const z = zones
+      .filter((x) => x.role === role)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))[0];
+    if (z) return z.id;
+  }
+  return null;
 }
 // ─── LOCATION BAG INTERACTIONS ──────────────────────────────
 const selectedLocBags = new Map(); // bagId → {batchId, loc}
@@ -11097,23 +12363,41 @@ async function createBatch() {
 // z-index, also läge beides hinter dem Ablauffenster — derselbe Fehler wie in
 // #592.
 function nbPlaceAndPrint(batchObj, bags) {
+  // Blöcke und Körnerbrut fragt die App nicht mehr nach dem Platz, sobald es
+  // Regale mit Brettern gibt: wo Platz ist, sieht man erst davor. Sie kommen in
+  // ihren Raum, auf keinem Brett, bis jemand ihr Brett scannt und Dazu tippt.
+  // Gedruckt wird wie immer gleich danach.
+  const raum = brettStartZone(batchObj);
+  if (raum) {
+    addBagsToLocation(batchObj, bags, raum, function () {
+      updateSD();
+      renderBatches();
+      renderStatus();
+    });
+    nbEtikettenNachPlatz(batchObj, bags);
+    return;
+  }
   openZonePickModal(batchObj, bags, function () {
-    const liste = document.getElementById('nb-bags');
-    if (liste)
-      liste.innerHTML = bags
-        .map(
-          (b) =>
-            `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
-        )
-        .join('');
-    // printBatchLabelsInline liest die Charge von hier, auch wenn die
-    // Chargenseite gar nicht im Bild ist.
-    const _res = document.getElementById('nb-result');
-    if (_res) _res.dataset.batchId = batchObj.batchId;
-    const kopf = document.getElementById('nbp-head');
-    if (kopf) kopf.textContent = t('batch.printFor', { id: batchObj.batchId, n: bags.length });
-    nbpOpen();
+    nbEtikettenNachPlatz(batchObj, bags);
   });
+}
+// Der zweite Teil: das Etikettenfenster für die neuen Beutel.
+function nbEtikettenNachPlatz(batchObj, bags) {
+  const liste = document.getElementById('nb-bags');
+  if (liste)
+    liste.innerHTML = bags
+      .map(
+        (b) =>
+          `<span class="fs-micro" style="font-family:monospace;background:var(--c-bg);padding:2px 6px;border-radius:4px;color:var(--c-text-sec)">${esc(b)}</span>`
+      )
+      .join('');
+  // printBatchLabelsInline liest die Charge von hier, auch wenn die
+  // Chargenseite gar nicht im Bild ist.
+  const _res = document.getElementById('nb-result');
+  if (_res) _res.dataset.batchId = batchObj.batchId;
+  const kopf = document.getElementById('nbp-head');
+  if (kopf) kopf.textContent = t('batch.printFor', { id: batchObj.batchId, n: bags.length });
+  nbpOpen();
 }
 // ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
 // Two cards, because there are two steps and they cost different things. The
@@ -19482,12 +20766,18 @@ function renderZones() {
     const zoneBags = getZoneBags(z.id);
     const bagCount = Object.keys(zoneBags).length;
     const rackIds = new Set(z.racks.map((r) => r.id));
-    const directCount = Object.values(zoneBags).filter((b) => !rackIds.has(b.loc)).length;
+    // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
+    const directCount = Object.values(zoneBags).filter((b) => !rackIds.has(String(b.loc).split(':')[0])).length;
     const rackHtml = z.racks.length
       ? z.racks
           .map((r) => {
             const rBags = Object.keys(getRackBags(r.id)).length;
-            return `<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${rBags === 0 ? `<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>` : ''}</span>`;
+            const art = brettArt(r.strainId);
+            const bretter =
+              r.levels > 0
+                ? ` <span class="zone-rack-bretter">${esc(tp('rackEdit.chip', r.levels))}${art ? ' · ' + esc(art.name) : ''}</span>`
+                : '';
+            return `<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${bretter}<button class="btn btn-sm zone-rack-bretter-btn" data-action="rack-shelves" data-rack="${esc(r.id)}">${esc(t('rackEdit.btn'))}</button>${rBags === 0 ? `<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>` : ''}</span>`;
           })
           .join('')
       : '<span class="fs-xs" style="color:var(--c-text-muted)">' + t('zones.noRacks') + '</span>';
@@ -19857,7 +21147,8 @@ function bulkMoveToRack(zoneId) {
   if (!z || !z.racks.length) return;
   const zoneBags = getZoneBags(zoneId);
   const rackIds = new Set(z.racks.map((r) => r.id));
-  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(b.loc));
+  // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
+  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(String(b.loc).split(':')[0]));
   if (!directBags.length) return;
   const m = document.getElementById('m-locmove');
   document.getElementById('lm-title').textContent = t('zones.moveToRackTitle', { count: directBags.length });
@@ -19878,7 +21169,8 @@ async function executeBulkMoveToRack(zoneId, rackId) {
   if (!z) return;
   const zoneBags = getZoneBags(zoneId);
   const rackIds = new Set(z.racks.map((r) => r.id));
-  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(b.loc));
+  // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
+  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(String(b.loc).split(':')[0]));
   if (!directBags.length) return;
   const entries = directBags.map(([bagId, b]) => ({
     action: 'MOVE',
@@ -23226,7 +24518,12 @@ function saveMStrain() {
     return;
   }
   const rec = _msReadRecipe();
-  const payload = { name, kuerzel, description: desc, ...rec };
+  const grenzen = _msReadLimits();
+  if (grenzen.tentMin > 0 && grenzen.tentMax > 0 && grenzen.tentMin > grenzen.tentMax) {
+    fieldError('ms-tent-min', t('strains.tentMinOverMax'));
+    return;
+  }
+  const payload = { name, kuerzel, description: desc, ...rec, ...grenzen };
   const num = (v, d) => (isFinite(parseFloat(v)) ? parseFloat(v) : d);
   const recLocal = {
     recBatchType: rec.recBatchType || '',
@@ -23239,7 +24536,8 @@ function saveMStrain() {
     recGypsum: !!rec.recGypsum,
     recGrainKg: num(rec.recGrainKg, 0),
     recGrainRhPct: num(rec.recGrainRhPct, 52),
-    recIncDays: num(rec.recIncDays, 14)
+    recIncDays: num(rec.recIncDays, 14),
+    ...grenzen
   };
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
@@ -23304,6 +24602,8 @@ function editMStrain(id) {
   sv('ms-rec-grainrh', ms.recGrainRhPct != null ? ms.recGrainRhPct : 52);
   sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
   sv('ms-rec-fruitdays', ms.recFruitDays || 0);
+  // Regale und Zelt (v122): leer heißt keine Prüfung.
+  for (const [eid, key] of MS_LIMIT_FIELDS) sv(eid, ms[key] == null ? '' : ms[key]);
   msRecTypeChange();
   _msFillRecCopyOptions(id);
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
@@ -23346,6 +24646,7 @@ function cancelMStrain() {
   sv('ms-rec-grainrh', 52);
   sv('ms-rec-days', 14);
   sv('ms-rec-fruitdays', 0);
+  for (const [eid] of MS_LIMIT_FIELDS) sv(eid, '');
   msRecTypeChange();
   _msFillRecCopyOptions(null);
 }
@@ -23817,6 +25118,25 @@ function anlageNehmen(el) {
 })();
 
 // ── Sorte production recipe (rec_*) — editor toggle + per-bag need preview ───
+// Regale und Zelt (v122): Feld → Schlüssel. Gesendet wird eine ganze Zahl oder
+// null; leer heißt, die App prüft bei dieser Art nichts.
+const MS_LIMIT_FIELDS = [
+  ['ms-inc-max', 'incMaxDays'],
+  ['ms-grain-max', 'grainMaxDays'],
+  ['ms-tent-days', 'tentMaxDays'],
+  ['ms-tent-min', 'tentMin'],
+  ['ms-tent-max', 'tentMax']
+];
+function _msReadLimits() {
+  const out = {};
+  for (const [eid, key] of MS_LIMIT_FIELDS) {
+    const el = document.getElementById(eid);
+    const v = el ? el.value.trim() : '';
+    const n = v === '' ? null : Math.round(Number(v));
+    out[key] = n === null || !Number.isFinite(n) || n < 0 ? null : n;
+  }
+  return out;
+}
 function _msReadRecipe() {
   const v = (id) => {
     const el = document.getElementById(id);
@@ -30094,6 +31414,11 @@ function processScan(raw, opts) {
       // Vorgang gerade steht. Am Fach gibt es nur diese drei.
       shelfScanned(entry.id);
       return;
+    } else if (entry.type === 'brett') {
+      // Ein Brett im Regal der Inkubation oder der Körnerbrut: sein Blatt mit
+      // Umziehen, Dazu, Leer und Stimmt nicht, egal welcher Vorgang steht.
+      brettScanned(entry.id);
+      return;
     }
   } else {
     // ── Legacy barcode fallback ──
@@ -34850,6 +36175,8 @@ const _Z_SCHLIESSEN = {
   'm-rhythm': () => closeRhythmEditor(),
   'm-note': () => closeNote(),
   'm-shelf': () => shelfSheetClose(),
+  'm-brett': () => brettZu(),
+  'm-rack-edit': () => rackEditClose(),
   'm-labfach': () => lfClose(),
   'm-kbz': () => kbzClose(),
   'm-lb': () => lbSheetClose(),
@@ -35845,6 +37172,7 @@ function initEventListeners() {
     else if (action === 'zone-capacity') editZoneCapacity(btn.dataset.zone);
     else if (action === 'add-rack') addRackToZone(btn.dataset.zone);
     else if (action === 'del-rack') removeRack(btn.dataset.rack);
+    else if (action === 'rack-shelves') rackEditOpen(btn.dataset.rack);
     else if (action === 'toggle-qr') renderZoneQrPanel(btn.dataset.zone);
     else if (action === 'print-zone-qr') printZoneQrBrowser(btn.dataset.zone);
     else if (action === 'bulk-move') bulkMoveToRack(btn.dataset.zone);
@@ -36678,6 +38006,7 @@ function initEventListeners() {
   });
   shelfWire();
   lfWire();
+  brettWire();
   kbzWire();
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
