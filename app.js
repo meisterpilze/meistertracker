@@ -382,6 +382,8 @@ let mushroomStrains = [],
 // Numeric barcode registry: Map<number, {type, id}> and reverse Map<string, number>
 let barcodeRegistry = new Map(),
   barcodeByEntity = new Map();
+// Etiketten von vor einem Neustart der Daten, nach Nummer (db.alte_etiketten).
+let alteEtiketten = new Map();
 // Regal: fertige Ware, eine Zahl je Artikel (renderShelf)
 let shelfItems = [];
 let appUsers = [];
@@ -705,6 +707,7 @@ function applyData(d) {
     barcodeRegistry.set(bc.barcode, { type: bc.entity_type, id: bc.entity_id });
     barcodeByEntity.set(bc.entity_type + ':' + bc.entity_id, bc.barcode);
   }
+  alteEtiketten = new Map((d.alteEtiketten || []).map((a) => [a.barcode, a]));
   rebuildZoneConstants();
   // ZPL label dimensions (set by server from LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS
   // env vars). Fall back to the default 50×30mm @ 203dpi if missing.
@@ -29989,6 +29992,39 @@ function _batchMmdd(b) {
   return d ? d.slice(2, 4) + d.slice(0, 2) : '';
 }
 
+// Ein Etikett von vor dem Neustart der Daten. Der Neustart im August 2026 hat
+// die Nummern neu vergeben: eine Petrischale, die noch im Labor stand, hiess
+// beim Scannen ein Beutel einer anderen Art. Jetzt nimmt der Scan die Kultur wieder
+// auf, druckt gleich ein neues Etikett und sagt das. Hat die Nummer inzwischen
+// ein anderes Ding (vor der Untergrenze in nextBarcodeNumber), weiss nur, wer
+// es in der Hand hat, welches gemeint ist: eine Frage, zwei Knöpfe.
+function altesEtikettGescannt(barcode, alt, entry, raw) {
+  if (!entry) return altesEtikettAufnehmen(barcode, alt);
+  confirm3(
+    t('alt.whichTitle'),
+    t('alt.whichBody', { n: barcode }),
+    t('alt.isOld', { id: alt.id }),
+    t('alt.isNew', { id: entry.id }),
+    () => altesEtikettAufnehmen(barcode, alt),
+    () => processScan(raw, { ohneAlt: true })
+  );
+}
+async function altesEtikettAufnehmen(barcode, alt) {
+  setFb('info', t('alt.working', { id: alt.id }));
+  const r = await apiPost('/api/alte-etiketten/aufnehmen', { barcode });
+  if (!r || r.error) {
+    setFb('err', t('alt.failed', { id: alt.id, msg: (r && r.error) || '' }));
+    return;
+  }
+  await loadData();
+  const modeEl = document.getElementById('lab-mode');
+  const qrEl = document.getElementById('lab-qr');
+  const zpl = makeLabZPL([r.id], modeEl ? modeEl.value : 'sorte', !!(qrEl && qrEl.checked));
+  const err = zpl && zpl.includes('^XA') ? await sendToPrinter(zpl) : t('print.noLabels');
+  // Nicht gedruckt: die Kultur ist trotzdem da und steht unter Drucken oben.
+  if (err) setFb('warn', t('alt.printFailed', { id: r.id, msg: err }));
+  else setFb('ok', t('alt.printed', { id: r.id }));
+}
 function processScan(raw, opts) {
   // Underscore/hyphen convention:
   // - Location barcodes use UNDERSCORES (e.g. INC_MUSTER_01, SPAWN_R1) — kept as-is
@@ -30019,6 +30055,12 @@ function processScan(raw, opts) {
   // ── Numeric barcode lookup (new system: 7+ digit numbers) ──
   const numVal = parseInt(val, 10);
   if (/^\d{7,}$/.test(val) && numVal >= 1000000) {
+    // Ein Etikett von vor dem Neustart der Daten: siehe altesEtikettGescannt.
+    const alt = opts && opts.ohneAlt ? null : alteEtiketten.get(numVal);
+    if (alt) {
+      altesEtikettGescannt(numVal, alt, barcodeRegistry.get(numVal) || null, raw);
+      return;
+    }
     const entry = barcodeRegistry.get(numVal);
     if (!entry) {
       if (!synced) {

@@ -10219,6 +10219,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     return;
   }
 
+  // POST /api/alte-etiketten/aufnehmen — { barcode }: ein Etikett von vor dem
+  // Neustart der Daten wurde gescannt. Die Kultur kommt zurück, mit neuer
+  // Nummer; die App druckt gleich das neue Etikett (db.altesEtikettAufnehmen).
+  if (req.method === 'POST' && req.url === '/api/alte-etiketten/aufnehmen') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.altesEtikettAufnehmen(database, data && data.barcode);
+        broadcastSSE(res);
+        jsonOk(res, { ok: true, id: r.id, barcode: r.barcode });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+
   // -- Cultures --
   if (req.method === 'POST' && req.url === '/api/cultures') {
     jsonBody(req, res, (e, data) => {
