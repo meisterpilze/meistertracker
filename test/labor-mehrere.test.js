@@ -195,6 +195,8 @@ describe('Mehrere Arten: anlegen', () => {
         return { batchObj: { batchId: 'G-1' }, bagIds: ['G-1-01', 'G-1-02'], saved: Promise.resolve() };
       };
       const renderLabLog = () => {};
+      ${hebe('speicherStand')}
+      const meldeSpeicherFehler = () => {};
       const etikettenFuerAlles = (ids, saved, korn) => fenster.push([ids, korn && korn.batchObj.batchId]);
       ${hebe('msqMehrereAnlegen')}
       msqMehrereAnlegen({
@@ -346,6 +348,63 @@ describe('Ein Etiketten-Fenster, ein Druck', () => {
     assert.equal(r.gesendet.length, 1);
     assert.deepEqual(r.gesendet[0].match(/\^XA.*?\^XZ/g), ['^XAPD-1^XZ', '^XALC-1^XZ']);
     assert.equal(r.gemeldet, 'print.printedAll{"n":2}');
+  });
+
+  // 23.11.2026: Petrischalen, eine Spritze und Körnerbrut aus einer
+  // Flüssigkultur, und der Server ging mittendrin schlafen. Die Spritze und die
+  // Beutel kamen an, die Schalen nicht — und gedruckt wurde gar nichts, weil
+  // das Fenster auf Promise.all wartete.
+  it('schlägt ein Posten fehl, druckt das Fenster die anderen trotzdem', async () => {
+    const r = await new Function(`
+      return (async () => {
+        const gesendet = [];
+        let geschlossen = false;
+        ${hebe('speicherStand')}
+        let _cprSaved = speicherStand([
+          { ids: ['PD-1', 'PD-2'], saved: Promise.reject(new Error('unreachable')) },
+          { ids: ['SY-1'], saved: Promise.resolve() }
+        ]);
+        let _cprKorn = { batchObj: { batchId: 'G-1' }, bagIds: ['G-1-01'], saved: Promise.resolve() };
+        let lastCreatedCultureIds = ['PD-1', 'PD-2', 'SY-1'];
+        const batches = [{ batchId: 'G-1', bags: ['G-1-01'] }];
+        const document = { getElementById: () => null };
+        const t = (k, p) => k + (p ? JSON.stringify(p) : '');
+        const toast = () => {};
+        const makeLabZPL = (ids) => ids.map((id) => '^XA' + id + '^XZ').join('\\n');
+        const makeBagZPL = (bags) => bags.map((id) => '^XA' + id + '^XZ').join('\\n');
+        const ensureBagBarcodes = async () => {};
+        const sendToPrinter = async (zpl) => { gesendet.push(zpl); return null; };
+        let gemeldet = '';
+        const printedFb = (m) => { gemeldet = m; };
+        const cprClose = () => { geschlossen = true; };
+        ${hebe('printCultureLabelsInline')}
+        await printCultureLabelsInline();
+        return { gesendet, gemeldet, stand: await _cprSaved, geschlossen };
+      })();
+    `)();
+    assert.deepEqual(r.stand, { fehlt: ['PD-1', 'PD-2'], grund: 'unreachable' });
+    assert.equal(r.gesendet.length, 1);
+    assert.deepEqual(r.gesendet[0].match(/\^XA.*?\^XZ/g), ['^XASY-1^XZ', '^XAG-1-01^XZ']);
+    assert.equal(r.gemeldet, 'print.printedAll{"n":2}');
+  });
+
+  it('die Meldung nennt, was fehlt, und sagt, dass der Rest gedruckt wird', () => {
+    const r = new Function(`
+      const gemeldet = [];
+      const toast = (m, k) => gemeldet.push([m, k]);
+      const t = (k, p) => k + (p ? JSON.stringify(p) : '');
+      ${hebe('meldeSpeicherFehler')}
+      meldeSpeicherFehler({ fehlt: [], grund: '' }, ['SY-1'], null);
+      meldeSpeicherFehler({ fehlt: ['PD-1'], grund: 'unreachable' }, ['PD-1', 'SY-1'], null);
+      meldeSpeicherFehler({ fehlt: ['PD-1'], grund: 'unreachable' }, ['PD-1'], { bagIds: ['G-1-01'] });
+      meldeSpeicherFehler({ fehlt: ['PD-1'], grund: 'unreachable' }, ['PD-1'], null);
+      return gemeldet;
+    `)();
+    assert.deepEqual(r, [
+      ['lab.saveFailedPart{"ids":"PD-1","msg":"unreachable"}', 'err'],
+      ['lab.saveFailedPart{"ids":"PD-1","msg":"unreachable"}', 'err'],
+      ['lab.saveFailed{"msg":"unreachable"}', 'err']
+    ]);
   });
 
   it('die Körnerbrut gibt ihre Speicherung mit, auf die das Fenster wartet', () => {

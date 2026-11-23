@@ -74,6 +74,8 @@ describe('Beimpfen: ein Tipp legt alles an', () => {
       const gsSetLines = (l) => { gesetzt.lines = l; };
       const createGrainBatch = (o) => { korn.push({ o, inoc: _inoc.slice() }); return { batchObj: { batchId: 'G-1' }, bagIds: ['G-1-01'] }; };
       const renderLabLog = () => {};
+      ${hebe('speicherStand')}
+      const meldeSpeicherFehler = () => {};
       const etikettenFuerAlles = (ids, saved, korn) => fenster.push(['etiketten', ids.length, korn ? korn.batchObj.batchId : null]);
       ${hebe('bmpGo')}
       bmpGo();
@@ -144,6 +146,8 @@ describe('Beimpfen: Spritzen in mehreren Größen auf einmal', () => {
         return { newC: Array.from({ length: spec.qty }, (_, i) => ({ id: spec.type + spec.ml + '-' + (i + 1) })), saved: Promise.resolve() };
       };
       const renderLabLog = () => {};
+      ${hebe('speicherStand')}
+      const meldeSpeicherFehler = () => {};
       const etikettenFuerAlles = (ids) => fenster.push(ids.length);
       ${hebe('bmpGo')}
       bmpGo();
@@ -254,7 +258,8 @@ describe('Beimpfen: das Fenster', () => {
     assert.match(hebe('ciAction'), /if \(a === 'ci-beimpfen'\) bmpOpen\(c\);/);
   });
   it('endet im gemeinsamen Schluss: Kulturen und Körnerbrut in einem Etiketten-Fenster', () => {
-    assert.match(hebe('bmpGo'), /etikettenFuerAlles\(ids, Promise\.all\(saves\), korn\);/);
+    assert.match(hebe('bmpGo'), /const stand = speicherStand\(saves\);/);
+    assert.match(hebe('bmpGo'), /etikettenFuerAlles\(ids, stand, korn\);/);
     assert.doesNotMatch(APP, /_cprDanach/);
   });
 });

@@ -961,6 +961,7 @@ window.LANG['pt'] = {
   'intake.exists': '{id} já está no sistema — nada a registar.',
   'intake.done': '{id} está de volta ao sistema. A etiqueta no frasco é válida.',
   'lab.saveFailed': 'Não guardado, por isso nenhuma etiqueta foi impressa ({msg}). Verifique a origem e crie de novo; se não ajudar, verifique o Wi-Fi.',
+  'lab.saveFailedPart': 'Não guardado: {ids} ({msg}). Esses não têm etiqueta, crie-os de novo. O resto está guardado e é impresso.',
   'batch.notes': 'Notas (opcional)',
   'batch.ph': 'pH (medido, opcional)',
   'batch.phNaN': 'O pH é um número entre 0 e 14, por exemplo 6,5. Ou deixe o campo vazio.',
