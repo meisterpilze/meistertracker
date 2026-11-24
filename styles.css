@@ -13146,6 +13146,23 @@ button.wk-an-zeile:active {
 .wk-bretter-hint {
   margin: -2px 0 6px;
 }
+/* Montags-Check (renderMontagsCheck): einmal die Woche, über "Regale und
+   Fruchtzelt". Gelb und umrandet, weil es die eine Stelle ist, die nach einer
+   Antwort fragt — und weil sie nicht jeden Tag dasteht, darf sie auffallen. */
+.wk-teil-montag {
+  margin: 24px 0;
+  padding: 14px 16px;
+  border: 2px solid var(--c-amber-border);
+  border-radius: 14px;
+  background: var(--c-amber-light);
+}
+.wk-teil-montag .wk-teil-kopf {
+  margin-bottom: 4px;
+}
+.wk-montag-hilfe {
+  margin: 0 0 10px;
+  color: var(--c-text-sec);
+}
 .wk-bretter-next {
   display: flex;
   flex-wrap: wrap;

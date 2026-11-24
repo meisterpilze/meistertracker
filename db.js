@@ -4640,7 +4640,7 @@ function readAll(db, opts = {}) {
     // der Server rechnet — der Browser rechnet dieselben, um "Noch da?" zu fragen.
     autoBookouts: listAutoBookouts(db),
     stillThere: listStillThere(db),
-    brettRules: { confirmDays: BRETT_CONFIRM_DAYS, graceDays: BRETT_GRACE_DAYS },
+    brettRules: { confirmDays: BRETT_CONFIRM_DAYS, checkDay: BRETT_CHECK_DAY },
     version
   };
 }
@@ -11679,12 +11679,34 @@ function setZoneCapacity(db, id, cap) {
 // die kein Umzug sind: wie viele Bretter, "Noch da", und was die App nach der
 // Hoechstzeit einer Art selbst ausbucht.
 const BRETT_CONFIRM_DAYS = 14; // "Noch da" schiebt die Frage so lange auf
-const BRETT_GRACE_DAYS = 7; // so lange fragt die App in der Inkubation, bevor sie ausbucht
+// Der Montags-Check: an diesem Wochentag (1 = Montag) fragt die App, was über
+// seiner Zeit ist, und eine Woche später, am nächsten, bucht sie aus, was
+// niemand beantwortet hat. Eine Warnung, die jeden Tag dasteht, liest niemand
+// mehr; einmal die Woche ist ein Termin.
+const BRETT_CHECK_DAY = 1;
 const DAY_MS = 86400000;
 const BRETT_MAX_LEVELS = 20;
 
 function brettId(rackId, level) {
   return rackId + ':' + level;
+}
+
+// Der erste Check-Tag um 0 Uhr Ortszeit, der nicht vor `ms` liegt. Ortszeit, weil
+// die Woche des Hofs dort beginnt; in Kalendertagen und nicht in festen 24
+// Stunden, damit die Zeitumstellung den Montag nicht auf Sonntag 23 Uhr schiebt.
+// app.js rechnet mit derselben Funktion.
+function brettCheckAb(ms, tag = BRETT_CHECK_DAY) {
+  const d = new Date(ms);
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (m.getTime() < ms) m.setDate(m.getDate() + 1);
+  m.setDate(m.getDate() + ((tag - m.getDay() + 7) % 7));
+  return m.getTime();
+}
+// Eine Woche später, in Kalendertagen (wie oben).
+function brettWocheSpaeter(ms) {
+  const d = new Date(ms);
+  d.setDate(d.getDate() + 7);
+  return d.getTime();
 }
 
 // Where every bag stands now: the latest ADD/MOVE/MOVE_BATCH with a place,
@@ -11756,9 +11778,10 @@ function setRackShelves(db, rackId, { levels, strainId } = {}) {
 //   when that time is reached.
 // - In an incubation or spawn zone: inc_max_days (blocks) or grain_max_days
 //   (grain spawn) after the batch was made, or BRETT_CONFIRM_DAYS after the
-//   last "Noch da" if that is later. From then the app asks; it books out
-//   BRETT_GRACE_DAYS later, and never earlier than BRETT_GRACE_DAYS after the
-//   limit was set (so entering a limit never empties a room at once).
+//   last "Noch da" if that is later. The app asks on the first check day
+//   (Montags-Check, BRETT_CHECK_DAY) after that, and never before the first
+//   check day after the limit was set (askAt); it books out a week after that
+//   check if nobody answered (outAt), so entering a limit never empties a room.
 // Contaminated bags, and Sorten without a limit, have no time. The times are
 // absolute (ms), so the caller compares them with whatever "now" it has.
 function brettFristen(db) {
@@ -11807,6 +11830,7 @@ function brettFristen(db) {
     const conf = confirmed.get(bag);
     let kind;
     let limitAt;
+    let askAt = null;
     let outAt;
     if (role === 'fruiting') {
       if (!(s.tent_max_days > 0)) continue;
@@ -11821,15 +11845,17 @@ function brettFristen(db) {
       limitAt = Date.parse(b.created) + max * DAY_MS;
       if (conf) limitAt = Math.max(limitAt, conf + BRETT_CONFIRM_DAYS * DAY_MS);
       const start = s.limits_set ? Date.parse(s.limits_set) : 0;
-      outAt = Math.max(limitAt, start) + BRETT_GRACE_DAYS * DAY_MS;
+      askAt = brettCheckAb(Math.max(limitAt, start));
+      outAt = brettWocheSpaeter(askAt);
     } else continue;
-    if (!Number.isFinite(limitAt)) continue;
+    if (!Number.isFinite(limitAt) || !Number.isFinite(outAt)) continue;
     out.push({
       bag,
       batch: b.batch_id,
       loc: at.loc,
       kind,
       limitAt,
+      askAt,
       outAt,
       species: b.species || null,
       strain: b.strain || null,
@@ -11857,33 +11883,53 @@ function _programmWiederAn(db, strainId, now) {
 }
 
 // Books out every bag whose time is up (REMOVE, reason "auto") and notes it in
-// auto_bookouts, so the app can show it until someone says "Stimmt" or "Noch
-// da". Runs with the other periodic checks; a second run books nothing twice,
-// because a booked-out bag has no place any more.
+// auto_bookouts. Runs with the other periodic checks; a second run books
+// nothing twice, because a booked-out bag has no place any more.
+//
+// Montags-Check: a bag from incubation or spawn only goes after a check day
+// showed it and a week passed without an answer. That was the question, so its
+// row is closed at once ("silent") and nobody is asked a second time. A tent bag
+// goes when its time is up without being asked; its row stays open for the
+// next check day to show ("Stimmt" / "Noch da"), and if a week passes after
+// that check without an answer, it is closed as "silent" too. So the check
+// never grows into a list that is always there.
 function autoBookOuts(db, now = new Date()) {
-  const faellig = brettFristen(db).filter((f) => f.outAt <= now.getTime());
-  if (!faellig.length) return [];
   const nowIso = now.toISOString();
+  const alt = db
+    .prepare('SELECT scan_log_id, created FROM auto_bookouts WHERE resolved IS NULL')
+    .all()
+    .filter((a) => brettWocheSpaeter(brettCheckAb(Date.parse(a.created))) <= now.getTime());
+  const faellig = brettFristen(db).filter((f) => f.outAt <= now.getTime());
+  if (!faellig.length && !alt.length) return [];
   db.exec('BEGIN');
   try {
-    const ids = appendScanEntriesNoTxn(
-      db,
-      faellig.map((f) => ({
-        time: nowIso,
-        action: 'REMOVE',
-        batch: f.batch,
-        bag: f.bag,
-        from: f.loc,
-        to: null,
-        species: f.species,
-        strain: f.strain,
-        reason: 'auto'
-      })),
-      null
+    const still = db.prepare(
+      "UPDATE auto_bookouts SET resolved = 'silent', resolved_at = ? WHERE scan_log_id = ? AND resolved IS NULL"
     );
-    const ins = db.prepare('INSERT OR IGNORE INTO auto_bookouts(scan_log_id, bag_id, loc, created) VALUES(?,?,?,?)');
+    for (const a of alt) still.run(nowIso, a.scan_log_id);
+    const ids = faellig.length
+      ? appendScanEntriesNoTxn(
+          db,
+          faellig.map((f) => ({
+            time: nowIso,
+            action: 'REMOVE',
+            batch: f.batch,
+            bag: f.bag,
+            from: f.loc,
+            to: null,
+            species: f.species,
+            strain: f.strain,
+            reason: 'auto'
+          })),
+          null
+        )
+      : [];
+    const ins = db.prepare(
+      'INSERT OR IGNORE INTO auto_bookouts(scan_log_id, bag_id, loc, created, resolved, resolved_at) VALUES(?,?,?,?,?,?)'
+    );
     faellig.forEach((f, i) => {
-      if (ids[i]) ins.run(ids[i], f.bag, f.loc, nowIso);
+      const gefragt = f.kind === 'inc';
+      if (ids[i]) ins.run(ids[i], f.bag, f.loc, nowIso, gefragt ? 'silent' : null, gefragt ? nowIso : null);
     });
     incrementDataVersion(db);
     db.exec('COMMIT');
@@ -17090,6 +17136,8 @@ module.exports = {
   locationBase,
   shelfOfLocation,
   setRackShelves,
+  brettCheckAb,
+  brettWocheSpaeter,
   brettFristen,
   autoBookOuts,
   listAutoBookouts,

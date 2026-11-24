@@ -16,9 +16,12 @@ const DB_SRC = fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8');
 const DAY = 86400000;
 const NOW = Date.parse('2026-03-01T10:00:00.000Z');
 const ago = (d) => new Date(NOW - d * DAY).toISOString();
-const RULES = { confirmDays: 14, graceDays: 7 };
+const RULES = { confirmDays: 14, checkDay: 1 };
 
-const brettFristVon = new Function(hebeFunktion('brettFristVon', SRC) + '; return brettFristVon;')();
+const brettFristVon = new Function(
+  ['brettCheckAb', 'brettWocheSpaeter', 'brettFristVon'].map((n) => hebeFunktion(n, SRC)).join('\n') +
+    '; return brettFristVon;'
+)();
 const zeltPlanVon = new Function(hebeFunktion('zeltPlanVon', SRC) + '; return zeltPlanVon;')();
 
 describe('Regalbretter im Browser: die Fristen', () => {
@@ -26,11 +29,21 @@ describe('Regalbretter im Browser: die Fristen', () => {
   const frist = (p) => brettFristVon(Object.assign({ s, rules: RULES, confirmed: null, limitsSet: ago(100) }, p));
 
   it('rechnet mit denselben Tagen wie der Server', () => {
-    const m = DB_SRC.match(/const BRETT_CONFIRM_DAYS = (\d+);[\s\S]*?const BRETT_GRACE_DAYS = (\d+);/);
+    const m = DB_SRC.match(/const BRETT_CONFIRM_DAYS = (\d+);[\s\S]*?const BRETT_CHECK_DAY = (\d+);/);
     assert.ok(m, 'die Fristen in db.js sind nicht mehr dort');
     assert.equal(Number(m[1]), RULES.confirmDays);
-    assert.equal(Number(m[2]), RULES.graceDays);
-    assert.match(SRC, /let brettRules = \{ confirmDays: 14, graceDays: 7 \};/, 'Vorgabe im Browser wie im Server');
+    assert.equal(Number(m[2]), RULES.checkDay);
+    assert.match(SRC, /let brettRules = \{ confirmDays: 14, checkDay: 1 \};/, 'Vorgabe im Browser wie im Server');
+  });
+
+  it('der Montag des Checks: dieselbe Rechnung im Browser und im Server', () => {
+    // Bis auf die Vorgabe des Wochentags wortgleich, damit beide denselben Montag nehmen.
+    const rumpf = (src) =>
+      hebeFunktion('brettCheckAb', src)
+        .replace(/tag = [A-Za-z_.]+\)/, 'tag)')
+        .replace(/^\s*\/\/.*$/gm, '');
+    assert.equal(rumpf(SRC), rumpf(DB_SRC));
+    assert.equal(hebeFunktion('brettWocheSpaeter', SRC), hebeFunktion('brettWocheSpaeter', DB_SRC));
   });
 
   it('im Zelt: die Zeltzeit ab dem Tag, an dem der Block hereinkam', () => {
@@ -45,15 +58,26 @@ describe('Regalbretter im Browser: die Fristen', () => {
     assert.equal(f.limitAt, NOW + 14 * DAY);
   });
 
-  it('in der Inkubation: ab dem Tag der Charge, gefragt wird eine Woche vor dem Ausbuchen', () => {
+  // NOW ist Sonntag, der 1.3.2026. Der nächste Montags-Check ist der 2.3. um 0 Uhr
+  // Ortszeit, der danach der 9.3.
+  const MONTAG = new Date(2026, 2, 2).getTime();
+  const MONTAG_DANACH = new Date(2026, 2, 9).getTime();
+
+  it('in der Inkubation: ab dem Tag der Charge, gefragt am nächsten Montag, ausgebucht eine Woche später', () => {
     const f = frist({ role: 'incubation', batchType: 'block', made: ago(34), since: ago(34) });
     assert.equal(f.limitAt, NOW - 4 * DAY);
-    assert.equal(f.outAt, NOW + 3 * DAY);
+    assert.equal(f.askAt, MONTAG);
+    assert.equal(f.outAt, MONTAG_DANACH);
   });
 
-  it('eine frisch eingetragene Zahl bucht frühestens eine Woche später aus', () => {
+  it('eine frisch eingetragene Zahl fragt erst am Montag danach und bucht eine Woche später aus', () => {
     const f = frist({ role: 'incubation', batchType: 'block', made: ago(90), since: ago(90), limitsSet: ago(0) });
-    assert.equal(f.outAt, NOW + 7 * DAY);
+    assert.equal(f.askAt, MONTAG);
+    assert.equal(f.outAt, MONTAG_DANACH);
+  });
+
+  it('im Zelt fragt die App nicht vorher: kein Montag', () => {
+    assert.equal(frist({ role: 'fruiting', batchType: 'block', made: ago(60), since: ago(25) }).askAt, null);
   });
 
   it('Körnerbrut hat ihre eigene Zahl, auch in einem Raum der Inkubation', () => {

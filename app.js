@@ -401,7 +401,7 @@ let shelfItems = [];
 // nach denen der Server rechnet (siehe REGALBRETTER).
 let autoBookouts = [];
 let stillThere = {};
-let brettRules = { confirmDays: 14, graceDays: 7 };
+let brettRules = { confirmDays: 14, checkDay: 1 };
 let appUsers = [];
 let calEvSelectedAssignees = [];
 let calTaskSelectedAssignees = [];
@@ -718,7 +718,14 @@ function applyData(d) {
   shelfItems = d.shelf || [];
   autoBookouts = d.autoBookouts || [];
   stillThere = d.stillThere || {};
-  if (d.brettRules && d.brettRules.confirmDays > 0 && d.brettRules.graceDays > 0) brettRules = d.brettRules;
+  if (
+    d.brettRules &&
+    d.brettRules.confirmDays > 0 &&
+    Number.isInteger(d.brettRules.checkDay) &&
+    d.brettRules.checkDay >= 0 &&
+    d.brettRules.checkDay <= 6
+  )
+    brettRules = d.brettRules;
   datenGeladen = true;
   // Build barcode registry from server data
   barcodeRegistry = new Map();
@@ -6726,6 +6733,16 @@ function buildLabMinTasks() {
     .sort((a, b) => Number(b.empty) - Number(a.empty) || b.gaps - a.gaps || a.name.localeCompare(b.name));
 }
 
+// Montags-Check in der Woche: eine Zeile, die nur ein Stand ist (Bestand unter
+// seinem Alarm, ein Raum über 90 %, eine Art unter ihrem Soll), steht am Montag
+// in der Liste, nicht jeden Tag — sonst steht sie immer da, und niemand liest
+// sie mehr. Was brennt (ein Raum über voll, eine Bestellung, die nicht raus
+// kann), steht heute. Der Montag ist immer eine der sieben Spalten.
+function checkSpalte(days, dringend) {
+  if (dringend) return 0;
+  const i = days.findIndex((d) => d.weekday === brettRules.checkDay);
+  return i < 0 ? 0 : i;
+}
 function buildWeekPlan() {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
@@ -6750,9 +6767,9 @@ function buildWeekPlan() {
   // genau wie eine Versorgungslücke. Als eigene Karte stand er neben der Liste,
   // die alles andere zu tun hatte — das einzige auf dem Schirm, das zweimal
   // gelesen werden musste, und beim Aufräumen der Nachbarkarten hatte es sich
-  // auch noch die ganze Zeilenbreite geerbt.
+  // auch noch die ganze Zeilenbreite geerbt. Wann er dasteht, sagt checkSpalte.
   for (const a of buildAlertTasks()) {
-    put(0, {
+    put(checkSpalte(days, a.urgent), {
       kind: 'alert',
       species: '',
       label: a.text,
@@ -6798,43 +6815,54 @@ function buildWeekPlan() {
       task: { id: r.task.id, date: r.date, done: false }
     });
   }
+  // Unter dem Soll: eine Art, deren Bestellung nicht raus kann (empty), heute;
+  // die übrigen am Montag (checkSpalte). Ist heute Montag, stehen alle heute.
   const laborMin = buildLabMinTasks();
-  const gebuendelt = laborMin.length > LABMIN_GROUP_AT;
-  if (gebuendelt) {
-    put(0, {
-      kind: 'labgroup',
-      species: '',
-      label: t('todo.labGroup', { n: laborMin.length }),
-      // Die ersten Arten mit Namen, der Rest steht in den Zeilen darunter,
-      // sobald man aufklappt.
-      detail:
-        laborMin
-          .slice(0, 3)
-          .map((l) => l.name)
-          .join(', ') + (laborMin.length > 3 ? ' …' : ''),
-      bags: 0,
-      zone: '',
-      overdue: laborMin.some((l) => l.empty),
-      ready: true,
-      // Wie viele Zeilen diese eine vertritt, sagt PLAN_KINDS.labgroup.weight --
-      // ausgerechnet aus task.rows, die ohnehin hier stehen.
-      task: { rows: laborMin }
-    });
+  const laborJeTag = new Map();
+  for (const l of laborMin) {
+    const off = checkSpalte(days, l.empty);
+    if (!laborJeTag.has(off)) laborJeTag.set(off, []);
+    laborJeTag.get(off).push(l);
   }
-  for (const l of gebuendelt && !dashLabGroupOpen ? [] : laborMin) {
-    // Today, like the supply rows and for the same reason: a floor breached is
-    // not a dated job, it is a state, and it is only ever "still under".
-    put(0, {
-      kind: 'labmin',
-      species: l.name,
-      label: l.name,
-      detail: l.detail,
-      bags: 0,
-      zone: '',
-      overdue: l.empty,
-      ready: true,
-      task: l
-    });
+  for (const [off, rows] of laborJeTag) {
+    const gebuendelt = rows.length > LABMIN_GROUP_AT;
+    if (gebuendelt) {
+      put(off, {
+        kind: 'labgroup',
+        species: '',
+        label: t('todo.labGroup', { n: rows.length }),
+        // Die ersten Arten mit Namen, der Rest steht in den Zeilen darunter,
+        // sobald man aufklappt.
+        detail:
+          rows
+            .slice(0, 3)
+            .map((l) => l.name)
+            .join(', ') + (rows.length > 3 ? ' …' : ''),
+        bags: 0,
+        zone: '',
+        overdue: rows.some((l) => l.empty),
+        ready: true,
+        // Wie viele Zeilen diese eine vertritt, sagt PLAN_KINDS.labgroup.weight --
+        // ausgerechnet aus task.rows, die ohnehin hier stehen.
+        task: { rows }
+      });
+    }
+    for (const l of gebuendelt && !dashLabGroupOpen ? [] : rows) {
+      // A floor breached is not a dated job, it is a state, and it is only ever
+      // "still under": so it stands on the day it is looked at, today when it
+      // is urgent, else the Monday of the check.
+      put(off, {
+        kind: 'labmin',
+        species: l.name,
+        label: l.name,
+        detail: l.detail,
+        bags: 0,
+        zone: '',
+        overdue: l.empty,
+        ready: true,
+        task: l
+      });
+    }
   }
   for (const s of buildSupplyTasks()) {
     // Always today. This is not a dated job — it is a gap, and a gap is only
@@ -10090,9 +10118,25 @@ function brettImZelt() {
   return m;
 }
 
+// Der erste Check-Tag (brettRules.checkDay, 1 = Montag) um 0 Uhr Ortszeit, der
+// nicht vor `ms` liegt; in Kalendertagen, damit die Zeitumstellung nichts
+// verschiebt. Wortgleich mit db.brettCheckAb.
+function brettCheckAb(ms, tag = brettRules.checkDay) {
+  const d = new Date(ms);
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (m.getTime() < ms) m.setDate(m.getDate() + 1);
+  m.setDate(m.getDate() + ((tag - m.getDay() + 7) % 7));
+  return m.getTime();
+}
+function brettWocheSpaeter(ms) {
+  const d = new Date(ms);
+  d.setDate(d.getDate() + 7);
+  return d.getTime();
+}
 // Dieselben Regeln wie db.brettFristen, ohne Datenbank, damit der Test sie
 // gegen dieselben Fälle halten kann. limitAt: ab dann ist der Beutel über der
-// Zeit; outAt: dann bucht der Server ihn aus.
+// Zeit; askAt: ab diesem Montags-Check fragt die App (Inkubation, Körnerbrut);
+// outAt: dann bucht der Server ihn aus, eine Woche nach dem Check.
 function brettFristVon(p) {
   // Wie der Server: eine Sorte, die wir gerade nicht anbauen, hat keine Fristen.
   if (p.s && p.s.imProgramm === false) return null;
@@ -10102,7 +10146,7 @@ function brettFristVon(p) {
     if (!(p.s.tentMaxDays > 0)) return null;
     const since = Date.parse(p.since);
     const limitAt = conf >= since ? conf + p.rules.confirmDays * tag : since + p.s.tentMaxDays * tag;
-    return { kind: 'tent', limitAt, outAt: limitAt };
+    return { kind: 'tent', limitAt, askAt: null, outAt: limitAt };
   }
   if (p.role === 'incubation' || p.role === 'spawn') {
     const max = p.batchType === 'grain' ? p.s.grainMaxDays : p.s.incMaxDays;
@@ -10110,7 +10154,8 @@ function brettFristVon(p) {
     let limitAt = Date.parse(p.made) + max * tag;
     if (conf) limitAt = Math.max(limitAt, conf + p.rules.confirmDays * tag);
     const start = p.limitsSet ? Date.parse(p.limitsSet) : 0;
-    return { kind: 'inc', limitAt, outAt: Math.max(limitAt, start) + p.rules.graceDays * tag };
+    const askAt = brettCheckAb(Math.max(limitAt, start), p.rules.checkDay);
+    return { kind: 'inc', limitAt, askAt, outAt: brettWocheSpaeter(askAt) };
   }
   return null;
 }
@@ -10771,8 +10816,10 @@ async function brettAutoAntwort(ids, how) {
   }
 }
 
-// Je Platz und Charge die Beutel, die über ihrer Zeit stehen (Inkubation und
-// Körnerbrut; im Zelt bucht der Server gleich aus).
+// Je Platz und Charge die Beutel, nach denen der Montags-Check fragt: über ihrer
+// Zeit (Inkubation und Körnerbrut; im Zelt bucht der Server gleich aus), und
+// der Check, an dem sie dran sind, hat schon begonnen. Wer erst am Mittwoch über
+// die Zeit kommt, steht im nächsten Check, nicht gleich.
 function brettAlteGruppen(now) {
   const g = new Map();
   for (const [loc, list] of brettPlaetze()) {
@@ -10781,7 +10828,7 @@ function brettAlteGruppen(now) {
     for (const e of list) {
       const x = _brettInfo(e);
       const f = brettFrist(x);
-      if (!f || now.getTime() < f.limitAt) continue;
+      if (!f || f.askAt == null || now.getTime() < f.askAt) continue;
       const key = loc + '|' + x.batch;
       let k = g.get(key);
       if (!k) g.set(key, (k = { loc, batch: x.batch, b: x.b, made: x.made, outAt: f.outAt, xs: [] }));
@@ -10791,10 +10838,13 @@ function brettAlteGruppen(now) {
   }
   return [...g.values()].sort((a, b) => a.outAt - b.outAt);
 }
-// Was der Server ausgebucht hat, je Art, Zone und Tag zusammen.
-function brettAutoGruppen() {
+// Was der Server ausgebucht hat, je Art, Zone und Tag zusammen; im Montags-Check
+// ab dem ersten Check-Tag nach dem Ausbuchen. Nach einer Woche ohne Antwort
+// schließt der Server die Zeile selbst ("silent"), dann ist sie nicht mehr da.
+function brettAutoGruppen(now) {
   const g = new Map();
   for (const a of autoBookouts) {
+    if (now && brettCheckAb(Date.parse(a.created)) > now.getTime()) continue;
     const b = batchById(a.batch);
     const zone = toZone(a.loc);
     const key = (b ? b.strainId : '') + '|' + zone + '|' + String(a.created).slice(0, 10);
@@ -10881,40 +10931,8 @@ function renderWorkBretter() {
           .join('')
     );
   }
-  const alt = brettAlteGruppen(now);
-  if (alt.length) {
-    teile.push(
-      `<h3 class="wk-bretter-h">${esc(t('bretter.stale'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.staleHelp'))}</p>` +
-        alt
-          .map((g, i) => {
-            const art = g.b ? sorteName(g.b) : '';
-            return (
-              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${esc(brettPlatzName(g.loc))}: ${g.xs.length} ${esc(art)}</b>` +
-              `<span>${esc(t('bretter.staleRow', { made: fmtDtShort(g.made), out: fmtDtShort(new Date(g.outAt)) }))}</span></span>` +
-              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
-              `<button type="button" class="btn btn-sm btn-r" data-bretter-raus="${i}">${esc(t('brett.gone'))}</button></span></div>`
-            );
-          })
-          .join('')
-    );
-  }
-  const auto = brettAutoGruppen();
-  if (auto.length) {
-    teile.push(
-      `<h3 class="wk-bretter-h">${esc(t('bretter.auto'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.autoHelp'))}</p>` +
-        auto
-          .map((g, i) => {
-            const art = g.b ? sorteName(g.b) : '';
-            return (
-              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${g.ids.length} ${esc(art)}</b>` +
-              `<span>${esc(t('bretter.autoRow', { zone: zoneDisplayName(g.zone), d: fmtDtShort(g.created) }))}</span></span>` +
-              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-auto-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
-              `<button type="button" class="btn btn-sm" data-bretter-auto-ok="${i}">${esc(t('bretter.correct'))}</button></span></div>`
-            );
-          })
-          .join('')
-    );
-  }
+  // "Noch da?" und "Von selbst ausgebucht" stehen nicht mehr hier, jeden Tag,
+  // sondern einmal die Woche im Montags-Check darüber (renderMontagsCheck).
   // Im Zelt: je Zelt und Art die Zahl, gegen die Grenzen der Art. Antippen
   // öffnet Raus und Zählen; im Zelt gibt es kein Etikett zum Scannen.
   const imZelt = [];
@@ -10946,6 +10964,61 @@ function renderWorkBretter() {
           .map((r) => zeltKarteHtml(r.z, r.art, r.sid, r.n))
           .join('') +
         '</div>'
+    );
+  }
+  card.hidden = !teile.length;
+  box.innerHTML = teile.join('');
+  if (!box.dataset.bound) {
+    box.dataset.bound = '1';
+    box.addEventListener('click', brettStartKlick);
+  }
+  renderMontagsCheck(now);
+}
+
+// ── Startseite: Montags-Check ──
+// Einmal die Woche, was eine Antwort braucht: Beutel über ihrer Zeit ("Noch
+// da?") und was die App selbst ausgebucht hat. Die Karte erscheint am Montag und
+// bleibt, bis alles beantwortet ist; was in der Woche dazukommt, wartet auf den
+// nächsten Montag. Ohne Antwort bucht die App eine Woche nach dem Check aus,
+// und was sie ausgebucht hat, gilt nach einer Woche als "Stimmt". So steht keine
+// Warnung jeden Tag da, und die eine, die kommt, hat einen Termin.
+function renderMontagsCheck(now) {
+  const card = document.getElementById('wk-montag');
+  const box = document.getElementById('wk-montag-list');
+  if (!card || !box) return;
+  const teile = [];
+  const alt = brettAlteGruppen(now);
+  if (alt.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.stale'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.staleHelp'))}</p>` +
+        alt
+          .map((g, i) => {
+            const art = g.b ? sorteName(g.b) : '';
+            return (
+              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${esc(brettPlatzName(g.loc))}: ${g.xs.length} ${esc(art)}</b>` +
+              `<span>${esc(t('bretter.staleRow', { made: fmtDtShort(g.made), out: fmtDtShort(new Date(g.outAt)) }))}</span></span>` +
+              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
+              `<button type="button" class="btn btn-sm btn-r" data-bretter-raus="${i}">${esc(t('brett.gone'))}</button></span></div>`
+            );
+          })
+          .join('')
+    );
+  }
+  const auto = brettAutoGruppen(now);
+  if (auto.length) {
+    teile.push(
+      `<h3 class="wk-bretter-h">${esc(t('bretter.auto'))}</h3><p class="fs-meta wk-bretter-hint">${esc(t('bretter.autoHelp'))}</p>` +
+        auto
+          .map((g, i) => {
+            const art = g.b ? sorteName(g.b) : '';
+            return (
+              `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${g.ids.length} ${esc(art)}</b>` +
+              `<span>${esc(t('bretter.autoRow', { zone: zoneDisplayName(g.zone), d: fmtDtShort(g.created) }))}</span></span>` +
+              `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-auto-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
+              `<button type="button" class="btn btn-sm" data-bretter-auto-ok="${i}">${esc(t('bretter.correct'))}</button></span></div>`
+            );
+          })
+          .join('')
     );
   }
   card.hidden = !teile.length;

@@ -3152,10 +3152,22 @@
                the rhythm behind them, opens under the list from "Woche"
                (#wk-today); it lived on the Dashboard once and came here so that
                one screen answers both "what now" and "how". -->
-          <!-- Regale und Zelt (renderWorkBretter): welches Brett als Nächstes ins
-               Zelt geht, was auf keinem Brett steht, was über seiner Zeit ist,
-               was der Server ausgebucht hat, und je Art die Zahl im Zelt. Ohne
-               all das ist der Teil nicht da. -->
+          <!-- Montags-Check (renderMontagsCheck): einmal die Woche, was eine
+               Antwort braucht — Beutel über ihrer Zeit ("Noch da?") und was die
+               App selbst ausgebucht hat. Erscheint am Montag und bleibt, bis
+               alles beantwortet ist; sonst ist der Teil nicht da. -->
+          <section class="wk-teil wk-teil-montag" id="wk-montag" hidden>
+            <div class="wk-teil-kopf">
+              <h2 class="wk-teil-t" data-i18n="montag.title">Montags-Check</h2>
+            </div>
+            <p class="fs-meta wk-montag-hilfe" data-i18n="montag.help">
+              Einmal die Woche, was eine Antwort braucht. Ohne Antwort bucht die App eine Woche später aus.
+            </p>
+            <div id="wk-montag-list"></div>
+          </section>
+          <!-- Regale und Zelt (renderWorkBretter): welches Fach als Nächstes ins
+               Zelt geht, was in keinem Fach steht, und je Art die Zahl im Zelt.
+               Ohne all das ist der Teil nicht da. -->
           <section class="wk-teil wk-teil-bretter" id="wk-bretter" hidden>
             <div class="wk-teil-kopf">
               <h2 class="wk-teil-t" data-i18n="bretter.title">Regale und Fruchtzelt</h2>
