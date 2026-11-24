@@ -11080,6 +11080,12 @@ function rackEditOpen(rackId) {
   if (!r) return;
   _rackEdit = rackId;
   document.getElementById('m-rack-edit-title').textContent = zoneDisplayName(r.zoneId) + ' · ' + rackLabel(rackId);
+  // Wie viele Beutel auf dem Regal stehen; löschen lässt es sich nur leer.
+  const nR = Object.keys(getRackBags(rackId)).length;
+  const sub = document.getElementById('m-rack-edit-sub');
+  if (sub) sub.textContent = t('rackEdit.sub', { bags: tp('dash.bags', nR) });
+  const weg = document.getElementById('m-rack-edit-del');
+  if (weg) weg.hidden = nR > 0;
   document.getElementById('m-rack-edit-levels').value = String(r.levels || 0);
   const sel = document.getElementById('m-rack-edit-strain');
   sel.innerHTML =
@@ -11166,6 +11172,12 @@ function rackEditWire() {
     if (a === 'close') rackEditClose();
     else if (a === 'save') rackEditSave();
     else if (a === 'print' && _rackEdit) brettEtikettenDrucken(_rackEdit);
+    else if (a === 'delete' && _rackEdit) {
+      // Die Frage "Regal löschen?" kommt als eigenes Fenster: das Blatt geht zu.
+      const id = _rackEdit;
+      rackEditClose();
+      removeRack(id);
+    }
   });
 }
 
@@ -20873,6 +20885,29 @@ const ROLE_LABELS = {
   contaminated: 'zones.roleContaminated'
 };
 const ROLE_ORDER = ['spawn', 'incubation', 'fruiting', 'contaminated'];
+
+// Die Seite Zonen: je Raum eine Karte mit Namen, Zahl und einem Knopf
+// "Bearbeiten", seine Regale als Kacheln; ein Tipp auf eine Kachel öffnet das
+// Regal (Fächer, Art, Etiketten). Was selten gebraucht wird (umbenennen,
+// Höchstzahl, Reihenfolge, ein Regal dazu, der QR-Code, löschen), steht im
+// Blatt des Raums (zoneEditOpen). Vorher hatte jeder Raum sechs Knöpfe in
+// seiner Kopfzeile und jedes Regal zwei, und die Warnung "ohne Rack" schickte
+// Beutel auf ein Regal statt in ein Fach.
+//
+// Ein Raum für Kontamination erscheint nicht: ein kontaminierter Beutel wird
+// ausgebucht, er steht nirgends (siehe POST /api/contamination-reports).
+function zonenReihe() {
+  const rang = (z) => {
+    const i = ROLE_ORDER.indexOf(z.role);
+    return i < 0 ? ROLE_ORDER.length : i;
+  };
+  return zones
+    .filter((z) => z.role !== 'contaminated')
+    .sort(
+      (a, b) =>
+        rang(a) - rang(b) || (a.sortOrder || 0) - (b.sortOrder || 0) || String(a.name).localeCompare(String(b.name))
+    );
+}
 function renderZones() {
   const el = document.getElementById('zones-list');
   if (!el) return;
@@ -20884,149 +20919,159 @@ function renderZones() {
     el.innerHTML = '<div class="empty">' + esc(t(datenGeladen ? 'zones.empty' : 'common.loading')) + '</div>';
     return;
   }
-  // Group zones by role in canonical order; unknown roles go last.
-  const groups = {};
-  ROLE_ORDER.forEach((r) => {
-    groups[r] = [];
-  });
-  const extraRoles = [];
-  zones.forEach((z) => {
-    if (groups[z.role]) groups[z.role].push(z);
-    else {
-      if (!groups[z.role]) {
-        groups[z.role] = [];
-        extraRoles.push(z.role);
-      }
-      groups[z.role].push(z);
-    }
-  });
-  // Within each group: sort by sortOrder (fallback to name for stability).
-  Object.keys(groups).forEach((role) => {
-    groups[role].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name));
-  });
-  const renderZone = (z) => {
-    const zoneBags = getZoneBags(z.id);
-    const bagCount = Object.keys(zoneBags).length;
-    const rackIds = new Set(z.racks.map((r) => r.id));
-    // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
-    const directCount = Object.values(zoneBags).filter((b) => !rackIds.has(String(b.loc).split(':')[0])).length;
-    const rackHtml = z.racks.length
-      ? z.racks
-          .map((r) => {
-            const rBags = Object.keys(getRackBags(r.id)).length;
-            const art = brettArt(r.strainId);
-            const bretter =
-              r.levels > 0
-                ? ` <span class="zone-rack-bretter">${esc(tp('rackEdit.chip', r.levels))}${art ? ' · ' + esc(art.name) : ''}</span>`
-                : '';
-            return `<span class="zone-rack-chip">${esc(r.id)} <span style="color:var(--c-text-muted)">(${rBags})</span>${bretter}<button class="btn btn-sm zone-rack-bretter-btn" data-action="rack-shelves" data-rack="${esc(r.id)}">${esc(t('rackEdit.btn'))}</button>${rBags === 0 ? `<button class="btn btn-sm btn-r zone-rack-del" data-action="del-rack" data-rack="${esc(r.id)}" title="${esc(t('zones.delete'))}">&times;</button>` : ''}</span>`;
-          })
-          .join('')
-      : '<span class="fs-xs" style="color:var(--c-text-muted)">' + t('zones.noRacks') + '</span>';
-    return `<div class="zone-row" data-find="zone:${esc(z.id)}" data-zone-id="${esc(z.id)}" data-zone-role="${esc(z.role)}" style="border-left:4px solid ${safeColor(z.color)}">
-      <div class="zone-row-header">
-        <span class="zone-drag-handle" draggable="true" title="${esc(t('zones.dragToReorder'))}" aria-label="${esc(t('zones.dragToReorder'))}">\u22ee\u22ee</span>
-        <span class="zone-row-name">${esc(z.name)}</span>
-        <span class="badge">${esc(t(ROLE_LABELS[z.role]) || z.role)}</span>
-        <span class="fs-xs" style="color:var(--c-text-muted)">${z.maxCapacity ? bagCount + ' / ' + z.maxCapacity + ' Bags' : tp('dash.bags', bagCount)}</span>
-        ${directCount > 0 ? `<span class="badge zone-direct-badge" title="${esc(t('zones.directBagsHint'))}">\u26a0 ${esc(t('zones.directBags', { count: directCount }))}</span>` : ''}
-        ${directCount > 0 && z.racks.length ? `<button class="btn btn-sm fs-micro" data-action="bulk-move" data-zone="${esc(z.id)}" style="color:var(--c-red-dark);font-weight:600">${esc(t('zones.moveToRack'))}</button>` : ''}
-        <span style="flex:1"></span>
-        <button class="btn btn-sm fs-xs" data-action="rename-zone" data-zone="${esc(z.id)}">${esc(t('batch.zones.rename'))}</button>
-        <button class="btn btn-sm fs-xs" data-action="zone-capacity" data-zone="${esc(z.id)}" title="${esc(z.maxCapacity ? z.name + ': ' + bagCount + ' / ' + z.maxCapacity : t('zones.capacityNone'))}">${esc(t('zones.capacity'))}</button>
-        <button class="btn btn-sm fs-xs" data-action="add-rack" data-zone="${esc(z.id)}">${esc(t('zones.addRack'))}</button>
-        <button class="btn btn-sm fs-xs" data-action="toggle-qr" data-zone="${esc(z.id)}">${esc(t('zones.showQr'))}</button>
-        <button class="btn btn-sm fs-xs" data-action="print-zone-qr" data-zone="${esc(z.id)}">${esc(t('zones.printQr'))}</button>
-        ${
-          bagCount === 0
-            ? `<button class="btn btn-sm btn-r fs-xs" data-action="del-zone" data-zone="${esc(z.id)}">${t('zones.delete')}</button>`
-            : `<button class="btn btn-sm btn-r fs-xs" disabled title="${esc(t('zones.hasBags', { count: bagCount }))}" style="opacity:.45;cursor:not-allowed">${t('zones.delete')}</button>`
-        }
-      </div>
-      <div class="zone-row-racks">${rackHtml}</div>
-      <div class="zone-qr-panel" id="zone-qr-${esc(z.id)}" style="display:none"></div>
-    </div>`;
-  };
-  const orderedRoles = [...ROLE_ORDER, ...extraRoles];
-  el.innerHTML = orderedRoles
-    .map((role) => {
-      const zs = groups[role];
-      if (!zs || !zs.length) return '';
-      const label = esc(t(ROLE_LABELS[role]) || role);
-      const header = `<div class="zone-group-header">${label}</div>`;
-      return header + zs.map(renderZone).join('');
+  el.innerHTML = zonenReihe().map(zonenKarte).join('');
+}
+// Eine Karte: Raum, Zahl der Beutel, "Bearbeiten"; in einem Raum mit Fächern
+// die Beutel, die noch in keinem Fach stehen (ein Tipp öffnet ihre Liste); dann
+// die Regale.
+function zonenKarte(z) {
+  const n = Object.keys(getZoneBags(z.id)).length;
+  const frei = brettZoneMitBrettern(z) ? brettOhne(z.id).length : 0;
+  const kacheln = z.racks
+    .map((r) => {
+      const nR = Object.keys(getRackBags(r.id)).length;
+      const art = brettArt(r.strainId);
+      return (
+        `<button type="button" class="zone-tile" data-action="rack-open" data-rack="${esc(r.id)}">` +
+        `<b>${esc(rackLabel(r.id))}</b>` +
+        `<span>${esc(r.levels > 0 ? tp('rackEdit.chip', r.levels) : t('zones.noShelves'))}</span>` +
+        `<span>${esc(tp('dash.bags', nR))}</span>` +
+        `<span class="zone-tile-art${art ? '' : ' zone-tile-leer'}">${esc(art ? art.name : t('zones.noStrain'))}</span>` +
+        '</button>'
+      );
     })
     .join('');
+  const unten = z.racks.length
+    ? `<div class="zone-tiles">${kacheln}</div>`
+    : `<p class="zone-hint">${esc(t(z.role === 'fruiting' ? 'zones.tentHint' : 'zones.noRacks'))}</p>`;
+  return (
+    `<div class="zone-card" data-find="zone:${esc(z.id)}" data-zone-id="${esc(z.id)}" style="--zc:${safeColor(z.color)}">` +
+    '<div class="zone-card-h">' +
+    `<span class="zone-card-name">${esc(zoneDisplayName(z.id))}</span>` +
+    `<span class="zone-card-n">${esc(tp('dash.bags', n))}</span>` +
+    `<button type="button" class="btn btn-sm" data-action="zone-open" data-zone="${esc(z.id)}">${esc(t('zones.edit'))}</button>` +
+    '</div>' +
+    (frei
+      ? `<button type="button" class="zone-frei" data-action="frei-open" data-zone="${esc(z.id)}">${esc(t('zones.freeN', { n: frei }))} ›</button>`
+      : '') +
+    unten +
+    '</div>'
+  );
 }
-// Drag-and-drop state for zone reordering.
-let draggedZoneId = null;
-let draggedZoneRole = null;
-function clearZoneDropHints() {
-  document.querySelectorAll('.zone-row.zone-drop-before,.zone-row.zone-drop-after').forEach((r) => {
-    r.classList.remove('zone-drop-before', 'zone-drop-after');
+
+// ── Das Blatt eines Raums ("Bearbeiten") ──
+let _zoneEdit = null; // zone id
+function zoneEditOpen(zoneId) {
+  if (!zones.some((x) => x.id === zoneId)) return;
+  _zoneEdit = zoneId;
+  zoneEditZeichne();
+  document.getElementById('m-zone-edit').classList.add('open');
+}
+function zoneEditClose() {
+  const m = document.getElementById('m-zone-edit');
+  if (m) m.classList.remove('open');
+  _zoneEdit = null;
+}
+function zoneEditZeichne() {
+  const z = zones.find((x) => x.id === _zoneEdit);
+  if (!z) {
+    zoneEditClose();
+    return;
+  }
+  const n = Object.keys(getZoneBags(z.id)).length;
+  const faecher = z.racks.reduce((s, r) => s + (r.levels > 0 ? r.levels : 0), 0);
+  document.getElementById('m-zone-edit-title').textContent = zoneDisplayName(z.id);
+  document.getElementById('m-zone-edit-sub').textContent = [
+    tp('dash.bags', n),
+    tp('zones.racksN', z.racks.length),
+    faecher ? tp('rackEdit.chip', faecher) : ''
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  // Nach oben und unten nur unter Räumen derselben Art: so ordnet die Seite.
+  const reihe = zonenReihe().filter((x) => x.role === z.role);
+  const i = reihe.findIndex((x) => x.id === z.id);
+  const knopf = (a, label, aus) =>
+    `<button type="button" class="btn btn-sm${a === 'delete' ? ' btn-r' : ''}" data-zone-edit="${a}"${aus ? ' disabled' : ''}>${esc(label)}</button>`;
+  const gruppe = (k) => `<div class="zone-sheet-grp">${esc(t(k))}</div>`;
+  document.getElementById('m-zone-edit-body').innerHTML =
+    gruppe('zones.grpRoom') +
+    '<div class="zone-sheet-row">' +
+    knopf('rename', t('batch.zones.rename')) +
+    knopf('capacity', t('zones.capacityBtn', { n: z.maxCapacity || t('zones.capacityNone') })) +
+    knopf('up', t('zones.up'), i <= 0) +
+    knopf('down', t('zones.down'), i < 0 || i >= reihe.length - 1) +
+    '</div>' +
+    gruppe('zones.grpRacks') +
+    `<div class="zone-sheet-row">${knopf('add-rack', t('zones.addRack'))}</div>` +
+    gruppe('zones.grpLabel') +
+    `<div class="zone-sheet-row">${knopf('qr', t('zones.printQr'))}</div>` +
+    (faecher ? `<p class="zone-sheet-note">${esc(t('zones.qrHint'))}</p>` : '') +
+    gruppe('zones.grpDelete') +
+    `<div class="zone-sheet-row">${knopf('delete', t('zones.deleteRoom'), n > 0)}</div>` +
+    (n > 0 ? `<p class="zone-sheet-note">${esc(t('zones.deleteBlocked', { n }))}</p>` : '');
+}
+function zoneEditWire() {
+  const m = document.getElementById('m-zone-edit');
+  if (!m) return;
+  m.addEventListener('click', (ev) => {
+    if (ev.target === m) {
+      zoneEditClose();
+      return;
+    }
+    const el = ev.target.closest('[data-zone-edit]');
+    if (!el || el.disabled) return;
+    const a = el.dataset.zoneEdit;
+    const id = _zoneEdit;
+    if (a === 'close' || !id) {
+      zoneEditClose();
+      return;
+    }
+    if (a === 'up' || a === 'down') {
+      zoneSchiebe(id, a === 'up' ? -1 : 1);
+      return;
+    }
+    // Die übrigen stellen eine eigene Frage oder drucken: das Blatt geht vorher zu.
+    zoneEditClose();
+    if (a === 'rename') renameZone(id);
+    else if (a === 'capacity') editZoneCapacity(id);
+    else if (a === 'add-rack') addRackToZone(id);
+    else if (a === 'qr') printZoneQrBrowser(id);
+    else if (a === 'delete') removeZone(id);
   });
 }
-function onZoneDragStart(e) {
-  const handle = e.target.closest('.zone-drag-handle');
-  if (!handle) {
-    return;
-  }
-  const row = handle.closest('.zone-row');
-  if (!row) {
-    return;
-  }
-  draggedZoneId = row.dataset.zoneId;
-  draggedZoneRole = row.dataset.zoneRole;
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move';
-    try {
-      e.dataTransfer.setData('text/plain', draggedZoneId);
-    } catch (_) {}
-    try {
-      const rect = row.getBoundingClientRect();
-      e.dataTransfer.setDragImage(row, e.clientX - rect.left, e.clientY - rect.top);
-    } catch (_) {}
-  }
-  // Delay the dragging class so the browser snapshots the row before we dim it.
-  setTimeout(() => {
-    row.classList.add('zone-dragging');
-  }, 0);
+// Ein Raum eine Stelle nach oben oder unten, unter den Räumen derselben Art.
+// reorderZoneWithinRole stellt die Reihe sofort um und speichert dann; das
+// Blatt zeigt die neue Stelle gleich.
+function zoneSchiebe(zoneId, schritt) {
+  const z = zones.find((x) => x.id === zoneId);
+  if (!z) return;
+  const reihe = zonenReihe().filter((x) => x.role === z.role);
+  const i = reihe.findIndex((x) => x.id === zoneId);
+  const ziel = i < 0 ? null : reihe[i + schritt];
+  if (!ziel) return;
+  reorderZoneWithinRole(zoneId, ziel.id, schritt < 0, z.role);
+  if (_zoneEdit === zoneId) zoneEditZeichne();
 }
-function onZoneDragOver(e) {
-  if (!draggedZoneId) return;
-  const row = e.target.closest('.zone-row');
-  if (!row || row.dataset.zoneRole !== draggedZoneRole || row.dataset.zoneId === draggedZoneId) {
-    clearZoneDropHints();
-    return;
-  }
-  e.preventDefault();
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-  const rect = row.getBoundingClientRect();
-  const before = e.clientY - rect.top < rect.height / 2;
-  clearZoneDropHints();
-  row.classList.add(before ? 'zone-drop-before' : 'zone-drop-after');
+
+// ── Einen Raum anlegen ("+ Raum") ──
+function zoneAddOpen() {
+  const m = document.getElementById('m-zone-add');
+  if (!m) return;
+  m.classList.add('open');
+  const f = document.getElementById('zone-name');
+  if (f) f.focus();
 }
-function onZoneDrop(e) {
-  if (!draggedZoneId) return;
-  const row = e.target.closest('.zone-row');
-  if (!row || row.dataset.zoneRole !== draggedZoneRole || row.dataset.zoneId === draggedZoneId) {
-    clearZoneDropHints();
-    return;
-  }
-  e.preventDefault();
-  const rect = row.getBoundingClientRect();
-  const before = e.clientY - rect.top < rect.height / 2;
-  const targetId = row.dataset.zoneId;
-  const sourceId = draggedZoneId;
-  const role = draggedZoneRole;
-  clearZoneDropHints();
-  reorderZoneWithinRole(sourceId, targetId, before, role);
+function zoneAddClose() {
+  const m = document.getElementById('m-zone-add');
+  if (m) m.classList.remove('open');
 }
-function onZoneDragEnd() {
-  document.querySelectorAll('.zone-row.zone-dragging').forEach((r) => r.classList.remove('zone-dragging'));
-  clearZoneDropHints();
-  draggedZoneId = null;
-  draggedZoneRole = null;
+function zoneAddWire() {
+  const m = document.getElementById('m-zone-add');
+  if (!m) return;
+  m.addEventListener('click', (ev) => {
+    if (ev.target === m || ev.target.closest('[data-zone-add="close"]')) zoneAddClose();
+  });
 }
 async function reorderZoneWithinRole(sourceId, targetId, before, role) {
   const sameRole = zones
@@ -21162,6 +21207,7 @@ async function addZone() {
     rebuildZoneConstants();
     renderZones();
     renderStatus();
+    zoneAddClose();
     document.getElementById('zone-name').value = '';
     document.getElementById('zone-racks').value = '';
     document.getElementById('zone-color').value = ZONE_ROLE_COLOR.fruiting;
@@ -21197,7 +21243,7 @@ function renameZone(id) {
 function editZoneCapacity(id) {
   const z = zones.find((x) => x.id === id);
   if (!z) return;
-  prompt2(t('zones.capacityPrompt', { zone: z.name }), z.maxCapacity ? String(z.maxCapacity) : '', function (raw) {
+  prompt2(t('zones.capacityPrompt', { zone: zoneDisplayName(id) }), z.maxCapacity ? String(z.maxCapacity) : '', function (raw) {
     if (raw === null || raw === undefined) return;
     const s = String(raw).trim();
     // '' clears; anything else must be a whole, non-negative number. Number('')
@@ -21229,7 +21275,7 @@ function editZoneCapacity(id) {
 function removeZone(id) {
   const z = zones.find((x) => x.id === id);
   if (!z) return;
-  confirm2(t('zones.deleteTitle'), t('zones.deleteMsg', { name: z.name }), t('zones.delete'), async () => {
+  confirm2(t('zones.deleteTitle'), t('zones.deleteMsg', { name: zoneDisplayName(id) }), t('zones.delete'), async () => {
     const res = await apiDelete('/api/zones/' + encodeURIComponent(id));
     if (res.error) {
       toast(res.error, 'err');
@@ -21269,7 +21315,9 @@ function addRackToZone(zoneId) {
   });
 }
 function removeRack(rackId) {
-  confirm2(t('zones.rackDeleteTitle'), t('zones.rackDeleteMsg', { name: rackId }), t('zones.delete'), () => {
+  const r = rackVon(rackId);
+  const name = (r ? zoneDisplayName(r.zoneId) + ' · ' : '') + rackLabel(rackId);
+  confirm2(t('zones.rackDeleteTitle'), t('zones.rackDeleteMsg', { name }), t('zones.delete'), () => {
     apiDelete('/api/racks/' + encodeURIComponent(rackId)).then((res) => {
       if (res.error) {
         toast(res.error, 'err');
@@ -21284,111 +21332,15 @@ function removeRack(rackId) {
     });
   });
 }
-function bulkMoveToRack(zoneId) {
-  const z = zones.find((x) => x.id === zoneId);
-  if (!z || !z.racks.length) return;
-  const zoneBags = getZoneBags(zoneId);
-  const rackIds = new Set(z.racks.map((r) => r.id));
-  // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
-  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(String(b.loc).split(':')[0]));
-  if (!directBags.length) return;
-  const m = document.getElementById('m-locmove');
-  document.getElementById('lm-title').textContent = t('zones.moveToRackTitle', { count: directBags.length });
-  document.getElementById('lm-info').textContent = zoneDisplayName(zoneId);
-  document.getElementById('lm-confirm').style.display = 'none';
-  const grid = document.getElementById('lm-grid');
-  grid.style.display = 'flex';
-  grid.innerHTML = z.racks
-    .map((r) => {
-      const rBags = Object.keys(getRackBags(r.id)).length;
-      return `<button class="btn btn-sm fs-meta" data-action="bulk-rack-target" data-zone="${esc(zoneId)}" data-rack="${esc(r.id)}" style="padding:8px 12px">${esc(r.id)} (${rBags})</button>`;
-    })
-    .join('');
-  m.classList.add('open');
-}
-async function executeBulkMoveToRack(zoneId, rackId) {
-  const z = zones.find((x) => x.id === zoneId);
-  if (!z) return;
-  const zoneBags = getZoneBags(zoneId);
-  const rackIds = new Set(z.racks.map((r) => r.id));
-  // Ein Beutel auf einem Brett ("INC_R1:2") steht auf seinem Regal.
-  const directBags = Object.entries(zoneBags).filter(([, b]) => !rackIds.has(String(b.loc).split(':')[0]));
-  if (!directBags.length) return;
-  const entries = directBags.map(([bagId, b]) => ({
-    action: 'MOVE',
-    batch: b.batchId,
-    bag: bagId,
-    from: b.loc,
-    to: rackId,
-    species: b.species,
-    strain: b.strain,
-    time: new Date().toISOString(),
-    client_uuid: newScanUuid(),
-    // I-12: optimistic concurrency snapshot for offline-queue replays.
-    expected_current_zone: b.loc ? toZone(b.loc) : null
-  }));
-  const res = await apiPost('/api/scan-log', { entries });
-  if (handleZoneMismatch(res, entries)) return; // I-12
-  if (res.error) {
-    toast(res.error, 'err');
-    return;
-  }
-  entries.forEach((e) => scanLog.push(e));
-  document.getElementById('m-locmove').classList.remove('open');
-  renderZones();
-  renderStatus();
-  setFb('ok', t('zones.movedToRack', { count: directBags.length, rack: rackId }));
-}
-
 // ─── ZONE QR CODES ──────────────────────────────────────────
-async function renderZoneQrPanel(zoneId) {
-  const panel = document.getElementById('zone-qr-' + zoneId);
-  if (!panel) return;
-  // Toggle if already loaded
-  if (panel.dataset.loaded) {
-    const show = panel.style.display === 'none';
-    panel.style.display = show ? '' : 'none';
-    const btn = panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
-    if (btn) btn.textContent = show ? t('zones.hideQr') : t('zones.showQr');
-    return;
-  }
-  panel.style.display = '';
-  panel.dataset.loaded = '1';
-  const btn = panel.closest('.zone-row').querySelector('[data-action="toggle-qr"]');
-  if (btn) btn.textContent = t('zones.hideQr');
-  const z = zones.find((x) => x.id === zoneId);
-  if (!z) return;
-  const items = [zoneId, ...z.racks.map((r) => r.id)];
-  const grid = document.createElement('div');
-  grid.className = 'zone-qr-grid';
-  for (const val of items) {
-    const cell = document.createElement('div');
-    cell.className = 'zone-qr-cell';
-    const img = await makeQR(val);
-    if (img) {
-      img.style.cssText = 'width:80px;height:80px';
-      cell.appendChild(img);
-    }
-    const lbl = document.createElement('div');
-    lbl.className = 'zone-qr-label';
-    lbl.textContent = val;
-    cell.appendChild(lbl);
-    grid.appendChild(cell);
-  }
-  panel.innerHTML = '';
-  panel.appendChild(grid);
-}
-
+// Der QR-Code eines Raums, mit den Regalen, die keine Fächer haben. Ein Regal
+// mit Fächern braucht keinen eigenen: jedes Fach hat sein Etikett, und ein
+// Beutel auf dem Regal selbst stünde in keinem Fach.
 async function printZoneQrBrowser(zoneId) {
   const z = zones.find((x) => x.id === zoneId);
   if (!z) return;
-  const items = [zoneId, ...z.racks.map((r) => r.id)];
-  await printQrSheet(items, z.name);
-}
-
-async function printAllZoneQrBrowser() {
-  const items = [...ZONES, ...ALL_RACKS];
-  await printQrSheet(items, 'All Zones');
+  const items = [zoneId, ...z.racks.filter((r) => !(r.levels > 0)).map((r) => r.id)];
+  await printQrSheet(items, zoneDisplayName(zoneId));
 }
 
 async function printQrSheet(items, title) {
@@ -28217,8 +28169,8 @@ function _crOpenForm(keep) {
       b.classList.toggle('active', b.dataset.sev === 'minor');
     });
     const autoMoveEl = document.getElementById('cr-auto-move');
-    // Kontaminiert heißt raus aus dem Bestand: der Block zieht in die
-    // Kontaminationszone, außer jemand nimmt den Haken unter "Mehr" heraus.
+    // Kontaminiert heißt raus aus dem Bestand: der Block wird ausgebucht, als
+    // Kontamination gezeichnet, außer jemand nimmt den Haken unter "Mehr" heraus.
     if (autoMoveEl) autoMoveEl.checked = true;
     // "Mehr" geht jedes Mal zu auf: ein neuer Bericht fängt schlank an.
     const mehr = document.getElementById('cr-more');
@@ -28643,6 +28595,14 @@ function crReportBags() {
   }));
 }
 
+// Wie viele Beutel ein Bericht ausgebucht hat. bookedOutCount sagt es der
+// Server; eine Antwort ohne das Feld (ein Server von vorher) hat nur umgezogen.
+function _crAusgebucht(r) {
+  if (!r) return 0;
+  if (typeof r.bookedOutCount === 'number') return r.bookedOutCount;
+  return r.autoMovedCount || (r.autoMovedScanId ? 1 : 0);
+}
+
 async function _crSubmit() {
   // Alle Beutel wieder aus der Meldung genommen und trotzdem gesendet: ohne
   // Beutel und ohne Charge wäre das ein Bericht über nichts, und niemand könnte
@@ -28677,7 +28637,7 @@ async function _crSubmit() {
     } else if (bags.length > 1) {
       // Eine ganze Reihe auf einmal: die Nummer eines einzelnen Berichts sagt
       // hier nichts, die Anzahl schon.
-      const moved = r.autoMovedCount || 0;
+      const moved = _crAusgebucht(r);
       setFb(
         'ok',
         moved
@@ -28685,9 +28645,9 @@ async function _crSubmit() {
           : t('contam.reportsSaved', { n: bags.length })
       );
     } else {
-      // If the server actually moved the bag to CONTAM, surface that in the
-      // toast so the worker isn't surprised by the new scan-log entry.
-      const msgKey = r.autoMovedScanId ? 'contam.reportSavedAutoMoved' : 'contam.reportSaved';
+      // Hat der Server den Beutel ausgebucht, sagt die Quittung das, damit
+      // niemand ihn danach noch im Regal sucht.
+      const msgKey = _crAusgebucht(r) ? 'contam.reportSavedAutoMoved' : 'contam.reportSaved';
       setFb('ok', t(msgKey, { id: r.id, photos: (r.photoIds || []).length }));
       // Refresh browse view if it's the active sub-tab
       if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
@@ -36419,6 +36379,8 @@ const _Z_SCHLIESSEN = {
   'm-shelf': () => shelfSheetClose(),
   'm-brett': () => brettZu(),
   'm-rack-edit': () => rackEditClose(),
+  'm-zone-edit': () => zoneEditClose(),
+  'm-zone-add': () => zoneAddClose(),
   'm-labfach': () => lfClose(),
   'm-kbz': () => kbzClose(),
   'm-lb': () => lbSheetClose(),
@@ -37068,18 +37030,6 @@ function initEventListeners() {
   $('m-move-batch').addEventListener('click', function (e) {
     if (e.target === this && !_zpMandatory()) this.classList.remove('open');
   });
-  // Delegated actions for the m-locmove modal. The dashboard bag-move picker no
-  // longer uses it (it shares _openZonePicker now); the Zonen page still reuses
-  // this modal for its "move loose bags into a rack" grid.
-  document.getElementById('m-locmove').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    switch (btn.dataset.action) {
-      case 'bulk-rack-target':
-        executeBulkMoveToRack(btn.dataset.zone, btn.dataset.rack);
-        break;
-    }
-  });
   $('btn-10').addEventListener('click', locRemoveSelected);
   $('cls-11').addEventListener('click', () => {
     document.getElementById('m-baginfo').classList.remove('open');
@@ -37399,35 +37349,23 @@ function initEventListeners() {
     const weg = e.target.closest('[data-action="own-del"]');
     if (weg) delOwnTask(weg.dataset.id);
   });
-  $('btn-print-all-zone-qr').addEventListener('click', printAllZoneQrBrowser);
+  $('btn-zone-add-open').addEventListener('click', zoneAddOpen);
+  zoneAddWire();
+  zoneEditWire();
   $('zone-role').addEventListener('change', function () {
     const c = ZONE_ROLE_COLOR[this.value];
     if (c) document.getElementById('zone-color').value = c;
   });
-  // Zone list event delegation (CSP blocks inline onclick)
+  // Die Seite Zonen (CSP verbietet onclick im Markup): "Bearbeiten" öffnet das
+  // Blatt des Raums, eine Kachel ihr Regal, "in keinem Fach" die Liste dieser
+  // Beutel, dieselbe wie auf der Arbeitsseite.
   $('zones-list').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
-    if (action === 'del-zone') removeZone(btn.dataset.zone);
-    else if (action === 'rename-zone') renameZone(btn.dataset.zone);
-    else if (action === 'zone-capacity') editZoneCapacity(btn.dataset.zone);
-    else if (action === 'add-rack') addRackToZone(btn.dataset.zone);
-    else if (action === 'del-rack') removeRack(btn.dataset.rack);
-    else if (action === 'rack-shelves') rackEditOpen(btn.dataset.rack);
-    else if (action === 'toggle-qr') renderZoneQrPanel(btn.dataset.zone);
-    else if (action === 'print-zone-qr') printZoneQrBrowser(btn.dataset.zone);
-    else if (action === 'bulk-move') bulkMoveToRack(btn.dataset.zone);
-  });
-  // Drag-and-drop zone reordering.
-  const zonesList = $('zones-list');
-  zonesList.addEventListener('dragstart', onZoneDragStart);
-  zonesList.addEventListener('dragover', onZoneDragOver);
-  zonesList.addEventListener('drop', onZoneDrop);
-  zonesList.addEventListener('dragend', onZoneDragEnd);
-  zonesList.addEventListener('dragleave', (e) => {
-    // Clear hints only when leaving the list entirely, not when moving between rows.
-    if (!zonesList.contains(e.relatedTarget)) clearZoneDropHints();
+    if (action === 'zone-open') zoneEditOpen(btn.dataset.zone);
+    else if (action === 'rack-open') rackEditOpen(btn.dataset.rack);
+    else if (action === 'frei-open') brettOeffne({ kind: 'frei', zone: btn.dataset.zone });
   });
   $('n-print').addEventListener('click', () => {
     go('print', 'n-print');

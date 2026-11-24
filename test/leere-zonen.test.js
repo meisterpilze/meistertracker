@@ -17,7 +17,7 @@ const { quelle } = require('./helpers/quelle');
 const SRC = quelle();
 
 function hebeFunktion(name) {
-  const re = new RegExp('^function ' + name + '\\(\\) \\{[\\s\\S]*?\\r?\\n\\}', 'm');
+  const re = new RegExp('^function ' + name + '\\([^)]*\\) \\{[\\s\\S]*?\\r?\\n\\}', 'm');
   const m = SRC.match(re);
   assert.ok(m, name + '() nicht in app.js gefunden — der Test muss mitgeführt werden');
   return m[0];
@@ -42,6 +42,11 @@ function umgebung({ zones, datenGeladen }) {
         const getRackBags = () => ({});
         const safeColor = (c) => c || '#000';
         const tp = (k) => k;
+        const brettZoneMitBrettern = () => false;
+        const brettOhne = () => [];
+        const brettArt = () => null;
+        const rackLabel = (id) => id;
+        const zoneDisplayName = (id) => id;
         ${extra}
         ${code}
         ${name}();
@@ -53,24 +58,27 @@ function umgebung({ zones, datenGeladen }) {
 
 describe('leere Zonenliste', () => {
   const ZONE = { id: 'SPAWN', name: 'Spawn', role: 'spawn', racks: [], sortOrder: 1 };
+  // renderZones zeichnet jede Karte mit zonenKarte, in der Reihe von zonenReihe.
+  const LISTE = ['zonenReihe', 'zonenKarte', 'renderZones'].map(hebeFunktion).join('\n');
 
   it('sagt vor der ersten Antwort nur, dass geladen wird', () => {
     const u = umgebung({ zones: [], datenGeladen: false });
-    const html = u.lauf(hebeFunktion('renderZones'), 'renderZones');
+    const html = u.lauf(LISTE, 'renderZones');
     assert.match(html, /common\.loading/);
     assert.doesNotMatch(html, /zones\.empty/, 'ohne Daten keine Aussage über die Daten');
   });
 
   it('sagt erst nach der Antwort, dass keine Zone angelegt ist', () => {
     const u = umgebung({ zones: [], datenGeladen: true });
-    const html = u.lauf(hebeFunktion('renderZones'), 'renderZones');
+    const html = u.lauf(LISTE, 'renderZones');
     assert.match(html, /zones\.empty/);
   });
 
   it('zeichnet die Liste, sobald es Zonen gibt', () => {
     const u = umgebung({ zones: [ZONE], datenGeladen: true });
-    const html = u.lauf(hebeFunktion('renderZones'), 'renderZones');
+    const html = u.lauf(LISTE, 'renderZones');
     assert.doesNotMatch(html, /zones\.empty|common\.loading/);
+    assert.match(html, /zone-card/);
   });
 
   // Dasselbe auf der Arbeitsgang-Seite, die dieselbe leere Liste anders

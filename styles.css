@@ -7679,126 +7679,118 @@ body:has(#m-camscan.open) .update-bar {
   display: none;
 }
 
-/* Zone management */
-.zone-row {
-  padding: 10px 12px;
-  border-radius: 8px;
+/* Zonen: je Raum eine Karte, die Regale als Kacheln (renderZones), dazu die
+   Blätter "Bearbeiten" (m-zone-edit) und "+ Raum" (m-zone-add). Schriftgrößen
+   nur aus den Tokens: auf dem Telefon nie unter 13px. */
+.zonen-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 2px 12px;
+}
+.zonen-kopf .sec {
+  margin: 0;
+}
+.zone-card {
   background: var(--c-surface);
-  margin-bottom: 8px;
-  position: relative;
-}
-.zone-row-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.zone-row-name {
-  font-weight: 600;
-  font-size: 0.875rem;
-}
-.zone-row-racks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-}
-.zone-rack-chip {
-  font-size: max(0.6875rem, var(--fs-min));
-  font-family: var(--ff-mono);
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--c-border-light);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.zone-rack-del {
-  padding: 1px 4px !important;
-  font-size: max(0.5625rem, var(--fs-min)) !important;
-  margin-left: 4px;
-  line-height: 1;
-}
-.zone-group-header {
-  font-size: max(0.6875rem, var(--fs-min));
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--c-text-muted);
-  padding: 14px 4px 6px;
-  border-bottom: 1px solid var(--c-border-light);
-  margin-bottom: 6px;
-}
-.zone-group-header:first-child {
-  padding-top: 4px;
-}
-.zone-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 22px;
-  margin-right: 2px;
-  font-size: 0.875rem;
-  font-weight: 700;
-  letter-spacing: -2px;
-  color: var(--c-text-muted);
-  cursor: grab;
-  user-select: none;
-  border-radius: 3px;
-}
-.zone-drag-handle:hover {
-  background: var(--c-border-light);
-  color: var(--c-text);
-}
-.zone-drag-handle:active {
-  cursor: grabbing;
-}
-.zone-row.zone-dragging {
-  opacity: 0.4;
-}
-.zone-row.zone-drop-before {
-  box-shadow: inset 0 4px 0 0 var(--c-primary);
-}
-.zone-row.zone-drop-after {
-  box-shadow: inset 0 -4px 0 0 var(--c-primary);
-}
-.zone-direct-badge {
-  background: var(--c-red) !important;
-  color: #fff !important;
-  font-size: max(0.75rem, var(--fs-min)) !important;
-  font-weight: 700 !important;
-  padding: 4px 10px !important;
-  border-radius: 6px !important;
-  box-shadow: 0 0 0 2px var(--c-red-light);
-  letter-spacing: 0.3px;
-}
-.zone-qr-panel {
-  border-top: 1px solid var(--c-border-light);
-  margin-top: 6px;
-  padding-top: 8px;
-}
-.zone-qr-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.zone-qr-cell {
   border: 1px solid var(--c-border);
-  border-radius: 6px;
-  padding: 8px;
-  text-align: center;
-  background: var(--c-surface);
+  border-left: 5px solid var(--zc, var(--c-border));
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin-bottom: 10px;
+}
+.zone-card-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zone-card-name {
+  font-weight: 700;
+  font-size: var(--fs-base);
+}
+.zone-card-n {
+  color: var(--c-text-muted);
+  font-size: var(--fs-sm);
+}
+.zone-card-h .btn {
+  margin-left: auto;
+}
+.zone-frei {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--c-amber-border);
+  background: var(--c-amber-light);
+  color: var(--c-amber-dark);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.zone-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.zone-tile {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.zone-qr-label {
-  font-size: max(0.6875rem, var(--fs-min));
-  font-weight: 600;
-  font-family: var(--ff-mono);
-  color: var(--c-text-sec);
+.zone-tile b {
+  font-size: var(--fs-base);
+}
+.zone-tile span {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+.zone-tile .zone-tile-leer {
+  font-style: italic;
+}
+.zone-hint {
+  margin: 6px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+.zone-sheet-sub {
+  margin: -4px 0 8px;
+  color: var(--c-text-muted);
+}
+.zone-sheet-grp {
+  margin: 14px 0 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+.zone-sheet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.zone-sheet-note {
+  margin: 6px 0 0;
+  font-size: var(--fs-meta);
+  color: var(--c-text-muted);
+}
+.zone-farbe input {
+  width: 64px;
+  padding: 2px;
 }
 
 /* ═══ NOTIFICATIONS (floating inbox top-right) ═══════════════════ */
@@ -13227,12 +13219,6 @@ button.wk-bretter-row {
 .wk-bretter-btns {
   display: flex;
   gap: 8px;
-}
-.zone-rack-bretter {
-  color: var(--c-text-sec);
-}
-.zone-rack-bretter-btn {
-  margin-left: 6px;
 }
 .ms-grenzen {
   margin: 12px 0;
