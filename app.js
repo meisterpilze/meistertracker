@@ -509,6 +509,7 @@ async function authFetch(url, opts) {
 }
 function _apiCall(method, path, body) {
   _mutating++;
+  _mutEpoch++;
   setSyncStatus('busy', 'Saving...');
   const opts = { method, headers: {} };
   if (body) {
@@ -760,6 +761,11 @@ function defaultInventory() {
 }
 // saveData() removed — all mutations now use atomic REST endpoints (apiPost/apiPatch/apiDelete)
 let _mutating = 0; // tracks in-flight mutations to block pollSync from overwriting
+// Zählt jeden Schreibvorgang, der beginnt (_apiCall). pollSync prüft _mutating nur
+// beim Start; eine Abfrage, während der eine Speicherung begann, kann den Stand
+// von vor dieser Änderung bringen und die schon gezeichnete Änderung zurückdrehen.
+// Sie wird dann nicht angewendet: die Abfrage nach dem Speichern holt den neuen.
+let _mutEpoch = 0;
 // Die Fotos, deren Original noch unterwegs ist (pjOriginaleHochladen). Sie
 // zaehlen nicht zu _mutating: ein Original braucht auf dem Handy Minuten, und
 // so lange darf der Sync nicht stehen. Ein Neuladen fuer ein Update wartet
@@ -1057,6 +1063,7 @@ async function pollSync(opts) {
   if (_polling) return new Promise((res) => _pollWaiters.push(res));
   if (_mutating > 0 && !(opts && opts.force)) return null;
   _polling = true;
+  const epoch = _mutEpoch;
   let ok = false;
   try {
     // P-04: send If-None-Match so the server can short-circuit with 304
@@ -1077,6 +1084,12 @@ async function pollSync(opts) {
     }
     const newEtag = r.headers && r.headers.get ? r.headers.get('ETag') : null;
     const d = await dataResponse(r);
+    // Während der Abfrage begann eine Speicherung (_mutEpoch): dieser Stand kann
+    // von vor ihr sein. Nicht anwenden; nach dem Speichern kommt der neue.
+    if (_mutEpoch !== epoch && !(opts && opts.force)) {
+      ok = null;
+      return ok;
+    }
     const h = JSON.stringify(d);
     if (h !== lastHash) {
       lastHash = h;
@@ -9547,6 +9560,8 @@ const _kbZahl = (n) => fmtKg(n, n % 1 ? 1 : 0);
 function _kbpZeilen(species) {
   const out = [];
   for (const sp of species) {
+    // Eine Sorte, die wir gerade nicht anbauen, steht nicht im Plan.
+    if (sp.imProgramm === false) continue;
     const i = sp.items.find((x) => x.key === 'GSKG');
     const p = i && i.plan;
     if (!p || (!(p.needKgWeek > 0) && !(p.oldKg > 0))) continue;
@@ -9921,17 +9936,12 @@ async function lbSollSave(strainId, i, soll) {
   if (!r || r.error) setFb('err', (r && r.error) || t('common.error'));
   loadLabStock();
 }
-async function lbProgramm(an) {
+// Das Häkchen "Im Programm" im Blatt einer Art: derselbe Weg wie die Knöpfe auf
+// der Seite Pilzsorten (sorteProgramm), mit demselben Zurück, wenn das Speichern
+// nicht klappt, und dem Blatt, das danach den bestätigten Stand zeigt.
+function lbProgramm(an) {
   if (!_lbSheet) return;
-  const id = _lbSheet.strainId;
-  const r = await apiPatch('/api/mushroom-strains/' + id, { imProgramm: an });
-  if (!r || r.error) {
-    setFb('err', (r && r.error) || t('common.error'));
-  } else {
-    const ms = (mushroomStrains || []).find((x) => x.id === id);
-    if (ms) ms.imProgramm = an;
-  }
-  loadLabStock();
+  sorteProgramm(_lbSheet.strainId, an);
 }
 
 // ─── RACKS ───────────────────────────────────────────────────
@@ -10084,6 +10094,8 @@ function brettImZelt() {
 // gegen dieselben Fälle halten kann. limitAt: ab dann ist der Beutel über der
 // Zeit; outAt: dann bucht der Server ihn aus.
 function brettFristVon(p) {
+  // Wie der Server: eine Sorte, die wir gerade nicht anbauen, hat keine Fristen.
+  if (p.s && p.s.imProgramm === false) return null;
   const tag = 86400000;
   const conf = p.confirmed ? Date.parse(p.confirmed) : NaN;
   if (p.role === 'fruiting') {
@@ -10175,6 +10187,20 @@ function zeltPlanVon(gruppen, imZelt, grenzen) {
   }
   return { go, wait };
 }
+// An oder aus (im_programm) einer Sorte; eine unbekannte Sorte gilt als an.
+function sorteAn(strainId) {
+  const s = (mushroomStrains || []).find((m) => m.id === strainId);
+  return !s || s.imProgramm !== false;
+}
+// Fruchtzelt-Grenzen je Sorte für zeltPlanVon. Eine Sorte, die wir gerade nicht
+// anbauen, hat kein Minimum; das Maximum bleibt, denn es ist der Platz, den das
+// Fruchtzelt für sie hat.
+function zeltGrenzenVon(strains) {
+  const out = {};
+  for (const s of strains || [])
+    out[s.id] = { min: s.imProgramm === false ? 0 : s.tentMin || 0, max: s.tentMax || 0 };
+  return out;
+}
 function zeltPlan(now) {
   const gruppen = [];
   for (const z of zones) {
@@ -10188,6 +10214,9 @@ function zeltPlan(now) {
       for (const e of list) {
         const x = _brettInfo(e);
         if (x.type === 'grain' || !x.strainId) continue;
+        // Eine Sorte, die wir gerade nicht anbauen, steht nicht in "Als Nächstes":
+        // ohne Frist fiele ihr Überfälliges sonst ganz nach vorn.
+        if (!sorteAn(x.strainId)) continue;
         const f = brettFaellig(x, now);
         if (f !== 'due' && f !== 'today') continue;
         const frist = brettFrist(x);
@@ -10201,8 +10230,7 @@ function zeltPlan(now) {
     }
     gruppen.push(...je.values());
   }
-  const grenzen = {};
-  for (const s of mushroomStrains) grenzen[s.id] = { min: s.tentMin || 0, max: s.tentMax || 0 };
+  const grenzen = zeltGrenzenVon(mushroomStrains);
   const imZelt = brettImZelt();
   return Object.assign(zeltPlanVon(gruppen, imZelt, grenzen), { imZelt, grenzen });
 }
@@ -10353,6 +10381,7 @@ function _brettZeltInfo(wer) {
   const da = brettImZelt()[sid] || 0;
   const neu = da + wer.length;
   const name = art ? art.name : '';
+  // Das Maximum ist Platz im Fruchtzelt und gilt auch für eine Sorte, die aus ist.
   if (art && art.tentMax > 0) {
     const info = t('brett.tentInfo', { species: name, from: da, to: neu, max: art.tentMax });
     return neu > art.tentMax ? info + ' · ' + t('brett.tentFullWarn', { n: Math.max(0, art.tentMax - da) }) : info;
@@ -10361,8 +10390,10 @@ function _brettZeltInfo(wer) {
 }
 function _zeltGrenzenText(art) {
   if (!art) return '';
-  if (art.tentMin > 0 && art.tentMax > 0) return t('zelt.limits', { min: art.tentMin, max: art.tentMax });
-  if (art.tentMin > 0) return t('zelt.limitMin', { min: art.tentMin });
+  // Aus: kein Minimum mehr, das Maximum (Platz) bleibt.
+  const min = art.imProgramm === false ? 0 : art.tentMin;
+  if (min > 0 && art.tentMax > 0) return t('zelt.limits', { min, max: art.tentMax });
+  if (min > 0) return t('zelt.limitMin', { min });
   if (art.tentMax > 0) return t('zelt.limitMax', { max: art.tentMax });
   return '';
 }
@@ -10928,7 +10959,9 @@ function renderWorkBretter() {
 }
 // Eine Art in einem Zelt: Zahl, Balken bis zur Höchstzahl, Strich beim Minimum.
 function zeltKarteHtml(z, art, sid, n) {
-  const min = art && art.tentMin > 0 ? art.tentMin : 0;
+  // Aus: kein Minimum und keine Warnung "zu wenig"; das Maximum (Platz) bleibt.
+  const an = !(art && art.imProgramm === false);
+  const min = an && art && art.tentMin > 0 ? art.tentMin : 0;
   const max = art && art.tentMax > 0 ? art.tentMax : 0;
   const unter = min > 0 && n < min;
   const voll = max > 0 && n >= max;
@@ -24539,7 +24572,101 @@ function goCreateStrain() {
   }, 60);
 }
 
+// ── Was wir gerade anbauen: Sorten an und aus ──
+// Ein Knopf je Sorte, alphabetisch und an seinem Platz, damit ein Tipp nichts
+// verschiebt. An oder aus ist dieselbe Kennzeichnung wie "Im Programm" in der
+// Tabelle darunter und im Blatt einer Art im Labor (im_programm). Ein Tipp gilt
+// sofort, ein zweiter macht ihn rückgängig; eine Rückfrage kostete mehr als ein
+// Fehltipp.
+function renderSortenSchalter() {
+  const box = document.getElementById('ms-schalter');
+  if (!box) return;
+  const liste = (mushroomStrains || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  // Dieselben Sorten wie schon gezeichnet: die Knöpfe bleiben und bekommen nur
+  // ihren Stand. Neu gezeichnet verlöre der Knopf, der gerade den Fokus hat, ihn,
+  // und ein Screenreader sagte den neuen Stand nicht an.
+  const da = box.querySelectorAll ? [...box.querySelectorAll('[data-ms-schalter]')] : [];
+  const gleich =
+    da.length === liste.length &&
+    da.every((b, i) => b.dataset.msSchalter === String(liste[i].id) && b.textContent === liste[i].name);
+  if (gleich) {
+    da.forEach((b, i) => {
+      const an = liste[i].imProgramm !== false;
+      b.classList.toggle('an', an);
+      b.setAttribute('aria-pressed', String(an));
+    });
+  } else {
+    box.innerHTML = liste
+      .map((m) => {
+        const an = m.imProgramm !== false;
+        return `<button type="button" class="ms-chip${an ? ' an' : ''}" data-ms-schalter="${m.id}" aria-pressed="${an}">${esc(m.name)}</button>`;
+      })
+      .join('');
+  }
+  const n = liste.filter((m) => m.imProgramm !== false).length;
+  const zahl = document.getElementById('ms-schalter-n');
+  if (zahl) zahl.textContent = liste.length ? t('strains.switchCount', { n, total: liste.length }) : '';
+}
+// Ein Tipp auf einen Knopf oben: an wird aus, aus wird an.
+function msSchalterKlick(e) {
+  const b = e.target.closest('[data-ms-schalter]');
+  if (!b) return;
+  const id = parseInt(b.dataset.msSchalter, 10);
+  const ms = (mushroomStrains || []).find((x) => x.id === id);
+  if (ms) sorteProgramm(id, ms.imProgramm === false);
+}
+// Stand einer Sorte in allen Daten der Seite: die Sortenliste und der
+// Laborbestand, aus dem das Blatt einer Art im Labor sein Häkchen nimmt.
+function _sorteProgrammSetzen(id, wert) {
+  const ms = (mushroomStrains || []).find((x) => x.id === id);
+  if (ms) ms.imProgramm = wert;
+  const sp = _lbSpecies().find((x) => x.strainId === id);
+  if (sp) sp.imProgramm = wert;
+}
+// Je Sorte, solange Speichern läuft: was der Server zuletzt bestätigt hat, und
+// wie viele Änderungen noch unterwegs sind.
+const _progOffen = new Map();
+// An oder aus, für die Knöpfe oben, die Tabelle und das Blatt im Labor: sofort
+// gezeichnet, dann gespeichert. Wenn die letzte Antwort da ist, steht der Stand
+// da, den der Server zuletzt bestätigt hat. So zeigen zwei schnelle Tipps, die
+// beide nicht gespeichert werden, wieder den alten Stand und nicht das Gegenteil.
+// Das Soll der Laborfächer rechnet der Server mit dieser Kennzeichnung, also
+// kommt der Laborbestand nach einer gespeicherten Änderung neu.
+function sorteProgramm(id, want) {
+  const ms = (mushroomStrains || []).find((x) => x.id === id);
+  if (!ms) return;
+  const jetzt = ms.imProgramm !== false;
+  if (jetzt === want) return;
+  let st = _progOffen.get(id);
+  if (!st) _progOffen.set(id, (st = { bestaetigt: jetzt, offen: 0, gespeichert: false }));
+  st.offen++;
+  const zeichnen = () => {
+    renderStrains();
+    renderBatches();
+    renderDashBatchTasks();
+    if (_lbSheet && _lbSheet.strainId === id) lbSheetRender();
+  };
+  _sorteProgrammSetzen(id, want);
+  zeichnen();
+  const fertig = (ok) => {
+    st.offen--;
+    if (ok) {
+      st.bestaetigt = want;
+      st.gespeichert = true;
+    } else toast(t('strains.switchFailed'), 'err');
+    if (st.offen > 0) return; // eine spätere Änderung ist noch unterwegs
+    _progOffen.delete(id);
+    _sorteProgrammSetzen(id, st.bestaetigt);
+    zeichnen();
+    if (st.gespeichert) loadLabStock();
+  };
+  apiPatch('/api/mushroom-strains/' + id, { imProgramm: want })
+    .then((r) => fertig(!!r && !r.error))
+    .catch(() => fertig(false));
+}
+
 function renderStrains() {
+  renderSortenSchalter();
   const body = document.getElementById('strains-body');
   if (!body) return;
   // Die Stämme stehen auf derselben Seite und hängen an denselben Daten — also
@@ -37589,25 +37716,10 @@ function initEventListeners() {
   $('strains-body').addEventListener('change', (e) => {
     const box = e.target.closest('[data-action="toggle-programm"]');
     if (!box) return;
-    const id = parseInt(box.dataset.id, 10);
-    const ms = mushroomStrains.find((x) => x.id === id);
-    if (!ms) return;
-    const want = box.checked;
-    const prev = ms.imProgramm !== false;
-    ms.imProgramm = want; // optimistic — the row is already drawn that way
-    renderStrains();
-    renderBatches();
-    renderDashBatchTasks();
-    apiPatch('/api/mushroom-strains/' + id, { imProgramm: want }).then((r) => {
-      if (r && r.error) {
-        ms.imProgramm = prev;
-        setFb('err', t('common.error') + ': ' + r.error);
-        renderStrains();
-        renderBatches();
-        renderDashBatchTasks();
-      }
-    });
+    sorteProgramm(parseInt(box.dataset.id, 10), box.checked);
   });
+  // Dieselbe Kennzeichnung als Knöpfe oben auf der Seite (renderSortenSchalter).
+  $('ms-schalter').addEventListener('click', msSchalterKlick);
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.
   const SORT_RERENDER = { harvests: renderHarvests };

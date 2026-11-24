@@ -574,7 +574,10 @@ describe('Laborbestand: ansetzen und das Soll', () => {
     const f = _hf('lbSollStep', APP);
     assert.match(f, /setTimeout\(\(\) => lbSollSave/);
     assert.doesNotMatch(f, /confirm/);
-    assert.match(_hf('lbProgramm', APP), /\{ imProgramm: an \}/);
+    // "Im Programm" geht denselben Weg wie die Knöpfe auf der Seite Pilzsorten,
+    // der dann { imProgramm } speichert (test/sorten-schalter.test.js).
+    assert.match(_hf('lbProgramm', APP), /sorteProgramm\(_lbSheet\.strainId, an\)/);
+    assert.match(_hf('sorteProgramm', APP), /\{ imProgramm: want \}/);
   });
 });
 
