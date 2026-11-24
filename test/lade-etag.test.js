@@ -31,6 +31,7 @@ describe('loadData und pollSync', () => {
       const _pollWaiters = [];
       const POLL_TIMEOUT_MS = 1000;
       let _mutating = 0;
+      let _mutEpoch = 0;
       let lastHash = null;
       let lastSyncTime = 0;
       const setSyncStatus = () => {};
