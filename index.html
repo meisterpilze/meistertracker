@@ -4100,6 +4100,23 @@
                     Antwort aus; im Zelt bucht sie gleich aus und zeigt es.
                   </p>
                 </div>
+                <!-- Körnerbrut-Plan (v123): wie viele Blöcke dieser Sorte pro Woche
+                     entstehen sollen. Leer heißt: die App nimmt die letzten acht
+                     Wochen. Daraus rechnet db.grainPlan den Körnerbrut-Bedarf. -->
+                <div class="ms-grenzen">
+                  <div class="fs-meta ms-grenzen-t" data-i18n="strains.planTitle">Körnerbrut-Plan</div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                    <label class="fs-meta" style="color: var(--c-text-muted)">
+                      <span data-i18n="strains.weekBlocks">Blöcke pro Woche (Plan)</span>
+                      <input id="ms-week-blocks" type="number" min="0" step="1" inputmode="numeric" />
+                    </label>
+                  </div>
+                  <p class="fs-meta muted" data-i18n="strains.planHelp">
+                    Leer heißt: die letzten 8 Wochen. Daraus, aus „Körnerbrut % vom Substrat“ und dem Online-Verkauf
+                    rechnet die App, wie viel Körnerbrut die Sorte pro Woche braucht. Das ersetzt den Mindestbestand
+                    Körnerbrut, sobald es etwas zu rechnen gibt.
+                  </p>
+                </div>
                 <div style="display: flex; gap: 8px">
                   <button class="btn btn-p" id="ms-save-btn" data-i18n="strains.save">Pilzsorte anlegen</button>
                   <button class="btn" id="ms-cancel-btn" style="display: none" data-i18n="strains.cancel">
@@ -4757,6 +4774,18 @@
               <div class="np-foot" data-i18n="np.foot">
                 Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
                 einem Tipp auf sie unten.
+              </div>
+            </div>
+            <!-- Körnerbrut pro Woche (v123): per species, how much grain spawn a
+                 week it needs, what is there and what to make (renderKbPlan).
+                 Same figures as the grain spawn stock in the list below. -->
+            <div class="card" id="kbp-card" hidden>
+              <div class="sec" data-i18n="kbp.title">Körnerbrut pro Woche</div>
+              <div id="kbp-rows"></div>
+              <div class="np-foot" data-i18n="kbp.foot">
+                Bedarf: Blöcke pro Woche × Blockgewicht × Körnerbrut-%, dazu der Online-Verkauf, aus den letzten 8 Wochen.
+                Soll: so viel, bis neue Körnerbrut fertig ist, und eine Woche dazu. „Rechnung“ zeigt, wie es zustande
+                kommt.
               </div>
             </div>
             <!-- The lab's stock per species: slants, liquid culture, petri, syringes,

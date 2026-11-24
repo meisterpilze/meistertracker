@@ -9502,6 +9502,7 @@ function renderLabStock() {
   const species = _lbSpecies();
   renderNachproduzieren(species);
   renderWorkNachproduzieren(species);
+  renderKbPlan(species);
   const card = document.getElementById('lb-card');
   if (!card) return;
   card.hidden = !species.length;
@@ -9534,6 +9535,84 @@ function renderLabStock() {
   else text = t('vb.allSent', { n: shop.length, time: zuletzt ? fmtDtTime(zuletzt) : '–' });
   bb.textContent = text;
   bb.classList.toggle('vb-bb-warn', !d.enabled || fehler > 0);
+}
+
+// ── Körnerbrut pro Woche (v123) ──
+// Je Sorte eine Zeile: wie viel Körnerbrut sie pro Woche braucht (für Blöcke
+// und online), was da ist und wächst, was anzusetzen ist, und was alt wird.
+// Gerechnet wird auf dem Server (db.grainPlan); es ist dasselbe Soll, das der
+// kg-Vorrat in der Liste darunter und die Tagesliste lesen. "Rechnung" öffnet
+// die Sorte mit der Rechnung aufgeklappt.
+const _kbZahl = (n) => fmtKg(n, n % 1 ? 1 : 0);
+function _kbpZeilen(species) {
+  const out = [];
+  for (const sp of species) {
+    const i = sp.items.find((x) => x.key === 'GSKG');
+    const p = i && i.plan;
+    if (!p || (!(p.needKgWeek > 0) && !(p.oldKg > 0))) continue;
+    out.push({ sp, i, p });
+  }
+  return out.sort(
+    (a, b) =>
+      (b.i.make || 0) - (a.i.make || 0) || b.p.needKgWeek - a.p.needKgWeek || a.sp.name.localeCompare(b.sp.name)
+  );
+}
+function _kbpAltText(p) {
+  if (p.oldAt && Date.parse(p.oldAt) <= Date.now()) return t('kbp.oldNow', { n: _kbZahl(p.oldKg) });
+  return t('kbp.old', { n: _kbZahl(p.oldKg), date: p.oldAt ? fmtDtShort(p.oldAt) : '–' });
+}
+// Eine Zeile wie in Nachproduzieren: links der Text, rechts ein kleiner Knopf.
+function _kbpZeile({ sp, i, p }) {
+  const stand = [t('kbp.need', { n: _kbZahl(p.needKgWeek) }), t('kbp.have', { n: _kbZahl(i.have) })];
+  if (i.growing) stand.push(t('kbp.growing', { n: _kbZahl(i.growing) }));
+  const tun =
+    i.make > 0
+      ? `<span class="kbp-make">${esc(t('kbp.make', { n: _kbZahl(i.make) }))}</span>`
+      : `<span class="kbp-ok">${esc(t('kbp.enough'))}</span>`;
+  return (
+    `<div class="kbp-row"><div class="kbp-l"><b>${esc(sp.name)}</b> ${tun}` +
+    `<small>${esc(stand.join(' · '))}</small>` +
+    (p.oldKg > 0 ? `<small class="kbp-alt">${esc(_kbpAltText(p))}</small>` : '') +
+    `</div><button type="button" class="btn btn-sm kbp-go" data-kbp-strain="${sp.strainId}">${esc(t('kbp.show'))}</button></div>`
+  );
+}
+function renderKbPlan(species) {
+  const card = document.getElementById('kbp-card');
+  if (!card) return;
+  const zeilen = _kbpZeilen(species);
+  card.hidden = !zeilen.length;
+  document.getElementById('kbp-rows').innerHTML = zeilen.map(_kbpZeile).join('');
+}
+function kbpOeffnen(strainId) {
+  lbSheetOpen(strainId);
+  if (!_lbSheet) return;
+  _lbSheet.sollOffen = 'GSKG';
+  lbSheetRender();
+}
+// Die Rechnung hinter dem Soll des kg-Vorrats, im Blatt der Sorte: dieselben
+// Zahlen wie die Zeile oben, Schritt für Schritt, und wo man sie ändert.
+function _kbPlanHtml(i) {
+  const p = i.plan;
+  const kg = (n) => _kbZahl(n) + ' kg';
+  const zeilen = [
+    p.weekBlocks != null
+      ? t('kbp.blocksPlan', { n: p.weekBlocks, ist: _kbZahl(p.blocksWeekActual) })
+      : t('kbp.blocksIst', { n: _kbZahl(p.blocksWeekActual) }),
+    t('kbp.forBlocks', { kg: _kbZahl(p.blockKg), pct: _kbZahl(p.spawnPct), n: kg(p.blocksKgWeek) }),
+    t('kbp.online', { n: kg(p.onlineKgWeek) })
+  ];
+  const fett = [t('kbp.needLine', { n: kg(p.needKgWeek) }), t('kbp.sollLine', { days: p.leadDays, n: kg(p.sollKg) })];
+  const dazu = [];
+  if (p.capped) dazu.push(t('kbp.capped', { days: p.grainMaxDays }));
+  if (p.measuredPct != null) dazu.push(t('kbp.measured', { pct: _kbZahl(p.measuredPct), n: p.measuredBatches }));
+  if (p.oldKg > 0) dazu.push(_kbpAltText(p));
+  return (
+    `<div class="kbp-plan">` +
+    zeilen.map((z) => `<span>${esc(z)}</span>`).join('') +
+    fett.map((z) => `<b>${esc(z)}</b>`).join('') +
+    dazu.map((z) => `<span>${esc(z)}</span>`).join('') +
+    `<small>${esc(t('kbp.change'))}</small></div>`
+  );
 }
 
 // ── Ansetzen: Laborarbeit → Mehrere, mit allem, was der Art fehlt ──
@@ -9642,19 +9721,24 @@ function lbSheetRender() {
   lbSheetKnopf(sp);
 }
 // "Soll 2 ›", oder "Kein Soll ›": der Knopf, der das Soll aufklappt.
-const _lbSollText = (i) =>
-  i.soll ? t('lb.soll', { n: _lbZahl(i, i.soll) + (i.key === 'GSKG' ? ' kg' : '') }) : t('lb.sollNone');
+// Ein berechnetes Soll (Körnerbrut-Plan) sagt es dazu, und aufgeklappt steht
+// statt − und + die Rechnung: von Hand verstellt wird dort nichts.
+const _lbSollText = (i) => {
+  if (i.auto) return t('lb.sollAuto', { n: _lbZahl(i, i.soll || 0) + ' kg' });
+  return i.soll ? t('lb.soll', { n: _lbZahl(i, i.soll) + (i.key === 'GSKG' ? ' kg' : '') }) : t('lb.sollNone');
+};
 function _lbSheetZeile(i, sp) {
   const k = esc(i.key);
   const offen = _lbSheet.sollOffen === i.key;
+  const stepper =
+    `<div class="lb-step lb-step-soll"><button type="button" class="btn btn-sm" data-lb-step="-1" data-lb-key="${k}" aria-label="${esc(t('vb.sollLess'))}">−</button>` +
+    `<b id="m-lb-soll-${k}" aria-live="polite">${esc(_lbZahl(i, i.soll || 0))}${i.key === 'GSKG' ? ' kg' : ''}</b>` +
+    `<button type="button" class="btn btn-sm" data-lb-step="1" data-lb-key="${k}" aria-label="${esc(t('vb.sollMore'))}">+</button></div>` +
+    (i.key === 'GSKG' && i.plan ? `<small class="lb-tap">${esc(t('kbp.manual'))}</small>` : '');
   const soll =
     `<button type="button" class="lb-soll-btn" data-lb-soll="${k}" aria-expanded="${offen}">` +
     `<span id="m-lb-sollt-${k}">${esc(_lbSollText(i))}</span> <span aria-hidden="true">${offen ? '‹' : '›'}</span></button>` +
-    (offen
-      ? `<div class="lb-step lb-step-soll"><button type="button" class="btn btn-sm" data-lb-step="-1" data-lb-key="${k}" aria-label="${esc(t('vb.sollLess'))}">−</button>` +
-        `<b id="m-lb-soll-${k}" aria-live="polite">${esc(_lbZahl(i, i.soll || 0))}${i.key === 'GSKG' ? ' kg' : ''}</b>` +
-        `<button type="button" class="btn btn-sm" data-lb-step="1" data-lb-key="${k}" aria-label="${esc(t('vb.sollMore'))}">+</button></div>`
-      : '');
+    (offen ? (i.auto && i.plan ? _kbPlanHtml(i) : stepper) : '');
   const n = _lbSheet.make[i.key] || 0;
   const make = _lbAnsetzbar(i)
     ? `<div class="lb-step"><button type="button" class="btn" data-lb-make="-1" data-lb-key="${k}" aria-label="${esc(t('lb.makeLess'))}">−</button>` +
@@ -24523,7 +24607,8 @@ function saveMStrain() {
     fieldError('ms-tent-min', t('strains.tentMinOverMax'));
     return;
   }
-  const payload = { name, kuerzel, description: desc, ...rec, ...grenzen };
+  const plan = _msReadLimits(MS_PLAN_FIELDS);
+  const payload = { name, kuerzel, description: desc, ...rec, ...grenzen, ...plan };
   const num = (v, d) => (isFinite(parseFloat(v)) ? parseFloat(v) : d);
   const recLocal = {
     recBatchType: rec.recBatchType || '',
@@ -24537,7 +24622,8 @@ function saveMStrain() {
     recGrainKg: num(rec.recGrainKg, 0),
     recGrainRhPct: num(rec.recGrainRhPct, 52),
     recIncDays: num(rec.recIncDays, 14),
-    ...grenzen
+    ...grenzen,
+    ...plan
   };
   const req = editId ? apiPatch('/api/mushroom-strains/' + editId, payload) : apiPost('/api/mushroom-strains', payload);
   req.then((r) => {
@@ -24603,7 +24689,7 @@ function editMStrain(id) {
   sv('ms-rec-days', ms.recIncDays != null ? ms.recIncDays : 14);
   sv('ms-rec-fruitdays', ms.recFruitDays || 0);
   // Regale und Zelt (v122): leer heißt keine Prüfung.
-  for (const [eid, key] of MS_LIMIT_FIELDS) sv(eid, ms[key] == null ? '' : ms[key]);
+  for (const [eid, key] of [...MS_LIMIT_FIELDS, ...MS_PLAN_FIELDS]) sv(eid, ms[key] == null ? '' : ms[key]);
   msRecTypeChange();
   _msFillRecCopyOptions(id);
   document.getElementById('ms-save-btn').textContent = t('strains.saveChanges');
@@ -24646,7 +24732,7 @@ function cancelMStrain() {
   sv('ms-rec-grainrh', 52);
   sv('ms-rec-days', 14);
   sv('ms-rec-fruitdays', 0);
-  for (const [eid] of MS_LIMIT_FIELDS) sv(eid, '');
+  for (const [eid] of [...MS_LIMIT_FIELDS, ...MS_PLAN_FIELDS]) sv(eid, '');
   msRecTypeChange();
   _msFillRecCopyOptions(null);
 }
@@ -25127,9 +25213,13 @@ const MS_LIMIT_FIELDS = [
   ['ms-tent-min', 'tentMin'],
   ['ms-tent-max', 'tentMax']
 ];
-function _msReadLimits() {
+// Körnerbrut-Plan (v123): Blöcke pro Woche; leer = die letzten acht Wochen.
+// Gelesen wie die Grenzen, aber kein Grenzwert: der Server startet damit keine
+// Frist.
+const MS_PLAN_FIELDS = [['ms-week-blocks', 'weekBlocks']];
+function _msReadLimits(felder = MS_LIMIT_FIELDS) {
   const out = {};
-  for (const [eid, key] of MS_LIMIT_FIELDS) {
+  for (const [eid, key] of felder) {
     const el = document.getElementById(eid);
     const v = el ? el.value.trim() : '';
     const n = v === '' ? null : Math.round(Number(v));
@@ -37460,6 +37550,10 @@ function initEventListeners() {
     }
     const b = e.target.closest('[data-np-strain]');
     if (b) lbAnsetzen(parseInt(b.dataset.npStrain, 10));
+  });
+  $('kbp-rows').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-kbp-strain]');
+    if (b) kbpOeffnen(parseInt(b.dataset.kbpStrain, 10));
   });
   $('lb-list').addEventListener('click', (e) => {
     if (e.target.closest('[data-lb-ruhen]')) {

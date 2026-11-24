@@ -3463,6 +3463,20 @@ const MIGRATIONS = [
         resolved_by INTEGER
       )`);
     }
+  },
+  {
+    version: 123,
+    description: 'Koernerbrut-Plan: geplante Bloecke pro Woche je Art',
+    fn(db) {
+      // Wie viele Bloecke einer Art pro Woche entstehen sollen. NULL heisst: die
+      // App nimmt, was in den letzten acht Wochen tatsaechlich angelegt wurde.
+      // Daraus und aus dem Online-Verkauf rechnet sie, wie viel Koernerbrut die
+      // Art pro Woche braucht (grainPlan).
+      const has = db
+        .prepare("SELECT COUNT(*) AS c FROM pragma_table_info('mushroom_strains') WHERE name = 'week_blocks'")
+        .get().c;
+      if (!has) db.exec('ALTER TABLE mushroom_strains ADD COLUMN week_blocks INTEGER');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -12925,6 +12939,14 @@ function listMushroomStrainLimits(r) {
   return out;
 }
 
+// v123: geplante Bloecke pro Woche. Kein Grenzwert: er bucht nichts aus und
+// startet darum auch keine Frist (limits_set bleibt, wie es ist).
+function _strainPlanFields(d) {
+  if (!('weekBlocks' in d)) return {};
+  const v = d.weekBlocks;
+  return { week_blocks: v === null || v === '' || v === undefined ? null : Math.round(Number(v)) };
+}
+
 function listMushroomStrains(db) {
   return db
     .prepare('SELECT * FROM mushroom_strains ORDER BY name')
@@ -12968,7 +12990,9 @@ function listMushroomStrains(db) {
       imProgramm: r.im_programm == null ? true : r.im_programm !== 0,
       // v122 — max days in incubation / as grain spawn / in the tent, tent min
       // and max count. null = not set, the check is off for this Sorte.
-      ...listMushroomStrainLimits(r)
+      ...listMushroomStrainLimits(r),
+      // v123 — planned blocks per week; null = the last eight weeks count.
+      weekBlocks: r.week_blocks == null ? null : r.week_blocks
     }));
 }
 
@@ -12979,7 +13003,12 @@ function createMushroomStrain(db, data) {
   const now = new Date().toISOString();
   const limits = _strainLimitFields(data || {});
   if (Object.keys(limits).length) limits.limits_set = now;
-  const rec = { ..._strainRecipeFields(data), ..._strainMinFields(data || {}), ...limits };
+  const rec = {
+    ..._strainRecipeFields(data),
+    ..._strainMinFields(data || {}),
+    ...limits,
+    ..._strainPlanFields(data || {})
+  };
   const cols = ['name', 'kuerzel', 'description', 'created', ...Object.keys(rec)];
   const vals = [name.trim(), kuerzel.trim(), description || '', now, ...Object.values(rec)];
   try {
@@ -13025,7 +13054,7 @@ function updateMushroomStrain(db, id, data) {
     'recSterilText'
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
-  Object.assign(fields, _strainMinFields(data || {}));
+  Object.assign(fields, _strainMinFields(data || {}), _strainPlanFields(data || {}));
   // A limit that changes restarts the grace period before anything is booked
   // out on its own; one sent unchanged (the editor sends the whole form) does not.
   const limits = _strainLimitFields(data || {});
@@ -15784,6 +15813,209 @@ function _grainKgOnShelf(db, nowIso) {
   return out;
 }
 
+// ── Koernerbrut-Plan (v123) ──────────────────────────────────────
+// Wie viel Koernerbrut eine Art pro Woche braucht, und wie viel davon jetzt
+// angesetzt werden muss, damit sie reicht und nichts alt wird.
+//
+// Bedarf pro Woche = Bloecke pro Woche x Blockgewicht x Koernerbrut-% der Art
+// (rec_bag_kg, rec_spawn_pct), plus was online verkauft wird. Bloecke pro Woche
+// ist der Plan der Art (week_blocks), ohne Plan das, was in den letzten acht
+// Wochen angelegt wurde; online sind die Bestellungen der letzten acht Wochen
+// an den Koernerbrut-SKUs der Art. Mit jeder Woche Daten wird die Zahl genauer.
+//
+// Soll ist der Bedarf, bis frisch angesetzte Koernerbrut fertig ist (so lange
+// brauchten die letzten Koernerbrut-Chargen der Art), plus eine Woche bis zum
+// naechsten Ansetzen. Nie mehr, als bis zum Hoechstalter (grain_max_days)
+// verbraucht wird. Was am Soll fehlt, setzt man an, wie bei jedem Fach.
+//
+// Alt wird, was bei diesem Bedarf, die aelteste Charge zuerst, sein
+// Hoechstalter erreicht, bevor sie dran ist.
+const KB_PLAN_WEEKS = 8;
+const KB_MESS_WEEKS = 12;
+const KB_LEAD_DAYS = 14; // fertig nach, solange eine Art keine Koernerbrut-Charge hat
+const _kbR1 = (n) => Math.round(n * 10) / 10;
+
+function _kbMedian(a) {
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+// Tag fuer Tag: zuerst wird alt, was heute sein Hoechstalter erreicht; dann
+// geht der Tagesbedarf aus dem, was fertig ist, die aelteste Charge zuerst.
+function _kbAltwerden(lots, proTag, maxDays, nowMs) {
+  if (!(maxDays > 0) || !lots.length) return { kg: 0, at: null };
+  const rest = lots
+    .map((l) => ({ kg: l.kg, ready: l.readyMs, ende: l.madeMs + maxDays * DAY_MS }))
+    .sort((a, b) => a.ende - b.ende);
+  const bis = Math.max(...rest.map((l) => l.ende));
+  let alt = 0;
+  let at = null;
+  for (let tag = nowMs; ; tag += DAY_MS) {
+    for (const l of rest) {
+      if (l.kg > 0 && l.ende <= tag) {
+        alt += l.kg;
+        if (at === null || l.ende < at) at = l.ende;
+        l.kg = 0;
+      }
+    }
+    if (tag > bis) break;
+    let bedarf = proTag;
+    for (const l of rest) {
+      if (bedarf <= 0) break;
+      if (l.kg <= 0 || l.ready > tag) continue;
+      const nimm = Math.min(l.kg, bedarf);
+      l.kg -= nimm;
+      bedarf -= nimm;
+    }
+  }
+  return { kg: _kbR1(alt), at: at === null ? null : new Date(at).toISOString() };
+}
+
+/**
+ * Der Koernerbrut-Plan je Art (Map strainId -> Plan). Die Zahlen sind auf ein
+ * Zehntel gerundet, das Soll auf ein halbes Kilo nach oben.
+ */
+function grainPlan(db, now = new Date()) {
+  const nowMs = now.getTime();
+  const nowIso = now.toISOString();
+  const seit = new Date(nowMs - KB_PLAN_WEEKS * 7 * DAY_MS).toISOString();
+  const seitMess = new Date(nowMs - KB_MESS_WEEKS * 7 * DAY_MS).toISOString();
+
+  const bloecke = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT strain_id, SUM(qty) AS n FROM batches
+        WHERE COALESCE(batch_type, '') <> 'grain' AND strain_id IS NOT NULL AND created >= ? AND created <= ?
+        GROUP BY strain_id`
+    )
+    .all(seit, nowIso))
+    bloecke.set(r.strain_id, Number(r.n) || 0);
+
+  // Online: Bestellzeilen an den Koernerbrut-SKUs der Art, mal ihrer Beutelgroesse.
+  const skus = new Map();
+  for (const s of db
+    .prepare(`SELECT strain_id, sku, ml FROM syringe_stock_sku WHERE type = 'GS' AND sku IS NOT NULL AND sku <> ''`)
+    .all())
+    skus.set(s.sku, s);
+  const online = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT i.channel_sku AS sku, SUM(i.qty) AS n FROM order_items i JOIN orders o ON o.id = i.order_id
+        WHERE o.status <> 'cancelled' AND i.qty > 0 AND o.order_date >= ? AND o.order_date <= ?
+        GROUP BY i.channel_sku`
+    )
+    .all(seit.slice(0, 19), nowIso.slice(0, 19))) {
+    const s = skus.get(r.sku);
+    if (s) online.set(s.strain_id, (online.get(s.strain_id) || 0) + Number(r.n) * Number(s.ml));
+  }
+
+  // Fertig nach: der Median der letzten drei Koernerbrut-Chargen der Art.
+  const reif = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT strain_id, days FROM batches
+        WHERE batch_type = 'grain' AND strain_id IS NOT NULL AND days > 0 ORDER BY created DESC`
+    )
+    .all()) {
+    const a = reif.get(r.strain_id) || [];
+    if (a.length < 3) a.push(Number(r.days));
+    reif.set(r.strain_id, a);
+  }
+
+  // Was im Regal steht, je Charge: dieselben Beutel, die der kg-Vorrat zaehlt.
+  const imRegal = getStockBagZoneMap(db);
+  const lose = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT b.bag_id, COALESCE(b.bag_kg, ba.bag_kg, 3) AS kg, ba.strain_id, ba.batch_id, ba.created, ba.due
+         FROM bags b JOIN batches ba ON ba.batch_id = b.batch_id
+        WHERE ba.batch_type = 'grain' AND ba.strain_id IS NOT NULL`
+    )
+    .all()) {
+    if (!imRegal.has(r.bag_id)) continue;
+    let m = lose.get(r.strain_id);
+    if (!m) lose.set(r.strain_id, (m = new Map()));
+    const made = Date.parse(r.created);
+    const l = m.get(r.batch_id) || { kg: 0, madeMs: made, readyMs: r.due ? Date.parse(r.due) : made };
+    l.kg += Number(r.kg);
+    m.set(r.batch_id, l);
+  }
+
+  // Gemessen: Koernerbrut, die beim Anlegen in eine Block-Charge gescannt wurde
+  // (REMOVE "spawn:<Charge>"), gegen das Gewicht der Bloecke, zwoelf Wochen.
+  const kbIn = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT s.reason, SUM(COALESCE(gb.bag_kg, g.bag_kg, 3)) AS kg
+         FROM scan_log s JOIN bags gb ON gb.bag_id = s.bag JOIN batches g ON g.batch_id = gb.batch_id
+        WHERE s.action = 'REMOVE' AND s.reason LIKE 'spawn:%' AND g.batch_type = 'grain'
+        GROUP BY s.reason`
+    )
+    .all())
+    kbIn.set(String(r.reason).slice(6), Number(r.kg));
+  const mess = new Map();
+  for (const r of db
+    .prepare(
+      `SELECT batch_id, strain_id, qty, bag_kg FROM batches
+        WHERE COALESCE(batch_type, '') <> 'grain' AND strain_id IS NOT NULL AND created >= ? AND created <= ?`
+    )
+    .all(seitMess, nowIso)) {
+    const g = kbIn.get(r.batch_id);
+    if (!g || !(r.bag_kg > 0) || !(r.qty > 0)) continue;
+    const m = mess.get(r.strain_id) || { g: 0, b: 0, n: 0 };
+    m.g += g;
+    m.b += r.qty * r.bag_kg;
+    m.n++;
+    mess.set(r.strain_id, m);
+  }
+
+  const out = new Map();
+  for (const ms of db
+    .prepare('SELECT id, rec_bag_kg, rec_spawn_pct, week_blocks, grain_max_days FROM mushroom_strains')
+    .all()) {
+    const ist = (bloecke.get(ms.id) || 0) / KB_PLAN_WEEKS;
+    const plan = ms.week_blocks == null ? null : Number(ms.week_blocks);
+    const proWoche = plan != null ? plan : ist;
+    const blockKg = Number(ms.rec_bag_kg) || 0;
+    const pct = Number(ms.rec_spawn_pct) || 0;
+    const fuerBloecke = (proWoche * blockKg * pct) / 100;
+    const onl = (online.get(ms.id) || 0) / KB_PLAN_WEEKS;
+    const bedarf = fuerBloecke + onl;
+    const r = reif.get(ms.id);
+    const lead = r && r.length ? Math.round(_kbMedian(r)) : KB_LEAD_DAYS;
+    const maxDays = ms.grain_max_days > 0 ? Number(ms.grain_max_days) : null;
+    let soll = (bedarf * (lead + 7)) / 7;
+    let capped = false;
+    if (maxDays && soll > (bedarf * maxDays) / 7) {
+      soll = (bedarf * maxDays) / 7;
+      capped = true;
+    }
+    const lots = [...(lose.get(ms.id) || new Map()).values()];
+    const alt = _kbAltwerden(lots, bedarf / 7, maxDays, nowMs);
+    const m = mess.get(ms.id);
+    out.set(ms.id, {
+      weekBlocks: plan,
+      blocksWeekActual: _kbR1(ist),
+      blocksWeek: _kbR1(proWoche),
+      blockKg,
+      spawnPct: pct,
+      blocksKgWeek: _kbR1(fuerBloecke),
+      onlineKgWeek: _kbR1(onl),
+      needKgWeek: _kbR1(bedarf),
+      leadDays: lead,
+      sollKg: Math.ceil(soll * 2 - 1e-9) / 2,
+      capped,
+      grainMaxDays: maxDays,
+      oldKg: alt.kg,
+      oldAt: alt.at,
+      measuredPct: m && m.b > 0 ? _kbR1((100 * m.g) / m.b) : null,
+      measuredBatches: m ? m.n : 0
+    });
+  }
+  return out;
+}
+
 /**
  * Der Laborbestand je Art, alles an einer Stelle: Slants, Fluessigkultur,
  * Petrischalen, Spritzen je Groesse, der Koernerbrut-Vorrat in kg und die
@@ -15804,6 +16036,7 @@ function labStock(db, now = new Date()) {
   const nowIso = now.toISOString();
   const sale = listSyringeStock(db, now);
   const kg = _grainKgOnShelf(db, nowIso);
+  const plan = grainPlan(db, now);
   const kulturen = new Map();
   for (const r of db
     .prepare(
@@ -15851,10 +16084,17 @@ function labStock(db, now = new Date()) {
     for (const r of mine.filter((x) => x.type === 'SY' && (x.sku || x.count > 0)))
       items.push(feld('SY' + r.ml, r.count, r.soll, { ml: r.ml, ordered: r.ordered || 0, shop: shop(r) }));
     const g = kg.get(ms.id) || { ready: 0, growing: 0, readyAt: null };
+    // Das Soll des kg-Vorrats rechnet der Koernerbrut-Plan, sobald die Art in
+    // den letzten acht Wochen etwas verbraucht hat oder einen Plan hat; sonst
+    // gilt der Mindestbestand von Hand (min_spawn_kg), wie bisher.
+    const p = plan.get(ms.id) || null;
+    const auto = !!(p && p.needKgWeek > 0);
     items.push(
-      feld('GSKG', Math.round(g.ready * 10) / 10, ms.min_spawn_kg, {
+      feld('GSKG', Math.round(g.ready * 10) / 10, auto ? p.sollKg : ms.min_spawn_kg, {
         growing: Math.round(g.growing * 10) / 10,
-        readyAt: g.readyAt
+        readyAt: g.readyAt,
+        auto,
+        plan: p
       })
     );
     for (const r of mine.filter((x) => x.type === 'GS' && x.sku))
@@ -16797,6 +17037,7 @@ module.exports = {
   druckErledigt,
   unsavedLabels,
   labStock,
+  grainPlan,
   getOrder,
   setOrderStatus,
   listCustomers,
