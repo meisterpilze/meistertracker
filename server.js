@@ -1117,6 +1117,44 @@ function validateMushroomStrain(data) {
   if (data.imProgramm !== undefined && data.imProgramm !== null && typeof data.imProgramm !== 'boolean') {
     return 'imProgramm must be a boolean';
   }
+  // v122: days and counts per Sorte. Empty or null switches the check off.
+  for (const [f, max] of [
+    ['incMaxDays', 3650],
+    ['grainMaxDays', 3650],
+    ['tentMaxDays', 3650],
+    ['tentMin', 100000],
+    ['tentMax', 100000]
+  ]) {
+    const v = data[f];
+    if (v === undefined || v === null || v === '') continue;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > max) {
+      return f + ' must be a whole number from 0 to ' + max + ', or empty';
+    }
+  }
+  if (
+    Number.isInteger(data.tentMin) &&
+    Number.isInteger(data.tentMax) &&
+    data.tentMax > 0 &&
+    data.tentMin > data.tentMax
+  ) {
+    return 'tentMin must not be more than tentMax';
+  }
+  return null;
+}
+// PATCH /api/racks/:id — shelves (0–20) and the Sorte the rack holds (or null).
+function validateRackShelves(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'Request body must be a JSON object';
+  if (data.levels === undefined && data.strainId === undefined) return 'Send levels or strainId';
+  if (data.levels !== undefined && (!Number.isInteger(data.levels) || data.levels < 0 || data.levels > 20)) {
+    return 'levels must be a whole number from 0 to 20';
+  }
+  if (
+    data.strainId !== undefined &&
+    data.strainId !== null &&
+    (!Number.isInteger(data.strainId) || data.strainId < 1)
+  ) {
+    return 'strainId must be a Sorte id or null';
+  }
   return null;
 }
 // What POST /api/tasks checks, for the fields a PATCH names. The times are
@@ -1523,6 +1561,7 @@ function checkSaleAlerts() {
   if (WORKTREE_MODE) return;
   checkShelf();
   checkLabFach();
+  checkBrettFristen();
   try {
     const neu = db.saleAlerts(database);
     if (!neu.length) return;
@@ -1606,6 +1645,21 @@ function checkLabFach() {
     broadcastSSE();
   } catch (e) {
     log('warn', 'Lab Fach check failed', { error: e.message });
+  }
+}
+// Regalbretter (v122): was laenger steht, als seine Art erlaubt, bucht die App
+// selbst aus (db.autoBookOuts) und zeigt es, bis jemand "Stimmt" oder "Noch da"
+// sagt. Laeuft mit den anderen Pruefungen; der naechste Lauf findet nichts
+// mehr, weil ein ausgebuchter Beutel keinen Platz mehr hat. Eine Worktree-Kopie
+// bucht nichts, wie dort.
+function checkBrettFristen() {
+  try {
+    const out = db.autoBookOuts(database);
+    if (!out.length) return;
+    log('info', 'Bags booked out after their time', { bags: out.length });
+    broadcastSSE();
+  } catch (e) {
+    log('warn', 'Shelf time check failed', { error: e.message });
   }
 }
 function scheduleSaleAlerts() {
@@ -4180,7 +4234,9 @@ function getBatchLocServer(batch, scanLog) {
     const id = String((bag && typeof bag === 'object' ? bag.id : bag) || '').toUpperCase();
     if (!id) return;
     const last = [...scanLog].reverse().find((e) => (e.bag || '').toUpperCase() === id);
-    if (last && last.action !== 'REMOVE' && last.to) locs[last.to] = (locs[last.to] || 0) + 1;
+    // A shelf ("INC_R1:2", v122) shows as its rack in the calendar.
+    const loc = last && last.to ? String(last.to).split(':')[0] : null;
+    if (last && last.action !== 'REMOVE' && loc) locs[loc] = (locs[loc] || 0) + 1;
   });
   const entries = Object.entries(locs);
   if (!entries.length) return '';
@@ -12185,6 +12241,83 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
+
+  // -- Regalbretter --
+  // Wie viele Bretter ein Regal hat und welche Art es traegt (v122). Bewegt wird
+  // ueber /api/scan-log; hier stehen "Noch da" und die Antwort auf das, was die
+  // App von selbst ausgebucht hat.
+  const brettRackMatch = req.url.match(/^\/api\/racks\/([^/]+)$/);
+  if (req.method === 'PATCH' && brettRackMatch) {
+    if (requireAdmin(req, res)) return;
+    const id = decodeURIComponent(brettRackMatch[1]);
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vb = validateRackShelves(data);
+      if (vb) {
+        jsonErr(res, 400, vb);
+        return;
+      }
+      try {
+        const out = db.setRackShelves(database, id, { levels: data.levels, strainId: data.strainId });
+        broadcastSSE(res);
+        jsonOk(res, out);
+      } catch (err) {
+        jsonErr(res, 400, err.message);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/bags/still-there') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const vb = validateBagList(data && data.bags, 'bags');
+      if (vb || !Array.isArray(data.bags) || !data.bags.length || data.bags.length > 1000) {
+        jsonErr(res, 400, vb || 'bags: 1 to 1000 bag ids');
+        return;
+      }
+      try {
+        const n = db.confirmStillThere(database, data.bags, req.authUser && req.authUser.user_id);
+        broadcastSSE(res);
+        jsonOk(res, { confirmed: n });
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/auto-bookouts/resolve') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const ids = data && data.ids;
+      if (!Array.isArray(ids) || !ids.length || ids.length > 1000 || !ids.every((x) => Number.isInteger(x) && x > 0)) {
+        jsonErr(res, 400, 'ids: 1 to 1000 positive whole numbers');
+        return;
+      }
+      const ve = validateEnum(data.how, ['correct', 'still_there'], 'how');
+      if (ve) {
+        jsonErr(res, 400, ve);
+        return;
+      }
+      try {
+        const out = db.resolveAutoBookouts(database, ids, data.how, req.authUser && req.authUser.user_id);
+        broadcastSSE(res);
+        jsonOk(res, out);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // -- Ende Regalbretter --
 
   // -- CalDAV Config --
   // ── CalDAV app-specific passwords (S-25) ──────────────────
