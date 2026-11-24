@@ -91,13 +91,14 @@ describe('Sorte aus und wieder an (Server)', () => {
     assert.equal(db.autoBookOuts(d, NOW).length, 0, 'nicht sofort');
     const f = fristen();
     assert.equal(f.get(zelt[0]).limitAt, spaeter(14).getTime(), 'Fruchtzelt: zwei Wochen ab dem Anschalten');
-    assert.equal(f.get(inc[0]).limitAt, spaeter(14).getTime(), 'Inkubation: über der Zeit in zwei Wochen');
-    // NOW ist Sonntag, der 1.3.2026: über der Zeit am 15.3., gefragt im Montags-Check
-    // am 16.3., ausgebucht ohne Antwort eine Woche danach, am 23.3. um 0 Uhr Ortszeit.
-    assert.equal(f.get(inc[0]).askAt, new Date(2026, 2, 16).getTime(), 'gefragt am Montag danach');
-    assert.equal(f.get(inc[0]).outAt, new Date(2026, 2, 23).getTime(), 'ausgebucht eine Woche nach dem Check');
-    assert.equal(db.autoBookOuts(d, spaeter(15)).length, 2, 'dann die beiden im Fruchtzelt');
-    assert.equal(db.autoBookOuts(d, spaeter(22)).length, 1, 'und der in der Inkubation');
+    // In der Inkubation zählt das Anschalten wie ein "Noch da": der nächste Check
+    // wird übersprungen. NOW ist Sonntag, der 1.3.2026, der letzte Tag der Woche ab
+    // dem 23.2.: gefragt am Montag, dem 9.3., ausgebucht ohne Antwort am 16.3., je um
+    // 0 Uhr Ortszeit.
+    assert.equal(f.get(inc[0]).askAt, new Date(2026, 2, 9).getTime(), 'gefragt im übernächsten Check');
+    assert.equal(f.get(inc[0]).outAt, new Date(2026, 2, 16).getTime(), 'ausgebucht eine Woche nach dem Check');
+    assert.equal(db.autoBookOuts(d, new Date(2026, 2, 15, 12)).length, 2, 'dann die beiden im Fruchtzelt');
+    assert.equal(db.autoBookOuts(d, new Date(f.get(inc[0]).outAt)).length, 1, 'und der in der Inkubation');
   });
 
   it('wieder an: ein Beutel, der noch länger Zeit hat, behält seine Frist', () => {
@@ -132,7 +133,7 @@ describe('Sorte aus und wieder an (Server)', () => {
 
 describe('Sorte aus: Fristen und Fruchtzelt im Browser', () => {
   const brettFristVon = new Function(hebeFunktion('brettFristVon', SRC) + '; return brettFristVon;')();
-  const RULES = { confirmDays: 14, graceDays: 7 };
+  const RULES = { confirmDays: 14, checkDay: 1 };
   const frist = (s) =>
     brettFristVon({
       s,

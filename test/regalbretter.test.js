@@ -300,14 +300,26 @@ describe('Regalbretter: was die App von selbst ausbucht', () => {
     assert.equal(db.brettFristen(d)[0].limitAt, NOW.getTime() + 5 * DAY);
   });
 
-  it('"Noch da" schiebt die Frage um zwei Wochen', () => {
+  it('"Noch da" ueberspringt einen Check: gefragt wird im uebernaechsten', () => {
     const bags = charge(d, sid, 'TP-010126-01', 1, 34);
     stelle(d, bags, 'TP-010126-01', 'INC_R1:1', 34);
+    // NOW ist Sonntag, der 1.3., der letzte Tag der Woche ab Montag, dem 23.2.:
+    // zwei Wochen nach deren Anfang ist Montag, der 9.3.
     assert.equal(db.confirmStillThere(d, [bags[0], 'GIBTS-NICHT'], null, NOW), 1);
     const [f] = db.brettFristen(d);
-    assert.equal(f.limitAt, NOW.getTime() + 14 * DAY);
+    assert.equal(f.limitAt, MONTAG_DANACH.getTime());
+    assert.equal(f.askAt, MONTAG_DANACH.getTime());
     assert.deepEqual(Object.keys(db.listStillThere(d, NOW)), bags);
     assert.ok('stillThere' in db.readAll(d), '/api/data traegt die Bestaetigungen mit');
+  });
+
+  it('"Noch da" am Montag um 9 Uhr: wieder gefragt genau zwei Montage spaeter, nicht drei', () => {
+    const bags = charge(d, sid, 'TP-010126-01', 1, 34);
+    stelle(d, bags, 'TP-010126-01', 'INC_R1:1', 34);
+    db.confirmStillThere(d, bags, null, new Date(2026, 2, 2, 9));
+    const [f] = db.brettFristen(d);
+    assert.equal(f.askAt, new Date(2026, 2, 16).getTime());
+    assert.equal(f.outAt, new Date(2026, 2, 23).getTime());
   });
 
   it('kontaminierte Beutel und Arten ohne Zahl haben keine Frist', () => {

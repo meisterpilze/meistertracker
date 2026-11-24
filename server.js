@@ -1658,8 +1658,11 @@ function checkLabFach() {
 function checkBrettFristen() {
   try {
     const out = db.autoBookOuts(database);
-    if (!out.length) return;
-    log('info', 'Bags booked out after their time', { bags: out.length });
+    // Auch ein Lauf, der nur Zeilen geschlossen hat (Montags-Check: eine Woche
+    // ohne Antwort), ändert, was die Telefone zeigen: also Bescheid geben.
+    const geschlossen = out.geschlossen || 0;
+    if (!out.length && !geschlossen) return;
+    log('info', 'Bags booked out after their time', { bags: out.length, closed: geschlossen });
     broadcastSSE();
   } catch (e) {
     log('warn', 'Shelf time check failed', { error: e.message });
