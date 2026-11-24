@@ -4641,6 +4641,9 @@ function readAll(db, opts = {}) {
     autoBookouts: listAutoBookouts(db),
     stillThere: listStillThere(db),
     brettRules: { confirmDays: BRETT_CONFIRM_DAYS, checkDay: BRETT_CHECK_DAY },
+    // Wann der Montags-Check nach welchem Beutel fragt, in der Zeitzone des
+    // Servers gerechnet (brettFragen).
+    brettFragen: brettFragen(db),
     version
   };
 }
@@ -11694,25 +11697,44 @@ function brettId(rackId, level) {
 // Der erste Check-Tag um 0 Uhr Ortszeit, der nicht vor `ms` liegt. Ortszeit, weil
 // die Woche des Hofs dort beginnt; in Kalendertagen und nicht in festen 24
 // Stunden, damit die Zeitumstellung den Montag nicht auf Sonntag 23 Uhr schiebt.
-// app.js rechnet mit derselben Funktion.
+// Jeder Tag wird aus Jahr, Monat und Tag neu gebaut: wo die Uhr um Mitternacht
+// springt und es 0 Uhr nicht gibt, ist das der erste Augenblick des Tages, und
+// eine Woche später wieder 0 Uhr. app.js rechnet mit denselben Funktionen; die
+// Telefone nehmen aber die Tage, die der Server schickt (brettFragen).
 function brettCheckAb(ms, tag = BRETT_CHECK_DAY) {
   const d = new Date(ms);
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  if (m.getTime() < ms) m.setDate(m.getDate() + 1);
-  m.setDate(m.getDate() + ((tag - m.getDay() + 7) % 7));
-  return m.getTime();
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  let t = d.getDate();
+  if (new Date(y, m, t).getTime() < ms) t += 1;
+  return new Date(y, m, t + ((tag - new Date(y, m, t).getDay() + 7) % 7)).getTime();
 }
-// Eine Woche später, in Kalendertagen (wie oben).
+// Der Tag eine Woche später um 0 Uhr; `ms` ist ein Check-Tag.
 function brettWocheSpaeter(ms) {
   const d = new Date(ms);
-  d.setDate(d.getDate() + 7);
-  return d.getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7).getTime();
 }
+// Der Check-Tag um 0 Uhr, an dem die Woche von `ms` begann (am Check-Tag selbst
+// derselbe Tag).
+function brettWochenAnfang(ms, tag = BRETT_CHECK_DAY) {
+  const c = brettCheckAb(ms, tag);
+  if (c === ms) return c;
+  const d = new Date(c);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7).getTime();
+}
+// Bis wann ein Bucher spätestens laufen muss, damit sein Ausbuchen noch "still"
+// sein darf: läuft der Server zur Zeit nicht (aus, abgestürzt, die Uhr sprang),
+// hat ihn auch kein Check gezeigt, und dann zeigt ihn der nächste.
+const BRETT_PUENKTLICH_MS = DAY_MS;
 
 // Where every bag stands now: the latest ADD/MOVE/MOVE_BATCH with a place,
 // with that row's time and reason. A REMOVE takes the bag out. The same replay
 // as getBagZoneMap, but keeping the exact place (shelf), not only the zone.
-function _bagPlaces(db) {
+// gruppeVon (optional): ort → eine Gruppe von Räumen ("inc" für Inkubation und
+// Körnerbrut). Dann trägt jeder Eintrag `seit`: wann der Beutel zuletzt in diese
+// Gruppe kam. Ein Umzug innerhalb der Gruppe (Raum → Fach, Fach → Fach) lässt
+// `seit` stehen; ein REMOVE oder ein Platz anderswo fängt neu an.
+function _bagPlaces(db, gruppeVon) {
   const map = new Map();
   const rows = db.prepare(
     'SELECT id, time, action, batch, bag, "to", reason FROM scan_log WHERE bag IS NOT NULL ORDER BY id'
@@ -11720,7 +11742,18 @@ function _bagPlaces(db) {
   for (const e of rows.iterate()) {
     if (e.action === 'REMOVE') map.delete(e.bag);
     else if ((e.action === 'ADD' || e.action === 'MOVE' || e.action === 'MOVE_BATCH') && e.to) {
-      map.set(e.bag, { id: e.id, loc: e.to, time: e.time, reason: e.reason || null, batch: e.batch || null });
+      const vorher = map.get(e.bag);
+      const gruppe = gruppeVon ? gruppeVon(e.to) : null;
+      const seit = vorher && gruppe && vorher.gruppe === gruppe ? vorher.seit : e.time;
+      map.set(e.bag, {
+        id: e.id,
+        loc: e.to,
+        time: e.time,
+        reason: e.reason || null,
+        batch: e.batch || null,
+        gruppe,
+        seit
+      });
     }
   }
   return map;
@@ -11777,11 +11810,15 @@ function setRackShelves(db, rackId, { levels, strainId } = {}) {
 //   after it came in counts BRETT_CONFIRM_DAYS from then instead. Booked out
 //   when that time is reached.
 // - In an incubation or spawn zone: inc_max_days (blocks) or grain_max_days
-//   (grain spawn) after the batch was made, or BRETT_CONFIRM_DAYS after the
-//   last "Noch da" if that is later. The app asks on the first check day
-//   (Montags-Check, BRETT_CHECK_DAY) after that, and never before the first
-//   check day after the limit was set (askAt); it books out a week after that
-//   check if nobody answered (outAt), so entering a limit never empties a room.
+//   (grain spawn) after the batch was made. A "Noch da" skips one check: the
+//   app asks again on the check day two weeks after the check week in which it
+//   was given. The app asks on the first check day (Montags-Check,
+//   BRETT_CHECK_DAY) after the limit, never before the first check day after
+//   the limit was set, and never before the first check day after the bag came
+//   into incubation or spawn (askAt: a bag put back or moved in has been seen,
+//   and is not booked out the moment it arrives). It books out a week after
+//   that check if nobody answered (outAt), so entering a limit never empties a
+//   room.
 // Contaminated bags, and Sorten without a limit, have no time. The times are
 // absolute (ms), so the caller compares them with whatever "now" it has.
 function brettFristen(db) {
@@ -11817,10 +11854,17 @@ function brettFristen(db) {
       .all()
       .map((r) => [r.bag_id, r])
   );
+  const rolleVon = (loc) => {
+    const base = locationBase(loc);
+    return roleOf.get(roleOf.has(base) ? base : rackZone.get(base));
+  };
+  const gruppeVon = (loc) => {
+    const r = rolleVon(loc);
+    return r === 'incubation' || r === 'spawn' ? 'inc' : r || null;
+  };
   const out = [];
-  for (const [bag, at] of _bagPlaces(db)) {
-    const base = locationBase(at.loc);
-    const role = roleOf.get(roleOf.has(base) ? base : rackZone.get(base));
+  for (const [bag, at] of _bagPlaces(db, gruppeVon)) {
+    const role = rolleVon(at.loc);
     const b = batchOf.get(bag);
     const s = b && strains.get(b.strain_id);
     if (!s) continue;
@@ -11843,9 +11887,13 @@ function brettFristen(db) {
       if (!(max > 0)) continue;
       kind = 'inc';
       limitAt = Date.parse(b.created) + max * DAY_MS;
-      if (conf) limitAt = Math.max(limitAt, conf + BRETT_CONFIRM_DAYS * DAY_MS);
+      // "Noch da": der Check-Tag zwei Wochen nach dem Anfang der Woche, in der es
+      // gesagt wurde. Mit conf + 14 Tagen zur selben Uhrzeit landete ein Montag
+      // 9 Uhr gegebenes "Noch da" erst einen Check später, nach drei Wochen.
+      if (conf) limitAt = Math.max(limitAt, brettWocheSpaeter(brettWocheSpaeter(brettWochenAnfang(conf))));
       const start = s.limits_set ? Date.parse(s.limits_set) : 0;
-      askAt = brettCheckAb(Math.max(limitAt, start));
+      const seit = at.seit ? Date.parse(at.seit) : 0;
+      askAt = brettCheckAb(Math.max(limitAt, start, Number.isFinite(seit) ? seit : 0));
       outAt = brettWocheSpaeter(askAt);
     } else continue;
     if (!Number.isFinite(limitAt) || !Number.isFinite(outAt)) continue;
@@ -11888,11 +11936,20 @@ function _programmWiederAn(db, strainId, now) {
 //
 // Montags-Check: a bag from incubation or spawn only goes after a check day
 // showed it and a week passed without an answer. That was the question, so its
-// row is closed at once ("silent") and nobody is asked a second time. A tent bag
-// goes when its time is up without being asked; its row stays open for the
-// next check day to show ("Stimmt" / "Noch da"), and if a week passes after
-// that check without an answer, it is closed as "silent" too. So the check
-// never grows into a list that is always there.
+// row is closed at once ("silent") and nobody is asked a second time — but only
+// when this run is on time (within BRETT_PUENKTLICH_MS of outAt): a run that
+// comes late (server off, clock jump) cannot know a check ever showed the bag,
+// so its row stays open like a tent row. askAt is never before the first check
+// after the bag came into incubation (brettFristen), so a bag put back is not
+// booked out again the moment it arrives. A tent bag goes when its time is up
+// without being asked; its row stays open for the next check day to show
+// ("Stimmt" / "Noch da"), and if a week passes after that check without an
+// answer, it is closed as "silent" too. So the check never grows into a list
+// that is always there.
+//
+// Returns the bags booked out; `.geschlossen` (not enumerable) says how many
+// open rows this run closed, so the caller knows the data changed even when
+// nothing new was booked out.
 function autoBookOuts(db, now = new Date()) {
   const nowIso = now.toISOString();
   const alt = db
@@ -11900,7 +11957,8 @@ function autoBookOuts(db, now = new Date()) {
     .all()
     .filter((a) => brettWocheSpaeter(brettCheckAb(Date.parse(a.created))) <= now.getTime());
   const faellig = brettFristen(db).filter((f) => f.outAt <= now.getTime());
-  if (!faellig.length && !alt.length) return [];
+  const ergebnis = (liste) => Object.defineProperty(liste, 'geschlossen', { value: alt.length });
+  if (!faellig.length && !alt.length) return ergebnis([]);
   db.exec('BEGIN');
   try {
     const still = db.prepare(
@@ -11928,12 +11986,12 @@ function autoBookOuts(db, now = new Date()) {
       'INSERT OR IGNORE INTO auto_bookouts(scan_log_id, bag_id, loc, created, resolved, resolved_at) VALUES(?,?,?,?,?,?)'
     );
     faellig.forEach((f, i) => {
-      const gefragt = f.kind === 'inc';
+      const gefragt = f.kind === 'inc' && now.getTime() - f.outAt < BRETT_PUENKTLICH_MS;
       if (ids[i]) ins.run(ids[i], f.bag, f.loc, nowIso, gefragt ? 'silent' : null, gefragt ? nowIso : null);
     });
     incrementDataVersion(db);
     db.exec('COMMIT');
-    return faellig.map((f, i) => ({ ...f, scanLogId: ids[i] || null }));
+    return ergebnis(faellig.map((f, i) => ({ ...f, scanLogId: ids[i] || null })));
   } catch (e) {
     db.exec('ROLLBACK');
     invalidateBagZoneCache(db);
@@ -11941,6 +11999,9 @@ function autoBookOuts(db, now = new Date()) {
   }
 }
 
+// checkAt: der Montags-Check, der die Zeile zeigt; closeAt: dann schließt der
+// Server sie "silent". Beide rechnet der Server, damit Telefone in einer anderen
+// Zeitzone denselben Montag nehmen.
 function listAutoBookouts(db) {
   return db
     .prepare(
@@ -11950,7 +12011,30 @@ function listAutoBookouts(db) {
         ORDER BY a.scan_log_id`
     )
     .all()
-    .map((r) => ({ id: r.scan_log_id, bag: r.bag_id, batch: r.batch || null, loc: r.loc, created: r.created }));
+    .map((r) => {
+      const checkAt = brettCheckAb(Date.parse(r.created));
+      return {
+        id: r.scan_log_id,
+        bag: r.bag_id,
+        batch: r.batch || null,
+        loc: r.loc,
+        created: r.created,
+        checkAt,
+        closeAt: brettWocheSpaeter(checkAt)
+      };
+    });
+}
+
+// Für den Browser: je Beutel in Inkubation oder Körnerbrut, der über seiner Zeit
+// ist oder es in der nächsten Woche wird, wann der Check fragt und wann der
+// Server ausbucht. Der Browser rechnet das nur noch selbst, wenn ein Beutel hier
+// fehlt (er kam nach dem letzten Abgleich über die Zeit): der Montag hängt an
+// der Zeitzone, und die des Servers gilt.
+function brettFragen(db, now = new Date()) {
+  const bis = now.getTime() + 8 * DAY_MS;
+  return brettFristen(db)
+    .filter((f) => f.kind === 'inc' && f.limitAt <= bis)
+    .map((f) => ({ bag: f.bag, askAt: f.askAt, outAt: f.outAt }));
 }
 
 // "Stimmt" (how = 'correct'): the bags stay out, the note goes. "Noch da"
@@ -17138,7 +17222,9 @@ module.exports = {
   setRackShelves,
   brettCheckAb,
   brettWocheSpaeter,
+  brettWochenAnfang,
   brettFristen,
+  brettFragen,
   autoBookOuts,
   listAutoBookouts,
   resolveAutoBookouts,

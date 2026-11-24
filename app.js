@@ -402,6 +402,9 @@ let shelfItems = [];
 let autoBookouts = [];
 let stillThere = {};
 let brettRules = { confirmDays: 14, checkDay: 1 };
+// Je Beutel, wann der Montags-Check fragt und wann der Server ausbucht, so wie
+// der Server es rechnet (db.brettFragen): bag → { askAt, outAt }.
+let brettFragen = new Map();
 let appUsers = [];
 let calEvSelectedAssignees = [];
 let calTaskSelectedAssignees = [];
@@ -718,6 +721,7 @@ function applyData(d) {
   shelfItems = d.shelf || [];
   autoBookouts = d.autoBookouts || [];
   stillThere = d.stillThere || {};
+  brettFragen = new Map((Array.isArray(d.brettFragen) ? d.brettFragen : []).map((f) => [f.bag, f]));
   if (
     d.brettRules &&
     d.brettRules.confirmDays > 0 &&
@@ -1086,6 +1090,10 @@ async function pollSync(opts) {
       // No change — keep the existing data, just refresh the "synced at" time.
       lastSyncTime = lastSyncTime || Date.now();
       setSyncStatus('ok', t('sync.syncedAt', { time: formatRelativeTime(lastSyncTime) }));
+      // Ein neuer Tag ohne neue Daten: die Startseite hängt am Datum (der
+      // Montags-Check erscheint am Montag, "Was ansteht" ist der Tag), also neu
+      // zeichnen — sonst stünde sie bis zur nächsten Änderung auf gestern.
+      if (_montagStand && _montagStand !== new Date().toDateString()) renderDashBatchTasks();
       ok = true;
       return ok;
     }
@@ -10120,23 +10128,37 @@ function brettImZelt() {
 
 // Der erste Check-Tag (brettRules.checkDay, 1 = Montag) um 0 Uhr Ortszeit, der
 // nicht vor `ms` liegt; in Kalendertagen, damit die Zeitumstellung nichts
-// verschiebt. Wortgleich mit db.brettCheckAb.
+// verschiebt. Wortgleich mit db.brettCheckAb, db.brettWocheSpaeter und
+// db.brettWochenAnfang. Wo der Server die Tage geschickt hat (brettFragen,
+// checkAt), gelten seine: der Montag hängt an der Zeitzone.
 function brettCheckAb(ms, tag = brettRules.checkDay) {
   const d = new Date(ms);
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  if (m.getTime() < ms) m.setDate(m.getDate() + 1);
-  m.setDate(m.getDate() + ((tag - m.getDay() + 7) % 7));
-  return m.getTime();
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  let t = d.getDate();
+  if (new Date(y, m, t).getTime() < ms) t += 1;
+  return new Date(y, m, t + ((tag - new Date(y, m, t).getDay() + 7) % 7)).getTime();
 }
+// Der Tag eine Woche später um 0 Uhr; `ms` ist ein Check-Tag.
 function brettWocheSpaeter(ms) {
   const d = new Date(ms);
-  d.setDate(d.getDate() + 7);
-  return d.getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7).getTime();
+}
+// Der Check-Tag um 0 Uhr, an dem die Woche von `ms` begann (am Check-Tag selbst
+// derselbe Tag).
+function brettWochenAnfang(ms, tag = brettRules.checkDay) {
+  const c = brettCheckAb(ms, tag);
+  if (c === ms) return c;
+  const d = new Date(c);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7).getTime();
 }
 // Dieselben Regeln wie db.brettFristen, ohne Datenbank, damit der Test sie
 // gegen dieselben Fälle halten kann. limitAt: ab dann ist der Beutel über der
 // Zeit; askAt: ab diesem Montags-Check fragt die App (Inkubation, Körnerbrut);
-// outAt: dann bucht der Server ihn aus, eine Woche nach dem Check.
+// outAt: dann bucht der Server ihn aus, eine Woche nach dem Check. Den Montag
+// nimmt brettFrist vom Server (brettFragen), wo er ihn geschickt hat; was hier
+// steht, gilt nur für einen Beutel, der seit dem letzten Abgleich über die Zeit
+// kam, und nach einem "Noch da", das der Server noch nicht zurückgemeldet hat.
 function brettFristVon(p) {
   // Wie der Server: eine Sorte, die wir gerade nicht anbauen, hat keine Fristen.
   if (p.s && p.s.imProgramm === false) return null;
@@ -10152,7 +10174,13 @@ function brettFristVon(p) {
     const max = p.batchType === 'grain' ? p.s.grainMaxDays : p.s.incMaxDays;
     if (!(max > 0)) return null;
     let limitAt = Date.parse(p.made) + max * tag;
-    if (conf) limitAt = Math.max(limitAt, conf + p.rules.confirmDays * tag);
+    // "Noch da" überspringt einen Check: gefragt wird am Check-Tag zwei Wochen
+    // nach dem Anfang der Woche, in der es gesagt wurde (wie db.brettFristen).
+    if (conf)
+      limitAt = Math.max(
+        limitAt,
+        brettWocheSpaeter(brettWocheSpaeter(brettWochenAnfang(conf, p.rules.checkDay)))
+      );
     const start = p.limitsSet ? Date.parse(p.limitsSet) : 0;
     const askAt = brettCheckAb(Math.max(limitAt, start), p.rules.checkDay);
     return { kind: 'inc', limitAt, askAt, outAt: brettWocheSpaeter(askAt) };
@@ -10163,7 +10191,7 @@ function brettFrist(x) {
   const s = brettArt(x.strainId);
   const z = ZONE_BY_ID[toZone(x.loc)];
   if (!s || !z) return null;
-  return brettFristVon({
+  const f = brettFristVon({
     role: z.role,
     batchType: x.type,
     made: x.made,
@@ -10173,6 +10201,13 @@ function brettFrist(x) {
     s,
     rules: brettRules
   });
+  // Den Montag des Checks und den Tag des Ausbuchens rechnet der Server, in
+  // seiner Zeitzone; er weiß auch, seit wann der Beutel in der Inkubation steht.
+  // Liegt die eigene Grenze schon nach seinem Montag, kam hier ein "Noch da"
+  // dazu, das sein Stand noch nicht kennt: dann gilt die eigene Rechnung.
+  const vomServer = f && f.kind === 'inc' ? brettFragen.get(x.bag) : null;
+  if (!vomServer || f.limitAt > vomServer.askAt) return f;
+  return Object.assign({}, f, { askAt: vomServer.askAt, outAt: vomServer.outAt });
 }
 // Ein Block in der Inkubation: fällig, wenn sein Tag (b.due) heute oder vorbei ist.
 function brettFaellig(x, now) {
@@ -10265,7 +10300,9 @@ function zeltPlan(now) {
         const f = brettFaellig(x, now);
         if (f !== 'due' && f !== 'today') continue;
         const frist = brettFrist(x);
-        if (frist && now.getTime() >= frist.limitAt) continue; // steht unter "Noch da?"
+        // Über der Zeit fragt der Montags-Check, ob er noch da ist; bis der Check
+        // ihn zeigt (askAt), bleibt er hier, sonst stünde er nirgends.
+        if (frist && now.getTime() >= (frist.askAt != null ? frist.askAt : frist.limitAt)) continue;
         const key = (ort || '') + '|' + x.strainId;
         let g = je.get(key);
         if (!g) je.set(key, (g = { ort, zone: z.id, strainId: x.strainId, n: 0, due: x.due }));
@@ -10750,6 +10787,30 @@ function brettZeltZaehlen(s, list, want, fertig) {
     fertig(t('brett.done.count', { name, n: want, was: have }), entries);
     return;
   }
+  // Mehr da, als die App zählt: zuerst die, die sie in diesem Zelt selbst
+  // ausgebucht hat (Zeltzeit vorbei) und die noch keiner bestätigt hat — die
+  // jüngsten zuerst. Sie stehen offenbar noch da; der Montags-Check hätte sie
+  // erst am Montag gezeigt. Erst was dann noch fehlt, kommt aus der Inkubation,
+  // sonst stünde ein Block doppelt: einmal geholt, einmal am Montag mit "Noch da"
+  // zurück.
+  const offen = autoBookouts
+    .filter((a) => toZone(a.loc) === s.zone && (batchById(a.batch) || {}).strainId === s.strainId)
+    .sort((a, b) => String(b.created).localeCompare(String(a.created)))
+    .slice(0, want - have);
+  if (offen.length) {
+    const ids = offen.map((a) => a.id);
+    autoBookouts = autoBookouts.filter((a) => !ids.includes(a.id));
+    apiPost('/api/auto-bookouts/resolve', { ids, how: 'still_there' }).then((r) => {
+      if (!r || r.error) toast(r && r.error ? r.error : t('brett.saveFailed'), 'err');
+      // Zurückgestellt hat der Server; die Einträge holt der Abgleich.
+      syncNow();
+    });
+  }
+  const zurueck = offen.length;
+  if (want - have - zurueck <= 0) {
+    fertig(t('brett.done.count', { name, n: have + zurueck, was: have }) + ' · ' + t('brett.restored', { n: zurueck }));
+    return;
+  }
   const quelle = [];
   for (const z of zones) {
     if (z.role !== 'incubation' && z.role !== 'spawn') continue;
@@ -10762,10 +10823,11 @@ function brettZeltZaehlen(s, list, want, fertig) {
     }
   }
   quelle.sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')) || brettAelter(a, b));
-  const wer = quelle.slice(0, want - have);
+  const wer = quelle.slice(0, want - have - zurueck);
   const entries = brettSchreibe(wer.map((x) => ({ action: 'MOVE', x, to: s.zone, reason: 'count' })));
-  const rest = want - have - entries.length;
-  const msg = t('brett.done.count', { name, n: have + entries.length, was: have });
+  const rest = want - have - zurueck - entries.length;
+  let msg = t('brett.done.count', { name, n: have + zurueck + entries.length, was: have });
+  if (zurueck) msg += ' · ' + t('brett.restored', { n: zurueck });
   fertig(rest > 0 ? msg + ' · ' + t('zelt.noneLeft', { n: rest, species: name }) : msg, entries);
 }
 // Vom Umziehen: die ältesten n an einen Platz (ein Zelt oder ein anderes Brett).
@@ -10806,6 +10868,13 @@ async function brettAutoAntwort(ids, how) {
     return;
   }
   autoBookouts = autoBookouts.filter((a) => !ids.includes(a.id));
+  // Nichts mehr offen: die Woche war um, der Server hatte die Zeilen schon
+  // geschlossen. Das sagen, statt "0 zurückgestellt" wie einen Erfolg zu melden.
+  if (r.resolved === 0) {
+    syncNow();
+    toast(t('brett.autoClosed'), 'err');
+    return;
+  }
   if (how === 'still_there') {
     // Zurückgestellt hat der Server; die neuen Einträge holt der nächste Abgleich.
     syncNow();
@@ -10828,7 +10897,7 @@ function brettAlteGruppen(now) {
     for (const e of list) {
       const x = _brettInfo(e);
       const f = brettFrist(x);
-      if (!f || f.askAt == null || now.getTime() < f.askAt) continue;
+      if (!f || f.askAt == null || now.getTime() < f.askAt || now.getTime() < f.limitAt) continue;
       const key = loc + '|' + x.batch;
       let k = g.get(key);
       if (!k) g.set(key, (k = { loc, batch: x.batch, b: x.b, made: x.made, outAt: f.outAt, xs: [] }));
@@ -10844,7 +10913,15 @@ function brettAlteGruppen(now) {
 function brettAutoGruppen(now) {
   const g = new Map();
   for (const a of autoBookouts) {
-    if (now && brettCheckAb(Date.parse(a.created)) > now.getTime()) continue;
+    if (now) {
+      // Den Montag und das Ende der Woche rechnet der Server (checkAt, closeAt);
+      // eine Antwort von vorher hat nur `created`.
+      const ab = a.checkAt != null ? a.checkAt : brettCheckAb(Date.parse(a.created));
+      const bis = a.closeAt != null ? a.closeAt : brettWocheSpaeter(ab);
+      // Noch nicht dran, oder die Woche ist um und der Server schließt die Zeile
+      // gleich: dann keinen Knopf mehr, der nichts mehr ändern kann.
+      if (ab > now.getTime() || bis <= now.getTime()) continue;
+    }
     const b = batchById(a.batch);
     const zone = toZone(a.loc);
     const key = (b ? b.strainId : '') + '|' + zone + '|' + String(a.created).slice(0, 10);
@@ -10982,10 +11059,14 @@ function renderWorkBretter() {
 // nächsten Montag. Ohne Antwort bucht die App eine Woche nach dem Check aus,
 // und was sie ausgebucht hat, gilt nach einer Woche als "Stimmt". So steht keine
 // Warnung jeden Tag da, und die eine, die kommt, hat einen Termin.
+// Der Tag, für den die Startseite zuletzt gezeichnet wurde (pollSync zeichnet
+// neu, wenn ein neuer begonnen hat).
+let _montagStand = '';
 function renderMontagsCheck(now) {
   const card = document.getElementById('wk-montag');
   const box = document.getElementById('wk-montag-list');
   if (!card || !box) return;
+  _montagStand = now.toDateString();
   const teile = [];
   const alt = brettAlteGruppen(now);
   if (alt.length) {
@@ -10996,7 +11077,8 @@ function renderMontagsCheck(now) {
             const art = g.b ? sorteName(g.b) : '';
             return (
               `<div class="wk-bretter-row wk-bretter-ask"><span class="wk-bretter-t"><b>${esc(brettPlatzName(g.loc))}: ${g.xs.length} ${esc(art)}</b>` +
-              `<span>${esc(t('bretter.staleRow', { made: fmtDtShort(g.made), out: fmtDtShort(new Date(g.outAt)) }))}</span></span>` +
+              // Ausgebucht wird um 0 Uhr am Check-Tag: antworten geht bis zum Tag davor.
+              `<span>${esc(t('bretter.staleRow', { made: fmtDtShort(g.made), out: fmtDtShort(new Date(g.outAt - 1)) }))}</span></span>` +
               `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-bretter-noch="${i}">${esc(t('brett.stillThere'))}</button>` +
               `<button type="button" class="btn btn-sm btn-r" data-bretter-raus="${i}">${esc(t('brett.gone'))}</button></span></div>`
             );

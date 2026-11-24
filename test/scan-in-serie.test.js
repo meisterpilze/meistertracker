@@ -460,6 +460,10 @@ describe('Abfrage: ein Fehler ist kein Stand', () => {
       const setSyncStatus = () => {};
       const formatRelativeTime = () => '';
       const refresh = () => {};
+      // Der Tag, für den die Startseite gezeichnet ist (Montags-Check): leer
+      // heißt noch nie gezeichnet, dann zeichnet ein 304 nichts neu.
+      const _montagStand = '';
+      const renderDashBatchTasks = () => {};
       const applyData = (d) => angewandt.push(d);
       const authFetch = async () => {
         const a = antworten.shift();

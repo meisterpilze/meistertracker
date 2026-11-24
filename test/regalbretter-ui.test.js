@@ -19,8 +19,9 @@ const ago = (d) => new Date(NOW - d * DAY).toISOString();
 const RULES = { confirmDays: 14, checkDay: 1 };
 
 const brettFristVon = new Function(
-  ['brettCheckAb', 'brettWocheSpaeter', 'brettFristVon'].map((n) => hebeFunktion(n, SRC)).join('\n') +
-    '; return brettFristVon;'
+  ['brettCheckAb', 'brettWocheSpaeter', 'brettWochenAnfang', 'brettFristVon']
+    .map((n) => hebeFunktion(n, SRC))
+    .join('\n') + '; return brettFristVon;'
 )();
 const zeltPlanVon = new Function(hebeFunktion('zeltPlanVon', SRC) + '; return zeltPlanVon;')();
 
@@ -38,12 +39,12 @@ describe('Regalbretter im Browser: die Fristen', () => {
 
   it('der Montag des Checks: dieselbe Rechnung im Browser und im Server', () => {
     // Bis auf die Vorgabe des Wochentags wortgleich, damit beide denselben Montag nehmen.
-    const rumpf = (src) =>
-      hebeFunktion('brettCheckAb', src)
+    const rumpf = (name, src) =>
+      hebeFunktion(name, src)
         .replace(/tag = [A-Za-z_.]+\)/, 'tag)')
         .replace(/^\s*\/\/.*$/gm, '');
-    assert.equal(rumpf(SRC), rumpf(DB_SRC));
-    assert.equal(hebeFunktion('brettWocheSpaeter', SRC), hebeFunktion('brettWocheSpaeter', DB_SRC));
+    for (const name of ['brettCheckAb', 'brettWocheSpaeter', 'brettWochenAnfang'])
+      assert.equal(rumpf(name, SRC), rumpf(name, DB_SRC), name);
   });
 
   it('im Zelt: die Zeltzeit ab dem Tag, an dem der Block hereinkam', () => {
