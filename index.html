@@ -308,11 +308,13 @@
       </div>
     </div>
 
-    <!-- Ein Regal einstellen: wie viele Bretter, welche Art, und die Etiketten der
-         Bretter (rackEditOpen). Nur ein Admin speichert. -->
+    <!-- Ein Regal einstellen: wie viele Fächer, welche Art, die Etiketten der
+         Fächer, und löschen, solange es leer ist (rackEditOpen). Geöffnet von
+         einer Regal-Kachel auf der Seite Zonen. Nur ein Admin speichert. -->
     <div class="modal-bg" id="m-rack-edit" role="dialog" aria-modal="true" aria-labelledby="m-rack-edit-title" hidden>
       <div class="modal">
         <h3 id="m-rack-edit-title"></h3>
+        <p class="fs-meta zone-sheet-sub" id="m-rack-edit-sub"></p>
         <label class="brett-feld" for="m-rack-edit-levels">
           <span data-i18n="rackEdit.levels">Fächer</span>
           <input type="number" id="m-rack-edit-levels" inputmode="numeric" min="0" max="20" step="1" value="0" />
@@ -324,10 +326,84 @@
         <p class="fs-meta" data-i18n="rackEdit.help">
           Jedes Fach bekommt ein eigenes Etikett. Ein Fach, in dem noch Beutel stehen, lässt sich nicht wegnehmen.
         </p>
+        <div class="zone-sheet-row">
+          <button type="button" class="btn btn-sm" data-rack-edit="print" data-i18n="rackEdit.print">
+            Etiketten drucken
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-r"
+            id="m-rack-edit-del"
+            data-rack-edit="delete"
+            data-i18n="rackEdit.delete"
+            hidden
+          >
+            Regal löschen
+          </button>
+        </div>
         <div class="modal-btns">
           <button type="button" class="btn" data-rack-edit="close" data-i18n="common.cancel">Abbrechen</button>
-          <button type="button" class="btn" data-rack-edit="print" data-i18n="rackEdit.print">Etiketten drucken</button>
           <button type="button" class="btn btn-p" data-rack-edit="save" data-i18n="common.save">Speichern</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ein Raum bearbeiten ("Bearbeiten" auf der Seite Zonen, zoneEditOpen).
+         Was dort selten gebraucht wird, steht hier: umbenennen, Höchstzahl,
+         Reihenfolge, ein Regal dazu, der QR-Code des Raums, löschen. Die Seite
+         selbst zeigt nur Räume und Regale. -->
+    <div class="modal-bg" id="m-zone-edit" role="dialog" aria-modal="true" aria-labelledby="m-zone-edit-title" hidden>
+      <div class="modal">
+        <h3 id="m-zone-edit-title"></h3>
+        <p class="fs-meta zone-sheet-sub" id="m-zone-edit-sub"></p>
+        <div id="m-zone-edit-body"></div>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-zone-edit="close" data-i18n="common.close">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Einen Raum anlegen ("+ Raum" auf der Seite Zonen). Die Felder sind die,
+         die addZone() liest. Einen Raum für Kontamination legt niemand mehr an:
+         ein kontaminierter Beutel wird ausgebucht, er steht nirgends. -->
+    <div class="modal-bg" id="m-zone-add" role="dialog" aria-modal="true" aria-labelledby="m-zone-add-title" hidden>
+      <div class="modal">
+        <h3 id="m-zone-add-title" data-i18n="zones.addTitle">Neuer Raum</h3>
+        <label class="brett-feld" for="zone-name">
+          <span data-i18n="zones.zoneName">Name</span>
+          <input id="zone-name" data-i18n-placeholder="zones.namePh" placeholder="z. B. Zelt 4" maxlength="50" />
+        </label>
+        <label class="brett-feld" for="zone-role">
+          <span data-i18n="zones.zoneRole">Wofür</span>
+          <select id="zone-role">
+            <option value="spawn" data-i18n="zones.roleSpawn">Körnerbrut</option>
+            <option value="incubation" data-i18n="zones.roleIncubation">Inkubation</option>
+            <option value="fruiting" selected data-i18n="zones.roleFruiting">Fruchtzelt</option>
+          </select>
+        </label>
+        <label class="brett-feld" for="zone-racks">
+          <span data-i18n="zones.zoneRacks">Regale (freiwillig, mit Komma getrennt)</span>
+          <input id="zone-racks" data-i18n-placeholder="zones.racksPh" placeholder="z. B. R1, R2, R3" maxlength="500" />
+        </label>
+        <label class="brett-feld" for="zone-capacity">
+          <span data-i18n="zones.capacity">Höchstzahl Beutel (freiwillig)</span>
+          <input
+            id="zone-capacity"
+            type="number"
+            min="1"
+            step="1"
+            inputmode="numeric"
+            data-i18n-placeholder="zones.capacityPh"
+            placeholder="freiwillig"
+          />
+        </label>
+        <label class="brett-feld zone-farbe" for="zone-color">
+          <span data-i18n="zones.zoneColor">Farbe</span>
+          <input id="zone-color" type="color" value="#438871" />
+        </label>
+        <div class="modal-btns">
+          <button type="button" class="btn" data-zone-add="close" data-i18n="common.cancel">Abbrechen</button>
+          <button type="button" class="btn btn-p" id="btn-add-zone" data-i18n="zones.add">Raum anlegen</button>
         </div>
       </div>
     </div>
@@ -1572,12 +1648,12 @@
               <button type="button" class="contam-sev-btn" data-sev="lost" data-i18n="contam.sevLost">Total</button>
             </div>
 
-            <!-- Auto-MOVE: on by default, whatever the severity. When checked,
-                 the server inserts a MOVE-to-CONTAM scan-log entry alongside
-                 the report. -->
+            <!-- Ausbuchen: on by default, whatever the severity. When checked,
+                 the server books the bag out with the report, marked as
+                 contamination (a MOVE to CONTAM, then a REMOVE). -->
             <label id="cr-auto-move-row" class="cr-auto-move-row">
               <input type="checkbox" id="cr-auto-move" />
-              <span data-i18n="contam.autoMove">Bag automatisch nach CONTAM verschieben</span>
+              <span data-i18n="contam.autoMove">Beutel ausbuchen, als Kontamination</span>
             </label>
           </div>
         </details>
@@ -7141,78 +7217,14 @@
           <div class="sp" id="sp-proj-products"><div id="pj-products"></div></div>
           <div class="sp" id="sp-proj-build"><div id="pj-build"></div></div>
         </div>
+        <!-- Zonen: je Raum eine Karte mit einem Knopf "Bearbeiten", die Regale als
+             Kacheln (renderZones). Anlegen über "+ Raum" (m-zone-add). -->
         <div class="page" id="p-zones">
-          <div class="card" style="margin-bottom: 16px">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
-              <div class="sec" data-i18n="zones.title" style="margin: 0">Zonen &amp; Racks</div>
-              <button
-                class="btn btn-sm fs-xs"
-                id="btn-print-all-zone-qr"
-                data-i18n="zones.printAllQr"
-              >
-                Alle QR-Codes drucken
-              </button>
-            </div>
-            <p class="fs-meta" style="color: var(--c-text-muted); margin-bottom: 12px" data-i18n="zones.desc">
-              Verwalte die Standorte deiner Farm. Zonen lassen sich nur löschen, wenn keine Bags darin sind.
-            </p>
-            <div id="zones-list"></div>
+          <div class="zonen-kopf">
+            <div class="sec" data-i18n="zones.title">Zonen</div>
+            <button type="button" class="btn btn-sm" id="btn-zone-add-open" data-i18n="zones.addRoom">+ Raum</button>
           </div>
-          <div class="card">
-            <div class="sec" data-i18n="zones.addTitle">Zone hinzufügen</div>
-            <div class="g2">
-              <div>
-                <label data-i18n="zones.zoneName">Name</label
-                ><input id="zone-name" data-i18n-placeholder="zones.namePh" placeholder="z.B. Tent 4" maxlength="50" />
-              </div>
-              <div>
-                <label data-i18n="zones.zoneRole">Rolle</label>
-                <select id="zone-role">
-                  <option value="spawn" data-i18n="zones.roleSpawn">Spawn</option>
-                  <option value="incubation" data-i18n="zones.roleIncubation">Incubation</option>
-                  <option value="fruiting" selected data-i18n="zones.roleFruiting">Fruiting</option>
-                  <option value="contaminated" data-i18n="zones.roleContaminated">Contaminated</option>
-                </select>
-              </div>
-            </div>
-            <div class="g2">
-              <div>
-                <label data-i18n="zones.zoneColor">Farbe</label
-                ><input
-                  id="zone-color"
-                  type="color"
-                  value="#438871"
-                  style="width: 60px; height: 32px; padding: 2px; border-radius: 6px; border: 1px solid var(--c-border)"
-                />
-              </div>
-              <div>
-                <label data-i18n="zones.zoneRacks">Racks (optional, kommagetrennt)</label
-                ><input
-                  id="zone-racks"
-                  data-i18n-placeholder="zones.racksPh"
-                  placeholder="z.B. R1, R2, R3"
-                  maxlength="500"
-                />
-              </div>
-            </div>
-            <div class="g2">
-              <div>
-                <label data-i18n="zones.capacity">Max. Kapazität (Bags)</label
-                ><input
-                  id="zone-capacity"
-                  type="number"
-                  min="1"
-                  step="1"
-                  data-i18n-placeholder="zones.capacityPh"
-                  placeholder="optional"
-                />
-              </div>
-              <div></div>
-            </div>
-            <button class="btn btn-green" id="btn-add-zone" style="margin-top: 10px" data-i18n="zones.add">
-              Zone hinzufügen
-            </button>
-          </div>
+          <div id="zones-list"></div>
         </div>
         <!-- One page, two halves, and they are the same working day: above, what
              may be sold; below, who is coming to collect it. Deciding the first

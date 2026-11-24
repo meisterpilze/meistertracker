@@ -9864,6 +9864,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const reportIds = [];
       const photoIds = [];
       const autoMovedScanIds = [];
+      const bookedOutScanIds = [];
       try {
         if (data.type_id === undefined || data.type_id === null) {
           const unknown = database.prepare("SELECT id FROM contamination_types WHERE key = 'unknown_other'").get();
@@ -9902,18 +9903,21 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
                 photoIds.push(db.addContaminationPhoto(database, reportId, saved));
               }
             }
-            // Auto-MOVE-to-CONTAM lifecycle: insert a MOVE scan-log entry that
-            // moves the bag to the first zone with role='contaminated', and stamp
-            // contamination_reports.scan_log_id to link the two records together.
+            // Kontaminiert heißt raus aus dem Bestand: der Beutel wird ausgebucht
+            // und steht danach nirgends mehr. Gezeichnet wird er mit einem Umzug
+            // in die Kontaminationszone (MOVE, Grund "contam_<Typ>"), denn daran
+            // zählen die Kontaminationsrate und "Tage ohne Kontamination"; im
+            // selben Zug bucht ein REMOVE mit demselben Grund ihn dort aus. Die
+            // Zone ist damit eine Markierung, kein Raum, in dem Beutel warten.
+            // contamination_reports.scan_log_id zeigt auf den MOVE.
             //
-            // auto_move: true zieht um, wie schwer es auch ist: ein kontaminierter
-            // Block gehört aus dem Bestand, und das Formular schickt das jetzt als
+            // auto_move: true bucht aus, wie schwer es auch ist: ein kontaminierter
+            // Block gehört aus dem Bestand, und das Formular schickt das als
             // Vorgabe. Vorher zog nur "Größer" oder "Total" um, und das Formular
             // stand auf "Klein" — gemeldet wurde, umgezogen nie, und der Block
             // zählte weiter in der Inkubation. Ohne Angabe (ältere Clients, die
             // Warteschlange) bleibt es bei major/lost; false heißt nein.
-            // Skipped silently when there is no bag_id (whole-batch report), no
-            // contam zone, or the bag already stands in one.
+            // Nichts geschieht ohne bag_id (Bericht über eine ganze Charge).
             const wantAutoMove =
               !cr.duplicate &&
               (data.auto_move === true ||
@@ -9922,47 +9926,65 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               const contamZone = database
                 .prepare("SELECT id FROM zones WHERE role = 'contaminated' ORDER BY sort_order, id LIMIT 1")
                 .get();
-              if (contamZone) {
-                const lastLoc = database
+              const lastLoc = database
+                .prepare(
+                  "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE','MOVE_BATCH') ORDER BY id DESC LIMIT 1"
+                )
+                .get(target.bag_id);
+              // Schon in einer Kontaminationszone (oder einem ihrer Regale): ein
+              // zweiter Umzug dorthin wäre nur ein doppelter Eintrag.
+              const schonDa =
+                !!contamZone &&
+                !!lastLoc &&
+                !!database
                   .prepare(
-                    "SELECT \"to\" AS toLoc FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE') ORDER BY id DESC LIMIT 1"
+                    `SELECT 1 FROM zones WHERE id = ? AND role = 'contaminated'
+                     UNION SELECT 1 FROM racks r JOIN zones z ON z.id = r.zone_id
+                      WHERE r.id = ? AND z.role = 'contaminated'`
                   )
-                  .get(target.bag_id);
-                // Schon in einer Kontaminationszone (oder einem ihrer Regale):
-                // ein zweiter Umzug dorthin wäre nur ein doppelter Eintrag.
-                const schonDa =
-                  lastLoc &&
-                  database
-                    .prepare(
-                      `SELECT 1 FROM zones WHERE id = ? AND role = 'contaminated'
-                       UNION SELECT 1 FROM racks r JOIN zones z ON z.id = r.zone_id
-                        WHERE r.id = ? AND z.role = 'contaminated'`
-                    )
-                    .get(lastLoc.toLoc, lastLoc.toLoc);
-                if (schonDa) continue;
-                const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
-                const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
-                // Use the no-txn variant so this insert is part of the surrounding transaction.
-                const ids = db.appendScanEntriesNoTxn(
-                  database,
-                  [
-                    {
-                      time: new Date().toISOString(),
-                      action: 'MOVE',
-                      batch: target.batch_id || null,
-                      bag: target.bag_id,
-                      from: lastLoc ? lastLoc.toLoc : null,
-                      to: contamZone.id,
-                      reason: reasonKey
-                    }
-                  ],
-                  req.authUser ? req.authUser.user_id : null
-                );
-                if (ids && ids.length) {
-                  autoMovedScanIds.push(ids[0]);
-                  db.setContaminationReportScanLogId(database, reportId, ids[0]);
-                }
+                  .get(lastLoc.toLoc, lastLoc.toLoc);
+              // Steht er noch irgendwo? Der letzte Platz-Eintrag entscheidet: nach
+              // einem REMOVE ist er schon aus dem Bestand.
+              const letzter = database
+                .prepare(
+                  "SELECT action FROM scan_log WHERE bag = ? AND action IN ('ADD','MOVE','MOVE_BATCH','REMOVE') ORDER BY id DESC LIMIT 1"
+                )
+                .get(target.bag_id);
+              const stehtNoch = !!letzter && letzter.action !== 'REMOVE';
+              const markieren = !!contamZone && !schonDa;
+              // Gezeichnet und schon draußen (oder ohne Zone und nirgends
+              // gestellt): es bleibt nichts zu tun.
+              if (!markieren && !stehtNoch) continue;
+              const typeRow = database.prepare('SELECT key FROM contamination_types WHERE id = ?').get(data.type_id);
+              const reasonKey = typeRow ? 'contam_' + typeRow.key : 'contam_unknown';
+              const time = new Date().toISOString();
+              const eintraege = [];
+              if (markieren)
+                eintraege.push({
+                  time,
+                  action: 'MOVE',
+                  batch: target.batch_id || null,
+                  bag: target.bag_id,
+                  from: lastLoc ? lastLoc.toLoc : null,
+                  to: contamZone.id,
+                  reason: reasonKey
+                });
+              eintraege.push({
+                time,
+                action: 'REMOVE',
+                batch: target.batch_id || null,
+                bag: target.bag_id,
+                from: markieren ? contamZone.id : lastLoc ? lastLoc.toLoc : null,
+                to: null,
+                reason: reasonKey
+              });
+              // Use the no-txn variant so these inserts are part of the surrounding transaction.
+              const ids = db.appendScanEntriesNoTxn(database, eintraege, req.authUser ? req.authUser.user_id : null);
+              if (markieren && ids && ids[0]) {
+                autoMovedScanIds.push(ids[0]);
+                db.setContaminationReportScanLogId(database, reportId, ids[0]);
               }
+              if (ids && ids[ids.length - 1]) bookedOutScanIds.push(ids[ids.length - 1]);
             }
           }
           database.exec('COMMIT');
@@ -9977,14 +9999,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         }
         broadcastSSE(res);
         // `id` und `autoMovedScanId` bleiben stehen: ein Bericht über einen
-        // Beutel ist weiter der Normalfall, und die Quittung, die der Client
-        // dafür zeigt, liest genau diese zwei Felder.
+        // Beutel ist weiter der Normalfall, und ältere Clients lesen genau diese
+        // zwei Felder. bookedOutCount: so viele Beutel hat der Bericht
+        // ausgebucht; das sagt die Quittung.
         jsonOk(res, {
           id: reportIds[0] || null,
           ids: reportIds,
           photoIds,
           autoMovedScanId: autoMovedScanIds[0] || null,
-          autoMovedCount: autoMovedScanIds.length
+          autoMovedCount: autoMovedScanIds.length,
+          bookedOutCount: bookedOutScanIds.length
         });
       } catch (err) {
         // R-15: photo-cap errors map to 507 Insufficient Storage so the
