@@ -251,15 +251,25 @@ describe('Regalbretter: was die App von selbst ausbucht', () => {
     assert.equal(db.autoBookOuts(d, NOW).length, 0);
   });
 
-  it('in der Inkubation: erst fragt die App eine Woche lang, dann bucht sie aus', () => {
+  // NOW ist Sonntag, der 1.3.2026, 11 Uhr Ortszeit. Der Montags-Check ist der
+  // 2.3. um 0 Uhr Ortszeit, der nächste der 9.3.
+  const MONTAG = new Date(2026, 2, 2);
+  const MONTAG_DANACH = new Date(2026, 2, 9);
+  const SONNTAG_SPAET = new Date(2026, 2, 8, 23);
+
+  it('in der Inkubation: gefragt am Montag danach, ausgebucht eine Woche später, ohne zweite Frage', () => {
     const bags = charge(d, sid, 'TP-010126-01', 1, 34);
     stelle(d, bags, 'TP-010126-01', 'INC_R1:1', 34);
     const [f] = db.brettFristen(d);
     assert.equal(f.kind, 'inc');
     assert.equal(f.limitAt, NOW.getTime() - 4 * DAY, 'Hoechstzeit seit vier Tagen vorbei');
-    assert.equal(f.outAt, NOW.getTime() + 3 * DAY, 'ausgebucht wird drei Tage spaeter');
+    assert.equal(f.askAt, MONTAG.getTime(), 'gefragt wird im naechsten Montags-Check');
+    assert.equal(f.outAt, MONTAG_DANACH.getTime(), 'ausgebucht eine Woche nach dem Check');
     assert.equal(db.autoBookOuts(d, NOW).length, 0);
-    assert.equal(db.autoBookOuts(d, new Date(NOW.getTime() + 3 * DAY)).length, 1);
+    assert.equal(db.autoBookOuts(d, SONNTAG_SPAET).length, 0, 'die ganze Woche des Checks nicht');
+    assert.equal(db.autoBookOuts(d, MONTAG_DANACH).length, 1);
+    assert.deepEqual(db.listAutoBookouts(d), [], 'die Frage war der Check, eine zweite gibt es nicht');
+    assert.equal(d.prepare('SELECT resolved FROM auto_bookouts').get().resolved, 'silent');
   });
 
   it('eine frisch eingetragene Zahl leert keinen Raum auf einmal', () => {
@@ -267,7 +277,21 @@ describe('Regalbretter: was die App von selbst ausbucht', () => {
     stelle(d, bags, 'TP-010126-01', 'INC_R1:1', 90);
     d.prepare('UPDATE mushroom_strains SET limits_set = ?').run(NOW.toISOString());
     assert.equal(db.autoBookOuts(d, NOW).length, 0);
-    assert.equal(db.autoBookOuts(d, new Date(NOW.getTime() + 7 * DAY)).length, 3);
+    assert.equal(db.autoBookOuts(d, SONNTAG_SPAET).length, 0);
+    assert.equal(db.autoBookOuts(d, MONTAG_DANACH).length, 3);
+  });
+
+  it('im Zelt: ohne Antwort gilt das Ausbuchen eine Woche nach dem Check als "Stimmt"', () => {
+    const bags = charge(d, sid, 'TP-010126-01', 1, 60);
+    stelle(d, bags, 'TP-010126-01', 'TENT1', 25);
+    assert.equal(db.autoBookOuts(d, NOW).length, 1);
+    assert.equal(db.listAutoBookouts(d).length, 1, 'offen fuer den Check am Montag');
+    db.autoBookOuts(d, SONNTAG_SPAET);
+    assert.equal(db.listAutoBookouts(d).length, 1, 'die Woche des Checks lang');
+    assert.deepEqual(db.autoBookOuts(d, MONTAG_DANACH), [], 'nichts Neues ausgebucht');
+    assert.equal(db.listAutoBookouts(d).length, 0);
+    assert.equal(d.prepare('SELECT resolved FROM auto_bookouts').get().resolved, 'silent');
+    assert.equal(letzter(d, bags[0]).action, 'REMOVE', 'er bleibt draussen');
   });
 
   it('Koernerbrut rechnet mit ihrer eigenen Hoechstzeit', () => {
@@ -295,16 +319,17 @@ describe('Regalbretter: was die App von selbst ausbucht', () => {
     assert.deepEqual(db.brettFristen(d), []);
   });
 
-  it('"Stimmt" laesst sie draussen, "Noch da" stellt sie zurueck auf ihr Brett', () => {
+  it('"Stimmt" laesst sie draussen, "Noch da" stellt sie zurueck an ihren Platz', () => {
+    // Im Zelt: dort bucht die App ohne Frage aus, und der Check fragt danach.
     const bags = charge(d, sid, 'TP-010126-01', 2, 60);
-    stelle(d, bags, 'TP-010126-01', 'INC_R1:2', 60);
+    stelle(d, bags, 'TP-010126-01', 'TENT1', 25);
     const out = db.autoBookOuts(d, NOW);
     assert.equal(out.length, 2);
     const [eins, zwei] = db.listAutoBookouts(d);
     assert.deepEqual(db.resolveAutoBookouts(d, [eins.id], 'correct', null, NOW), { resolved: 1, restored: 0 });
     assert.equal(letzter(d, eins.bag).action, 'REMOVE');
     assert.deepEqual(db.resolveAutoBookouts(d, [zwei.id], 'still_there', null, NOW), { resolved: 1, restored: 1 });
-    assert.deepEqual(letzter(d, zwei.bag), { action: 'ADD', to: 'INC_R1:2', from: null, reason: 'still-there' });
+    assert.deepEqual(letzter(d, zwei.bag), { action: 'ADD', to: 'TENT1', from: null, reason: 'still-there' });
     assert.equal(db.listAutoBookouts(d).length, 0);
     assert.equal(db.autoBookOuts(d, NOW).length, 0, 'zurueckgestellt zaehlt die Frist neu');
   });
