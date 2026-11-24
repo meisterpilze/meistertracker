@@ -453,6 +453,9 @@ describe('Abfrage: ein Fehler ist kein Stand', () => {
       let lastHash = '';
       let lastSyncTime = null;
       let _mutating = (vorher && vorher.mutating) || 0;
+      // Zählt begonnene Speicherungen; pollSync wendet keine Antwort an, wenn
+      // während der Abfrage eine begann (test/sorten-schalter.test.js).
+      let _mutEpoch = 0;
       const t = (k) => k;
       const setSyncStatus = () => {};
       const formatRelativeTime = () => '';

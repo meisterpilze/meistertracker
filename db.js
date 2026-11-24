@@ -11801,6 +11801,9 @@ function brettFristen(db) {
     const b = batchOf.get(bag);
     const s = b && strains.get(b.strain_id);
     if (!s) continue;
+    // Eine Sorte, die wir gerade nicht anbauen (im_programm = 0), hat keine
+    // Fristen: keine Frage "Noch da?", nichts wird von selbst ausgebucht.
+    if (s.im_programm === 0) continue;
     const conf = confirmed.get(bag);
     let kind;
     let limitAt;
@@ -11829,10 +11832,28 @@ function brettFristen(db) {
       limitAt,
       outAt,
       species: b.species || null,
-      strain: b.strain || null
+      strain: b.strain || null,
+      strainId: b.strain_id
     });
   }
   return out;
+}
+
+// Eine Sorte wird wieder angeschaltet. Solange sie aus war, lief für ihre Beutel
+// keine Frist (brettFristen überspringt sie), und ohne mehr buchte der nächste
+// Lauf alles aus, was in der Zeit fällig wurde, ohne je zu fragen: in der
+// Inkubation ohne die Woche "Noch da?", im Fruchtzelt sofort. Darum zählt das
+// Anschalten wie ein "Noch da" für jeden Beutel der Sorte, dessen Frist schon
+// vorbei ist oder in den nächsten zwei Wochen fällt: er bekommt die zwei Wochen,
+// die ein "Noch da" gibt. Ein Beutel, der noch länger Zeit hat, behält seine
+// Frist, damit das Anschalten sie nicht verkürzt (im Zelt ersetzt ein "Noch da"
+// die Zeltzeit).
+function _programmWiederAn(db, strainId, now) {
+  const bis = now.getTime() + BRETT_CONFIRM_DAYS * DAY_MS;
+  const bags = brettFristen(db)
+    .filter((f) => f.strainId === strainId && f.limitAt < bis)
+    .map((f) => f.bag);
+  return confirmStillThere(db, bags, null, now);
 }
 
 // Books out every bag whose time is up (REMOVE, reason "auto") and notes it in
@@ -13025,9 +13046,9 @@ function createMushroomStrain(db, data) {
   }
 }
 
-function updateMushroomStrain(db, id, data) {
+function updateMushroomStrain(db, id, data, jetzt = new Date()) {
   const { name, kuerzel, description } = data || {};
-  const now = new Date().toISOString();
+  const now = jetzt.toISOString();
   const fields = {};
   if (name !== undefined) fields.name = name.trim();
   if (kuerzel !== undefined) fields.kuerzel = kuerzel.trim();
@@ -13065,11 +13086,18 @@ function updateMushroomStrain(db, id, data) {
     }
   }
   if (!Object.keys(fields).length) return;
+  // Wieder angeschaltet (im_programm 0 -> 1): siehe _programmWiederAn.
+  let wiederAn = false;
+  if (fields.im_programm === 1) {
+    const vorher = db.prepare('SELECT im_programm FROM mushroom_strains WHERE id=?').get(id);
+    wiederAn = !!vorher && vorher.im_programm === 0;
+  }
   fields.updated = now;
   const cols = Object.keys(fields);
   const sets = cols.map((c) => `${c}=?`).join(',');
   try {
     db.prepare(`UPDATE mushroom_strains SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
+    if (wiederAn) _programmWiederAn(db, Number(id), jetzt);
     // Propagate name/kuerzel changes to batches and cultures that reference this
     // strain.
     //
