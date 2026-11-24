@@ -11711,7 +11711,7 @@ function setRackShelves(db, rackId, { levels, strainId } = {}) {
   if (levels !== undefined) {
     n = Number(levels);
     if (!Number.isInteger(n) || n < 0 || n > BRETT_MAX_LEVELS) {
-      throw new Error('Bretter: eine ganze Zahl von 0 bis ' + BRETT_MAX_LEVELS + '.');
+      throw new Error('Fächer: eine ganze Zahl von 0 bis ' + BRETT_MAX_LEVELS + '.');
     }
     if (n < (rack.levels || 0)) {
       // Ein Brett mit Beuteln darauf faellt nicht weg: die Beutel stuenden sonst
@@ -11723,7 +11723,7 @@ function setRackShelves(db, rackId, { levels, strainId } = {}) {
       }
       if (belegt.size) {
         const [ebene, zahl] = [...belegt].sort((a, b) => a[0] - b[0])[0];
-        throw new Error('Auf Brett ' + ebene + ' stehen noch ' + zahl + ' Beutel. Zieh sie erst um oder buch sie aus.');
+        throw new Error('In Fach ' + ebene + ' stehen noch ' + zahl + ' Beutel. Zieh sie erst um oder buch sie aus.');
       }
     }
   }

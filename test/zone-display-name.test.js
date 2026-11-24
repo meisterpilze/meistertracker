@@ -29,7 +29,7 @@ function load(zones) {
   const src =
     re[0] + '\n' + lift('KNOWN_ZONE_I18N', 'KNOWN_ZONE_SEED_NAME', 'zoneI18nKey', 'brettVon', 'zoneDisplayName');
   const t = (k, p) => {
-    const s = { 'dash.zoneTent1': 'Zelt 1', 'dash.zoneInc': 'Inkubation', 'brett.levelN': 'Brett {n}' }[k] || k;
+    const s = { 'dash.zoneTent1': 'Zelt 1', 'dash.zoneInc': 'Inkubation', 'brett.levelN': 'Fach {n}' }[k] || k;
     return p ? s.replace('{n}', p.n) : s;
   };
   return new Function('zones', 't', `${src}\nreturn zoneDisplayName;`)(zones, t);
@@ -38,7 +38,7 @@ function load(zones) {
 describe('zoneDisplayName', () => {
   it('names a shelf after its rack, then the level', () => {
     const name = load([{ id: 'INC', name: 'Warmraum', racks: [{ id: 'INC_R1' }] }]);
-    assert.equal(name('INC_R1:2'), 'Warmraum/R1 · Brett 2');
+    assert.equal(name('INC_R1:2'), 'Warmraum/R1 · Fach 2');
   });
 
   it('translates a seeded zone that still has its seed name', () => {
