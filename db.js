@@ -16086,9 +16086,11 @@ function labStock(db, now = new Date()) {
     const g = kg.get(ms.id) || { ready: 0, growing: 0, readyAt: null };
     // Das Soll des kg-Vorrats rechnet der Koernerbrut-Plan, sobald die Art in
     // den letzten acht Wochen etwas verbraucht hat oder einen Plan hat; sonst
-    // gilt der Mindestbestand von Hand (min_spawn_kg), wie bisher.
+    // gilt der Mindestbestand von Hand (min_spawn_kg), wie bisher. Ein Plan von
+    // 0 Bloecken ist auch ein Plan: dann soll nur da sein, was online geht, und
+    // nicht der alte Mindestbestand.
     const p = plan.get(ms.id) || null;
-    const auto = !!(p && p.needKgWeek > 0);
+    const auto = !!(p && (p.needKgWeek > 0 || p.weekBlocks != null));
     items.push(
       feld('GSKG', Math.round(g.ready * 10) / 10, auto ? p.sollKg : ms.min_spawn_kg, {
         growing: Math.round(g.growing * 10) / 10,

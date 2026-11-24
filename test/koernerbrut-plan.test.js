@@ -219,6 +219,18 @@ describe('Körnerbrut-Plan: Bedarf, Soll, alt', () => {
     assert.equal(i.plan.needKgWeek, 1.2);
   });
 
+  it('ein Plan von 0 Blöcken gilt auch: dann kein Soll aus dem alten Mindestbestand', () => {
+    db.updateMushroomStrain(d, sid, { minSpawnKg: 9, weekBlocks: 0 });
+    const i = db
+      .labStock(d, NOW)
+      .find((s) => s.strainId === sid)
+      .items.find((x) => x.key === 'GSKG');
+    assert.equal(i.auto, true);
+    assert.equal(i.plan.needKgWeek, 0);
+    assert.equal(i.soll, null);
+    assert.equal(i.make, 0);
+  });
+
   it('die Prüfung am Server: Blöcke pro Woche ist eine ganze Zahl ab 0, oder leer', () => {
     const SRV = quelle('server.js');
     const pruefe = new Function(hebeFunktion('validateMushroomStrain', SRV) + '; return validateMushroomStrain;')();
