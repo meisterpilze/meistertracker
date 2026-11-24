@@ -99,7 +99,7 @@ describe('Regalbretter: Regal, Bretter, Art', () => {
     db.setRackShelves(d, 'INC_R1', { levels: 3 });
     const bags = charge(d, sid, 'TP-010326-01', 2, 5);
     stelle(d, bags, 'TP-010326-01', 'INC_R1:3', 5);
-    assert.throws(() => db.setRackShelves(d, 'INC_R1', { levels: 2 }), /Brett 3 stehen noch 2 Beutel/);
+    assert.throws(() => db.setRackShelves(d, 'INC_R1', { levels: 2 }), /Fach 3 stehen noch 2 Beutel/);
     assert.equal(db.readAll(d).zones.find((z) => z.id === 'INC').racks[0].levels, 3);
   });
 
