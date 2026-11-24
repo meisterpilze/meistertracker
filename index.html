@@ -2946,7 +2946,7 @@
                 </svg>
               </span>
               <span class="wk-tile-t" data-i18n="work.move">Umziehen</span>
-              <span class="wk-tile-when" data-i18n="work.moveWhen">Inkubation → Zelt → Lager</span>
+              <span class="wk-tile-when" data-i18n="work.moveWhen">Inkubation → Fruchtzelt → Lager</span>
               <span class="wk-stand" id="wk-n-move" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-harvest" style="--wk-c: var(--c-amber-dark); --wk-cl: var(--c-amber-light)">
@@ -3080,7 +3080,7 @@
                all das ist der Teil nicht da. -->
           <section class="wk-teil wk-teil-bretter" id="wk-bretter" hidden>
             <div class="wk-teil-kopf">
-              <h2 class="wk-teil-t" data-i18n="bretter.title">Regale und Zelt</h2>
+              <h2 class="wk-teil-t" data-i18n="bretter.title">Regale und Fruchtzelt</h2>
             </div>
             <div id="wk-bretter-list"></div>
           </section>
@@ -3842,6 +3842,19 @@
 
         <!-- ══ PILZSORTEN ══ -->
         <div class="page" id="p-strains">
+          <!-- Was wir gerade anbauen (renderSortenSchalter): ein Knopf je Sorte, an
+               oder aus. Dieselbe Kennzeichnung wie "Im Programm" in der Tabelle
+               unten, nur auf einen Blick und fürs Handy. -->
+          <div class="card" id="ms-schalter-card">
+            <div class="sec" data-i18n="strains.switchTitle">Was wir gerade anbauen</div>
+            <p class="fs-meta muted" data-i18n="strains.switchHelp">
+              Antippen schaltet eine Sorte an oder aus. Aus heißt: Die App verlangt nichts mehr für diese Sorte, kein
+              Soll, nichts nachzuproduzieren, kein Körnerbrut-Plan, kein Minimum im Fruchtzelt, keine Frage „Noch da?“
+              und kein automatisches Ausbuchen. Was schon da ist, bleibt sichtbar.
+            </p>
+            <div class="ms-schalter" id="ms-schalter" role="group"></div>
+            <p class="fs-meta muted" id="ms-schalter-n"></p>
+          </div>
           <div class="g2" style="align-items: start">
             <div class="card">
               <div class="sec" data-i18n="strains.manage">Pilzsorten verwalten</div>
@@ -4072,7 +4085,7 @@
                      dieser Sorte höchstens steht, und wie viele das Zelt haben
                      soll. Leer heißt: keine Prüfung bei dieser Sorte. -->
                 <div class="ms-grenzen">
-                  <div class="fs-meta ms-grenzen-t" data-i18n="strains.limitsTitle">Regale und Zelt</div>
+                  <div class="fs-meta ms-grenzen-t" data-i18n="strains.limitsTitle">Regale und Fruchtzelt</div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
                     <label class="fs-meta" style="color: var(--c-text-muted)">
                       <span data-i18n="strains.incMaxDays">Höchstens in der Inkubation (Tage)</span>
@@ -4083,21 +4096,21 @@
                       <input id="ms-grain-max" type="number" min="0" step="1" inputmode="numeric" />
                     </label>
                     <label class="fs-meta" style="color: var(--c-text-muted)">
-                      <span data-i18n="strains.tentMaxDays">Höchstens im Zelt (Tage)</span>
+                      <span data-i18n="strains.tentMaxDays">Höchstens im Fruchtzelt (Tage)</span>
                       <input id="ms-tent-days" type="number" min="0" step="1" inputmode="numeric" />
                     </label>
                     <label class="fs-meta" style="color: var(--c-text-muted)">
-                      <span data-i18n="strains.tentMin">Im Zelt mindestens (Blöcke)</span>
+                      <span data-i18n="strains.tentMin">Im Fruchtzelt mindestens (Blöcke)</span>
                       <input id="ms-tent-min" type="number" min="0" step="1" inputmode="numeric" />
                     </label>
                     <label class="fs-meta" style="color: var(--c-text-muted)">
-                      <span data-i18n="strains.tentMax">Im Zelt höchstens (Blöcke)</span>
+                      <span data-i18n="strains.tentMax">Im Fruchtzelt höchstens (Blöcke)</span>
                       <input id="ms-tent-max" type="number" min="0" step="1" inputmode="numeric" />
                     </label>
                   </div>
                   <p class="fs-meta muted" data-i18n="strains.limitsHelp">
                     Leer lassen heißt: keine Prüfung. Danach fragt die App „Noch da?“ und bucht nach einer Woche ohne
-                    Antwort aus; im Zelt bucht sie gleich aus und zeigt es.
+                    Antwort aus; im Fruchtzelt bucht sie gleich aus und zeigt es.
                   </p>
                 </div>
                 <!-- Körnerbrut-Plan (v123): wie viele Blöcke dieser Sorte pro Woche

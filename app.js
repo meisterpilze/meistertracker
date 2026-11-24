@@ -9547,6 +9547,8 @@ const _kbZahl = (n) => fmtKg(n, n % 1 ? 1 : 0);
 function _kbpZeilen(species) {
   const out = [];
   for (const sp of species) {
+    // Eine Sorte, die wir gerade nicht anbauen, steht nicht im Plan.
+    if (sp.imProgramm === false) continue;
     const i = sp.items.find((x) => x.key === 'GSKG');
     const p = i && i.plan;
     if (!p || (!(p.needKgWeek > 0) && !(p.oldKg > 0))) continue;
@@ -10084,6 +10086,8 @@ function brettImZelt() {
 // gegen dieselben Fälle halten kann. limitAt: ab dann ist der Beutel über der
 // Zeit; outAt: dann bucht der Server ihn aus.
 function brettFristVon(p) {
+  // Wie der Server: eine Sorte, die wir gerade nicht anbauen, hat keine Fristen.
+  if (p.s && p.s.imProgramm === false) return null;
   const tag = 86400000;
   const conf = p.confirmed ? Date.parse(p.confirmed) : NaN;
   if (p.role === 'fruiting') {
@@ -10202,7 +10206,10 @@ function zeltPlan(now) {
     gruppen.push(...je.values());
   }
   const grenzen = {};
-  for (const s of mushroomStrains) grenzen[s.id] = { min: s.tentMin || 0, max: s.tentMax || 0 };
+  // Eine Sorte, die wir gerade nicht anbauen, hat im Fruchtzelt weder Minimum
+  // noch Maximum: sie drängelt nicht vor und hält nichts auf.
+  for (const s of mushroomStrains)
+    grenzen[s.id] = s.imProgramm === false ? { min: 0, max: 0 } : { min: s.tentMin || 0, max: s.tentMax || 0 };
   const imZelt = brettImZelt();
   return Object.assign(zeltPlanVon(gruppen, imZelt, grenzen), { imZelt, grenzen });
 }
@@ -10353,14 +10360,14 @@ function _brettZeltInfo(wer) {
   const da = brettImZelt()[sid] || 0;
   const neu = da + wer.length;
   const name = art ? art.name : '';
-  if (art && art.tentMax > 0) {
+  if (art && art.imProgramm !== false && art.tentMax > 0) {
     const info = t('brett.tentInfo', { species: name, from: da, to: neu, max: art.tentMax });
     return neu > art.tentMax ? info + ' · ' + t('brett.tentFullWarn', { n: Math.max(0, art.tentMax - da) }) : info;
   }
   return t('brett.tentInfoNoMax', { species: name, from: da, to: neu });
 }
 function _zeltGrenzenText(art) {
-  if (!art) return '';
+  if (!art || art.imProgramm === false) return '';
   if (art.tentMin > 0 && art.tentMax > 0) return t('zelt.limits', { min: art.tentMin, max: art.tentMax });
   if (art.tentMin > 0) return t('zelt.limitMin', { min: art.tentMin });
   if (art.tentMax > 0) return t('zelt.limitMax', { max: art.tentMax });
@@ -10928,8 +10935,10 @@ function renderWorkBretter() {
 }
 // Eine Art in einem Zelt: Zahl, Balken bis zur Höchstzahl, Strich beim Minimum.
 function zeltKarteHtml(z, art, sid, n) {
-  const min = art && art.tentMin > 0 ? art.tentMin : 0;
-  const max = art && art.tentMax > 0 ? art.tentMax : 0;
+  // Aus: nur die Zahl, ohne Minimum, Maximum und Warnung.
+  const an = !(art && art.imProgramm === false);
+  const min = an && art && art.tentMin > 0 ? art.tentMin : 0;
+  const max = an && art && art.tentMax > 0 ? art.tentMax : 0;
   const unter = min > 0 && n < min;
   const voll = max > 0 && n >= max;
   const stand = unter
@@ -24539,7 +24548,57 @@ function goCreateStrain() {
   }, 60);
 }
 
+// ── Was wir gerade anbauen: Sorten an und aus ──
+// Ein Knopf je Sorte, alphabetisch und an seinem Platz, damit ein Tipp nichts
+// verschiebt. An oder aus ist dieselbe Kennzeichnung wie "Im Programm" in der
+// Tabelle darunter und im Blatt einer Art im Labor (im_programm). Ein Tipp gilt
+// sofort, ein zweiter macht ihn rückgängig; eine Rückfrage kostete mehr als ein
+// Fehltipp.
+function renderSortenSchalter() {
+  const box = document.getElementById('ms-schalter');
+  if (!box) return;
+  const liste = (mushroomStrains || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  box.innerHTML = liste
+    .map((m) => {
+      const an = m.imProgramm !== false;
+      return `<button type="button" class="ms-chip${an ? ' an' : ''}" data-ms-schalter="${m.id}" aria-pressed="${an}">${esc(m.name)}</button>`;
+    })
+    .join('');
+  const n = liste.filter((m) => m.imProgramm !== false).length;
+  const zahl = document.getElementById('ms-schalter-n');
+  if (zahl) zahl.textContent = liste.length ? t('strains.switchCount', { n, total: liste.length }) : '';
+}
+// An oder aus, für die Knöpfe oben und die Tabelle: sofort gezeichnet, dann
+// gespeichert. Schlägt das Speichern fehl, steht wieder der alte Stand da. Das
+// Soll der Laborfächer rechnet der Server mit dieser Kennzeichnung, also kommt
+// der Laborbestand danach neu.
+function sorteProgramm(id, want) {
+  const ms = (mushroomStrains || []).find((x) => x.id === id);
+  if (!ms) return;
+  const prev = ms.imProgramm !== false;
+  if (prev === want) return;
+  const zeichnen = () => {
+    renderStrains();
+    renderBatches();
+    renderDashBatchTasks();
+  };
+  const zurueck = (msg) => {
+    ms.imProgramm = prev;
+    setFb('err', t('common.error') + ': ' + msg);
+    zeichnen();
+  };
+  ms.imProgramm = want;
+  zeichnen();
+  apiPatch('/api/mushroom-strains/' + id, { imProgramm: want })
+    .then((r) => {
+      if (!r || r.error) return zurueck((r && r.error) || t('strains.switchFailed'));
+      loadLabStock();
+    })
+    .catch(() => zurueck(t('strains.switchFailed')));
+}
+
 function renderStrains() {
+  renderSortenSchalter();
   const body = document.getElementById('strains-body');
   if (!body) return;
   // Die Stämme stehen auf derselben Seite und hängen an denselben Daten — also
@@ -37589,24 +37648,15 @@ function initEventListeners() {
   $('strains-body').addEventListener('change', (e) => {
     const box = e.target.closest('[data-action="toggle-programm"]');
     if (!box) return;
-    const id = parseInt(box.dataset.id, 10);
-    const ms = mushroomStrains.find((x) => x.id === id);
-    if (!ms) return;
-    const want = box.checked;
-    const prev = ms.imProgramm !== false;
-    ms.imProgramm = want; // optimistic — the row is already drawn that way
-    renderStrains();
-    renderBatches();
-    renderDashBatchTasks();
-    apiPatch('/api/mushroom-strains/' + id, { imProgramm: want }).then((r) => {
-      if (r && r.error) {
-        ms.imProgramm = prev;
-        setFb('err', t('common.error') + ': ' + r.error);
-        renderStrains();
-        renderBatches();
-        renderDashBatchTasks();
-      }
-    });
+    sorteProgramm(parseInt(box.dataset.id, 10), box.checked);
+  });
+  // Dieselbe Kennzeichnung als Knöpfe oben auf der Seite (renderSortenSchalter).
+  $('ms-schalter').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ms-schalter]');
+    if (!b) return;
+    const id = parseInt(b.dataset.msSchalter, 10);
+    const ms = (mushroomStrains || []).find((x) => x.id === id);
+    if (ms) sorteProgramm(id, ms.imProgramm === false);
   });
   // One listener per registered sortable table, wired the same way, so a new
   // table needs only its entry in SORT_TABLES and data-sort on its headers.

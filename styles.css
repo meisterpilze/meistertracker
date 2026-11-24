@@ -13299,3 +13299,44 @@ button.wk-bretter-row {
   margin-top: 4px;
   color: var(--c-text-muted);
 }
+
+/* Was wir gerade anbauen (Pilzsorten page): one chip per species, on or off.
+   Chips keep their place when tapped; the state is the fill and the dot. */
+.ms-schalter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap-sm, 44px);
+  padding: 6px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.ms-chip::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--c-border);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.ms-chip.an {
+  border-color: var(--c-green-border);
+  background: var(--c-green-light);
+  color: var(--c-green-dark);
+  font-weight: 600;
+}
+.ms-chip.an::before {
+  border-color: var(--c-green-dark);
+  background: var(--c-green-dark);
+}

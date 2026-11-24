@@ -11801,6 +11801,9 @@ function brettFristen(db) {
     const b = batchOf.get(bag);
     const s = b && strains.get(b.strain_id);
     if (!s) continue;
+    // Eine Sorte, die wir gerade nicht anbauen (im_programm = 0), hat keine
+    // Fristen: keine Frage "Noch da?", nichts wird von selbst ausgebucht.
+    if (s.im_programm === 0) continue;
     const conf = confirmed.get(bag);
     let kind;
     let limitAt;
