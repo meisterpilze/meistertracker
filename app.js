@@ -19244,8 +19244,9 @@ function _bandZeilen(s) {
     .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
     .filter(Boolean);
 }
-function _qrModule(val) {
-  const q = new QRCode(document.createElement('div'), { text: val, correctLevel: QRCode.CorrectLevel.M });
+// stufe: die Fehlerkorrektur, L, M, Q oder H; ohne Angabe M.
+function _qrModule(val, stufe) {
+  const q = new QRCode(document.createElement('div'), { text: val, correctLevel: QRCode.CorrectLevel[stufe || 'M'] });
   const m = q._oQRCode;
   return { count: m.getModuleCount(), isDark: (r, c) => m.isDark(r, c) };
 }
@@ -19285,12 +19286,19 @@ const FACH_BAND_HOCH = 76;
 // Der Drucker legt das Bild stehend gelesen etwas zu weit nach rechts; um so
 // viele Punkte wird alles nach links gezeichnet (am Etikett gemessen).
 const FACH_LINKS = 5;
+// Der QR-Code ist klein, 6 Punkte je Modul (16 mm breit): das Etikett klebt um
+// einen runden Pfosten, und je breiter der Code, desto weiter biegt er sich
+// darum herum. Mit 8 Punkten (21 mm) bog er sich so weit, dass die Kamera ihn
+// an einem dicken Pfosten nicht mehr las; die Beutel-Etiketten lesen sich mit 5
+// Punkten gut. Dazu die Fehlerkorrektur Q statt M: ein Viertel des Codes darf
+// unlesbar sein, etwa an den gebogenen Rändern, und es bleiben 21 × 21 Module.
 // Um den QR-Code bleibt eine weiße Ruhezone von vier Modulen, wie die QR-Norm
 // sie verlangt, zur Nummer wie zum Rand. Zum unteren Rand kommt Luft dazu für
 // ein Etikett, das der Drucker ein, zwei Millimeter verschoben trifft. Mit 2 mm
 // bis zum Rand und 3 mm bis zur Nummer lasen zwei Telefone neun gedruckte
 // Etiketten gar nicht, und ZXing las eins der Bilder nicht einmal auf Weiß.
-const FACH_QR_MODUL = 8;
+const FACH_QR_MODUL = 6;
+const FACH_QR_STUFE = 'Q';
 const FACH_QR_RUHE = 4;
 const FACH_QR_UNTEN = 44;
 const FACH_SCHRIFT = 'Fredoka, Arial, Helvetica, sans-serif';
@@ -19335,14 +19343,15 @@ function fachEtikettCanvas(x) {
   band.forEach((z, i) => mittig(z, bandTop + i * bandLh, breit - 24));
   ctx.fillStyle = '#000';
 
-  // Unten der QR-Code, mittig, FACH_QR_UNTEN über dem Rand, 8 Punkte je Modul
-  // (bei einer siebenstelligen Nummer 21 mm), mit seiner Ruhezone rundherum.
-  // Keine Nummer darunter: ein Fach-Code wird nur gescannt, nirgends eingetippt.
+  // Unten der QR-Code, mittig, FACH_QR_UNTEN über dem Rand, FACH_QR_MODUL
+  // Punkte je Modul (bei einer siebenstelligen Nummer 16 mm), mit seiner
+  // Ruhezone rundherum. Keine Nummer darunter: ein Fach-Code wird nur
+  // gescannt, nirgends eingetippt.
   const val = String(x.barcode || '');
   let qrOben = H;
   let ruhe = 0;
   if (val && typeof QRCode !== 'undefined') {
-    const q = _qrModule(val);
+    const q = _qrModule(val, FACH_QR_STUFE);
     const mod = Math.max(1, Math.min(FACH_QR_MODUL, Math.floor((W - 2 * FACH_QR_UNTEN) / q.count)));
     const size = q.count * mod;
     qrOben = H - FACH_QR_UNTEN - size;

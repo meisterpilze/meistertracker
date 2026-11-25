@@ -149,10 +149,13 @@ function leinwand() {
 }
 
 // Ein QR-Code aus 21 Modulen, nur das erste dunkel: so sieht man, wo er beginnt.
-function QRCode() {
+// Die verlangte Fehlerkorrektur merkt er sich (Werte wie in qrcode.min.js).
+let stufe;
+function QRCode(div, opt) {
+  stufe = opt.correctLevel;
   this._oQRCode = { getModuleCount: () => 21, isDark: (r, c) => r === 0 && c === 0 };
 }
-QRCode.CorrectLevel = { M: 0 };
+QRCode.CorrectLevel = { L: 1, M: 0, Q: 3, H: 2 };
 
 // Alle Konstanten des Fach-Etiketts, wie sie in app.js stehen.
 const BAND_HOCH = APP.match(/^const FACH_[A-Z_]+ = .*;$/gm).join('\n');
@@ -196,25 +199,29 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
     assert.ok(zeilen.every((z) => z.y > 12 && z.y + 24 < 12 + 76));
     assert.ok(zeilen.every((z) => /^bold 24px Fredoka, Arial/.test(z.font)));
   });
-  it('unten der QR-Code mittig, 8 Punkte je Modul, 44 über dem Rand, ohne Nummer darunter', () => {
+  it('unten der QR-Code mittig, 6 Punkte je Modul, 44 über dem Rand, ohne Nummer darunter', () => {
     const { rechtecke, texte } = zeichne(FACH);
-    // 21 Module zu 8 Punkten: 168 breit, mittig ab x = 44, verschoben 39.
-    const qr = rechtecke.find((r) => r.w === 8);
-    assert.deepEqual([qr.x, qr.y], [39, 456 - 44 - 168]);
+    // 21 Module zu 6 Punkten: 126 breit (16 mm), mittig ab x = 65, verschoben 60.
+    const qr = rechtecke.find((r) => r.w === 6);
+    assert.deepEqual([qr.x, qr.y], [60, 456 - 44 - 126]);
     assert.equal(
       texte.find((x) => x.text === '4711'),
       undefined,
       'ein Fach-Code wird nur gescannt'
     );
   });
+  it('der QR-Code mit Fehlerkorrektur Q: er biegt sich um einen runden Pfosten', () => {
+    zeichne(FACH);
+    assert.equal(stufe, QRCode.CorrectLevel.Q);
+  });
   it('rund um den QR-Code vier Module weiß, zum unteren Rand noch 12 Punkte mehr', () => {
     const { rechtecke, texte } = zeichne(FACH);
-    const qr = rechtecke.find((r) => r.w === 8);
-    const ruhe = 4 * 8;
+    const qr = rechtecke.find((r) => r.w === 6);
+    const ruhe = 4 * 6;
     // Zum unteren Rand: Ruhezone und Luft für ein um 1,5 mm verschobenes Etikett.
-    assert.ok(456 - (qr.y + 168) >= ruhe + 12, 'unten');
+    assert.ok(456 - (qr.y + 126) >= ruhe + 12, 'unten');
     // Zu den Seiten des Etiketts (stehend 0..256, alles 5 nach links verschoben).
-    assert.ok(qr.x >= ruhe && 256 - 5 - (qr.x + 168) >= ruhe, 'Seiten');
+    assert.ok(qr.x >= ruhe && 256 - 5 - (qr.x + 126) >= ruhe, 'Seiten');
     // Zur Nummer: ihr unterster schwarzer Punkt liegt vor der Ruhezone.
     const nummer = texte.find((x) => x.text === '3');
     assert.ok(nummer.y <= qr.y - ruhe, 'Nummer bei ' + nummer.y);
@@ -227,14 +234,14 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
       'kein Wort "Fach"'
     );
     const nummer = texte.find((x) => x.text === '3');
-    // Platz: von 12 + 76 + 12 bis 244 - 32 (die Ruhezone des QR-Codes), also
-    // 112 hoch; Ziffern schwärzen 0,72 der Größe.
-    const px = Math.floor((100 * 112) / 72);
+    // Platz: von 12 + 76 + 12 bis 286 - 24 (die Ruhezone des QR-Codes), also
+    // 162 hoch; Ziffern schwärzen 0,72 der Größe.
+    const px = Math.floor((100 * 162) / 72);
     assert.deepEqual([nummer.px, nummer.x, nummer.s], [px, MITTE, 1]);
     assert.match(nummer.font, /^bold \d+px Fredoka, Arial/);
     const oben = nummer.y - 0.72 * px;
-    assert.ok(oben >= 100 - 1 && nummer.y <= 212 + 1, 'nichts reicht in Band oder QR-Code');
-    assert.ok(Math.abs((oben + nummer.y) / 2 - (100 + 212) / 2) <= 1, 'mittig');
+    assert.ok(oben >= 100 - 1 && nummer.y <= 262 + 1, 'nichts reicht in Band oder QR-Code');
+    assert.ok(Math.abs((oben + nummer.y) / 2 - (100 + 262) / 2) <= 1, 'mittig');
   });
   it('eine Nummer, die zu breit wäre, wird kleiner, bis sie in die Breite passt', () => {
     const { texte } = zeichne({ ...FACH, nummer: '1234567' });
@@ -255,10 +262,10 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
     assert.equal(ctx.punkt(5, 128), 255);
     assert.equal(ctx.punkt(95, 128), 255);
     assert.equal(ctx.punkt(50, 255 - 242), 255);
-    // Das erste Modul (stehend x 39..46, y 244..251) liegt liegend bei x 244..251, y 216..209.
-    assert.equal(ctx.punkt(244, 255 - 39), 0);
-    assert.equal(ctx.punkt(244 + 7, 255 - 39 - 7), 0);
-    assert.equal(ctx.punkt(244 + 8, 255 - 39), 255);
+    // Das erste Modul (stehend x 60..65, y 286..291) liegt liegend bei x 286..291, y 195..190.
+    assert.equal(ctx.punkt(286, 255 - 60), 0);
+    assert.equal(ctx.punkt(286 + 5, 255 - 60 - 5), 0);
+    assert.equal(ctx.punkt(286 + 6, 255 - 60), 255);
   });
 });
 
