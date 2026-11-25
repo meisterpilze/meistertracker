@@ -26,7 +26,8 @@ const ABSCHNITT = {
     '_isJpegMagic',
     'savePhotoToDisk',
     '_discardPhotoFiles',
-    'etagMatches'
+    'etagMatches',
+    'raiseBatchCheckBell'
   ],
   konstanten: [
     'PHOTO_MAX_BYTES',

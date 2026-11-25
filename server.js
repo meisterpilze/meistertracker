@@ -1563,6 +1563,7 @@ syringeStock.start();
 const SALE_ALERT_EVERY_MS = 15 * 60 * 1000;
 function checkSaleAlerts() {
   if (WORKTREE_MODE) return;
+  checkBatchChecks();
   checkShelf();
   checkLabFach();
   checkBrettFristen();
@@ -1585,6 +1586,44 @@ function checkSaleAlerts() {
     log('info', 'Sale alerts raised', { articles: neu.length });
   } catch (e) {
     log('warn', 'Sale alert check failed', { error: e.message });
+  }
+}
+// Charge pruefen (v125): eine neue Pruefung laeutet bei jedem Angemeldeten
+// einmal. "Geprueft" nimmt die Glocke bei allen wieder weg (db.closeBatchCheck).
+function raiseBatchCheckBell(neu) {
+  if (!neu || !neu.length) return;
+  try {
+    const users = db.listUsers(database);
+    for (const c of neu) {
+      const b = database.prepare('SELECT species FROM batches WHERE batch_id = ?').get(c.batchId);
+      for (const u of users) {
+        db.createNotificationOnce(database, {
+          userId: u.id,
+          type: 'batch_check',
+          title: 'Charge prüfen: ' + (b && b.species ? b.species + ' ' : '') + c.batchId,
+          body:
+            'Ein Beutel daraus ist kontaminiert. Schau dir ' +
+            (c.left === 1 ? 'den anderen Beutel' : 'die anderen ' + c.left + ' Beutel') +
+            ' an und tippe dann auf Geprüft.',
+          linkType: 'batch_check',
+          linkId: c.batchId
+        });
+      }
+    }
+  } catch (e) {
+    log('warn', 'Batch check bell failed', { error: e.message });
+  }
+}
+// Steht von einer Charge nichts mehr da, schliesst sich ihre Pruefung.
+function checkBatchChecks() {
+  try {
+    const n = db.closeEmptyBatchChecks(database);
+    if (n) {
+      log('info', 'Batch checks closed, nothing left', { checks: n });
+      broadcastSSE();
+    }
+  } catch (e) {
+    log('warn', 'Batch check sweep failed', { error: e.message });
   }
 }
 // Regal: neue Bestellungen aus dem Bestellungen-Hub (Billbee) nehmen den
@@ -9891,6 +9930,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       const photoIds = [];
       const autoMovedScanIds = [];
       const bookedOutScanIds = [];
+      // Die Chargen, aus denen etwas gemeldet wurde (nicht bei einer
+      // nachgespielten Meldung), und was daraus an Pruefungen wurde.
+      const gemeldeteChargen = new Set();
+      const checks = [];
       try {
         if (data.type_id === undefined || data.type_id === null) {
           const unknown = database.prepare("SELECT id FROM contamination_types WHERE key = 'unknown_other'").get();
@@ -9912,6 +9955,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
             });
             const reportId = cr.id;
             reportIds.push(reportId);
+            if (!cr.duplicate) {
+              const charge = target.batch_id || db.batchOfBag(database, target.bag_id);
+              if (charge) gemeldeteChargen.add(charge);
+            }
             // On an offline-replay duplicate (same report_uuid) the report, photos
             // and auto-MOVE already committed the first time — skip re-running the
             // side effects so a lost 200 can't create a second report or CONTAM move.
@@ -10013,6 +10060,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
               if (ids && ids[ids.length - 1]) bookedOutScanIds.push(ids[ids.length - 1]);
             }
           }
+          // Erst nach dem Ausbuchen: gezaehlt wird, was von der Charge noch steht.
+          const melder = req.authUser ? req.authUser.user_id : null;
+          for (const charge of gemeldeteChargen) {
+            const c = db.openBatchCheck(database, charge, melder);
+            if (c) checks.push(c);
+          }
           database.exec('COMMIT');
         } catch (innerErr) {
           database.exec('ROLLBACK');
@@ -10023,6 +10076,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           _discardPhotoFiles(writtenPhotoFiles);
           throw innerErr;
         }
+        raiseBatchCheckBell(checks.filter((c) => c.opened));
         broadcastSSE(res);
         // `id` und `autoMovedScanId` bleiben stehen: ein Bericht über einen
         // Beutel ist weiter der Normalfall, und ältere Clients lesen genau diese
@@ -10034,7 +10088,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           photoIds,
           autoMovedScanId: autoMovedScanIds[0] || null,
           autoMovedCount: autoMovedScanIds.length,
-          bookedOutCount: bookedOutScanIds.length
+          bookedOutCount: bookedOutScanIds.length,
+          // Je Charge: wie viele Beutel noch stehen und angesehen werden sollen.
+          batchChecks: checks.map((c) => ({ id: c.id, batchId: c.batchId, left: c.left }))
         });
       } catch (err) {
         // R-15: photo-cap errors map to 507 Insufficient Storage so the
@@ -12364,6 +12420,29 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
         const out = db.resolveAutoBookouts(database, ids, data.how, req.authUser && req.authUser.user_id);
         broadcastSSE(res);
         jsonOk(res, out);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // Charge pruefen (v125): "Geprueft" schliesst die Pruefung fuer alle, mit
+  // undo: true geht sie wieder auf.
+  if (req.method === 'POST' && req.url === '/api/batch-checks/close') {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      const id = data && data.id;
+      if (!Number.isInteger(id) || id <= 0) {
+        jsonErr(res, 400, 'id: a positive whole number');
+        return;
+      }
+      try {
+        const changed = db.closeBatchCheck(database, id, req.authUser && req.authUser.user_id, data.undo === true);
+        if (changed) broadcastSSE(res);
+        jsonOk(res, { changed });
       } catch (err) {
         safeErr(res, err);
       }

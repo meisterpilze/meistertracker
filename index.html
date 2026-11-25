@@ -3152,6 +3152,19 @@
                the rhythm behind them, opens under the list from "Woche"
                (#wk-today); it lived on the Dashboard once and came here so that
                one screen answers both "what now" and "how". -->
+          <!-- Charge prüfen (renderChargePruefen, v125): ein Beutel war
+               kontaminiert, die anderen seiner Charge soll jemand ansehen. Steht
+               über allem, bis jemand "Geprüft" tippt; sonst ist der Teil nicht da. -->
+          <section class="wk-teil wk-teil-charge" id="wk-charge" hidden>
+            <div class="wk-teil-kopf">
+              <h2 class="wk-teil-t" data-i18n="charge.title">Charge prüfen</h2>
+            </div>
+            <p class="fs-meta wk-montag-hilfe" data-i18n="charge.help">
+              Ein Beutel daraus war kontaminiert. Sieh dir die anderen an. Ist noch einer hin, melde ihn über
+              Kontamination melden. Dann tippe auf Geprüft.
+            </p>
+            <div id="wk-charge-list"></div>
+          </section>
           <!-- Montags-Check (renderMontagsCheck): einmal die Woche, was eine
                Antwort braucht — Beutel über ihrer Zeit ("Noch da?") und was die
                App selbst ausgebucht hat. Erscheint am Montag und bleibt, bis

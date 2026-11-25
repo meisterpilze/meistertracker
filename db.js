@@ -3497,6 +3497,31 @@ const MIGRATIONS = [
       // Die Charge haelt fest, woraus ihre Beutel sind, wie bei Kleie und Mais.
       addCol('batches', 'sub_soyhull', 'REAL DEFAULT 0');
     }
+  },
+  {
+    version: 125,
+    description: 'Charge pruefen: ein kontaminierter Beutel schickt jemanden zu den anderen seiner Charge',
+    fn(db) {
+      // Eine Zeile je Anlass: offen, bis jemand die uebrigen Beutel der Charge
+      // angesehen hat (checked_at). reports zaehlt die Meldungen, die waehrend
+      // der offenen Pruefung dazukamen. how: 'checked' (von Hand) oder 'empty'
+      // (kein Beutel der Charge mehr da, nichts mehr anzusehen).
+      db.exec(`CREATE TABLE IF NOT EXISTS batch_checks (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id    TEXT NOT NULL,
+        opened_at   TEXT NOT NULL,
+        opened_by   INTEGER,
+        reports     INTEGER NOT NULL DEFAULT 1,
+        last_report TEXT NOT NULL,
+        checked_at  TEXT,
+        checked_by  INTEGER,
+        how         TEXT
+      )`);
+      // Je Charge hoechstens eine offene Pruefung.
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_batch_checks_open ON batch_checks(batch_id) WHERE checked_at IS NULL'
+      );
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4667,6 +4692,9 @@ function readAll(db, opts = {}) {
     // Wann der Montags-Check nach welchem Beutel fragt, in der Zeitzone des
     // Servers gerechnet (brettFragen).
     brettFragen: brettFragen(db),
+    // Chargen, die jemand ansehen soll, weil ein Beutel daraus kontaminiert war
+    // (v125). Bis "Geprueft" stehen sie auf der Arbeit-Seite.
+    batchChecks: listBatchChecks(db),
     version
   };
 }
@@ -7292,6 +7320,7 @@ function resetOperationalData(db, opts, wer) {
       // about to be gone.
       wipe('bag_still_there');
       wipe('auto_bookouts');
+      wipe('batch_checks');
       wipe('scan_log');
       wipe('bags');
       wipe('batches');
@@ -14460,6 +14489,126 @@ function unresolveContaminationReport(db, id) {
   return r.changes > 0;
 }
 
+// ── Charge pruefen (v125) ──────────────────────────────────
+// Ist ein Beutel kontaminiert, sind es die anderen seiner Charge vielleicht
+// auch: gleiche Brut, gleicher Ansatz, gleicher Tag am Autoklav. Die Meldung
+// oeffnet darum eine Pruefung der Charge, die fuer alle gilt (nicht je Person
+// wie die Glocke) und offen bleibt, bis jemand die uebrigen Beutel angesehen
+// und "Geprueft" getippt hat. Wer dabei noch einen kaputten findet, meldet ihn
+// wie jeden anderen; die offene Pruefung zaehlt ihn mit.
+
+// Die Beutel einer Charge, die noch im Bestand stehen. Die Kennungen kommen aus
+// bags und aus dem Scan-Log: aeltere Chargen haben nicht jeden Beutel in bags.
+function batchStockBags(db, batchId) {
+  if (!batchId) return [];
+  const imRegal = getStockBagZoneMap(db);
+  const ids = db
+    .prepare(
+      `SELECT bag_id AS bag FROM bags WHERE batch_id = ?
+       UNION SELECT bag FROM scan_log WHERE batch = ? AND bag IS NOT NULL`
+    )
+    .all(batchId, batchId)
+    .map((r) => r.bag);
+  return ids.filter((b) => imRegal.has(b));
+}
+
+// Die Charge eines Beutels: aus der Meldung, sonst aus bags, sonst aus dem Log.
+function batchOfBag(db, bagId) {
+  if (!bagId) return null;
+  const b = db.prepare('SELECT batch_id FROM bags WHERE bag_id = ?').get(bagId);
+  if (b) return b.batch_id;
+  const s = db
+    .prepare('SELECT batch FROM scan_log WHERE bag = ? AND batch IS NOT NULL ORDER BY id DESC LIMIT 1')
+    .get(bagId);
+  return s ? s.batch : null;
+}
+
+// Eine Meldung ueber die Charge: oeffnet die Pruefung oder zaehlt eine offene
+// hoch. Steht von der Charge nichts mehr da, gibt es nichts anzusehen, und es
+// bleibt bei null. Gibt { id, batchId, left, opened } zurueck; opened heisst,
+// die Pruefung ist neu (dann laeutet die Glocke). Laeuft in der Transaktion
+// der Meldung, also ohne eigene.
+function openBatchCheck(db, batchId, userId) {
+  if (!batchId) return null;
+  const left = batchStockBags(db, batchId).length;
+  const now = new Date().toISOString();
+  const offen = db.prepare('SELECT id FROM batch_checks WHERE batch_id = ? AND checked_at IS NULL').get(batchId);
+  if (offen) {
+    db.prepare('UPDATE batch_checks SET reports = reports + 1, last_report = ? WHERE id = ?').run(now, offen.id);
+    incrementDataVersion(db);
+    return { id: offen.id, batchId, left, opened: false };
+  }
+  if (!left) return null;
+  const info = db
+    .prepare('INSERT INTO batch_checks(batch_id, opened_at, opened_by, reports, last_report) VALUES(?, ?, ?, 1, ?)')
+    .run(batchId, now, userId || null, now);
+  incrementDataVersion(db);
+  return { id: Number(info.lastInsertRowid), batchId, left, opened: true };
+}
+
+// Die offenen Pruefungen, die neueste Meldung zuerst. Wo die Beutel stehen,
+// rechnet der Browser aus dem Scan-Log, wie fuer die Faecher.
+function listBatchChecks(db) {
+  return db
+    .prepare(
+      `SELECT id, batch_id AS batchId, opened_at AS openedAt, reports, last_report AS lastReport
+         FROM batch_checks WHERE checked_at IS NULL ORDER BY last_report DESC, id DESC`
+    )
+    .all();
+}
+
+// Die Glocke zu einer Pruefung, bei allen: weg, wenn sie zu ist; mit undo
+// wieder da. Gelesen bleibt sie.
+function _batchCheckGlocke(db, batchId, undo) {
+  db.prepare(
+    `UPDATE notifications SET ${undo ? 'dismissed = 0' : 'dismissed = 1, read = 1'}
+      WHERE type = 'batch_check' AND link_type = 'batch_check' AND link_id = ?`
+  ).run(batchId);
+}
+
+// "Geprueft": die Pruefung ist zu, fuer alle. undo=true macht sie wieder auf,
+// solange fuer die Charge nicht schon eine neue offen ist (dann zaehlt die).
+// Gibt true zurueck, wenn sich etwas geaendert hat.
+function closeBatchCheck(db, id, userId, undo = false) {
+  const row = db.prepare('SELECT * FROM batch_checks WHERE id = ?').get(id);
+  if (!row) return false;
+  let r;
+  if (undo) {
+    if (row.checked_at == null) return false;
+    const neu = db.prepare('SELECT 1 FROM batch_checks WHERE batch_id = ? AND checked_at IS NULL').get(row.batch_id);
+    if (neu) return false;
+    r = db.prepare('UPDATE batch_checks SET checked_at = NULL, checked_by = NULL, how = NULL WHERE id = ?').run(id);
+  } else {
+    r = db
+      .prepare(
+        "UPDATE batch_checks SET checked_at = ?, checked_by = ?, how = 'checked' WHERE id = ? AND checked_at IS NULL"
+      )
+      .run(new Date().toISOString(), userId || null, id);
+  }
+  if (!r.changes) return false;
+  _batchCheckGlocke(db, row.batch_id, undo);
+  incrementDataVersion(db);
+  return true;
+}
+
+// Steht von einer Charge kein Beutel mehr da (alle geerntet, ausgebucht oder
+// ebenfalls kontaminiert), ist nichts mehr anzusehen: die Pruefung schliesst
+// sich selbst. Laeuft mit den anderen regelmaessigen Pruefungen.
+function closeEmptyBatchChecks(db) {
+  let n = 0;
+  for (const c of listBatchChecks(db)) {
+    if (batchStockBags(db, c.batchId).length) continue;
+    db.prepare("UPDATE batch_checks SET checked_at = ?, how = 'empty' WHERE id = ? AND checked_at IS NULL").run(
+      new Date().toISOString(),
+      c.id
+    );
+    _batchCheckGlocke(db, c.batchId, false);
+    n++;
+  }
+  if (n) incrementDataVersion(db);
+  return n;
+}
+
 // R-23: classifier for `Error.message` strings — true if the message comes
 // from a known validator and is safe to forward to the client as a 400, false
 // for anything else (which should be logged + returned as a generic 500).
@@ -17657,6 +17806,12 @@ module.exports = {
   deleteContaminationReport,
   resolveContaminationReport,
   unresolveContaminationReport,
+  batchStockBags,
+  batchOfBag,
+  openBatchCheck,
+  listBatchChecks,
+  closeBatchCheck,
+  closeEmptyBatchChecks,
   setContaminationReportScanLogId,
   // R-23
   isSafeError,
