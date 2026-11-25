@@ -69,6 +69,17 @@ The license texts are redistributed beside the font files:
 lib/OFL-Atkinson-Hyperlegible-Next.txt and lib/OFL-Atkinson-Hyperlegible-Mono.txt.
 
 ================================================================================
+Fredoka  —  lib/fredoka-*-700-normal.woff2
+================================================================================
+Source:    https://github.com/hafontia/Fredoka-One
+           (Latin and Latin Extended subsets, weight 700, as packaged by
+           Fontsource 5.3.0)
+License:   SIL Open Font License, Version 1.1
+Copyright: 2016 The Fredoka Project Authors
+
+The license text is redistributed beside the font files: lib/OFL-Fredoka.txt.
+
+================================================================================
 MIT License
 ================================================================================
 
