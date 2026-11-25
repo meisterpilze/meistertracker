@@ -172,7 +172,11 @@ function itemsToZPL(items) {
       }
     } else if (it.type === 'qr') {
       // Reset label home immediately before QR to ensure ^FO works from true origin.
-      z += '^LH0,0^FO' + it.x + ',' + y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
+      // ^BY2,3,10 too: the GK420d starts a QR code about the current ^BY bar
+      // height below its ^FO, and keeps ^BY from the label before. A QR label
+      // after a barcode label (^BY…,90) printed its code 80 dots low, into the
+      // text. At the default height of 10 it lands about 7 dots low.
+      z += '^LH0,0^BY2,3,10^FO' + it.x + ',' + y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
