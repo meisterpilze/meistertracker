@@ -196,11 +196,25 @@ describe('Regalbretter: Hoechstzeiten je Art', () => {
     db.updateMushroomStrain(d, id, { incMaxDays: 30, tentMin: 2, description: 'gleich' });
     s = db.listMushroomStrains(d).find((x) => x.id === id);
     assert.equal(s.limitsSet, ago(50), 'dieselben Zahlen noch einmal gesendet: kein neuer Beginn');
-    db.updateMushroomStrain(d, id, { incMaxDays: '', tentMaxDays: 40 });
+    // Nur eine Zeit in Inkubation oder Koernerbrut, die neu dazukommt oder
+    // kuerzer wird, setzt den Beginn neu: sie kann Beutel auf einmal ueber die
+    // Zeit bringen. Die Zahlen des Fruchtzelts, eine laengere oder eine
+    // geloeschte Zeit lassen ihn stehen.
+    db.updateMushroomStrain(d, id, { incMaxDays: 30, tentMin: 3, tentMaxDays: 40 });
+    s = db.listMushroomStrains(d).find((x) => x.id === id);
+    assert.equal(s.tentMaxDays, 40);
+    assert.equal(s.limitsSet, ago(50), 'Fruchtzelt geaendert: kein neuer Beginn');
+    db.updateMushroomStrain(d, id, { incMaxDays: 45 });
+    assert.equal(db.listMushroomStrains(d).find((x) => x.id === id).limitsSet, ago(50), 'laenger: kein neuer Beginn');
+    db.updateMushroomStrain(d, id, { incMaxDays: 20 });
+    assert.notEqual(db.listMushroomStrains(d).find((x) => x.id === id).limitsSet, ago(50), 'kuerzer: neuer Beginn');
+    d.prepare('UPDATE mushroom_strains SET limits_set = ? WHERE id = ?').run(ago(50), id);
+    db.updateMushroomStrain(d, id, { incMaxDays: '' });
     s = db.listMushroomStrains(d).find((x) => x.id === id);
     assert.equal(s.incMaxDays, null);
-    assert.equal(s.tentMaxDays, 40);
-    assert.notEqual(s.limitsSet, ago(50));
+    assert.equal(s.limitsSet, ago(50), 'geloescht: kein neuer Beginn');
+    db.updateMushroomStrain(d, id, { grainMaxDays: 60 });
+    assert.notEqual(db.listMushroomStrains(d).find((x) => x.id === id).limitsSet, ago(50), 'neu gesetzt: neuer Beginn');
   });
 
   it('eine Aenderung an Name oder Rezept laesst die Zahlen stehen', () => {
