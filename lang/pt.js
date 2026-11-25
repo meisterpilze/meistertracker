@@ -2171,7 +2171,6 @@ window.LANG['pt'] = {
   'aria.torchToggle': 'Alternar lanterna',
   'aria.clearLastScan': 'Desfazer \u00faltimo scan',
   'aria.clearScan': 'Limpar scan (redefinir a\u00e7\u00e3o)',
-  'aria.doneScanning': 'Scan conclu\u00eddo',
   'aria.toggleSidebar': 'Alternar barra lateral',
   'aria.mainNav': 'Navega\u00e7\u00e3o principal',
   'aria.adminNav': 'Navega\u00e7\u00e3o de administra\u00e7\u00e3o',

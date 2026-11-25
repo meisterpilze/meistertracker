@@ -1,11 +1,13 @@
 'use strict';
 // Die Kamera schließen, auf jedem Telefon.
 //
-// Geschlossen wurde sie nur über den grünen Haken ganz unten, unter Kamera,
-// Kacheln und Knopfreihe. Auf einem kleinen Telefon lag er unter dem Bildrand,
-// und das Blatt rollte nicht; das X, das man sah, setzte nur den Scan zurück.
-// Wer fertig war, musste die App schließen. Jetzt steht oben rechts immer
-// "Schließen", das Blatt rollt, und der Zurücksetzen-Knopf ist kein X mehr.
+// Geschlossen wurde sie über einen grünen Haken ganz unten, unter Kamera,
+// Kacheln und Knopfreihe. Den Haken las niemand als "Kamera zu", und das X,
+// das man sah, setzte nur den Scan zurück: wer fertig war, schloss die ganze
+// App. Jetzt ist der grüne Knopf ein X und heißt Schließen, Zurücksetzen ist
+// ein Radiergummi, und ist die Kamera höher als der Schirm, rollt sie bis zu
+// diesem Knopf. Ein zweiter Schließen-Knopf oben stand kurz da (#819) und ist
+// wieder weg: einer reicht.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { quelle } = require('./helpers/quelle');
@@ -14,6 +16,11 @@ const APP = quelle();
 const HTML = quelle('index.html');
 const CSS = quelle('styles.css');
 const kamera = HTML.slice(HTML.indexOf('id="m-camscan"'), HTML.indexOf('<!-- Sidebar -->'));
+const knopf = (id) => {
+  const i = kamera.indexOf('id="' + id + '"');
+  assert.ok(i > 0, id + ' fehlt in der Kamera');
+  return kamera.slice(i, kamera.indexOf('</button>', i));
+};
 const regel = (sel) => {
   const i = CSS.indexOf('\n' + sel + ' {');
   assert.ok(i >= 0, sel + ' fehlt in styles.css');
@@ -21,19 +28,21 @@ const regel = (sel) => {
 };
 
 describe('Kamera schließen', () => {
-  it('oben rechts steht "Schließen", vor allem anderen in der Kamera', () => {
-    assert.ok(kamera.indexOf('id="cam-close"') > 0);
-    assert.ok(kamera.indexOf('id="cam-close"') < kamera.indexOf('class="cam-scan-wrap"'));
-    assert.match(kamera, /id="cam-close"[\s\S]{0,700}data-i18n="common\.close"/);
-    const r = regel('.cam-close');
-    assert.match(r, /position: absolute/);
-    assert.match(r, /top: calc\(12px \+ env\(safe-area-inset-top/);
-    assert.match(r, /z-index: 2/);
+  it('der grüne Knopf ist ein X und heißt Schließen', () => {
+    const k = knopf('cls-16');
+    assert.match(k, /data-i18n-aria-label="common\.close"/);
+    assert.match(k, /<line x1="18" y1="6" x2="6" y2="18" \/>/);
+    assert.doesNotMatch(k, /M20 6L9 17l-5-5/, 'kein Haken mehr');
   });
 
-  it('der Knopf schließt wie der grüne Haken', () => {
-    assert.match(APP, /\$\('cam-close'\)\.addEventListener\('click', closeCamScan\)/);
+  it('er schließt die Kamera', () => {
     assert.match(APP, /\$\('cls-16'\)\.addEventListener\('click', closeCamScan\)/);
+  });
+
+  it('es gibt nur einen Schließen-Knopf', () => {
+    assert.doesNotMatch(HTML, /id="cam-close"/);
+    assert.doesNotMatch(CSS, /\.cam-close\b/);
+    assert.doesNotMatch(APP, /'cam-close'/);
   });
 
   it('ist die Kamera höher als der Schirm, rollt sie, statt Knöpfe abzuschneiden', () => {
@@ -42,8 +51,9 @@ describe('Kamera schließen', () => {
     assert.match(r, /justify-content: safe center/);
   });
 
-  it('Zurücksetzen ist kein X im Kreis mehr', () => {
-    const reset = kamera.slice(kamera.indexOf('id="btn-cam-reset"'), kamera.indexOf('id="cls-16"'));
+  it('Zurücksetzen ist kein X: das X gibt es nur einmal', () => {
+    const reset = knopf('btn-cam-reset');
+    assert.doesNotMatch(reset, /<line x1="18" y1="6" x2="6" y2="18" \/>/);
     assert.doesNotMatch(reset, /<circle cx="12" cy="12" r="10" \/>/);
   });
 });
