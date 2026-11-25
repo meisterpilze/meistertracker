@@ -802,12 +802,20 @@ describe('MCP label printing', () => {
       assert.ok(zpl.endsWith('^XZ'), 'must end with ^XZ');
     });
 
-    it('computes label length between 160 and 240', () => {
+    it('prints on the whole 57 x 32 mm roll', () => {
       const zpl = itemsToZPL([{ type: 'text', y: 10, fontH: 24, text: 'test' }]);
-      const llMatch = zpl.match(/\^LL(\d+)/);
-      assert.ok(llMatch, 'must contain ^LL');
-      const ll = Number(llMatch[1]);
-      assert.ok(ll >= 160 && ll <= 240, `label length ${ll} must be 160-240`);
+      assert.ok(zpl.startsWith('^XA^PW456^LL256^'), zpl.slice(0, 20));
+    });
+
+    it('prints every field 5 dots lower than laid out (the printer sits it too high)', () => {
+      const zpl = itemsToZPL([
+        { type: 'barcode', x: 72, y: 24, h: 90, val: '1000601', mw: 3 },
+        { type: 'text', x: 20, y: 120, fontH: 24, text: 'A', blockW: 416 },
+        { type: 'qr', x: 20, y: 12, size: 125, mag: 5, val: '1000601' }
+      ]);
+      assert.ok(zpl.includes('^FO72,29^BY3'), 'barcode');
+      assert.ok(zpl.includes('^FO20,125^FB416'), 'text');
+      assert.ok(zpl.includes('^FO20,17^BQN'), 'QR');
     });
 
     it('renders barcode items with ^BCN command', () => {
@@ -828,8 +836,8 @@ describe('MCP label printing', () => {
       // Bold = two ^FO commands, second at x+1
       const matches = zpl.match(/\^FO/g);
       assert.equal(matches.length, 2, 'bold text needs 2 FO commands');
-      assert.ok(zpl.includes('^FO0,136'), 'first at x=0');
-      assert.ok(zpl.includes('^FO1,136'), 'second at x=1');
+      assert.ok(zpl.includes('^FO0,141'), 'first at x=0');
+      assert.ok(zpl.includes('^FO1,141'), 'second at x=1');
     });
 
     it('renders QR items with ^BQN and mag parameter', () => {
@@ -914,13 +922,14 @@ describe('MCP label printing', () => {
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, '42');
       assert.equal(items[0].mag, 5);
-      assert.equal(items[0].x, 0);
+      assert.equal(items[0].x, 20, 'inside the side margin');
     });
 
     it('with QR: text centered full-width below QR', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, true);
       for (const it of items.filter((i) => i.type === 'text')) {
-        assert.equal(it.blockW, 400, 'text width must be 400');
+        assert.equal(it.x, 20, 'text starts at the side margin');
+        assert.equal(it.blockW, 416, 'text width must be 456 minus both margins');
       }
     });
 
@@ -1001,7 +1010,7 @@ describe('MCP label printing', () => {
       assert.equal(items[0].type, 'qr');
       assert.equal(items[0].val, '55');
       assert.equal(items[0].mag, 5);
-      assert.equal(items[0].x, 0);
+      assert.equal(items[0].x, 20, 'inside the side margin');
     });
 
     it('falls back to underscore-encoded ID when no barcodeNum', () => {
@@ -1144,13 +1153,13 @@ describe('MCP label printing', () => {
       const mcpZpl = itemsToZPL(mcpItems);
 
       // Verify structural elements match what frontend would produce
-      assert.ok(mcpZpl.startsWith('^XA^PW400^LL'), 'header format');
+      assert.ok(mcpZpl.startsWith('^XA^PW456^LL256'), 'header format');
       assert.ok(mcpZpl.includes('^CI28^LH0,0'), 'charset and home');
 
       // Barcode: ^BY{mw},2.0,90^BCN,90,N,N,N^FD100^FS
       const expectedBc = bcParams('100');
       assert.ok(
-        mcpZpl.includes('^FO' + expectedBc.x + ',40^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD100^FS'),
+        mcpZpl.includes('^FO' + expectedBc.x + ',43^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD100^FS'),
         'barcode command must match frontend format'
       );
 
@@ -1181,16 +1190,17 @@ describe('MCP label printing', () => {
       const mcpZpl = itemsToZPL(mcpItems);
 
       // Structural checks
-      assert.ok(mcpZpl.startsWith('^XA^PW400^LL'), 'header');
-      // The species line needs two lines here, so the barcode gives up height
-      // (never below 60) instead of the text running off the label.
+      assert.ok(mcpZpl.startsWith('^XA^PW456^LL256'), 'header');
+      // The species line needs two lines here. On the 57 x 32 mm roll the
+      // barcode still keeps its full 90 dots (on 50 x 30 mm it had to give up
+      // height), laid out at y=24 and printed 5 dots lower.
       const expectedBc = bcParams('200');
-      const bc = mcpZpl.match(/\^FO(\d+),40\^BY(\d),2\.0,(\d+)\^BCN,(\d+),N,N,N\^FD200\^FS/);
+      const bc = mcpZpl.match(/\^FO(\d+),29\^BY(\d),2\.0,(\d+)\^BCN,(\d+),N,N,N\^FD200\^FS/);
       assert.ok(bc, 'barcode command');
       assert.equal(Number(bc[1]), expectedBc.x);
       assert.equal(Number(bc[2]), expectedBc.mw);
       assert.equal(bc[3], bc[4]);
-      assert.ok(Number(bc[3]) >= 60 && Number(bc[3]) < 90, 'barcode height ' + bc[3]);
+      assert.equal(Number(bc[3]), 90, 'barcode height ' + bc[3]);
       assert.ok(mcpZpl.includes('PD-001 <- MC-001'), 'ID with parent arrow');
       assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35'), 'species name');
       assert.ok(mcpZpl.includes('XY-1'), 'strainText');

@@ -87,16 +87,17 @@ function buildBagLocationMap(scanLog) {
 
 // ── ZPL Label Generation ─────────────────────────────────
 // Ported from app.js — server-side copy so MCP tools can generate labels
-// without a browser. Canvas is 400×240 dots (50×30mm @ 203dpi).
+// without a browser. Canvas is labelDims (456×256 dots = 57×32mm @ 203dpi).
 
 function bcParams(val, qzMult) {
+  const W = labelDims.widthDots;
   const mods = 35 + val.length * 11;
   let mw = 3;
   qzMult = qzMult || 10;
   const qz = (m) => m * qzMult;
-  while (mw > 1 && mods * mw + 2 * qz(mw) > 400) mw--;
+  while (mw > 1 && mods * mw + 2 * qz(mw) > W) mw--;
   const w = mods * mw;
-  return { mw, x: Math.max(qz(mw), Math.round((400 - w) / 2)) };
+  return { mw, x: Math.max(qz(mw), Math.round((W - w) / 2)) };
 }
 
 function zplText(s) {
@@ -111,28 +112,34 @@ function fmtDt(d) {
   return dd + '.' + mm + '.' + yy;
 }
 
-// Label size from LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env vars.
-// Default 400×240 dots = 50×30mm at 203dpi (Zebra GK420d small label).
-// Field positions in itemsToZPL/bagLabelItems/labLabelItems assume
-// 400 dots wide; significantly different sizes need their own layout.
+// Label size from LABEL_WIDTH_DOTS / LABEL_HEIGHT_DOTS env vars, the same
+// as server.js. Default 456×256 dots = 57×32mm at 203dpi, the rolls in the
+// Zebra GK420d. The layouts below are computed from these two numbers; the
+// name labelDims is the one app.js uses, so the shared block reads the same.
 const _LABEL_W = (() => {
   const v = parseInt(process.env.LABEL_WIDTH_DOTS, 10);
-  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 400;
+  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 456;
 })();
 const _LABEL_H = (() => {
   const v = parseInt(process.env.LABEL_HEIGHT_DOTS, 10);
-  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 240;
+  return Number.isFinite(v) && v >= 100 && v <= 4000 ? v : 256;
 })();
+const labelDims = { widthDots: _LABEL_W, heightDots: _LABEL_H };
+// Wie in app.js: der Drucker legt das Bild so viele Punkte zu hoch auf das
+// Etikett, also wird um so viel tiefer gedruckt.
+const LABEL_RUNTER = 5;
 function itemsToZPL(items) {
   // ^LT0/^LS0 reset stored offsets, ^PON/^FWN force normal orientation.
+  // Every field goes LABEL_RUNTER dots lower than laid out.
   let z = '^XA^PW' + _LABEL_W + '^LL' + _LABEL_H + '^CI28^LH0,0^LT0^LS0^PON^FWN';
   for (const it of items) {
+    const y = it.y + LABEL_RUNTER;
     if (it.type === 'barcode') {
       z +=
         '^FO' +
         it.x +
         ',' +
-        it.y +
+        y +
         '^BY' +
         it.mw +
         ',2.0,' +
@@ -144,16 +151,15 @@ function itemsToZPL(items) {
         '^FS';
     } else if (it.type === 'text') {
       const fw = it.fontW || it.fontH;
-      const bw = it.blockW || 400;
+      const bw = it.blockW || _LABEL_W;
       const bx = it.x || 0;
-      z +=
-        '^FO' + bx + ',' + it.y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw + '^FD' + zplText(it.text) + '^FS';
+      z += '^FO' + bx + ',' + y + '^FB' + bw + ',1,0,C^A0N,' + it.fontH + ',' + fw + '^FD' + zplText(it.text) + '^FS';
       if (it.bold) {
         z +=
           '^FO' +
           (bx + 1) +
           ',' +
-          it.y +
+          y +
           '^FB' +
           bw +
           ',1,0,C^A0N,' +
@@ -166,7 +172,11 @@ function itemsToZPL(items) {
       }
     } else if (it.type === 'qr') {
       // Reset label home immediately before QR to ensure ^FO works from true origin.
-      z += '^LH0,0^FO' + it.x + ',' + it.y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
+      // ^BY2,3,10 too: the GK420d starts a QR code about the current ^BY bar
+      // height below its ^FO, and keeps ^BY from the label before. A QR label
+      // after a barcode label (^BY…,90) printed its code 80 dots low, into the
+      // text. At the default height of 10 it lands about 7 dots low.
+      z += '^LH0,0^BY2,3,10^FO' + it.x + ',' + y + '^BQN,2,' + (it.mag || 4) + '^FDMA,' + zplText(it.val) + '^FS';
     }
   }
   return z + '^XZ';
@@ -182,12 +192,18 @@ function bagLabelKg(batch, bagId) {
   if (Number.isFinite(w) && w > 0) return w;
   return Number.isFinite(batch && batch.bagKg) && batch.bagKg > 0 ? batch.bagKg : null;
 }
+// Ränder des Etiketts, in Punkten: an den Seiten, oben und unten steht nichts,
+// die Ecken sind rund, und an den Rand druckt der Drucker nicht genau. Steht
+// wie die Zeilen-Funktionen gleich in app.js und mcp-server.js.
+const LABEL_RAND = { seite: 20, oben: 12, unten: 12 };
 // Width a centred text line may use. The bottom-right badge sits over the band
 // the last line(s) occupy, so any line overlapping it vertically is narrowed to
 // stop short — the text re-centres in the space left rather than running under
-// the box. Lines clear of the badge keep the full width they always had.
+// the box. Lines clear of the badge keep the full width between the margins.
 function _lineBlockW(y, fontH, badge) {
-  return badge && y < badge.y + badge.h && badge.y < y + fontH ? badge.x - 6 : 400;
+  return badge && y < badge.y + badge.h && badge.y < y + fontH
+    ? badge.x - 6 - LABEL_RAND.seite
+    : labelDims.widthDots - 2 * LABEL_RAND.seite;
 }
 // ─── Jede Zeile passt ────────────────────────────────────────
 // Ein Textfeld auf dem Etikett ist ein ^FB-Block für eine Zeile, und der
@@ -351,7 +367,14 @@ function labelLines(absaetze, y, badge) {
       satz = setze(a.fontH);
     }
     satz.zeilen.forEach((text, i) => {
-      const item = { type: 'text', y: satz.zeileY(i), blockW: satz.breite(i), fontH: satz.h, text: text };
+      const item = {
+        type: 'text',
+        x: LABEL_RAND.seite,
+        y: satz.zeileY(i),
+        blockW: satz.breite(i),
+        fontH: satz.h,
+        text: text
+      };
       if (a.bold) item.bold = true;
       items.push(item);
     });
@@ -362,8 +385,6 @@ function labelLines(absaetze, y, badge) {
   }
   return { items: items, unten: unten };
 }
-// Tiefer als die Unterkante des Zählers unten rechts (232) steht kein Text.
-const LABEL_UNTEN = 234;
 // Code und Zeilen zu einem Etikett. Passt der Text nicht unter den Code, wird
 // ein kürzbarer Absatz — die Angaben zur Sorte — eine Zeile kürzer, und seine
 // letzte endet mit "...". Reicht auch eine Zeile nicht (unter einem QR, neben
@@ -378,19 +399,21 @@ function labelLayout(bcVal, qr, absaetze, badge) {
     liste = liste.map((a, j) => (j === i ? Object.assign({}, a, { maxZeilen: a.maxZeilen - 1 }) : a));
   }
 }
-// Strichcode oben, die Zeilen darunter, das Ganze senkrecht mittig, aber nie
-// über y=40: darüber schneidet dieses Material ab. Braucht der Text mehr Platz,
-// als unter einem 90 Punkte hohen Code frei ist, gibt der Code Höhe ab, in
-// Schritten bis 60 — 7,5 mm liest jede Kamera noch.
+// Strichcode oben, die Zeilen darunter, das Ganze senkrecht mittig, innerhalb
+// der Ränder oben und unten. Braucht der Text mehr Platz, als unter einem 90
+// Punkte hohen Code frei ist, gibt der Code Höhe ab, in Schritten bis 60 —
+// 7,5 mm liest jede Kamera noch.
 function _labelBarcode(bcVal, absaetze, badge) {
   const bc = bcParams(bcVal);
+  const H = labelDims.heightDots;
   const hoehe = labelLines(absaetze, 0, null).unten;
   let versuch = null;
   for (let bcH = 90; bcH >= 60; bcH -= 6) {
-    const bcY = Math.max(40, Math.round((240 - (bcH + 6 + hoehe)) / 2));
+    const bcY = Math.max(LABEL_RAND.oben, Math.round((H - (bcH + 6 + hoehe)) / 2));
     const text = labelLines(absaetze, bcY + bcH + 6, badge);
-    const code = { type: 'barcode', x: bc.x, y: bcY, w: 400 - 2 * bc.x, h: bcH, val: bcVal, mw: bc.mw };
-    versuch = { passt: text.unten <= LABEL_UNTEN, items: [code].concat(text.items) };
+    const w = labelDims.widthDots - 2 * bc.x;
+    const code = { type: 'barcode', x: bc.x, y: bcY, w: w, h: bcH, val: bcVal, mw: bc.mw };
+    versuch = { passt: text.unten <= H - LABEL_RAND.unten, items: [code].concat(text.items) };
     if (versuch.passt) break;
   }
   return versuch;
@@ -398,9 +421,9 @@ function _labelBarcode(bcVal, absaetze, badge) {
 // QR oben links, mag 5 → 125 Punkte (25 Module), die Zeilen darunter über die
 // ganze Breite.
 function _labelQr(bcVal, absaetze, badge) {
-  const text = labelLines(absaetze, 155, badge);
-  const code = { type: 'qr', x: 0, y: 10, size: 125, mag: 5, val: bcVal };
-  return { passt: text.unten <= 240, items: [code].concat(text.items) };
+  const code = { type: 'qr', x: LABEL_RAND.seite, y: LABEL_RAND.oben, size: 125, mag: 5, val: bcVal };
+  const text = labelLines(absaetze, code.y + code.size + 20, badge);
+  return { passt: text.unten <= labelDims.heightDots - LABEL_RAND.unten, items: [code].concat(text.items) };
 }
 function bagLabelItems(bagId, batch, detail, barcodeNum, qr, bagKg) {
   const bcVal = barcodeNum ? String(barcodeNum) : bagId.replace(/-/g, '_');

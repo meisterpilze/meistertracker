@@ -11,7 +11,7 @@
 // Alle Namen und Nummern hier sind ausgedacht.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebeFunktion } = require('./helpers/quelle');
+const { quelle, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
 
 const APP = quelle();
 const DE = (() => {
@@ -201,22 +201,39 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
 });
 
 describe('shelfLabelCanvas: andere Etiketten bleiben liegend, wie sie sind', () => {
+  // Gezeichnet wird auf die ganze Rolle (456 × 256), das Etikett darin 12 vom
+  // Rand an den Seiten und 8 oben und unten, also innen 432 × 240, und um die
+  // 5 Punkte tiefer, die der Drucker es zu hoch legt. Die Zahlen unten sind
+  // innen gemessen; DX und DY rechnen sie auf die Rolle um.
+  const DX = 12;
+  const DY = 8 + 5;
   it('QR-Code mittig rechts, Nummer unten links, Text unter dem Band', () => {
     const l = leinwand();
     new Function(
       'document',
       'QRCode',
-      `const labelDims = { widthDots: 400, heightDots: 240 };
+      `const labelDims = { widthDots: 456, heightDots: 256 };
+      ${APP.match(/^const LABEL_RUNTER = \d+;$/m)[0]}
+      ${hebeKonstante('SHELF_RAND', APP)}
       const etikettBild = () => {};
       ${heben(['_shelfWrap', '_bandZeilen', '_qrModule', '_qrZeichnen', '_nurSchwarzWeiss', 'shelfLabelCanvas'])}
       shelfLabelCanvas({ barcode: 55, band: 'Testband', etikett: 'Testartikel' });`
     )(l.document, QRCode);
-    // 21 Module zu 7 Punkten: 147 breit, rechts 14 vom Rand, also ab x = 239.
-    const qr = l.rechtecke.find((r) => r.x === 239 && r.w === 7);
-    assert.equal(qr.y, Math.floor((240 - 147) / 2));
+    // 21 Module zu 7 Punkten: 147 breit, rechts 14 vom Rand, also innen ab x = 271.
+    const qr = l.rechtecke.find((r) => r.x === DX + 271 && r.w === 7);
+    assert.equal(qr.y, DY + Math.floor((240 - 147) / 2));
     const nummer = l.texte.find((x) => x.text === '55');
-    assert.deepEqual([nummer.x, nummer.y, nummer.align], [12, 230, 'start']);
-    assert.equal(l.texte.find((x) => x.text === 'Testartikel').y, 92);
+    assert.deepEqual([nummer.x, nummer.y, nummer.align], [DX + 12, DY + 230, 'start']);
+    assert.equal(l.texte.find((x) => x.text === 'Testartikel').y, DY + 92);
+    // Das Band beginnt innen bei 0, auf der Rolle also 12 vom Rand und unter
+    // dem oberen Rand.
+    assert.ok(
+      l.rechtecke.some((r) => r.x === DX && r.y === DY && r.h === 81 && r.farbe === '#000'),
+      'Band'
+    );
+    // Schwarz-weiß wird die ganze Rolle, nicht nur das Innere.
+    const cv = l.leinwaende[0];
+    assert.equal(cv.getContext('2d').punkt(455, 255), 255);
   });
 });
 
