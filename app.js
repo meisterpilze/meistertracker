@@ -19281,6 +19281,14 @@ const FACH_BAND_HOCH = 76;
 // Der Drucker legt das Bild stehend gelesen etwas zu weit nach rechts; um so
 // viele Punkte wird alles nach links gezeichnet (am Etikett gemessen).
 const FACH_LINKS = 5;
+// Um den QR-Code bleibt eine weiße Ruhezone von vier Modulen, wie die QR-Norm
+// sie verlangt, zur Nummer wie zum Rand. Zum unteren Rand kommt Luft dazu für
+// ein Etikett, das der Drucker ein, zwei Millimeter verschoben trifft. Mit 2 mm
+// bis zum Rand und 3 mm bis zur Nummer lasen zwei Telefone neun gedruckte
+// Etiketten gar nicht, und ZXing las eins der Bilder nicht einmal auf Weiß.
+const FACH_QR_MODUL = 8;
+const FACH_QR_RUHE = 4;
+const FACH_QR_UNTEN = 44;
 const FACH_SCHRIFT = 'Fredoka, Arial, Helvetica, sans-serif';
 async function fachEtikettSchrift(text) {
   try {
@@ -19323,16 +19331,18 @@ function fachEtikettCanvas(x) {
   band.forEach((z, i) => mittig(z, bandTop + i * bandLh, breit - 24));
   ctx.fillStyle = '#000';
 
-  // Unten der QR-Code, mittig, 16 über dem Rand, 9 Punkte je Modul (bei einer
-  // siebenstelligen Nummer 24 mm). Keine Nummer darunter: ein Fach-Code wird
-  // nur gescannt, nirgends eingetippt.
+  // Unten der QR-Code, mittig, FACH_QR_UNTEN über dem Rand, 8 Punkte je Modul
+  // (bei einer siebenstelligen Nummer 21 mm), mit seiner Ruhezone rundherum.
+  // Keine Nummer darunter: ein Fach-Code wird nur gescannt, nirgends eingetippt.
   const val = String(x.barcode || '');
   let qrOben = H;
+  let ruhe = 0;
   if (val && typeof QRCode !== 'undefined') {
     const q = _qrModule(val);
-    const mod = Math.max(1, Math.min(9, Math.floor((W - 2 * 28) / q.count)));
+    const mod = Math.max(1, Math.min(FACH_QR_MODUL, Math.floor((W - 2 * FACH_QR_UNTEN) / q.count)));
     const size = q.count * mod;
-    qrOben = H - 16 - size;
+    qrOben = H - FACH_QR_UNTEN - size;
+    ruhe = FACH_QR_RUHE * mod;
     _qrZeichnen(ctx, q, Math.floor((W - size) / 2), qrOben, mod);
   }
   ctx.textBaseline = 'alphabetic';
@@ -19352,7 +19362,9 @@ function fachEtikettCanvas(x) {
   };
   const nummer = String(x.nummer || '');
   const oben = FACH_RAND + FACH_BAND_HOCH + 12;
-  const unten = qrOben - 24;
+  // Die Nummer endet vor der Ruhezone des QR-Codes: ihr Schwarz daneben
+  // brachte Leser auf eine falsche Fährte.
+  const unten = qrOben - Math.max(24, ruhe);
   const probe = mass(100);
   const px = Math.floor(
     Math.min(probe.w > 0 ? (100 * breit) / probe.w : Infinity, (100 * (unten - oben)) / (probe.auf + probe.ab))

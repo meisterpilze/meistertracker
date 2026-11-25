@@ -154,9 +154,8 @@ function QRCode() {
 }
 QRCode.CorrectLevel = { M: 0 };
 
-const BAND_HOCH = ['FACH_ETIKETT', 'FACH_RAND', 'FACH_BAND_HOCH', 'FACH_LINKS', 'FACH_SCHRIFT']
-  .map((k) => APP.match(new RegExp('^const ' + k + ' = .*;$', 'm'))[0])
-  .join('\n');
+// Alle Konstanten des Fach-Etiketts, wie sie in app.js stehen.
+const BAND_HOCH = APP.match(/^const FACH_[A-Z_]+ = .*;$/gm).join('\n');
 // Stehend 256 × 456 (32 × 57 mm), alles um FACH_LINKS (5) nach links
 // verschoben: die Mitte ist 123.
 const MITTE = 128 - 5;
@@ -197,16 +196,28 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
     assert.ok(zeilen.every((z) => z.y > 12 && z.y + 24 < 12 + 76));
     assert.ok(zeilen.every((z) => /^bold 24px Fredoka, Arial/.test(z.font)));
   });
-  it('unten der QR-Code mittig, 9 Punkte je Modul, 16 über dem Rand, ohne Nummer darunter', () => {
+  it('unten der QR-Code mittig, 8 Punkte je Modul, 44 über dem Rand, ohne Nummer darunter', () => {
     const { rechtecke, texte } = zeichne(FACH);
-    // 21 Module zu 9 Punkten: 189 breit, mittig ab x = 33, verschoben 28.
-    const qr = rechtecke.find((r) => r.w === 9);
-    assert.deepEqual([qr.x, qr.y], [28, 456 - 16 - 189]);
+    // 21 Module zu 8 Punkten: 168 breit, mittig ab x = 44, verschoben 39.
+    const qr = rechtecke.find((r) => r.w === 8);
+    assert.deepEqual([qr.x, qr.y], [39, 456 - 44 - 168]);
     assert.equal(
       texte.find((x) => x.text === '4711'),
       undefined,
       'ein Fach-Code wird nur gescannt'
     );
+  });
+  it('rund um den QR-Code vier Module weiß, zum unteren Rand noch 12 Punkte mehr', () => {
+    const { rechtecke, texte } = zeichne(FACH);
+    const qr = rechtecke.find((r) => r.w === 8);
+    const ruhe = 4 * 8;
+    // Zum unteren Rand: Ruhezone und Luft für ein um 1,5 mm verschobenes Etikett.
+    assert.ok(456 - (qr.y + 168) >= ruhe + 12, 'unten');
+    // Zu den Seiten des Etiketts (stehend 0..256, alles 5 nach links verschoben).
+    assert.ok(qr.x >= ruhe && 256 - 5 - (qr.x + 168) >= ruhe, 'Seiten');
+    // Zur Nummer: ihr unterster schwarzer Punkt liegt vor der Ruhezone.
+    const nummer = texte.find((x) => x.text === '3');
+    assert.ok(nummer.y <= qr.y - ruhe, 'Nummer bei ' + nummer.y);
   });
   it('die Nummer so groß es geht, mittig zwischen Band und QR-Code, zum QR-Code mehr Luft', () => {
     const { texte } = zeichne(FACH);
@@ -216,13 +227,14 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
       'kein Wort "Fach"'
     );
     const nummer = texte.find((x) => x.text === '3');
-    // Platz: von 12 + 76 + 12 bis 251 - 24, also 127 hoch; Ziffern schwärzen 0,72 der Größe.
-    const px = Math.floor((100 * 127) / 72);
+    // Platz: von 12 + 76 + 12 bis 244 - 32 (die Ruhezone des QR-Codes), also
+    // 112 hoch; Ziffern schwärzen 0,72 der Größe.
+    const px = Math.floor((100 * 112) / 72);
     assert.deepEqual([nummer.px, nummer.x, nummer.s], [px, MITTE, 1]);
     assert.match(nummer.font, /^bold \d+px Fredoka, Arial/);
     const oben = nummer.y - 0.72 * px;
-    assert.ok(oben >= 100 - 1 && nummer.y <= 227 + 1, 'nichts reicht in Band oder QR-Code');
-    assert.ok(Math.abs((oben + nummer.y) / 2 - (100 + 227) / 2) <= 1, 'mittig');
+    assert.ok(oben >= 100 - 1 && nummer.y <= 212 + 1, 'nichts reicht in Band oder QR-Code');
+    assert.ok(Math.abs((oben + nummer.y) / 2 - (100 + 212) / 2) <= 1, 'mittig');
   });
   it('eine Nummer, die zu breit wäre, wird kleiner, bis sie in die Breite passt', () => {
     const { texte } = zeichne({ ...FACH, nummer: '1234567' });
@@ -243,10 +255,10 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
     assert.equal(ctx.punkt(5, 128), 255);
     assert.equal(ctx.punkt(95, 128), 255);
     assert.equal(ctx.punkt(50, 255 - 242), 255);
-    // Das erste Modul (stehend x 28..36, y 251..259) liegt liegend bei x 251..259, y 227..219.
-    assert.equal(ctx.punkt(251, 255 - 28), 0);
-    assert.equal(ctx.punkt(251 + 8, 255 - 28 - 8), 0);
-    assert.equal(ctx.punkt(251 + 9, 255 - 28), 255);
+    // Das erste Modul (stehend x 39..46, y 244..251) liegt liegend bei x 244..251, y 216..209.
+    assert.equal(ctx.punkt(244, 255 - 39), 0);
+    assert.equal(ctx.punkt(244 + 7, 255 - 39 - 7), 0);
+    assert.equal(ctx.punkt(244 + 8, 255 - 39), 255);
   });
 });
 
