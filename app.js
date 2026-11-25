@@ -11285,19 +11285,17 @@ async function rackEditSave() {
   renderStatus();
   toast(t('rackEdit.saved', { n: r.levels }));
 }
-// Das Etikett eines Fachs: Raum und Regal im Band, das Fach groß und mittig, der
-// QR-Code oben mit der Nummer darunter. Keine Art: ein freies Regal nimmt auch
-// mal eine andere, und das Etikett bleibt dasselbe.
+// Was auf das Etikett eines Fachs kommt: Raum und Regal fürs Band, das Wort
+// ("Fach") und die Nummer des Fachs, der QR-Code. Keine Art: ein freies Regal
+// nimmt auch mal eine andere, und das Etikett bleibt dasselbe.
 function brettEtikett(ort) {
   const r = rackVon(ort);
   const b = brettVon(ort);
   return {
     barcode: barcodeByEntity.get('brett:' + ort),
     band: zoneDisplayName(r ? r.zoneId : '') + '\n' + rackLabel(b ? b.rackId : ort),
-    etikett: t('brett.levelN', { n: b ? b.level : '' }),
-    namePx: 60,
-    qrOben: true,
-    mitte: true
+    wort: t('brett.levelN', { n: '' }).trim(),
+    nummer: String(b ? b.level : '')
   };
 }
 async function brettEtikettenDrucken(rackId) {
@@ -11314,7 +11312,7 @@ async function brettEtikettenDrucken(rackId) {
     return;
   }
   if (typeof QRCode === 'undefined') await loadVendorLibs();
-  const zpl = orte.map((o) => shelfLabelZPL(shelfLabelCanvas(brettEtikett(o)), 1)).join('\n');
+  const zpl = orte.map((o) => shelfLabelZPL(fachEtikettCanvas(brettEtikett(o)), 1)).join('\n');
   const err = await sendToPrinter(zpl);
   if (err) toast(t('rackEdit.printFailed', { err }), 'err');
   else toast(t('rackEdit.printed', { n: orte.length }));
@@ -18987,42 +18985,23 @@ function shelfLabelCanvas(x) {
   ctx.translate(SHELF_RAND.x, SHELF_RAND.y + LABEL_RUNTER);
   ctx.fillStyle = '#000';
 
-  // QR: ganze Punkte je Modul, sonst franst er aus. Rechts, senkrecht mittig;
-  // mit qrOben oben, so weit vom Rand wie rechts, und die Nummer steht dann
-  // unter ihm (Fach-Etikett).
+  // QR: ganze Punkte je Modul, sonst franst er aus. Rechts, senkrecht mittig.
   const val = String(x.barcode || '');
   let qx = W - 14;
-  let qrUnten = 0;
-  let qrBreite = 0;
   if (val && typeof QRCode !== 'undefined') {
-    const holder = document.createElement('div');
-    const q = new QRCode(holder, { text: val, correctLevel: QRCode.CorrectLevel.M });
-    const m = q._oQRCode;
-    const count = m.getModuleCount();
-    const mod = Math.max(1, Math.min(7, Math.floor((H - 24) / count)));
-    const size = count * mod;
+    const q = _qrModule(val);
+    const mod = Math.max(1, Math.min(7, Math.floor((H - 24) / q.count)));
+    const size = q.count * mod;
     qx = W - 14 - size;
-    const qy = x.qrOben ? 14 : Math.floor((H - size) / 2);
-    for (let r = 0; r < count; r++)
-      for (let c = 0; c < count; c++) if (m.isDark(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod);
-    qrUnten = qy + size;
-    qrBreite = size;
+    _qrZeichnen(ctx, q, qx, Math.floor((H - size) / 2), mod);
   }
   ctx.textBaseline = 'alphabetic';
   ctx.font = 'bold 18px Consolas, "Courier New", monospace';
-  if (x.qrOben && qrBreite) {
-    ctx.textAlign = 'center';
-    ctx.fillText(val, qx + qrBreite / 2, qrUnten + 26);
-    ctx.textAlign = 'start';
-  } else ctx.fillText(val, 12, H - 10);
+  ctx.fillText(val, 12, H - 10);
 
   // Das Band: Bild und Wort weiß auf Schwarz. Ein Wort, das zu breit ist, wird
   // schmaler gezogen statt kleiner, damit jedes Band dieselbe Schrifthöhe hat.
-  const band = String(x.band || '')
-    .split('\n')
-    // Wörter in Großbuchstaben; eine Größe (3 kg, 10 ml) bleibt, wie sie ist.
-    .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
-    .filter(Boolean);
+  const band = _bandZeilen(x.band);
   const mitBand = !!(band.length || x.bild);
   const bandBreite = qx - 10;
   const bandHoch = 81;
@@ -19056,8 +19035,7 @@ function shelfLabelCanvas(x) {
   const text = String(x.etikett || x.name || '');
   const maxW = qx - 14 - 12;
   const oben = mitBand ? 92 : 12;
-  // Steht die Nummer unter dem QR-Code, ist links Platz bis fast an den Rand.
-  const hoch = (x.qrOben ? H - 10 : H - 36) - oben;
+  const hoch = H - 36 - oben;
   const words = text.split(/\s+/).filter(Boolean);
   const gross = x.namePx || 44;
   let wahl = null;
@@ -19071,34 +19049,151 @@ function shelfLabelCanvas(x) {
   ctx.font = 'bold ' + wahl.px + 'px Arial, Helvetica, sans-serif';
   ctx.textBaseline = 'top';
   const zeilen = wahl.lines.slice(0, Math.max(1, Math.floor(hoch / wahl.lh)));
-  // Mittig (Fach-Etikett): der Text steht in der Mitte zwischen Band und unterem
-  // Rand, gemessen an dem, was die Schrift schwärzt. Nach der Zeilenhöhe säße
-  // "Fach 6" zu hoch, es hat keine Unterlänge.
-  let y0 = oben;
-  if (x.mitte) {
-    const auf = ctx.measureText(zeilen[0]).actualBoundingBoxAscent;
-    const ab = ctx.measureText(zeilen[zeilen.length - 1]).actualBoundingBoxDescent;
-    const kopf = Number.isFinite(auf) ? -auf : 0;
-    const fuss = (zeilen.length - 1) * wahl.lh + (Number.isFinite(ab) ? ab : wahl.px);
-    y0 = Math.round(((mitBand ? bandHoch : 0) + H) / 2 - (kopf + fuss) / 2);
-  }
   zeilen.forEach((l, i) => {
     const w = ctx.measureText(l).width;
     ctx.save();
-    ctx.translate(12, y0 + i * wahl.lh);
+    ctx.translate(12, oben + i * wahl.lh);
     if (w > maxW) ctx.scale(maxW / w, 1);
     ctx.fillText(l, 0, 0);
     ctx.restore();
   });
 
-  // Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
-  const img = ctx.getImageData(0, 0, cv.width, cv.height);
+  _nurSchwarzWeiss(ctx, cv.width, cv.height);
+  return cv;
+}
+// Die Zeilen eines Bands: Wörter in Großbuchstaben, eine Größe (3 kg, 10 ml)
+// bleibt, wie sie ist.
+function _bandZeilen(s) {
+  return String(s || '')
+    .split('\n')
+    .map((z) => (/\d/.test(z) ? z.trim() : z.trim().toUpperCase()))
+    .filter(Boolean);
+}
+function _qrModule(val) {
+  const q = new QRCode(document.createElement('div'), { text: val, correctLevel: QRCode.CorrectLevel.M });
+  const m = q._oQRCode;
+  return { count: m.getModuleCount(), isDark: (r, c) => m.isDark(r, c) };
+}
+function _qrZeichnen(ctx, q, x, y, mod) {
+  for (let r = 0; r < q.count; r++)
+    for (let c = 0; c < q.count; c++) if (q.isDark(r, c)) ctx.fillRect(x + c * mod, y + r * mod, mod, mod);
+}
+// Schwarz oder Weiß, nichts dazwischen: so druckt der Zebra.
+function _nurSchwarzWeiss(ctx, W, H) {
+  const img = ctx.getImageData(0, 0, W, H);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
     const v = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 150 ? 0 : 255;
     d[i] = d[i + 1] = d[i + 2] = v;
     d[i + 3] = 255;
   }
+  ctx.putImageData(img, 0, 0);
+}
+
+// Das Etikett eines Fachs, hochkant: man dreht es um 90° und klebt es stehend
+// an den Regalpfosten. Gezeichnet wird es stehend (240 × 400), von oben nach
+// unten: das schwarze Band mit Raum und Regal, darunter klein das Wort "Fach"
+// und groß seine Nummer, ganz unten der QR-Code mit der Nummer zum Abtippen.
+// Dann wird es auf das liegende Etikett (400 × 240) gedreht: was stehend oben
+// ist, liegt links. Aus dem Drucker kommt es also quer und wird im
+// Uhrzeigersinn gedreht.
+const FACH_BAND_HOCH = 76;
+function fachEtikettCanvas(x) {
+  const W = labelDims.heightDots;
+  const H = labelDims.widthDots;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const rand = 12;
+  const breit = W - 2 * rand;
+  // Eine Zeile mittig bei y; was zu breit ist, wird schmaler gezogen.
+  const mittig = (text, y) => {
+    const w = ctx.measureText(text).width;
+    ctx.save();
+    ctx.translate(W / 2, y);
+    if (w > breit) ctx.scale(breit / w, 1);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  };
+  ctx.textAlign = 'center';
+
+  // Das Band über die ganze Breite, die Zeilen mittig.
+  const band = _bandZeilen(x.band);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, FACH_BAND_HOCH);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 24px "Arial Narrow", "Roboto Condensed", Arial, sans-serif';
+  ctx.textBaseline = 'top';
+  const bandLh = 26;
+  const bandTop = Math.floor((FACH_BAND_HOCH - band.length * bandLh) / 2) + 2;
+  band.forEach((z, i) => mittig(z, bandTop + i * bandLh));
+  ctx.fillStyle = '#000';
+
+  // Unten der QR-Code, mittig, die Nummer darunter.
+  const val = String(x.barcode || '');
+  const nummerY = H - 10;
+  let qrOben = nummerY - 26;
+  if (val && typeof QRCode !== 'undefined') {
+    const q = _qrModule(val);
+    const mod = Math.max(1, Math.min(7, Math.floor((W - 2 * 14) / q.count)));
+    const size = q.count * mod;
+    qrOben -= size;
+    _qrZeichnen(ctx, q, Math.floor((W - size) / 2), qrOben, mod);
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 18px Consolas, "Courier New", monospace';
+  ctx.fillText(val, W / 2, nummerY);
+
+  // Wort und Nummer stehen zusammen in der Mitte zwischen Band und QR-Code,
+  // gemessen an dem, was die Schrift schwärzt (Ziffern haben keine Unterlänge).
+  const wortFont = 'bold 30px Arial, Helvetica, sans-serif';
+  const nummerFont = 'bold 104px Arial, Helvetica, sans-serif';
+  const tinte = (font, text, px) => {
+    ctx.font = font;
+    const m = ctx.measureText(text);
+    const auf = Number.isFinite(m.actualBoundingBoxAscent) ? m.actualBoundingBoxAscent : 0.72 * px;
+    const ab = Number.isFinite(m.actualBoundingBoxDescent) ? m.actualBoundingBoxDescent : 0;
+    return { auf, ab };
+  };
+  const wort = String(x.wort || '');
+  const nummer = String(x.nummer || '');
+  const tw = tinte(wortFont, wort, 30);
+  const tn = tinte(nummerFont, nummer, 104);
+  const luecke = 14;
+  const gesamt = tw.auf + tw.ab + luecke + tn.auf + tn.ab;
+  const start = Math.round((FACH_BAND_HOCH + qrOben) / 2 - gesamt / 2);
+  ctx.font = wortFont;
+  mittig(wort, start + tw.auf);
+  ctx.font = nummerFont;
+  mittig(nummer, start + tw.auf + tw.ab + luecke + tn.auf);
+
+  _nurSchwarzWeiss(ctx, W, H);
+  return fachEtikettQuer(cv);
+}
+// Stehend (x, y) wird liegend (y, Breite - 1 - x): oben liegt dann links.
+// Punkt für Punkt, damit nichts beim Drehen verwischt.
+function fachEtikettQuer(stehend) {
+  const W = stehend.width;
+  const H = stehend.height;
+  const von = stehend.getContext('2d').getImageData(0, 0, W, H).data;
+  const cv = document.createElement('canvas');
+  cv.width = H;
+  cv.height = W;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(H, W);
+  const nach = img.data;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const a = (y * W + x) * 4;
+      const b = ((W - 1 - x) * H + y) * 4;
+      nach[b] = von[a];
+      nach[b + 1] = von[a + 1];
+      nach[b + 2] = von[a + 2];
+      nach[b + 3] = von[a + 3];
+    }
   ctx.putImageData(img, 0, 0);
   return cv;
 }

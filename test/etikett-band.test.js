@@ -123,8 +123,9 @@ describe('Etikett: Labor und Regal', () => {
     assert.match(f, /if \(w > maxW\) ctx\.scale\(maxW \/ w, 1\);/);
   });
   it('eine Größe im Band bleibt klein geschrieben, ein Wort wird groß', () => {
+    assert.match(hebe('shelfLabelCanvas'), /const band = _bandZeilen\(x\.band\);/);
     assert.match(
-      hebe('shelfLabelCanvas'),
+      hebe('_bandZeilen'),
       /\.map\(\(z\) => \(\/\\d\/\.test\(z\) \? z\.trim\(\) : z\.trim\(\)\.toUpperCase\(\)\)\)/
     );
   });
