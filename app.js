@@ -11285,16 +11285,15 @@ async function rackEditSave() {
   renderStatus();
   toast(t('rackEdit.saved', { n: r.levels }));
 }
-// Was auf das Etikett eines Fachs kommt: Raum und Regal fürs Band, das Wort
-// ("Fach") und die Nummer des Fachs, der QR-Code. Keine Art: ein freies Regal
-// nimmt auch mal eine andere, und das Etikett bleibt dasselbe.
+// Was auf das Etikett eines Fachs kommt: Raum und Regal fürs Band, die Nummer
+// des Fachs, der QR-Code. Keine Art: ein freies Regal nimmt auch mal eine
+// andere, und das Etikett bleibt dasselbe.
 function brettEtikett(ort) {
   const r = rackVon(ort);
   const b = brettVon(ort);
   return {
     barcode: barcodeByEntity.get('brett:' + ort),
     band: zoneDisplayName(r ? r.zoneId : '') + '\n' + rackLabel(b ? b.rackId : ort),
-    wort: t('brett.levelN', { n: '' }).trim(),
     nummer: String(b ? b.level : '')
   };
 }
@@ -11312,7 +11311,9 @@ async function brettEtikettenDrucken(rackId) {
     return;
   }
   if (typeof QRCode === 'undefined') await loadVendorLibs();
-  const zpl = orte.map((o) => shelfLabelZPL(fachEtikettCanvas(brettEtikett(o)), 1)).join('\n');
+  const etiketten = orte.map(brettEtikett);
+  await fachEtikettSchrift(etiketten.map((e) => e.band + e.nummer).join(''));
+  const zpl = etiketten.map((e) => shelfLabelZPL(fachEtikettCanvas(e), 1)).join('\n');
   const err = await sendToPrinter(zpl);
   if (err) toast(t('rackEdit.printFailed', { err }), 'err');
   else toast(t('rackEdit.printed', { n: orte.length }));
@@ -19091,84 +19092,105 @@ function _nurSchwarzWeiss(ctx, W, H) {
 }
 
 // Das Etikett eines Fachs, hochkant: man dreht es um 90° und klebt es stehend
-// an den Regalpfosten. Gezeichnet wird es stehend (240 × 400), von oben nach
-// unten: das schwarze Band mit Raum und Regal, darunter klein das Wort "Fach"
-// und groß seine Nummer, ganz unten der QR-Code mit der Nummer zum Abtippen.
-// Dann wird es auf das liegende Etikett (400 × 240) gedreht: was stehend oben
-// ist, liegt links. Aus dem Drucker kommt es also quer und wird im
-// Uhrzeigersinn gedreht.
+// an den Regalpfosten. Gezeichnet wird es stehend, auf die ganze Rolle
+// (32 × 57 mm, nicht labelDims: das sind 50 × 30 mm, und darauf säße es mit
+// breitem weißem Rand außermittig), von oben nach unten: das schwarze Band mit
+// Raum und Regal, darunter die Nummer des Fachs so groß es geht (ohne das
+// Wort "Fach"), ganz unten der QR-Code. Dann wird es auf das liegende Etikett
+// gedreht: was stehend oben ist, liegt links. Aus dem Drucker kommt es also
+// quer und wird im Uhrzeigersinn gedreht.
+//
+// Band und Nummer sind in Fredoka (lib/, siehe NOTICE). Auf eine Leinwand
+// zeichnet der Browser nur eine Schrift, die schon geladen ist, darum lädt
+// fachEtikettSchrift sie vor dem Zeichnen; fehlt sie, wird es Arial.
+const FACH_ETIKETT = { breit: 256, hoch: 456 };
+// Das Band steht so weit vom Rand ab: das Etikett hat runde Ecken, und ein
+// Band bis an den Rand zeigte jede kleine Verschiebung des Druckers.
+const FACH_RAND = 12;
 const FACH_BAND_HOCH = 76;
+// Der Drucker legt das Bild stehend gelesen etwas zu weit nach rechts; um so
+// viele Punkte wird alles nach links gezeichnet (am Etikett gemessen).
+const FACH_LINKS = 5;
+const FACH_SCHRIFT = 'Fredoka, Arial, Helvetica, sans-serif';
+async function fachEtikettSchrift(text) {
+  try {
+    if (document.fonts && document.fonts.load) await document.fonts.load('bold 100px Fredoka', text || '0');
+  } catch (e) {
+    // ohne die Schrift eben in Arial
+  }
+}
 function fachEtikettCanvas(x) {
-  const W = labelDims.heightDots;
-  const H = labelDims.widthDots;
+  const W = FACH_ETIKETT.breit;
+  const H = FACH_ETIKETT.hoch;
   const cv = document.createElement('canvas');
   cv.width = W;
   cv.height = H;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
-  const rand = 12;
-  const breit = W - 2 * rand;
-  // Eine Zeile mittig bei y; was zu breit ist, wird schmaler gezogen.
-  const mittig = (text, y) => {
+  ctx.translate(-FACH_LINKS, 0);
+  const breit = W - 2 * FACH_RAND;
+  // Eine Zeile mittig bei y; was breiter ist als maxW, wird schmaler gezogen.
+  const mittig = (text, y, maxW) => {
     const w = ctx.measureText(text).width;
     ctx.save();
     ctx.translate(W / 2, y);
-    if (w > breit) ctx.scale(breit / w, 1);
+    if (w > maxW) ctx.scale(maxW / w, 1);
     ctx.fillText(text, 0, 0);
     ctx.restore();
   };
   ctx.textAlign = 'center';
 
-  // Das Band über die ganze Breite, die Zeilen mittig.
+  // Das Band, FACH_RAND vom Rand, die Zeilen mittig darin.
   const band = _bandZeilen(x.band);
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, FACH_BAND_HOCH);
+  ctx.fillRect(FACH_RAND, FACH_RAND, breit, FACH_BAND_HOCH);
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 24px "Arial Narrow", "Roboto Condensed", Arial, sans-serif';
+  ctx.font = 'bold 24px ' + FACH_SCHRIFT;
   ctx.textBaseline = 'top';
   const bandLh = 26;
-  const bandTop = Math.floor((FACH_BAND_HOCH - band.length * bandLh) / 2) + 2;
-  band.forEach((z, i) => mittig(z, bandTop + i * bandLh));
+  const bandTop = FACH_RAND + Math.floor((FACH_BAND_HOCH - band.length * bandLh) / 2) + 2;
+  band.forEach((z, i) => mittig(z, bandTop + i * bandLh, breit - 24));
   ctx.fillStyle = '#000';
 
-  // Unten der QR-Code, mittig, die Nummer darunter.
+  // Unten der QR-Code, mittig, 16 über dem Rand, 9 Punkte je Modul (bei einer
+  // siebenstelligen Nummer 24 mm). Keine Nummer darunter: ein Fach-Code wird
+  // nur gescannt, nirgends eingetippt.
   const val = String(x.barcode || '');
-  const nummerY = H - 10;
-  let qrOben = nummerY - 26;
+  let qrOben = H;
   if (val && typeof QRCode !== 'undefined') {
     const q = _qrModule(val);
-    const mod = Math.max(1, Math.min(7, Math.floor((W - 2 * 14) / q.count)));
+    const mod = Math.max(1, Math.min(9, Math.floor((W - 2 * 28) / q.count)));
     const size = q.count * mod;
-    qrOben -= size;
+    qrOben = H - 16 - size;
     _qrZeichnen(ctx, q, Math.floor((W - size) / 2), qrOben, mod);
   }
   ctx.textBaseline = 'alphabetic';
-  ctx.font = 'bold 18px Consolas, "Courier New", monospace';
-  ctx.fillText(val, W / 2, nummerY);
 
-  // Wort und Nummer stehen zusammen in der Mitte zwischen Band und QR-Code,
-  // gemessen an dem, was die Schrift schwärzt (Ziffern haben keine Unterlänge).
-  const wortFont = 'bold 30px Arial, Helvetica, sans-serif';
-  const nummerFont = 'bold 104px Arial, Helvetica, sans-serif';
-  const tinte = (font, text, px) => {
-    ctx.font = font;
-    const m = ctx.measureText(text);
+  // Die Nummer, so groß es geht: nicht breiter als der Platz, nicht höher als
+  // der Raum zwischen Band und QR-Code, mittig darin. Gemessen wird, was die
+  // Schrift schwärzt (Ziffern haben keine Unterlänge).
+  // Zum QR-Code hin bleibt mehr Luft als zum Band, damit beide nicht
+  // zusammenkleben.
+  const font = (px) => 'bold ' + px + 'px ' + FACH_SCHRIFT;
+  const mass = (px) => {
+    ctx.font = font(px);
+    const m = ctx.measureText(nummer);
     const auf = Number.isFinite(m.actualBoundingBoxAscent) ? m.actualBoundingBoxAscent : 0.72 * px;
     const ab = Number.isFinite(m.actualBoundingBoxDescent) ? m.actualBoundingBoxDescent : 0;
-    return { auf, ab };
+    return { w: m.width, auf, ab };
   };
-  const wort = String(x.wort || '');
   const nummer = String(x.nummer || '');
-  const tw = tinte(wortFont, wort, 30);
-  const tn = tinte(nummerFont, nummer, 104);
-  const luecke = 14;
-  const gesamt = tw.auf + tw.ab + luecke + tn.auf + tn.ab;
-  const start = Math.round((FACH_BAND_HOCH + qrOben) / 2 - gesamt / 2);
-  ctx.font = wortFont;
-  mittig(wort, start + tw.auf);
-  ctx.font = nummerFont;
-  mittig(nummer, start + tw.auf + tw.ab + luecke + tn.auf);
+  const oben = FACH_RAND + FACH_BAND_HOCH + 12;
+  const unten = qrOben - 24;
+  const probe = mass(100);
+  const px = Math.floor(
+    Math.min(probe.w > 0 ? (100 * breit) / probe.w : Infinity, (100 * (unten - oben)) / (probe.auf + probe.ab))
+  );
+  if (nummer && Number.isFinite(px) && px > 0) {
+    const m = mass(px);
+    mittig(nummer, Math.round((oben + unten) / 2 - (m.auf + m.ab) / 2 + m.auf), breit);
+  }
 
   _nurSchwarzWeiss(ctx, W, H);
   return fachEtikettQuer(cv);

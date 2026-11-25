@@ -2,8 +2,9 @@
 // Das Etikett eines Fachs (vorher "Brett"), hochkant.
 //
 // Man dreht es um 90° und klebt es stehend an. Stehend gelesen, von oben nach
-// unten: das schwarze Band mit Raum und Regal, klein das Wort "Fach", groß die
-// Nummer, unten der QR-Code mit der Nummer zum Abtippen. Die Art steht nicht
+// unten: das schwarze Band mit Raum und Regal, die Nummer des Fachs so groß es
+// geht (ohne das Wort "Fach"), unten der QR-Code (ohne Nummer: er wird nur gescannt).
+// Band und Nummer sind in Fredoka, die mit der App kommt. Die Art steht nicht
 // darauf: ein freies Regal nimmt auch mal eine andere, und das Etikett soll dann
 // nicht falsch sein. Die anderen Etiketten, die shelfLabelCanvas zeichnet
 // (Regal-Artikel, Laborfächer), bleiben liegend, wie sie sind.
@@ -40,19 +41,43 @@ describe('brettEtikett: was auf das Etikett eines Fachs kommt', () => {
       return brettEtikett('Z9_R2:3');`
     )(tVon(tab));
 
-  it('Raum und Regal fürs Band, Wort und Nummer des Fachs getrennt', () => {
+  it('Raum und Regal fürs Band, die Nummer des Fachs, kein Wort "Fach"', () => {
     assert.deepEqual(etikett(DE), {
       barcode: 4711,
       band: 'Testraum\nRegal 2',
-      wort: 'Fach',
       nummer: '3'
     });
   });
   it('keine Art, auch wenn das Regal eine trägt', () => {
     assert.doesNotMatch(JSON.stringify(etikett(DE)), /Testpilz/);
   });
-  it('auf Englisch bleibt es Shelf', () => {
-    assert.equal(etikett(EN).wort, 'Shelf');
+  it('auf Englisch heißt nur das Regal anders', () => {
+    assert.equal(etikett(EN).band, 'Testraum\n' + EN['dash.rackN'].replace('{n}', '2'));
+  });
+});
+
+describe('Fredoka: die Schrift der Fach-Etiketten kommt mit der App', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const lib = (f) => path.join(__dirname, '..', 'lib', f);
+  it('die Dateien und die Lizenz liegen in lib/, NOTICE nennt sie', () => {
+    for (const f of ['fredoka-latin-700-normal.woff2', 'fredoka-latin-ext-700-normal.woff2', 'OFL-Fredoka.txt'])
+      assert.ok(fs.existsSync(lib(f)), f);
+    assert.match(quelle('NOTICE'), /Fredoka[\s\S]*SIL Open Font License[\s\S]*lib\/OFL-Fredoka\.txt/);
+  });
+  it('styles.css meldet sie an, fett', () => {
+    const css = quelle('styles.css');
+    for (const f of ['fredoka-latin-700-normal.woff2', 'fredoka-latin-ext-700-normal.woff2'])
+      assert.match(
+        css,
+        new RegExp("font-family: 'Fredoka';[^}]*font-weight: 700;[^}]*/lib/" + f.replace(/\./g, '\\.'))
+      );
+  });
+  it('vor dem Zeichnen wird sie geladen, für den Text, der auf die Etiketten kommt', () => {
+    const f = hebeFunktion('brettEtikettenDrucken', APP);
+    const laden = f.indexOf('await fachEtikettSchrift(');
+    assert.ok(laden > 0 && laden < f.indexOf('fachEtikettCanvas('), 'erst laden, dann zeichnen');
+    assert.match(hebeFunktion('fachEtikettSchrift', APP), /document\.fonts\.load\('bold 100px Fredoka', text/);
   });
 });
 
@@ -95,7 +120,15 @@ function leinwand() {
             punkte.fill(v, (yy * W + xx) * 4, (yy * W + xx) * 4 + 3);
       },
       fillText: (text, x, y) =>
-        texte.push({ text, x: lage.x + x * lage.s, y: lage.y + y, px: px(), s: lage.s, align: ctx.textAlign }),
+        texte.push({
+          text,
+          x: lage.x + x * lage.s,
+          y: lage.y + y,
+          px: px(),
+          s: lage.s,
+          align: ctx.textAlign,
+          font: ctx.font
+        }),
       measureText: (text) => ({
         width: text.length * px() * 0.55,
         actualBoundingBoxAscent: 0.72 * px(),
@@ -121,7 +154,12 @@ function QRCode() {
 }
 QRCode.CorrectLevel = { M: 0 };
 
-const BAND_HOCH = APP.match(/^const FACH_BAND_HOCH = \d+;$/m)[0];
+const BAND_HOCH = ['FACH_ETIKETT', 'FACH_RAND', 'FACH_BAND_HOCH', 'FACH_LINKS', 'FACH_SCHRIFT']
+  .map((k) => APP.match(new RegExp('^const ' + k + ' = .*;$', 'm'))[0])
+  .join('\n');
+// Stehend 256 × 456 (32 × 57 mm), alles um FACH_LINKS (5) nach links
+// verschoben: die Mitte ist 123.
+const MITTE = 128 - 5;
 const heben = (namen) => namen.map((f) => hebeFunktion(f, APP)).join('\n');
 
 describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
@@ -131,72 +169,84 @@ describe('fachEtikettCanvas: das Fach-Etikett hochkant', () => {
       'document',
       'QRCode',
       'item',
-      `const labelDims = { widthDots: 400, heightDots: 240 };
-      ${BAND_HOCH}
+      `${BAND_HOCH}
       ${heben(['_bandZeilen', '_qrModule', '_qrZeichnen', '_nurSchwarzWeiss', 'fachEtikettCanvas', 'fachEtikettQuer'])}
       return fachEtikettCanvas(item);`
     )(l.document, QRCode, item);
     return { ...l, cv, stehend: l.leinwaende[0] };
   }
-  const FACH = { barcode: 4711, band: 'Testraum\nRegal 2', wort: 'Fach', nummer: '3' };
+  const FACH = { barcode: 4711, band: 'Testraum\nRegal 2', nummer: '3' };
 
-  it('gedruckt wird liegend, auf das Etikett 400 × 240', () => {
+  it('auf die ganze Rolle: stehend 256 × 456, gedruckt liegend 456 × 256', () => {
     const { cv, stehend } = zeichne(FACH);
-    assert.deepEqual([stehend.width, stehend.height], [240, 400]);
-    assert.deepEqual([cv.width, cv.height], [400, 240]);
+    assert.deepEqual([stehend.width, stehend.height], [256, 456]);
+    assert.deepEqual([cv.width, cv.height], [456, 256]);
   });
-  it('oben das Band über die ganze Breite, Raum und Regal mittig darin (mit Zahl bleibt es, wie es ist)', () => {
+  it('oben das Band, 12 vom Rand, Raum und Regal mittig darin (mit Zahl bleibt es, wie es ist)', () => {
     const { rechtecke, texte, stehend } = zeichne(FACH);
-    const band = rechtecke.find((r) => r.cv === stehend && r.farbe === '#000' && r.w === 240);
-    assert.deepEqual([band.x, band.y, band.h], [0, 0, 76]);
+    const band = rechtecke.find((r) => r.cv === stehend && r.farbe === '#000' && r.h === 76);
+    assert.deepEqual([band.x, band.y, band.w], [12 - 5, 12, 256 - 24]);
     const zeilen = texte.filter((x) => x.px === 24);
     assert.deepEqual(
       zeilen.map((z) => [z.text, z.x, z.align]),
       [
-        ['TESTRAUM', 120, 'center'],
-        ['Regal 2', 120, 'center']
+        ['TESTRAUM', MITTE, 'center'],
+        ['Regal 2', MITTE, 'center']
       ]
     );
-    assert.ok(zeilen.every((z) => z.y > 0 && z.y + 24 < 76));
+    assert.ok(zeilen.every((z) => z.y > 12 && z.y + 24 < 12 + 76));
+    assert.ok(zeilen.every((z) => /^bold 24px Fredoka, Arial/.test(z.font)));
   });
-  it('unten der QR-Code mittig, die Nummer darunter', () => {
+  it('unten der QR-Code mittig, 9 Punkte je Modul, 16 über dem Rand, ohne Nummer darunter', () => {
     const { rechtecke, texte } = zeichne(FACH);
-    // 21 Module zu 7 Punkten: 147 breit, mittig ab x = 46; unten 10 Rand und 26 für die Nummer.
-    const qr = rechtecke.find((r) => r.w === 7);
-    assert.deepEqual([qr.x, qr.y], [46, 400 - 10 - 26 - 147]);
-    const nummer = texte.find((x) => x.text === '4711');
-    assert.deepEqual([nummer.x, nummer.y, nummer.align], [120, 390, 'center']);
+    // 21 Module zu 9 Punkten: 189 breit, mittig ab x = 33, verschoben 28.
+    const qr = rechtecke.find((r) => r.w === 9);
+    assert.deepEqual([qr.x, qr.y], [28, 456 - 16 - 189]);
+    assert.equal(
+      texte.find((x) => x.text === '4711'),
+      undefined,
+      'ein Fach-Code wird nur gescannt'
+    );
   });
-  it('das Wort klein, die Nummer groß, zusammen mittig zwischen Band und QR-Code', () => {
+  it('die Nummer so groß es geht, mittig zwischen Band und QR-Code, zum QR-Code mehr Luft', () => {
     const { texte } = zeichne(FACH);
-    const wort = texte.find((x) => x.text === 'Fach');
+    assert.equal(
+      texte.find((x) => x.text === 'Fach'),
+      undefined,
+      'kein Wort "Fach"'
+    );
     const nummer = texte.find((x) => x.text === '3');
-    assert.deepEqual([wort.px, wort.x], [30, 120]);
-    assert.deepEqual([nummer.px, nummer.x], [104, 120]);
-    const oben = wort.y - 0.72 * 30;
-    assert.ok(wort.y < nummer.y - 0.72 * 104, 'das Wort steht über der Nummer');
-    const mitte = (oben + nummer.y) / 2;
-    assert.ok(Math.abs(mitte - (76 + 217) / 2) <= 1, 'Mitte bei ' + mitte);
+    // Platz: von 12 + 76 + 12 bis 251 - 24, also 127 hoch; Ziffern schwärzen 0,72 der Größe.
+    const px = Math.floor((100 * 127) / 72);
+    assert.deepEqual([nummer.px, nummer.x, nummer.s], [px, MITTE, 1]);
+    assert.match(nummer.font, /^bold \d+px Fredoka, Arial/);
+    const oben = nummer.y - 0.72 * px;
+    assert.ok(oben >= 100 - 1 && nummer.y <= 227 + 1, 'nichts reicht in Band oder QR-Code');
+    assert.ok(Math.abs((oben + nummer.y) / 2 - (100 + 227) / 2) <= 1, 'mittig');
   });
-  it('ein langes Wort wird schmaler gezogen, nicht über den Rand', () => {
-    const { texte } = zeichne({ ...FACH, wort: 'Testwortlaenger' });
-    const w = texte.find((x) => x.text === 'Testwortlaenger');
-    // 15 Zeichen zu 30 × 0,55 sind 247 breit; mittig gesetzt und auf 216 gestaucht.
-    assert.equal(w.x, 120);
-    assert.ok(Math.abs(15 * 30 * 0.55 * w.s - 216) < 0.01, 'breit ' + 15 * 30 * 0.55 * w.s);
-    assert.equal(texte.find((x) => x.text === '3').s, 1, 'die Nummer bleibt, wie sie ist');
+  it('eine Nummer, die zu breit wäre, wird kleiner, bis sie in die Breite passt', () => {
+    const { texte } = zeichne({ ...FACH, nummer: '1234567' });
+    const n = texte.find((x) => x.text === '1234567');
+    // 7 Zeichen zu 0,55: bei 100 sind es 385, Platz ist 256 - 24 = 232.
+    assert.deepEqual([n.px, n.s], [Math.floor((100 * 232) / 385), 1]);
+  });
+  it('ohne Nummer bleibt die Mitte leer, statt abzustürzen', () => {
+    const { texte } = zeichne({ ...FACH, nummer: '' });
+    assert.ok(texte.every((x) => x.px < 30));
   });
   it('gedreht: stehend oben liegt links, der QR-Code liegt rechts', () => {
     const { cv } = zeichne(FACH);
     const ctx = cv.getContext('2d');
-    // Das Band (stehend y 0..75) ist liegend der linke Streifen.
-    assert.equal(ctx.punkt(10, 120), 0);
-    assert.equal(ctx.punkt(75, 0), 0);
-    assert.equal(ctx.punkt(76, 120), 255);
-    // Das erste Modul (stehend x 46..52, y 217..223) liegt liegend bei x 217..223, y 193..187.
-    assert.equal(ctx.punkt(217, 239 - 46), 0);
-    assert.equal(ctx.punkt(217 + 6, 239 - 46 - 6), 0);
-    assert.equal(ctx.punkt(217 + 7, 239 - 46), 255);
+    // Stehend (x, y) liegt liegend bei (y, 255 - x). Das Band (stehend x 7..238,
+    // y 12..87) ist liegend ein Streifen links, mit weißem Rand rundherum.
+    assert.equal(ctx.punkt(50, 128), 0);
+    assert.equal(ctx.punkt(5, 128), 255);
+    assert.equal(ctx.punkt(95, 128), 255);
+    assert.equal(ctx.punkt(50, 255 - 242), 255);
+    // Das erste Modul (stehend x 28..36, y 251..259) liegt liegend bei x 251..259, y 227..219.
+    assert.equal(ctx.punkt(251, 255 - 28), 0);
+    assert.equal(ctx.punkt(251 + 8, 255 - 28 - 8), 0);
+    assert.equal(ctx.punkt(251 + 9, 255 - 28), 255);
   });
 });
 
