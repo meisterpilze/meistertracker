@@ -2678,6 +2678,13 @@ window.LANG['de'] = {
   'notifications.doneTitle': 'Erledigt: aus der Liste nehmen',
   'notifications.doneToast': 'Meldung erledigt',
   'notifications.saveFailed': 'Nicht gespeichert: der Server ist nicht erreichbar. Prüfe das WLAN und tippe noch einmal.',
+  'notifications.grp.sale_uncovered': 'Bestellt, aber nicht da',
+  'notifications.grp.lab_low': 'Labor: nachproduzieren',
+  'notifications.grp.shelf_low': 'Regal: nachproduzieren',
+  'notifications.grpMore': '+{n} weitere',
+  'notifications.grpDoneTitle': 'Alle {n} erledigt: aus der Liste nehmen',
+  'notifications.grpDoneToast.one': '{n} Meldung erledigt',
+  'notifications.grpDoneToast.other': '{n} Meldungen erledigt',
   // Alerts
   'alert.filterShowAll': 'Alle anzeigen',
   'alert.filterDueToday': 'Heute fällig oder braucht Aufmerksamkeit',

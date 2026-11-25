@@ -2672,6 +2672,13 @@ window.LANG['pt'] = {
   'notifications.doneTitle': 'Feito: remover da lista',
   'notifications.doneToast': 'Notificação removida',
   'notifications.saveFailed': 'Não guardado: o servidor não está acessível. Verifica o Wi-Fi e toca de novo.',
+  'notifications.grp.sale_uncovered': 'Encomendado, mas sem stock',
+  'notifications.grp.lab_low': 'Laboratório: produzir mais',
+  'notifications.grp.shelf_low': 'Prateleira: produzir mais',
+  'notifications.grpMore': '+{n} mais',
+  'notifications.grpDoneTitle': 'Todas as {n} feitas: tirar da lista',
+  'notifications.grpDoneToast.one': '{n} notificação feita',
+  'notifications.grpDoneToast.other': '{n} notificações feitas',
   // Alerts
   'alert.filterShowAll': 'Mostrar todos',
   'alert.filterDueToday': 'Vencem hoje ou precisam de atenção',
