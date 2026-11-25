@@ -865,6 +865,124 @@ function closeNotifDropdown() {
   }
 }
 
+// Meldungen, die als Gruppe in der Glocke stehen, sobald es zwei derselben Art
+// gibt: ein Bestand unter seinem Soll im Labor oder im Regal, eine Bestellung,
+// die nicht rausgehen kann. Davon kommen viele auf einmal, und jede als eigene
+// Zeile (zwanzig an einem normalen Tag) begrub alles andere. Die Reihenfolge
+// hier ist die oben in der Liste: auf eine Bestellung wartet ein Kunde.
+const NOTIF_GRUPPEN = ['sale_uncovered', 'lab_low', 'shelf_low'];
+// Welche Gruppen aufgeklappt sind; bleibt, solange die Seite offen ist.
+const _notifOffen = new Set();
+
+// Aus der Liste des Servers (neueste zuerst) die Zeilen der Glocke: jede andere
+// Meldung für sich, die Arten oben als eine Gruppe an der Stelle ihrer neuesten.
+// Eine Gruppe mit nur einer Meldung ist einfach diese Meldung.
+function notifEintraege(items) {
+  const gruppen = new Map();
+  const out = [];
+  for (const it of items) {
+    if (!NOTIF_GRUPPEN.includes(it.type)) {
+      out.push({ it });
+      continue;
+    }
+    let g = gruppen.get(it.type);
+    if (!g) {
+      g = { type: it.type, items: [] };
+      gruppen.set(it.type, g);
+      out.push({ g });
+    }
+    g.items.push(it);
+  }
+  const rang = (e) => ((e.g ? e.g.type : e.it.type) === 'sale_uncovered' ? 0 : 1);
+  // sort() ist stabil: sonst bleibt alles, wie es kam.
+  return out.map((e) => (e.g && e.g.items.length === 1 ? { it: e.g.items[0] } : e)).sort((a, b) => rang(a) - rang(b));
+}
+// Der Name einer Meldung in der Gruppe: der Titel ohne das, was die Gruppe schon
+// sagt ("Nachproduzieren: Enoki Petri" → "Enoki Petri").
+function notifKurz(it) {
+  const s = String(it.title || '');
+  const i = s.indexOf(': ');
+  return i < 0 ? s : s.slice(i + 2);
+}
+function notifZeileHtml(it) {
+  const ts = it.created ? new Date(it.created).getTime() : Date.now();
+  const unreadCls = it.read ? '' : 'unread';
+  return (
+    '<div class="notif-row">' +
+    '<button type="button" class="notif-item ' +
+    unreadCls +
+    '" data-nid="' +
+    it.id +
+    '" data-link-type="' +
+    esc(it.linkType || '') +
+    '" data-link-id="' +
+    esc(it.linkId || '') +
+    '">' +
+    '<div class="notif-item-title">' +
+    esc(it.title || '') +
+    '</div>' +
+    (it.body ? '<div class="notif-item-body">' + esc(it.body) + '</div>' : '') +
+    '<div class="notif-item-time">' +
+    esc(formatRelativeTime(ts)) +
+    '</div>' +
+    '</button>' +
+    '<button type="button" class="notif-done" data-nid="' +
+    it.id +
+    '" title="' +
+    esc(t('notifications.doneTitle')) +
+    '">' +
+    esc(t('notifications.done')) +
+    '</button>' +
+    '</div>'
+  );
+}
+// Eine Gruppe: was es ist, wie viele, die ersten Namen. Ein Tipp klappt die
+// einzelnen Meldungen auf, jede mit ihrem Weg und ihrem Erledigt; das Erledigt
+// der Gruppe nimmt alle auf einmal.
+function notifGruppeHtml(g) {
+  const n = g.items.length;
+  const offen = _notifOffen.has(g.type);
+  const neu = g.items.some((it) => !it.read);
+  const ts = g.items[0].created ? new Date(g.items[0].created).getTime() : Date.now();
+  const namen =
+    g.items.slice(0, 3).map(notifKurz).join(', ') + (n > 3 ? ' ' + t('notifications.grpMore', { n: n - 3 }) : '');
+  return (
+    '<div class="notif-row notif-gruppe' +
+    (g.type === 'sale_uncovered' ? ' notif-rot' : '') +
+    '">' +
+    '<button type="button" class="notif-item' +
+    (neu ? ' unread' : '') +
+    '" data-ngrp="' +
+    esc(g.type) +
+    '" aria-expanded="' +
+    offen +
+    '">' +
+    '<div class="notif-item-title">' +
+    esc(t('notifications.grp.' + g.type)) +
+    '<span class="notif-zahl">' +
+    n.toLocaleString(loc()) +
+    '</span>' +
+    WK_AN_CHEV +
+    '</div>' +
+    '<div class="notif-item-body">' +
+    esc(namen) +
+    '</div>' +
+    '<div class="notif-item-time">' +
+    esc(formatRelativeTime(ts)) +
+    '</div>' +
+    '</button>' +
+    '<button type="button" class="notif-done" data-ngrp-done="' +
+    esc(g.type) +
+    '" title="' +
+    esc(t('notifications.grpDoneTitle', { n })) +
+    '">' +
+    esc(t('notifications.done')) +
+    '</button>' +
+    '</div>' +
+    (offen ? '<div class="notif-teil">' + g.items.map(notifZeileHtml).join('') + '</div>' : '')
+  );
+}
+
 function renderNotifList(items) {
   const list = document.getElementById('notif-list');
   const empty = document.getElementById('notif-empty');
@@ -875,49 +993,34 @@ function renderNotifList(items) {
     return;
   }
   empty.hidden = true;
-  list.innerHTML = items
-    .map((it) => {
-      const ts = it.created ? new Date(it.created).getTime() : Date.now();
-      const rel = formatRelativeTime(ts);
-      const unreadCls = it.read ? '' : 'unread';
-      // esc() is the existing HTML-escape helper used throughout app.js
-      return (
-        '<div class="notif-row">' +
-        '<button type="button" class="notif-item ' +
-        unreadCls +
-        '" data-nid="' +
-        it.id +
-        '" data-link-type="' +
-        esc(it.linkType || '') +
-        '" data-link-id="' +
-        esc(it.linkId || '') +
-        '">' +
-        '<div class="notif-item-title">' +
-        esc(it.title || '') +
-        '</div>' +
-        (it.body ? '<div class="notif-item-body">' + esc(it.body) + '</div>' : '') +
-        '<div class="notif-item-time">' +
-        esc(rel) +
-        '</div>' +
-        '</button>' +
-        '<button type="button" class="notif-done" data-nid="' +
-        it.id +
-        '" title="' +
-        esc(t('notifications.doneTitle')) +
-        '">' +
-        esc(t('notifications.done')) +
-        '</button>' +
-        '</div>'
-      );
-    })
+  list.innerHTML = notifEintraege(items)
+    .map((e) => (e.g ? notifGruppeHtml(e.g) : notifZeileHtml(e.it)))
     .join('');
-  // Wire click handlers on each item
-  for (const el of list.querySelectorAll('.notif-item')) {
-    el.addEventListener('click', onNotifItemClick);
+  for (const el of list.querySelectorAll('.notif-item[data-nid]')) el.addEventListener('click', onNotifItemClick);
+  for (const el of list.querySelectorAll('.notif-done[data-nid]')) el.addEventListener('click', onNotifDoneClick);
+  for (const el of list.querySelectorAll('[data-ngrp]')) el.addEventListener('click', onNotifGruppeClick);
+  for (const el of list.querySelectorAll('[data-ngrp-done]')) el.addEventListener('click', onNotifGruppeDoneClick);
+}
+
+// Auf- und zuklappen. Wer sie aufklappt, hat sie gesehen: die Zahl an der Glocke
+// geht um die ungelesenen darin herunter.
+function onNotifGruppeClick(e) {
+  // Die Liste wird neu gezeichnet; ohne das schlösse der Außen-Klick-Wächter sie.
+  e.stopPropagation();
+  const type = e.currentTarget.getAttribute('data-ngrp');
+  if (_notifOffen.has(type)) _notifOffen.delete(type);
+  else {
+    _notifOffen.add(type);
+    const ids = _notifItems.filter((x) => x.type === type && !x.read).map((x) => x.id);
+    if (ids.length) {
+      _notifItems = _notifItems.map((x) => (ids.includes(x.id) ? { ...x, read: 1 } : x));
+      apiPost('/api/notifications/read', { ids });
+      const badge = document.getElementById('bell-badge');
+      const vorher = badge && !badge.hidden ? parseInt(badge.textContent, 10) || 0 : 0;
+      renderNotifBadge(Math.max(0, vorher - ids.length));
+    }
   }
-  for (const el of list.querySelectorAll('.notif-done')) {
-    el.addEventListener('click', onNotifDoneClick);
-  }
+  renderNotifList(_notifItems);
 }
 
 // Erledigt: ein Tipp nimmt die Meldung aus der Liste, die Leiste unten bietet
@@ -948,6 +1051,41 @@ function onNotifDoneClick(e) {
   showUndoBar(t('notifications.doneToast'), () => {
     putBack();
     apiPost('/api/notifications/dismiss', { ids: [id], undo: true }).then((r) => {
+      if (r && r.error) toast(t('notifications.saveFailed'), 'err');
+      else if (r && typeof r.unread === 'number') renderNotifBadge(r.unread);
+    });
+  });
+}
+
+// Erledigt an einer Gruppe: alle ihre Meldungen auf einmal, mit einem Rückgängig.
+// Was davon wieder ansteht, meldet der Server ohnehin neu.
+function onNotifGruppeDoneClick(e) {
+  e.stopPropagation();
+  const type = e.currentTarget.getAttribute('data-ngrp-done');
+  const weg = _notifItems.filter((x) => x.type === type);
+  if (!weg.length) return;
+  const ids = weg.map((x) => x.id);
+  _notifItems = _notifItems.filter((x) => !ids.includes(x.id));
+  _notifOffen.delete(type);
+  renderNotifList(_notifItems);
+  // Zurück an ihre Stelle: die Liste ist neueste zuerst, wie der Server sie schickt.
+  const putBack = () => {
+    const fehlt = weg.filter((x) => !_notifItems.some((y) => y.id === x.id)).map((x) => ({ ...x, read: 1 }));
+    if (!fehlt.length) return;
+    _notifItems = _notifItems
+      .concat(fehlt)
+      .sort((a, b) => String(b.created || '').localeCompare(String(a.created || '')) || b.id - a.id);
+    if (_notifOpen) renderNotifList(_notifItems);
+  };
+  apiPost('/api/notifications/dismiss', { ids }).then((r) => {
+    if (r && r.error) {
+      putBack();
+      toast(t('notifications.saveFailed'), 'err');
+    } else if (r && typeof r.unread === 'number') renderNotifBadge(r.unread);
+  });
+  showUndoBar(tp('notifications.grpDoneToast', ids.length), () => {
+    putBack();
+    apiPost('/api/notifications/dismiss', { ids, undo: true }).then((r) => {
       if (r && r.error) toast(t('notifications.saveFailed'), 'err');
       else if (r && typeof r.unread === 'number') renderNotifBadge(r.unread);
     });

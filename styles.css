@@ -8042,6 +8042,34 @@ body:has(#m-camscan.open) .update-bar {
   font-size: max(0.6875rem, var(--fs-min));
   color: var(--c-text-muted);
 }
+/* Eine Gruppe (Nachproduzieren, offene Bestellungen): die Zahl hinter dem Namen,
+   der Pfeil dreht sich nach unten, solange sie offen ist. Darunter, etwas
+   eingerückt, ihre einzelnen Meldungen. */
+.notif-zahl {
+  margin-left: auto;
+  font-family: var(--ff-mono);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.notif-gruppe .notif-item-title > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
+}
+.notif-gruppe .notif-item[aria-expanded='true'] .notif-item-title > svg {
+  transform: rotate(90deg);
+}
+.notif-rot .notif-item-title {
+  color: var(--rot);
+}
+.notif-teil {
+  border-bottom: 1px solid var(--c-border-light);
+  background: var(--c-bg);
+}
+.notif-teil .notif-item {
+  padding-left: 26px;
+}
 .notif-empty {
   padding: 24px 14px;
   text-align: center;

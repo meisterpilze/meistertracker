@@ -2655,6 +2655,13 @@ window.LANG['en'] = {
   'notifications.doneTitle': 'Done: remove from the list',
   'notifications.doneToast': 'Notification cleared',
   'notifications.saveFailed': 'Not saved: the server cannot be reached. Check the Wi-Fi and tap again.',
+  'notifications.grp.sale_uncovered': 'Ordered, but not in stock',
+  'notifications.grp.lab_low': 'Lab: make more',
+  'notifications.grp.shelf_low': 'Shelf: make more',
+  'notifications.grpMore': '+{n} more',
+  'notifications.grpDoneTitle': 'All {n} done: remove from the list',
+  'notifications.grpDoneToast.one': '{n} notification done',
+  'notifications.grpDoneToast.other': '{n} notifications done',
   // Alerts
   'alert.filterShowAll': 'Show all',
   'alert.filterDueToday': 'Due today or needs attention',

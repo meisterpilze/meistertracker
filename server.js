@@ -13992,7 +13992,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
   // -- Notifications (per-user) --
   if (req.method === 'GET' && url === '/api/notifications') {
     try {
-      const items = db.listNotifications(database, req.authUser.user_id);
+      // 100, nicht die 20 von listNotifications: die Glocke fasst Nachproduzieren
+      // und offene Bestellungen zu Gruppen zusammen, und an einem normalen Tag
+      // sind das allein schon um die zwanzig. Mit 20 fielen die ältesten aus der
+      // Gruppe, und ihre Zahl war zu klein.
+      const items = db.listNotifications(database, req.authUser.user_id, 100);
       const unread = db.countUnreadNotifications(database, req.authUser.user_id);
       jsonOk(res, { items, unread });
     } catch (err) {
