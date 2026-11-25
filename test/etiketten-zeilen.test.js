@@ -25,7 +25,7 @@ const NBSP = String.fromCharCode(0xa0);
 
 // Was in beiden Dateien gleich stehen muss, in der Reihenfolge, in der es
 // einander braucht.
-const KONSTANTEN = ['_LABEL_EM', '_LABEL_ERSATZ'];
+const KONSTANTEN = ['LABEL_RAND', '_LABEL_EM', '_LABEL_ERSATZ'];
 const FUNKTIONEN = [
   '_lineBlockW',
   'labelTextW',
@@ -36,7 +36,11 @@ const FUNKTIONEN = [
   '_labelBarcode',
   '_labelQr'
 ];
-const unterkante = (src) => src.match(/^const LABEL_UNTEN = \d+;$/m)[0];
+const runter = (src) => src.match(/^const LABEL_RUNTER = \d+;$/m)[0];
+// Die Rolle: 57 × 32 mm, und die Ränder, in denen nichts steht.
+const W = 456;
+const H = 256;
+const RAND = { seite: 20, oben: 12, unten: 12 };
 
 // app.js hat keine Modulgrenze: die Etiketten-Funktionen werden herausgehoben
 // und gegen Attrappen gebaut. barcodeByEntity bleibt leer, also druckt jedes
@@ -44,9 +48,9 @@ const unterkante = (src) => src.match(/^const LABEL_UNTEN = \d+;$/m)[0];
 const APP_E = new Function(
   [
     'const barcodeByEntity = new Map();',
-    'const labelDims = { widthDots: 400, heightDots: 240 };',
+    'const labelDims = { widthDots: ' + W + ', heightDots: ' + H + ' };',
     'let _labelEmMap = null;',
-    unterkante(APP),
+    runter(APP),
     hebeKonstante('_BADGE', APP),
     ...KONSTANTEN.map((k) => hebeKonstante(k, APP)),
     ...['bcParams', 'fmtDt', 'labelKg', '_bagTotalBadge', ...FUNKTIONEN].map((f) => hebeFunktion(f, APP)),
@@ -226,10 +230,17 @@ function pruefe(items, name, nummern) {
     .sort((a, b) => a.y - b.y);
   for (const z of zeilen.concat(zaehler ? [zaehler] : [])) {
     const breite = mcp.labelTextW(z.text, z.fontH);
-    assert.ok(breite <= (z.blockW || 400) - 6, name + ': "' + z.text + '" braucht ' + breite + ' von ' + z.blockW);
+    assert.ok(breite <= z.blockW - 6, name + ': "' + z.text + '" braucht ' + breite + ' von ' + z.blockW);
   }
+  // Nichts steht im Rand: die Ecken sind rund, und an den Rand druckt der
+  // Drucker nicht genau.
+  for (const z of texte(items)) {
+    assert.ok(z.x >= RAND.seite && z.x + z.blockW <= W - RAND.seite, name + ': "' + z.text + '" im Seitenrand');
+  }
+  assert.ok(code.y >= RAND.oben, name + ': Code im oberen Rand');
+  if (code.type === 'qr') assert.ok(code.x >= RAND.seite, name + ': QR-Code im Seitenrand');
+  if (zaehler) assert.ok(zaehler.y + 30 <= H - RAND.unten, name + ': Zähler im unteren Rand');
   if (code.type === 'barcode') {
-    assert.ok(code.y >= 40, name + ': Strichcode im Rand, den das Material abschneidet');
     assert.ok(code.h >= 60 && code.h <= 90, name + ': Strichcode ' + code.h + ' hoch');
   }
   let oben = code.y + (code.h || code.size);
@@ -237,11 +248,11 @@ function pruefe(items, name, nummern) {
     assert.ok(z.y >= oben, name + ': "' + z.text + '" überdeckt, was darüber steht');
     oben = z.y + z.fontH;
   }
-  assert.ok(oben <= (code.type === 'barcode' ? 234 : 240), name + ': Text reicht bis ' + oben);
+  assert.ok(oben <= H - RAND.unten, name + ': Text reicht bis ' + oben);
   if (zaehler) {
     for (const z of zeilen) {
       const daneben = z.y < zaehler.y + zaehler.fontH && zaehler.y < z.y + z.fontH;
-      if (daneben) assert.ok((z.blockW || 400) <= zaehler.x - 6, name + ': "' + z.text + '" läuft unter den Zähler');
+      if (daneben) assert.ok(z.x + z.blockW <= zaehler.x - 6, name + ': "' + z.text + '" läuft unter den Zähler');
     }
   }
   const alles = zeilen.map((z) => z.text).join('');
@@ -275,11 +286,23 @@ describe('Keine Zeile läuft über, keine überdeckt eine andere', () => {
     assert.deepEqual(
       items.map((i) => [i.type, i.y, i.h || i.fontH]),
       [
-        ['barcode', 46, 90],
-        ['text', 142, 24],
-        ['text', 170, 24]
+        ['barcode', 54, 90],
+        ['text', 150, 24],
+        ['text', 178, 24]
       ]
     );
+  });
+  it('gedruckt wird auf die ganze Rolle, alles 5 Punkte tiefer als in der Vorschau', () => {
+    // Der Drucker legt das Bild 5 Punkte zu hoch, gemessen am Fach-Etikett.
+    for (const [datei, d] of Object.entries(DRUCKER)) {
+      const items = d.beutel('BO-280926-01-01', CHARGEN.kurz.charge, 'full', true, 2.5);
+      const zpl = d.zpl(items);
+      assert.ok(zpl.startsWith('^XA^PW456^LL256^'), datei + ': ' + zpl.slice(0, 20));
+      const qr = items.find((i) => i.type === 'qr');
+      assert.ok(zpl.includes('^FO' + qr.x + ',' + (qr.y + 5) + '^BQN'), datei + ': QR-Code');
+      for (const z of texte(items))
+        assert.ok(zpl.includes('^FO' + z.x + ',' + (z.y + 5) + '^FB'), datei + ': ' + z.text);
+    }
   });
 });
 
@@ -290,5 +313,5 @@ describe('app.js und mcp-server.js messen und umbrechen gleich', () => {
   for (const f of FUNKTIONEN) {
     it(f, () => assert.equal(hebeFunktion(f, MCP), hebeFunktion(f, APP)));
   }
-  it('LABEL_UNTEN', () => assert.equal(unterkante(MCP), unterkante(APP)));
+  it('LABEL_RUNTER', () => assert.equal(runter(MCP), runter(APP)));
 });

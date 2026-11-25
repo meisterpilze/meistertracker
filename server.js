@@ -167,18 +167,18 @@ if (PM2_PROCESS_NAME !== PM2_PROCESS_NAME_RAW) {
   });
 }
 
-// ZPL label dimensions in dots. Default 400×240 = 50×30mm at 203dpi
-// (Zebra GK420d / ZD420 standard small label). Forks with different
-// label stock can override via env, but note the field positions in
-// app.js and mcp-server.js itemsToZPL() are laid out for 400 dots
-// wide — significantly different sizes will need layout tweaks too.
+// ZPL label dimensions in dots. Default 456×256 = 57×32mm at 203dpi, the
+// rolls this app prints on (Zebra GK420d). The layouts in app.js and
+// mcp-server.js are computed from these two numbers, with fixed margins and
+// font sizes, so stock of a similar size can override them via env; very
+// different sizes will need layout tweaks too.
 function _intEnv(name, def, min, max) {
   const v = parseInt(process.env[name], 10);
   if (Number.isFinite(v) && v >= min && v <= max) return v;
   return def;
 }
-const LABEL_WIDTH_DOTS = _intEnv('LABEL_WIDTH_DOTS', 400, 100, 4000);
-const LABEL_HEIGHT_DOTS = _intEnv('LABEL_HEIGHT_DOTS', 240, 100, 4000);
+const LABEL_WIDTH_DOTS = _intEnv('LABEL_WIDTH_DOTS', 456, 100, 4000);
+const LABEL_HEIGHT_DOTS = _intEnv('LABEL_HEIGHT_DOTS', 256, 100, 4000);
 
 // Optional Windows print bridge (scripts/print-bridge.ps1). When configured,
 // the server forwards print + status calls to this URL instead of running
@@ -3629,9 +3629,11 @@ const ZPL_GFA_RE = /^\^GFA,(\d{1,7}),(\d{1,7}),(\d{1,4}),([0-9A-F]*)(?=\^FS)/i;
 // the printer's file system, which is the kind of thing this list exists to keep
 // out, so the character class is deliberately narrow.
 const ZPL_FONT_RE = /^A[0-9A-Z]$/;
-// A label is on the order of a kilobyte. The body cap is 5 MB, which would be
-// tens of thousands of them.
-const ZPL_MAX_CHARS = 1024 * 1024;
+// A text label is on the order of a kilobyte; a shelf label drawn as a bitmap
+// on the whole 57 × 32 mm roll is about 29 KB of hex. 2 MB holds some seventy
+// of those in one job ("print all" on the shelf page), and stays well under
+// the 5 MB body cap.
+const ZPL_MAX_CHARS = 2 * 1024 * 1024;
 const ZPL_MAX_LABELS = 2000;
 
 /** null when the payload is safe to send, otherwise the reason it is not. */

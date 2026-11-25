@@ -10,7 +10,7 @@
 // Alle Namen und Nummern hier sind ausgedacht.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { quelle, hebeFunktion } = require('./helpers/quelle');
+const { quelle, hebeFunktion, hebeKonstante } = require('./helpers/quelle');
 
 const APP = quelle();
 const DE = (() => {
@@ -58,6 +58,12 @@ describe('brettEtikett: was auf das Etikett eines Fachs kommt', () => {
 });
 
 describe('shelfLabelCanvas: die Lage von QR-Code, Nummer und Text', () => {
+  // Gezeichnet wird auf die ganze Rolle (456 × 256), das Etikett darin 12 vom
+  // Rand an den Seiten und 8 oben und unten, also innen 432 × 240, und um die
+  // 5 Punkte tiefer, die der Drucker es zu hoch legt. Die Zahlen unten sind
+  // innen gemessen; DX und DY rechnen sie auf die Rolle um.
+  const DX = 12;
+  const DY = 8 + 5;
   // Eine Leinwand, die mitschreibt, wo was hinkommt. Die Schrift misst sie mit
   // festen Anteilen der Schriftgröße: ein Zeichen ist 0,55 breit, und bei
   // textBaseline "top" schwärzt eine Zeile von 0,2 bis 0,9 unter ihrem y.
@@ -99,15 +105,17 @@ describe('shelfLabelCanvas: die Lage von QR-Code, Nummer und Text', () => {
       'document',
       'QRCode',
       'item',
-      `const labelDims = { widthDots: 400, heightDots: 240 };
+      `const labelDims = { widthDots: 456, heightDots: 256 };
+      ${APP.match(/^const LABEL_RUNTER = \d+;$/m)[0]}
+      ${hebeKonstante('SHELF_RAND', APP)}
       const etikettBild = () => {};
       ${hebeFunktion('_shelfWrap', APP)}
       ${hebeFunktion('shelfLabelCanvas', APP)}
       shelfLabelCanvas(item);`
     )(document, QRCode, item);
-    // 21 Module zu 7 Punkten: 147 breit, rechts 14 vom Rand, also ab x = 239.
-    const qr = rechtecke.find((r) => r.x === 239 && r.w === 7);
-    return { qr, texte };
+    // 21 Module zu 7 Punkten: 147 breit, rechts 14 vom Rand, also innen ab x = 271.
+    const qr = rechtecke.find((r) => r.x === DX + 271 && r.w === 7);
+    return { qr, texte, rechtecke };
   }
 
   it('Fach: der QR-Code oben, so weit vom Rand wie rechts, die Nummer mittig darunter', () => {
@@ -119,9 +127,9 @@ describe('shelfLabelCanvas: die Lage von QR-Code, Nummer und Text', () => {
       qrOben: true,
       mitte: true
     });
-    assert.equal(qr.y, 14);
+    assert.equal(qr.y, DY + 14);
     const nummer = texte.find((x) => x.text === '4711');
-    assert.deepEqual([nummer.x, nummer.y, nummer.align], [239 + 147 / 2, 14 + 147 + 26, 'center']);
+    assert.deepEqual([nummer.x, nummer.y, nummer.align], [DX + 271 + 147 / 2, DY + 14 + 147 + 26, 'center']);
   });
   it('Fach: der Text groß und mittig zwischen Band und unterem Rand', () => {
     const { texte } = zeichne({
@@ -134,9 +142,9 @@ describe('shelfLabelCanvas: die Lage von QR-Code, Nummer und Text', () => {
     });
     const fach = texte.find((x) => x.text === 'Fach 3');
     assert.equal(fach.px, 60);
-    assert.equal(fach.x, 12, 'links bündig mit dem Band');
+    assert.equal(fach.x, DX + 12, 'links bündig mit dem Band');
     // Geschwärzt von y + 12 bis y + 54; die Mitte liegt zwischen Band (81) und Rand (240).
-    const mitte = fach.y + (0.2 * 60 + 0.9 * 60) / 2;
+    const mitte = fach.y - DY + (0.2 * 60 + 0.9 * 60) / 2;
     assert.ok(Math.abs(mitte - (81 + 240) / 2) <= 1, 'Mitte bei ' + mitte);
   });
   it('zwei Zeilen stehen zusammen in der Mitte', () => {
@@ -158,16 +166,22 @@ describe('shelfLabelCanvas: die Lage von QR-Code, Nummer und Text', () => {
       ]
     );
     const lh = zeilen[1].y - zeilen[0].y;
-    const mitte = (zeilen[0].y + 0.2 * zeilen[0].px + zeilen[1].y + 0.9 * zeilen[1].px) / 2;
+    const mitte = (zeilen[0].y + 0.2 * zeilen[0].px + zeilen[1].y + 0.9 * zeilen[1].px) / 2 - DY;
     assert.ok(lh > 0 && Math.abs(mitte - (81 + 240) / 2) <= 1, 'Mitte bei ' + mitte);
-    assert.ok(zeilen[1].y + 0.9 * zeilen[1].px <= 240, 'nichts läuft unten heraus');
+    assert.ok(zeilen[1].y - DY + 0.9 * zeilen[1].px <= 240, 'nichts läuft unten heraus');
   });
   it('andere Etiketten bleiben, wie sie sind: QR-Code mittig, Nummer unten links, Text unter dem Band', () => {
-    const { qr, texte } = zeichne({ barcode: 55, band: 'Testband', etikett: 'Testartikel' });
-    assert.equal(qr.y, Math.floor((240 - 147) / 2));
+    const { qr, texte, rechtecke } = zeichne({ barcode: 55, band: 'Testband', etikett: 'Testartikel' });
+    assert.equal(qr.y, DY + Math.floor((240 - 147) / 2));
     const nummer = texte.find((x) => x.text === '55');
-    assert.deepEqual([nummer.x, nummer.y, nummer.align], [12, 230, 'start']);
-    assert.equal(texte.find((x) => x.text === 'Testartikel').y, 92);
+    assert.deepEqual([nummer.x, nummer.y, nummer.align], [DX + 12, DY + 230, 'start']);
+    assert.equal(texte.find((x) => x.text === 'Testartikel').y, DY + 92);
+    // Das Band beginnt innen bei 0, auf der Rolle also 12 vom Rand und unter
+    // dem oberen Rand.
+    assert.ok(
+      rechtecke.some((r) => r.x === DX && r.y === DY && r.h === 81 && r.farbe === '#000'),
+      'Band'
+    );
   });
 });
 

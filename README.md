@@ -40,7 +40,7 @@ See [`LICENSE`](LICENSE) for the full terms.
 - **Task management** — auto-generated batch tasks plus manual tasks with team assignment
 - **CalDAV calendar sync** — built-in CalDAV server consumed by Apple Calendar, Thunderbird, DAVx5
 - **Dashboard** — KPIs, production pipeline chart, harvest analytics, rack occupancy, contamination rate
-- **Label printing** — Code 128 + QR labels for Zebra GK420d (50×30 mm, 203 dpi)
+- **Label printing** — Code 128 + QR labels for Zebra GK420d (57×32 mm, 203 dpi)
 - **PWA** — installable on phones / tablets, offline scan queue replays on reconnect
 - **Multi-language UI** — German, English, Portuguese
 
@@ -173,16 +173,16 @@ The wearable is the one that changes the day. It pairs to the phone or tablet as
 
 Where paper labels genuinely stop working — soaked, fogged over, or scuffed past reading in the fruiting rooms — NFC tags on the racks are the next step up, because a tap tolerates wet and dark. Reach for that only once you have watched paper fail, not before.
 
-## 🏷️ Label Printing (Zebra ZPL · 50×30 mm · 203 dpi)
+## 🏷️ Label Printing (Zebra ZPL · 57×32 mm · 203 dpi)
 
 The server sends ZPL directly to the printer via the Windows print spooler — no browser dialog needed.
 
 1. Connect a ZPL-compatible Zebra (GK420d, ZD420, ZD230, …) via USB and ensure it is powered on
-2. Labels are **50 × 30 mm**, Code 128 / QR, designed for **203 dpi** (`^PW400 ^LL240`)
+2. Labels are **57 × 32 mm**, Code 128 / QR, designed for **203 dpi** (`^PW456 ^LL256`)
 
 On non-Windows systems, use the "Download ZPL" fallback to send labels manually.
 
-> **Compatibility:** the layout is tuned for ZPL II at 203 dpi with 50×30 mm landscape labels. Different Zebras at the same dpi/label size work as-is; different label sizes, 300 dpi printers, or non-ZPL printers (Brother QL, Dymo LabelWriter, …) need either a layout refactor or a new print backend. See [FORKING.md §2](FORKING.md#2-hardware-assumptions) for the full breakdown.
+> **Compatibility:** the layout is tuned for ZPL II at 203 dpi with 57×32 mm landscape labels. Different Zebras at the same dpi/label size work as-is; different label sizes, 300 dpi printers, or non-ZPL printers (Brother QL, Dymo LabelWriter, …) need either a layout refactor or a new print backend. See [FORKING.md §2](FORKING.md#2-hardware-assumptions) for the full breakdown.
 
 ## 🔐 Authorization
 
@@ -534,7 +534,7 @@ Dockerfile             Containerized deployment
 
 ## 🍴 Running it for your own lab?
 
-Meistertracker was built for one specific operator and a few rough edges still reflect that — a fixed inventory schema, a CalDAV slug baked in for compatibility, and a print pipeline tuned for Zebra ZPL at 203 dpi with 50×30 mm labels. Most of these are configurable via env vars; some need a small fork. Read [FORKING.md](FORKING.md) for the full inventory of what's tuned to Meisterpilze vs. what's generic, and the env-var matrix for the configurable bits.
+Meistertracker was built for one specific operator and a few rough edges still reflect that — a fixed inventory schema, a CalDAV slug baked in for compatibility, and a print pipeline tuned for Zebra ZPL at 203 dpi with 57×32 mm labels. Most of these are configurable via env vars; some need a small fork. Read [FORKING.md](FORKING.md) for the full inventory of what's tuned to Meisterpilze vs. what's generic, and the env-var matrix for the configurable bits.
 
 ## 🤝 Contributing
 
