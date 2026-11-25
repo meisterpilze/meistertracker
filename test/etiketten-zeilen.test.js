@@ -292,6 +292,17 @@ describe('Keine Zeile läuft über, keine überdeckt eine andere', () => {
       ]
     );
   });
+  it('vor jedem QR-Code steht die Strichhöhe des Druckers, nicht die vom Etikett davor', () => {
+    // Der Drucker setzt einen QR-Code etwa um die ^BY-Höhe unter sein ^FO und
+    // behält ^BY vom vorigen Etikett: nach einem Strichcode-Etikett (Höhe 90)
+    // lag der Code 80 Punkte zu tief, mitten im Text (am Etikett gemessen).
+    for (const [datei, d] of Object.entries(DRUCKER)) {
+      const zpl = d.zpl(d.beutel('BO-280926-01-01', CHARGEN.kurz.charge, 'full', true, 2.5));
+      const qr = zpl.indexOf('^BQN');
+      assert.ok(qr > 0, datei + ': kein QR-Code');
+      assert.match(zpl.slice(0, qr), /\^BY2,3,10\^FO\d+,\d+$/, datei);
+    }
+  });
   it('gedruckt wird auf die ganze Rolle, alles 5 Punkte tiefer als in der Vorschau', () => {
     // Der Drucker legt das Bild 5 Punkte zu hoch, gemessen am Fach-Etikett.
     for (const [datei, d] of Object.entries(DRUCKER)) {
