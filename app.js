@@ -10404,6 +10404,15 @@ function brettScanned(id) {
     brettZiehe(id);
     return;
   }
+  // Läuft ein Umzug (Beutel scannen, oder Umziehen in der Kamera), ist das Fach
+  // das neue Ziel, wie jedes Platz-Etikett in processScan: so geht man Fach für
+  // Fach durchs Regal, ohne die Kamera zuzumachen. Ein Umziehen ohne Ziel (vom
+  // gedruckten MOVE-Etikett) bekommt so seins. Sein Blatt gibt es wieder,
+  // sobald der Umziehen-Knopf aus ist.
+  if (scan.action === 'MOVE') {
+    armMoveRun(id);
+    return;
+  }
   const cam = document.getElementById('m-camscan');
   if (cam && cam.classList.contains('open')) closeCamScan();
   closeScanModal();
@@ -10597,9 +10606,17 @@ const BRETT_ANSICHT = {
         (b.strainId === sid) - (a.strainId === sid) || (b.zone === hier) - (a.zone === hier) || brettAelter(a, b)
     );
     const zurueck = '<div class="brett-acts">' + _bb('mode', 'main', t('brett.back'), '', false) + '</div>';
-    if (!kand.length) return `<p class="fs-meta">${esc(t('brett.addNone'))}</p>` + zurueck;
+    // Oben die Kamera: jeden Beutel scannen, der hier steht. Für die Inventur,
+    // und wenn die Liste darunter zu lang ist, um die Charge darin zu suchen.
+    const scannen =
+      '<div class="brett-acts">' +
+      _bb('act', 'scan', t('brett.scanBags'), 'btn-p', false) +
+      '</div>' +
+      `<p class="fs-meta">${esc(t('brett.scanHelp'))}</p>`;
+    if (!kand.length) return scannen + `<p class="fs-meta">${esc(t('brett.addNone'))}</p>` + zurueck;
     const frage = s.mehr ? t('brett.moreThanExpected', { n: s.mehr }) : t('brett.addQ');
     return (
+      scannen +
       `<p class="fs-meta">${esc(frage)}</p><div class="brett-pick">` +
       kand
         .map((g) => {
@@ -10775,6 +10792,21 @@ function brettAktion(act) {
     fertig(t('zelt.done.out', { n: entries.length, species: art ? art.name : '' }), entries);
   } else if (act === 'tcount') {
     brettZeltZaehlen(s, list, _brettN(), fertig);
+  } else if (act === 'scan') {
+    // Beutel scannen: ein Umzug in der Kamera mit diesem Fach als Ziel. Jeder
+    // gescannte Beutel kommt hierher, von wo auch immer die App ihn hatte, und
+    // ein anderes Fach-Etikett wechselt das Ziel (brettScanned). Was danach in
+    // keinem Fach steht, war nicht da: das bucht "In keinem Fach" aus.
+    // Gesammelte Kontaminations-Beutel gingen beim Umschalten verloren.
+    if (contamPending()) return;
+    const ort = s.loc;
+    brettZu();
+    armMode('MOVE', ort);
+    rememberDest(ort);
+    // Die Meldung in die Kamera, nicht in die Scan-Hülle davor: setFb wählt
+    // nach dem Scanner, und der startet erst, wenn seine Bibliothek geladen ist.
+    openCamScan();
+    _showCamHudToast('ok', t('cam.moveArmed', { loc: zoneDisplayName(ort) }));
   }
 }
 // Im Zelt gezählt. Weniger: die ältesten gehen raus. Mehr: sie sind meist ohne

@@ -3114,6 +3114,8 @@ window.LANG['pt'] = {
   'brett.gone': 'Já saíram',
   'brett.move': 'Mover',
   'brett.add': 'Adicionar',
+  'brett.scanBags': 'Ler sacos',
+  'brett.scanHelp': 'Cada saco que ler vai para esta prateleira. Leia outra prateleira para continuar lá.',
   'brett.emptyBtn': 'Vazia',
   'brett.wrongCount': 'Contagem errada',
   'brett.back': 'Voltar',

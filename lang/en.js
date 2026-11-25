@@ -3097,6 +3097,8 @@ window.LANG['en'] = {
   'brett.gone': 'Gone',
   'brett.move': 'Move',
   'brett.add': 'Add',
+  'brett.scanBags': 'Scan bags',
+  'brett.scanHelp': 'Every bag you scan goes onto this shelf. Scan another shelf label to carry on there.',
   'brett.emptyBtn': 'Empty',
   'brett.wrongCount': 'Wrong count',
   'brett.back': 'Back',
