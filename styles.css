@@ -8063,6 +8063,11 @@ body:has(#m-camscan.open) .update-bar {
 .notif-rot .notif-item-title {
   color: var(--rot);
 }
+/* Der Alarm: ein roter Streifen links, damit die Zeile auch ungelesen (blau
+   hinterlegt) und im Augenwinkel als Bestellung auffaellt. */
+.notif-rot > .notif-item {
+  box-shadow: inset 4px 0 0 var(--rot);
+}
 .notif-teil {
   border-bottom: 1px solid var(--c-border-light);
   background: var(--c-bg);
