@@ -20,6 +20,7 @@ const { hebe } = require('./helpers/quelle');
 const TEILE = [
   [/^function esc\(s\) \{[\s\S]*?\n\}/m, 'esc()'],
   [/^function parseDecimal\([\s\S]*?\n\}/m, 'parseDecimal()'],
+  [/^function subBlendText\(c\) \{[\s\S]*?\n\}/m, 'subBlendText()'],
   [/^function nbSubstrateNeed\(\) \{[\s\S]*?\n\}/m, 'nbSubstrateNeed()']
 ];
 
@@ -116,6 +117,7 @@ describe('the draw a Charge quotes against a mix', () => {
       MIX,
       STRAINS
     );
-    assert.match(html, /hw=80.*wb=20.*rh=62/);
+    // Die Mischung in Worten (subBlendText), damit Sojaschalen darin Platz haben.
+    assert.match(html, /blend=80 % sub\.pellets\(\) · 20 % sub\.bran\(\),rh=62/);
   });
 });

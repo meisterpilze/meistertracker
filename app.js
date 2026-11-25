@@ -3213,7 +3213,8 @@ const _OH_MAT_KEY = {
   gypsum: 'inv.gypsum',
   coir: 'inv.coir',
   corn: 'inv.corn',
-  calcium: 'inv.calcium'
+  calcium: 'inv.calcium',
+  soyhull: 'inv.soyhull'
 };
 function _ohMatName(mat) {
   return t(_OH_MAT_KEY[mat] || mat);
@@ -3372,7 +3373,7 @@ function renderInventoryCard() {
   if (!body) return;
   const stock = (inventory && inventory.stock) || {};
   const thr = (inventory && inventory.thresholds) || {};
-  const mats = ['grain', 'hardwood', 'wheatbran', 'gypsum', 'coir', 'corn', 'calcium'];
+  const mats = ['grain', 'hardwood', 'wheatbran', 'soyhull', 'gypsum', 'coir', 'corn', 'calcium'];
   body.innerHTML = mats
     .map((m) => {
       const have = stock[m] || 0;
@@ -12721,7 +12722,7 @@ function sbPreviewSoon() {
 // Das Rezept der Sorte belegt die Felder, danach gehören sie diesem einen
 // Ansatz. Wer 70/30 mischen will, tippt hier 70 — vorher hätte er dafür das
 // Rezept der Sorte umschreiben müssen, und damit jeden künftigen Ansatz mit.
-const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-corn', 'sb-gyp', 'sb-ca', 'sb-rh'];
+const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-soy', 'sb-corn', 'sb-gyp', 'sb-ca', 'sb-rh'];
 function _sbNum(id) {
   const el = document.getElementById(id);
   if (!el || el.value === '') return null;
@@ -12891,6 +12892,7 @@ function sbRecipeOf(recipeId) {
   return {
     branPct: +r.wheatbranPct || 0,
     cornPct: 0,
+    soyhullPct: +r.soyhullPct || 0,
     gypsumPct: +r.gypsumPct || 0,
     // Gespeicherte Mischungen kennen kein Calciumcarbonat; es kommt pro Ansatz dazu.
     calciumPct: 0,
@@ -12915,7 +12917,8 @@ function sbFillBlendFromRecipe() {
   }
   _sbSet('sb-wb', rec.branPct);
   _sbSet('sb-corn', rec.cornPct);
-  _sbSet('sb-hw', 100 - rec.branPct - rec.cornPct);
+  _sbSet('sb-soy', rec.soyhullPct);
+  _sbSet('sb-hw', 100 - rec.branPct - rec.cornPct - rec.soyhullPct);
   _sbSet('sb-gyp', rec.gypsumPct);
   _sbSet('sb-ca', rec.calciumPct);
   _sbSet('sb-rh', rec.moisturePct);
@@ -12924,17 +12927,18 @@ function sbFillBlendFromRecipe() {
   if (cornWrap) cornWrap.style.display = rec.cornPct > 0 ? '' : 'none';
   sbBlendDirty();
 }
-// Pellets und Kleie sind eine Zahl in zwei Feldern: was nicht Kleie (und Mais)
-// ist, ist Pellets. Wer eines tippt, hat das andere mitgesagt — sonst stünde da
+// Pellets und Kleie sind eine Zahl in zwei Feldern: was nicht Kleie (und Mais,
+// Sojaschalen) ist, ist Pellets. Wer eines tippt, hat das andere mitgesagt — sonst stünde da
 // eine Mischung, die nicht 100 % ergibt, und die Rechnung nähme stillschweigend
 // eine andere.
 function sbBlendEdited(which) {
   const corn = _sbNum('sb-corn') || 0;
-  const rest = Math.max(0, 100 - corn);
+  const soy = _sbNum('sb-soy') || 0;
+  const rest = Math.max(0, 100 - corn - soy);
   if (which === 'hw') {
     const hw = Math.min(rest, Math.max(0, _sbNum('sb-hw') || 0));
     _sbSet('sb-wb', rest - hw);
-  } else if (which === 'wb' || which === 'corn') {
+  } else if (which === 'wb' || which === 'corn' || which === 'soy') {
     const wb = Math.min(rest, Math.max(0, _sbNum('sb-wb') || 0));
     _sbSet('sb-hw', rest - wb);
   }
@@ -12950,6 +12954,7 @@ function sbBlendAdjusted() {
   return !(
     gleich(_sbNum('sb-wb'), rec.branPct) &&
     gleich(_sbNum('sb-corn'), rec.cornPct) &&
+    gleich(_sbNum('sb-soy'), rec.soyhullPct) &&
     gleich(_sbNum('sb-gyp'), rec.gypsumPct) &&
     gleich(_sbNum('sb-ca'), rec.calciumPct) &&
     gleich(_sbNum('sb-rh'), rec.moisturePct)
@@ -12970,6 +12975,8 @@ function sbBlend() {
   if (wb != null) o.branPct = wb;
   const corn = _sbNum('sb-corn');
   if (corn != null) o.cornPct = corn;
+  const soy = _sbNum('sb-soy');
+  if (soy != null) o.soyhullPct = soy;
   const gyp = _sbNum('sb-gyp');
   if (gyp != null) o.gypsumPct = gyp;
   const ca = _sbNum('sb-ca');
@@ -13041,6 +13048,7 @@ async function sbPreview() {
     row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
     row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
     (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
+    (m.soyhullKg > 0.005 ? row(t('sub.soyhull'), m.soyhullKg, 'kg', 'soyhull') : '') +
     row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
     (m.calciumKg > 0.005 ? row(t('sub.calcium'), m.calciumKg, 'kg', 'calcium', 2) : '') +
     row(t('sub.waterNow'), sbWater(r).nowL, 'L') +
@@ -13237,7 +13245,7 @@ function nbSubstrateNeed() {
   box.innerHTML =
     '<div class="fs-meta" style="line-height:1.7">' +
     '<div>' +
-    esc(t('sub.mixComposition', { hw: s.composition.hardwoodPct, wb: s.composition.wheatbranPct, rh: s.composition.rhPct })) +
+    esc(t('sub.mixComposition', { blend: subBlendText(s.composition), rh: s.composition.rhPct })) +
     '</div>' +
     '<div>' +
     esc(t('sub.drawLine', { qty: qty, bagKg: bagKg, need: need.toFixed(1) })) +
@@ -13502,6 +13510,21 @@ function recordBurstBags(s) {
   );
 }
 
+// Woraus die Trockenmischung eines Ansatzes besteht, in Worten: "70 % Pellets ·
+// 30 % Weizenkleie". Mais und Sojaschalen stehen nur da, wenn welche drin sind,
+// und die Kleie fehlt, wenn sie 0 ist und etwas anderes ihren Platz hat. Drei
+// Zahlen mit Schrägstrich lasen sich falsch, sobald Soja dazukam.
+function subBlendText(c) {
+  const z = (v) => String(Math.round((+v || 0) * 10) / 10);
+  const corn = +c.cornPct || 0;
+  const soy = +c.soyhullPct || 0;
+  const teile = [z(c.hardwoodPct) + ' % ' + t('sub.pellets')];
+  if (+c.wheatbranPct > 0 || !(corn > 0 || soy > 0)) teile.push(z(c.wheatbranPct) + ' % ' + t('sub.bran'));
+  if (corn > 0) teile.push(z(corn) + ' % ' + t('sub.corn'));
+  if (soy > 0) teile.push(z(soy) + ' % ' + t('sub.soyhull'));
+  return teile.join(' · ');
+}
+
 // Sterilisierzeit und pH stehen nebeneinander, weil die eine Zahl die andere
 // erklären soll: wie lange sterilisiert wurde, und welcher pH beim Beimpfen der
 // Chargen aus diesem Ansatz gemessen wurde. Fehlt eins, steht ein Strich da.
@@ -13684,11 +13707,12 @@ async function openSubstrateInfo(subId) {
     '</div>' +
     '<table class="fs-sm" style="border-collapse:collapse;margin-bottom:10px">' +
     line(t('sub.targetKg'), kg(s.targetKg, 0)) +
-    line(t('sub.blend'), c.hardwoodPct + ' / ' + c.wheatbranPct + (c.cornPct ? ' / ' + c.cornPct : '') + ' %') +
+    line(t('sub.blendTitle'), esc(subBlendText(c))) +
     line(t('sub.dryMix'), kg(s.dryKg)) +
     line(t('sub.pellets'), kg(s.pelletsKg)) +
     line(t('sub.bran'), kg(s.branKg)) +
     (s.cornKg > 0.005 ? line(t('sub.corn'), kg(s.cornKg)) : '') +
+    (s.soyhullKg > 0.005 ? line(t('sub.soyhull'), kg(s.soyhullKg)) : '') +
     line(t('sub.gypsum'), kg(s.gypsumKg, 2)) +
     (s.calciumKg > 0.005 ? line(t('sub.calcium'), kg(s.calciumKg, 2) + ' (' + c.calciumPct + ' %)') : '') +
     line(t('sub.waterCalc'), s.waterL.toFixed(1) + ' L') +
@@ -14975,6 +14999,7 @@ function openChargeSheet(b) {
         '% · WB ' +
         b.substrate.wheatbran +
         '%' +
+        (b.substrate.soyhull ? ' · Soja ' + b.substrate.soyhull + '%' : '') +
         (b.substrate.rh ? ' · RH ' + b.substrate.rh + '%' : '') +
         (b.substrate.gypsum ? ' · Gypsum' : '')
       : '—';
@@ -18165,10 +18190,10 @@ function clearLog() {
 }
 
 // ─── INVENTORY ───────────────────────────────────────────────
-const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal', calcium: 'Calcium carbonate' };
-const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207', calcium: '#475569' };
-const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8', calcium: '#f8fafc' };
-const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a', calcium: '#cbd5e1' };
+const MAT_LABELS = { hardwood: 'Hardwood pellets', wheatbran: 'Wheat bran', soyhull: 'Soy hulls', gypsum: 'Gypsum', grain: 'Grain', corn: 'Corn meal', calcium: 'Calcium carbonate' };
+const MAT_COLORS = { hardwood: '#92400e', wheatbran: '#166534', soyhull: '#0f766e', gypsum: '#1e40af', grain: '#6b21a8', corn: '#a16207', calcium: '#475569' };
+const MAT_BG = { hardwood: '#fff7ed', wheatbran: '#f0fdf4', soyhull: '#f0fdfa', gypsum: '#eff6ff', grain: '#faf5ff', corn: '#fefce8', calcium: '#f8fafc' };
+const MAT_BORDER = { hardwood: '#fed7aa', wheatbran: '#bbf7d0', soyhull: '#99f6e4', gypsum: '#bfdbfe', grain: '#e9d5ff', corn: '#fef08a', calcium: '#cbd5e1' };
 
 // Wie weit zurück gezählt wird, um zu gewichten. Kurz genug, dass eine
 // Umstellung im Sortiment durchschlägt, lang genug, dass eine ruhige Woche
@@ -27720,7 +27745,17 @@ function biHerkunftHtml(b) {
   } else if (b.substrate && b.batchType !== 'grain' && b.substrate.rh) {
     html += zeile(
       t('bagInfo.substrate'),
-      muted('HW ' + b.substrate.hardwood + ' % · WB ' + b.substrate.wheatbran + ' % · RH ' + b.substrate.rh + ' %')
+      muted(
+        'HW ' +
+          b.substrate.hardwood +
+          ' % · WB ' +
+          b.substrate.wheatbran +
+          ' %' +
+          (b.substrate.soyhull ? ' · Soja ' + b.substrate.soyhull + ' %' : '') +
+          ' · RH ' +
+          b.substrate.rh +
+          ' %'
+      )
     );
   }
   if (b.created) html += zeile(t('bagInfo.made'), muted(fmtDt(b.created)));
@@ -28132,7 +28167,11 @@ function _bbLineageHtml(l) {
     const mix = s.subId
       ? ''
       : muted(
-          'HW ' + _bbPct(s.hardwoodPct) + ' · WB ' + _bbPct(s.wheatbranPct)
+          'HW ' +
+            _bbPct(s.hardwoodPct) +
+            ' · WB ' +
+            _bbPct(s.wheatbranPct) +
+            (s.soyhullPct ? ' · Soja ' + _bbPct(s.soyhullPct) : '')
         );
     html += zeile(t('bagInfo.substrate'), [
       s.subId ? mono(s.subId) : '',
@@ -28180,7 +28219,15 @@ function _bbSummaryHtml(good) {
     a.n++;
     const s = l.substrate;
     if (s) {
-      const r = s.recipe || (s.subId ? s.subId : 'HW ' + _bbPct(s.hardwoodPct) + ' · WB ' + _bbPct(s.wheatbranPct));
+      const r =
+        s.recipe ||
+        (s.subId
+          ? s.subId
+          : 'HW ' +
+            _bbPct(s.hardwoodPct) +
+            ' · WB ' +
+            _bbPct(s.wheatbranPct) +
+            (s.soyhullPct ? ' · Soja ' + _bbPct(s.soyhullPct) : ''));
       a.recipes.set(r, (a.recipes.get(r) || 0) + 1);
       if (s.actualRh != null) a.ist.push(s.actualRh);
       if (s.targetRh) a.soll.push(s.targetRh);
@@ -39795,8 +39842,10 @@ async function wkbCreate() {
 // Formular oder das Rezept umschreiben, und damit jeden künftigen Ansatz mit.
 // `steriMin` gehört nicht zur Mischung und nicht in den Vorschau-Schlüssel: es
 // ändert keine Zahl der Rechnung, es wird nur mit dem Ansatz gespeichert.
-const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, steriMin: null, unlesbar: {}, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '' };
-const WKM_MIX_KEYS = ['branPct', 'gypsumPct', 'calciumPct', 'moisturePct'];
+// `sichern` ist offen, solange jemand die Mischung unter einem Namen speichert:
+// { name, fehler, laeuft }, sonst null.
+const WKM = { recipeId: null, bags: 50, kg: 0, mix: null, steriMin: null, unlesbar: {}, notes: '', preview: null, previewKey: '', laedt: false, bucht: false, fehler: '', sichern: null };
+const WKM_MIX_KEYS = ['branPct', 'soyhullPct', 'gypsumPct', 'calciumPct', 'moisturePct'];
 
 function wkmKey() {
   // Mit den unlesbaren Feldern: eine getippte Nicht-Zahl ändert WKM.mix nicht,
@@ -39807,7 +39856,13 @@ function wkmKey() {
 function wkmMixFromRecipe() {
   const rec = sbRecipeOf(WKM.recipeId);
   WKM.mix = rec
-    ? { branPct: rec.branPct, gypsumPct: rec.gypsumPct, calciumPct: rec.calciumPct, moisturePct: rec.moisturePct }
+    ? {
+        branPct: rec.branPct,
+        soyhullPct: rec.soyhullPct,
+        gypsumPct: rec.gypsumPct,
+        calciumPct: rec.calciumPct,
+        moisturePct: rec.moisturePct
+      }
     : null;
 }
 
@@ -39819,6 +39874,22 @@ function wkmMixAdjusted() {
   return WKM_MIX_KEYS.some((k) => k in WKM.mix && Math.abs(WKM.mix[k] - rec[k]) > 1e-9);
 }
 
+// Ob es sich lohnt, die Mischung zu speichern: eine Zahl, die eine gespeicherte
+// Mischung trägt, weicht vom Rezept ab. Calciumcarbonat zählt nicht mit, denn
+// Mischungen kennen es nicht; es kommt je Ansatz dazu.
+function wkmMischungNeu() {
+  const rec = sbRecipeOf(WKM.recipeId);
+  if (!rec || !WKM.mix) return false;
+  return ['branPct', 'soyhullPct', 'gypsumPct', 'moisturePct'].some(
+    (k) => k in WKM.mix && Math.abs(WKM.mix[k] - rec[k]) > 1e-9
+  );
+}
+// Speichern darf ein Admin, wie beim MCP-Werkzeug: jede Mischung steht danach
+// jedem zur Auswahl, der ansetzt.
+function wkmDarfSichern() {
+  return !!(currentUser && currentUser.role === 'admin');
+}
+
 // Dieselben Grenzen wie validateMixOverride() im Server. Hier geprüft, damit
 // statt "branPct must be <= 95" ein Satz dasteht, mit dem man etwas anfangen kann.
 function wkmMixOk() {
@@ -39827,6 +39898,7 @@ function wkmMixOk() {
   return (
     !wkmUnlesbar('mix') &&
     drin('branPct', 0, 95) &&
+    drin('soyhullPct', 0, 95) &&
     drin('gypsumPct', 0, 20) &&
     drin('calciumPct', 0, 20) &&
     drin('moisturePct', 20, 90)
@@ -39844,6 +39916,7 @@ function wkmSteriOk() {
 const WKM_FELD_NAME = {
   hw: 'sub.pellets',
   wb: 'sub.bran',
+  soy: 'sub.soyhull',
   gyp: 'sub.gypsum',
   ca: 'sub.calcium',
   rh: 'sub.moisture',
@@ -39873,6 +39946,10 @@ function wkmMixFehler() {
 let _wkmMixTimer = null;
 function wkmBlendEdited(which) {
   if (!WKM.mix) WKM.mix = {};
+  // Was Sojaschalen sind, steht Pellets und Kleie nicht mehr zur Verfügung. Fehlt
+  // die Zahl im Objekt, gilt die des Rezepts, so wie der Server sie liest.
+  const rec = sbRecipeOf(WKM.recipeId) || {};
+  const soja = () => ('soyhullPct' in WKM.mix ? WKM.mix.soyhullPct : rec.soyhullPct || 0);
   if (which === 'hw' || which === 'wb') {
     const v = wkmFeldLesen(which);
     // Das Gegenfeld ist jetzt wieder lesbar, weil es gleich überschrieben wird.
@@ -39880,10 +39957,19 @@ function wkmBlendEdited(which) {
     if (v == null) {
       delete WKM.mix.branPct;
     } else {
-      const teil = Math.min(100, Math.max(0, v));
-      WKM.mix.branPct = which === 'hw' ? 100 - teil : teil;
-      _sbSet(which === 'hw' ? 'wkm-wb' : 'wkm-hw', 100 - teil);
+      const rest = Math.max(0, 100 - soja());
+      const teil = Math.min(rest, Math.max(0, v));
+      WKM.mix.branPct = which === 'hw' ? rest - teil : teil;
+      _sbSet(which === 'hw' ? 'wkm-wb' : 'wkm-hw', rest - teil);
     }
+  } else if (which === 'soy') {
+    const v = wkmFeldLesen('soy');
+    if (v == null) delete WKM.mix.soyhullPct;
+    else WKM.mix.soyhullPct = v;
+    // Die Pellets sind der Rest; ihr Feld zeigt ihn gleich mit.
+    const kleie = 'branPct' in WKM.mix ? WKM.mix.branPct : rec.branPct || 0;
+    delete WKM.unlesbar.hw;
+    _sbSet('wkm-hw', Math.max(0, 100 - kleie - soja()));
   } else {
     const k = { gyp: 'gypsumPct', ca: 'calciumPct', rh: 'moisturePct' }[which];
     const v = wkmFeldLesen(which);
@@ -39892,6 +39978,8 @@ function wkmBlendEdited(which) {
   }
   const reset = document.querySelector('[data-wkm="mixreset"]');
   if (reset) reset.hidden = !wkmMixAdjusted();
+  const sichern = document.querySelector('[data-wkm="mixsave"]');
+  if (sichern) sichern.hidden = !!WKM.sichern || !wkmMischungNeu();
   clearTimeout(_wkmMixTimer);
   _wkmMixTimer = setTimeout(wkmLoadPreview, 300);
 }
@@ -39919,6 +40007,7 @@ function wkmShortfalls() {
     [t('sub.gypsum'), m.gypsumKg, s.gypsum || 0]
   ];
   if (m.cornKg > 0.005) zeilen.push([t('sub.corn'), m.cornKg, s.corn || 0]);
+  if (m.soyhullKg > 0.005) zeilen.push([t('sub.soyhull'), m.soyhullKg, s.soyhull || 0]);
   if (m.calciumKg > 0.005) zeilen.push([t('sub.calcium'), m.calciumKg, s.calcium || 0]);
   return zeilen.filter((z) => z[1] > z[2] + 1e-9).map((z) => ({ label: z[0], need: z[1], have: z[2] }));
 }
@@ -39967,7 +40056,10 @@ async function wkmLoadPreview() {
 }
 
 async function wkmOpen() {
-  await loadSubstrateRecipes();
+  // Frisch vom Server: eine Mischung, die eben jemand auf einem anderen Telefon
+  // gespeichert hat, soll hier schon zur Auswahl stehen.
+  await loadSubstrateRecipes(true);
+  WKM.sichern = null;
   WKM.recipeId = _sbRecipes.length ? _sbRecipes[0].id : null;
   wkmMixFromRecipe();
   WKM.steriMin = null;
@@ -40021,6 +40113,7 @@ function wkmRenderOut() {
         zeile(t('sub.pellets'), m.pelletsKg, 'kg') +
         zeile(t('sub.bran'), m.branKg, 'kg') +
         (m.cornKg > 0.005 ? zeile(t('sub.corn'), m.cornKg, 'kg') : '') +
+        (m.soyhullKg > 0.005 ? zeile(t('sub.soyhull'), m.soyhullKg, 'kg') : '') +
         zeile(t('sub.gypsum'), m.gypsumKg, 'kg') +
         (m.calciumKg > 0.005 ? zeile(t('sub.calcium'), m.calciumKg, 'kg') : '') +
         zeile(t('sub.waterNow'), sbWater(WKM.preview).nowL, 'L') +
@@ -40079,6 +40172,8 @@ function wkmRender() {
 
   const list = sbRecipeOptions(WKM.recipeId);
   const mix = WKM.mix || {};
+  const rezept = sbRecipeOf(WKM.recipeId) || {};
+  const soja = 'soyhullPct' in mix ? mix.soyhullPct : rezept.soyhullPct || 0;
   // Mit Komma, wie getippt wird; parseDecimal liest beides.
   const zahl = (v) => (v == null ? '' : String(Math.round(v * 100) / 100).replace('.', ','));
   const feld = (id, label, wert, min, max, step, einheit) =>
@@ -40091,19 +40186,26 @@ function wkmRender() {
      <div class="wkf-field">
        <div class="wkm-blend-head">
          <label>${esc(t('sub.blendTitle'))}</label>
-         <button type="button" class="btn-xs" data-wkm="mixreset"${wkmMixAdjusted() ? '' : ' hidden'}>${esc(t('sub.blendReset'))}</button>
+         <span class="wkm-blend-acts">
+           <button type="button" class="btn-xs" data-wkm="mixreset"${wkmMixAdjusted() ? '' : ' hidden'}>${esc(t('sub.blendReset'))}</button>` +
+    (wkmDarfSichern()
+      ? `<button type="button" class="btn-xs" data-wkm="mixsave"${wkmMischungNeu() && !WKM.sichern ? '' : ' hidden'}>${esc(t('sub.saveMix'))}</button>`
+      : '') +
+    `</span>
        </div>
        <div class="wkf-two wkm-blend">` +
-    feld('wkm-hw', t('sub.pellets'), 'branPct' in mix ? 100 - mix.branPct : null, 0, 100, 1) +
+    feld('wkm-hw', t('sub.pellets'), 'branPct' in mix ? 100 - mix.branPct - soja : null, 0, 100, 1) +
     feld('wkm-wb', t('sub.bran'), mix.branPct, 0, 95, 1) +
+    feld('wkm-soy', t('sub.soyhull'), mix.soyhullPct, 0, 95, 1) +
     feld('wkm-gyp', t('sub.gypsum'), mix.gypsumPct, 0, 20, 0.5) +
     feld('wkm-ca', t('sub.calcium'), mix.calciumPct, 0, 20, 0.5) +
     feld('wkm-rh', t('sub.moisture'), mix.moisturePct, 20, 90, 0.5) +
     // Keine Zahl der Mischung, aber mit ihr gespeichert: neben dem pH der
     // Chargen zeigt sie, was die Sterilisierzeit mit dem Substrat macht.
     feld('wkm-steri', t('sub.steri'), WKM.steriMin, 0, 1440, 1, 'min') +
+    '</div>' +
+    wkmSichernHtml() +
     `</div>
-     </div>
      <div class="wkf-two">
        <div class="wkf-field"><label>${esc(t('sub.bags'))}</label>
          <input type="text" inputmode="numeric" id="wkm-bags" value="${WKM.bags || ''}" /></div>
@@ -40119,6 +40221,77 @@ function wkmRender() {
     `<button class="btn btn-p" data-wkm="create">${esc(t('sub.create'))}</button>`;
   wkmRenderOut();
   wkmUpdateButton();
+}
+
+// Name und Knöpfe, solange jemand die Mischung speichert. Unter den Feldern, weil
+// es um genau diese Zahlen geht; ein Dialog läge hinter dem Ablauf.
+function wkmSichernHtml() {
+  const z = WKM.sichern;
+  if (!z) return '';
+  return (
+    '<div class="wkm-sichern">' +
+    `<label for="wkm-savename">${esc(t('sub.saveMixName'))}</label>` +
+    `<input type="text" id="wkm-savename" maxlength="60" value="${esc(z.name)}" placeholder="${esc(t('sub.saveMixPh'))}" />` +
+    `<div class="wkf-hint">${esc(t('sub.saveMixHint'))}</div>` +
+    (z.fehler ? `<div class="wkf-note bad">${esc(z.fehler)}</div>` : '') +
+    '<div class="wkm-sichern-acts">' +
+    `<button type="button" class="btn" data-wkm="savecancel">${esc(t('work.cancel'))}</button>` +
+    `<button type="button" class="btn btn-p" data-wkm="savego"${z.laeuft ? ' disabled' : ''}>${esc(t('sub.saveMixGo'))}</button>` +
+    '</div></div>'
+  );
+}
+
+// Die Mischung, wie sie in den Feldern steht, unter einem Namen speichern. Danach
+// ist sie gewählt: der Ansatz, der gerade entsteht, heißt dann wie sie, statt
+// "70/30 · Soja 50 %". Was nicht getippt wurde, kommt aus dem Rezept, so wie
+// der Server ein fehlendes Feld liest.
+async function wkmSaveMix() {
+  const z = WKM.sichern;
+  if (!z || z.laeuft) return;
+  const name = (z.name || '').trim();
+  if (!name) {
+    z.fehler = t('sub.saveMixNoName');
+    wkmRender();
+    return;
+  }
+  // Steht in einem Anteil etwas, das keine Zahl ist, gespeichert würde still die
+  // letzte lesbare. Dieselbe Sperre wie vor der Rechnung.
+  if (wkmUnlesbar('mix')) {
+    z.fehler = wkmMixFehler();
+    wkmRender();
+    return;
+  }
+  const m = Object.assign({}, sbRecipeOf(WKM.recipeId) || {}, WKM.mix || {});
+  z.fehler = '';
+  z.laeuft = true;
+  wkmRender();
+  const r = await apiPost('/api/recipes', {
+    name,
+    wheatbranPct: m.branPct,
+    soyhullPct: m.soyhullPct,
+    gypsumPct: m.gypsumPct,
+    rhPct: m.moisturePct
+  });
+  // Inzwischen abgebrochen oder den Ablauf verlassen: nichts mehr hineinmalen.
+  if (WKF.kind !== 'mix' || WKM.sichern !== z) return;
+  z.laeuft = false;
+  if (!r || r.error) {
+    z.fehler = (r && r.error) || '?';
+    wkmRender();
+    return;
+  }
+  // Calciumcarbonat gehört zum Ansatz, nicht zur Mischung: was getippt war, bleibt.
+  const kalk = WKM.mix && 'calciumPct' in WKM.mix ? WKM.mix.calciumPct : null;
+  await loadSubstrateRecipes(true);
+  if (WKF.kind !== 'mix') return;
+  WKM.recipeId = r.id;
+  wkmMixFromRecipe();
+  if (kalk != null && WKM.mix) WKM.mix.calciumPct = kalk;
+  WKM.sichern = null;
+  WKM.preview = null;
+  wkmRender();
+  wkmLoadPreview();
+  toast(t('sub.mixSaved', { name: r.name || name }));
 }
 
 async function wkmCreate() {
@@ -40196,6 +40369,7 @@ function wkmSubmit(subId, menge, label, mix, steriMin) {
               ? [
                   [t('sub.pellets'), fmtKg(m.pelletsKg, 1) + ' kg'],
                   [t('sub.bran'), fmtKg(m.branKg, 1) + ' kg'],
+                  ...(m.soyhullKg > 0.005 ? [[t('sub.soyhull'), fmtKg(m.soyhullKg, 1) + ' kg']] : []),
                   ...(m.calciumKg > 0.005 ? [[t('sub.calcium'), fmtKg(m.calciumKg, 1) + ' kg']] : []),
                   [t('sub.waterNow'), fmtKg(sbWater(r.water ? r : WKM.preview).nowL, 1) + ' L'],
                   [t('sub.waterRest'), fmtKg(sbWater(r.water ? r : WKM.preview).restL, 1) + ' L']
@@ -40224,6 +40398,20 @@ function wkmSubmit(subId, menge, label, mix, steriMin) {
     if (!el || el.disabled) return;
     if (el.dataset.wkm === 'create') wkmCreate();
     else if (el.dataset.wkm === 'again') wkmOpen();
+    else if (el.dataset.wkm === 'mixsave') {
+      wkmRead();
+      WKM.sichern = { name: '', fehler: '', laeuft: false };
+      wkmRender();
+      const f = document.getElementById('wkm-savename');
+      if (f) f.focus();
+    } else if (el.dataset.wkm === 'savecancel') {
+      wkmRead();
+      WKM.sichern = null;
+      wkmRender();
+    } else if (el.dataset.wkm === 'savego') {
+      wkmRead();
+      wkmSaveMix();
+    }
     else if (el.dataset.wkm === 'mixreset') {
       wkmRead();
       wkmMixFromRecipe();
@@ -40264,8 +40452,9 @@ function wkmSubmit(subId, menge, label, mix, steriMin) {
   // Die Anteile beim Tippen: das Gegenfeld sofort, die Rechnung kurz danach.
   flow.addEventListener('input', (e) => {
     if (WKF.kind !== 'mix') return;
-    const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-gyp,#wkm-ca,#wkm-rh');
+    const f = e.target.closest('#wkm-hw,#wkm-wb,#wkm-soy,#wkm-gyp,#wkm-ca,#wkm-rh');
     if (f) wkmBlendEdited(f.id.slice(4));
+    else if (e.target.id === 'wkm-savename' && WKM.sichern) WKM.sichern.name = e.target.value;
     // Die Zeit ändert die Rechnung nicht, also nur merken.
     else if (e.target.closest('#wkm-steri')) WKM.steriMin = wkmFeldLesen('steri');
   });

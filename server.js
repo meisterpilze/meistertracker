@@ -962,6 +962,7 @@ function validateMixOverride(mix) {
   return validateRanges(mix, {
     branPct: { min: 0, max: 95 },
     cornPct: { min: 0, max: 95 },
+    soyhullPct: { min: 0, max: 95 },
     gypsumPct: { min: 0, max: 20 },
     calciumPct: { min: 0, max: 20 },
     moisturePct: { min: 20, max: 90 }
@@ -8945,14 +8946,34 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     }
     return;
   }
-  // The mixes the Ansatz form offers. Read-only here; they are kept in the
-  // recipes table.
+  // The mixes the Ansatz form offers, kept in the recipes table.
   if (req.method === 'GET' && req.url === '/api/recipes') {
     try {
       jsonOk(res, db.getAllRecipes(database));
     } catch (err) {
       safeErr(res, err);
     }
+    return;
+  }
+  // Eine neue Mischung aus dem Ansatz-Formular. Nur ein Admin, wie beim
+  // MCP-Werkzeug manage_recipes: jede Mischung steht danach jedem zur Auswahl,
+  // der ansetzt. Geprüft wird in createMixRecipe.
+  if (req.method === 'POST' && req.url === '/api/recipes') {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.createMixRecipe(database, data || {});
+        log('info', 'Mix recipe created', { actor: req.authUser.username, id: r && r.id });
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
     return;
   }
   // Restfeuchte der Sackware (Pellets, Kleie). Lesen darf jeder, der ansetzt;
