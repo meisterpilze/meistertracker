@@ -1486,9 +1486,9 @@ function createMcpServer(database, onWrite, printer) {
 
   server.tool(
     'update_inventory',
-    'Log a substrate inventory change: delivery (positive deltaKg), usage (negative deltaKg), or correction. Materials: hardwood, wheatbran, gypsum, grain. ALWAYS use this for stock changes — NEVER record inventory as task (→ create_task) or batch note (→ update_batch).',
+    'Log a substrate inventory change: delivery (positive deltaKg), usage (negative deltaKg), or correction. Materials: hardwood, wheatbran, gypsum, grain, soyhull (soy hulls). ALWAYS use this for stock changes — NEVER record inventory as task (→ create_task) or batch note (→ update_batch).',
     {
-      material: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain']).describe('Material type'),
+      material: z.enum(['hardwood', 'wheatbran', 'gypsum', 'grain', 'soyhull']).describe('Material type'),
       deltaKg: z.number().describe('Change in kg (positive for delivery, negative for usage)'),
       type: z.string().optional().describe('Transaction type (e.g. delivery, batch, correction)'),
       ref: z.string().optional().describe('Reference note (e.g. supplier name, batch ID)')
@@ -2138,13 +2138,14 @@ function createMcpServer(database, onWrite, printer) {
   // Example: manage_recipes({ action: 'create', name: 'Beispielrezept', hardwoodPct: 85, wheatbranPct: 15, rhPct: 60 })
   server.tool(
     'manage_recipes',
-    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, gypsum%, rh% for quick batch creation. Use recipeId in create_batch to auto-fill substrate fields.',
+    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, soyhull%, gypsum%, rh% for quick batch creation. Hardwood is the remainder: 100 - wheatbran - soyhull. Use recipeId in create_batch to auto-fill substrate fields.',
     {
       action: z.enum(['create', 'update', 'delete']).describe('Action to perform'),
       id: z.number().optional().describe('Recipe ID (required for update/delete)'),
       name: z.string().optional().describe('Recipe name (required for create, unique)'),
       hardwoodPct: z.number().optional().describe('Hardwood percentage'),
       wheatbranPct: z.number().optional().describe('Wheat bran percentage'),
+      soyhullPct: z.number().optional().describe('Soy hull percentage of the dry blend'),
       gypsumPct: z.number().optional().describe('Gypsum percentage'),
       rhPct: z.number().optional().describe('Relative humidity percentage'),
       notes: z.string().optional().describe('Notes')
@@ -2160,6 +2161,7 @@ function createMcpServer(database, onWrite, printer) {
               name: params.name,
               hardwood_pct: params.hardwoodPct || 0,
               wheatbran_pct: params.wheatbranPct || 0,
+              soyhull_pct: params.soyhullPct || 0,
               gypsum_pct: params.gypsumPct || 0,
               rh_pct: params.rhPct || 0,
               notes: params.notes || null,
@@ -2174,6 +2176,7 @@ function createMcpServer(database, onWrite, printer) {
               name: params.name,
               hardwood_pct: params.hardwoodPct,
               wheatbran_pct: params.wheatbranPct,
+              soyhull_pct: params.soyhullPct,
               gypsum_pct: params.gypsumPct,
               rh_pct: params.rhPct,
               notes: params.notes

@@ -67,7 +67,9 @@ describe('die Mischung eines Ansatzes', () => {
     // erreicht oder hinter einer 500 verschwindet.
     const faelle = [
       [{ moisturePct: 6 }, /Restfeuchte/],
-      [{ branPct: 99, cornPct: 5 }, /Kleie \+ Maismehl/]
+      [{ branPct: 99, cornPct: 5 }, /Kleie, Maismehl und Sojaschalen ergeben 104%/],
+      // Sojaschalen teilen sich denselben Platz mit Kleie und Mais.
+      [{ branPct: 40, soyhullPct: 60 }, /Kleie, Maismehl und Sojaschalen ergeben 100%/]
     ];
     for (const [ov, muster] of faelle) {
       let msg = null;

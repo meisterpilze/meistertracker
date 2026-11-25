@@ -3477,6 +3477,26 @@ const MIGRATIONS = [
         .get().c;
       if (!has) db.exec('ALTER TABLE mushroom_strains ADD COLUMN week_blocks INTEGER');
     }
+  },
+  {
+    version: 124,
+    description: 'Sojaschalen als Rohstoff: im Ansatz, in gespeicherten Mischungen, in der Charge',
+    fn(db) {
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // Sojaschalen sind wie Kleie ein Teil der Trockenmischung, nicht wie Gips
+      // obendrauf: was nicht Kleie, Mais oder Soja ist, sind Pellets. Sie kommen
+      // vom Lager wie jeder Rohstoff, also brauchen sie Bestand und Mindestmenge.
+      addCol('inventory', 'stock_soyhull', 'REAL DEFAULT 0');
+      addCol('inventory', 'thresh_soyhull', 'REAL DEFAULT 0');
+      addCol('recipes', 'soyhull_pct', 'REAL DEFAULT 0');
+      addCol('substrate_batches', 'soyhull_pct', 'REAL DEFAULT 0');
+      addCol('substrate_batches', 'soyhull_kg', 'REAL DEFAULT 0');
+      // Die Charge haelt fest, woraus ihre Beutel sind, wie bei Kleie und Mais.
+      addCol('batches', 'sub_soyhull', 'REAL DEFAULT 0');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4332,6 +4352,7 @@ function readAll(db, opts = {}) {
         hardwood: r.sub_hardwood,
         wheatbran: r.sub_wheatbran,
         corn: r.sub_corn || 0,
+        soyhull: r.sub_soyhull || 0,
         coir: r.sub_coir || 0,
         rh: r.sub_rh,
         gypsum: r.sub_gypsum === 1 ? true : false
@@ -4478,7 +4499,8 @@ function readAll(db, opts = {}) {
       grain: inv.stock_grain,
       coir: inv.stock_coir || 0,
       corn: inv.stock_corn || 0,
-      calcium: inv.stock_calcium || 0
+      calcium: inv.stock_calcium || 0,
+      soyhull: inv.stock_soyhull || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
@@ -4487,7 +4509,8 @@ function readAll(db, opts = {}) {
       grain: { minKg: inv.thresh_grain },
       coir: { minKg: inv.thresh_coir || 0 },
       corn: { minKg: inv.thresh_corn || 0 },
-      calcium: { minKg: inv.thresh_calcium || 0 }
+      calcium: { minKg: inv.thresh_calcium || 0 },
+      soyhull: { minKg: inv.thresh_soyhull || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -5739,27 +5762,32 @@ function computeMixBatch(rec, targetKg, opts) {
 
   const bran = num(rec.branPct, 0) / 100;
   const corn = num(rec.cornPct, 0) / 100;
+  // Sojaschalen wie Kleie: ein Teil der Trockenmischung, nicht obendrauf.
+  const soy = num(rec.soyhullPct, 0) / 100;
   const gyp = num(rec.gypsumPct, 0) / 100;
   // Calciumcarbonat wie Gips: ein Anteil der Trockenmischung, obendrauf.
   const calc = num(rec.calciumPct, 0) / 100;
   const moist = num(rec.moisturePct, 0) / 100;
 
-  // Pellets are the remainder so the three shares can never total anything but
+  // Pellets are the remainder so the shares can never total anything but
   // 100%. A blend that leaves nothing over is a data error, not a 0 kg order.
   // The base is whatever the blend is not: pellets on a hardwood recipe, coir
   // on a CVG one. Taking the remainder rather than storing it keeps the shares
   // from drifting into a blend that does not total 100%.
   const baseMat = (rec.substrate || 'holzkleie') === 'cvg' ? 'coir' : 'hardwood';
-  const pelletShare = 1 - bran - corn;
+  const pelletShare = 1 - bran - corn - soy;
   if (pelletShare <= 0) {
     throw new Error(
-      'Kleie + Maismehl ergeben ' + ((bran + corn) * 100).toFixed(0) + '% — kein Anteil fuer Pellets uebrig'
+      'Kleie, Maismehl und Sojaschalen ergeben ' +
+        ((bran + corn + soy) * 100).toFixed(0) +
+        '% — kein Anteil fuer Pellets uebrig'
     );
   }
   if (!(moist > 0 && moist < 1)) throw new Error('Zielfeuchte muss zwischen 0 und 100 % liegen');
   // Jeder Rohstoff bringt seine eigene Restfeuchte mit: die Kleie ihre, alles
-  // andere (Pellets bzw. Kokos, Mais) die der Pellets. Gerechnet wird mit dem
-  // gewogenen Mittel ueber die Trockenmischung; ohne Kleie-Wert ist es R0.
+  // andere (Pellets bzw. Kokos, Mais, Sojaschalen) die der Pellets. Gerechnet
+  // wird mit dem gewogenen Mittel ueber die Trockenmischung; ohne Kleie-Wert ist
+  // es R0.
   const Rbran = o.residualBranPct == null || o.residualBranPct === '' ? R0 : num(o.residualBranPct, R0 * 100) / 100;
   const R = R0 + bran * (Rbran - R0);
   const denom = 1 + gyp + calc - R;
@@ -5782,6 +5810,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const pelletsKg = dryKg * pelletShare;
   const branKg = dryKg * bran;
   const cornKg = dryKg * corn;
+  const soyhullKg = dryKg * soy;
   const gypsumKg = dryKg * gyp;
   const calciumKg = dryKg * calc;
 
@@ -5792,6 +5821,7 @@ function computeMixBatch(rec, targetKg, opts) {
   push(baseMat, pelletsKg);
   push('wheatbran', branKg);
   push('corn', cornKg);
+  push('soyhull', soyhullKg);
   push('gypsum', gypsumKg);
   push('calcium', calciumKg);
 
@@ -5801,6 +5831,7 @@ function computeMixBatch(rec, targetKg, opts) {
     pelletsKg,
     branKg,
     cornKg,
+    soyhullKg,
     gypsumKg,
     calciumKg,
     waterL,
@@ -5811,12 +5842,16 @@ function computeMixBatch(rec, targetKg, opts) {
     baseMat,
     moisturePct: ((waterL + dryKg * R) / target) * 100,
     waterMinutes: flow > 0 ? waterL / flow : 0,
-    hardwoodPct: pelletShare * 100,
-    wheatbranPct: bran * 100,
-    cornPct: corn * 100,
-    gypsumPct: gyp * 100,
-    calciumPct: calc * 100,
-    rhPct: moist * 100,
+    // Die Anteile so, wie sie eingegeben wurden, nicht aus den Brüchen zurück-
+    // gerechnet: (1 − 0,1 − 0,35) · 100 ergab 55,00000000000001, und so stand es
+    // dann am Ansatz und an jeder Charge daraus.
+    hardwoodPct: 100 - num(rec.branPct, 0) - num(rec.cornPct, 0) - num(rec.soyhullPct, 0),
+    wheatbranPct: num(rec.branPct, 0),
+    cornPct: num(rec.cornPct, 0),
+    soyhullPct: num(rec.soyhullPct, 0),
+    gypsumPct: num(rec.gypsumPct, 0),
+    calciumPct: num(rec.calciumPct, 0),
+    rhPct: num(rec.moisturePct, 0),
     deltas
   };
 }
@@ -5836,12 +5871,12 @@ function computeMixBatch(rec, targetKg, opts) {
 //
 // Übernommen wird nur, was genannt ist; alles andere bleibt beim Rezept. Der
 // Hartholzanteil steht nicht in der Liste, weil er keine Eingabe ist: er ist
-// der Rest (1 − Kleie − Mais), und zwei Zahlen für dieselbe Größe driften.
+// der Rest (1 − Kleie − Mais − Soja), und zwei Zahlen für dieselbe Größe driften.
 function mixWithOverride(recipe, ov) {
   if (!ov || typeof ov !== 'object') return { recipe, adjusted: false };
   const out = { ...recipe };
   let adjusted = false;
-  for (const k of ['branPct', 'cornPct', 'gypsumPct', 'calciumPct', 'moisturePct']) {
+  for (const k of ['branPct', 'cornPct', 'soyhullPct', 'gypsumPct', 'calciumPct', 'moisturePct']) {
     const v = ov[k];
     if (v == null || !Number.isFinite(+v)) continue;
     if (Math.abs(+v - (+recipe[k] || 0)) < 1e-9) continue;
@@ -5899,6 +5934,7 @@ function getMixFromRecipe(db, recipeId) {
       substrate: 'holzkleie',
       branPct: r.wheatbran_pct || 0,
       cornPct: 0,
+      soyhullPct: r.soyhull_pct || 0,
       gypsumPct: r.gypsum_pct || 0,
       moisturePct: r.rh_pct || 0
     },
@@ -5939,8 +5975,9 @@ function createSubstrateBatch(db, b, userId) {
          (sub_id, recipe_strain_id, recipe_label, target_kg, remaining_kg,
           hardwood_pct, wheatbran_pct, corn_pct, gypsum_pct, rh_pct,
           dry_kg, pellets_kg, bran_kg, corn_kg, gypsum_kg, water_l, moisture_pct,
-          notes, created, status, water_now_l, calcium_pct, calcium_kg, steri_min)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?)`
+          notes, created, status, water_now_l, calcium_pct, calcium_kg, steri_min,
+          soyhull_pct, soyhull_kg)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?, ?, ?)`
     ).run(
       b.subId,
       found.strainId != null ? found.strainId : null,
@@ -5964,7 +6001,9 @@ function createSubstrateBatch(db, b, userId) {
       water.nowL,
       mix.calciumPct,
       mix.calciumKg,
-      _steriMinOf(b.steriMin)
+      _steriMinOf(b.steriMin),
+      mix.soyhullPct,
+      mix.soyhullKg
     );
     for (const d of mix.deltas) {
       applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, 'mix', b.subId, userId || null);
@@ -5995,6 +6034,9 @@ function mixLabel(base, recipe, mix) {
   if (anders(mix.wheatbranPct, r.branPct) || anders(mix.cornPct, r.cornPct)) {
     teile.push(Math.round(mix.hardwoodPct) + '/' + Math.round(mix.wheatbranPct));
   }
+  // Wie Gips beim Namen genannt: "50/0" sagte nicht, dass die andere Haelfte
+  // Soja ist. Was sich an den Pellets mitaendert, folgt daraus.
+  if (anders(mix.soyhullPct, r.soyhullPct)) teile.push('Soja ' + zahl(mix.soyhullPct) + ' %');
   if (anders(mix.gypsumPct, r.gypsumPct)) teile.push('Gips ' + zahl(mix.gypsumPct) + ' %');
   if (mix.calciumPct > 0) teile.push('CaCO₃ ' + zahl(mix.calciumPct) + ' %');
   if (anders(mix.rhPct, r.moisturePct)) teile.push(zahl(mix.rhPct) + ' % Feuchte');
@@ -6032,6 +6074,7 @@ function _mapSubstrateRow(r) {
       hardwoodPct: r.hardwood_pct,
       wheatbranPct: r.wheatbran_pct,
       cornPct: r.corn_pct,
+      soyhullPct: r.soyhull_pct || 0,
       gypsumPct: r.gypsum_pct,
       calciumPct: r.calcium_pct || 0,
       rhPct: r.rh_pct
@@ -6040,6 +6083,7 @@ function _mapSubstrateRow(r) {
     pelletsKg: r.pellets_kg,
     branKg: r.bran_kg,
     cornKg: r.corn_kg,
+    soyhullKg: r.soyhull_kg || 0,
     gypsumKg: r.gypsum_kg,
     calciumKg: r.calcium_kg || 0,
     steriMin: r.steri_min == null ? null : r.steri_min,
@@ -6487,6 +6531,7 @@ function createBagBatchFromSubstrate(db, b, userId) {
         hardwood: sub.hardwood_pct,
         wheatbran: sub.wheatbran_pct,
         corn: sub.corn_pct,
+        soyhull: sub.soyhull_pct || 0,
         rh: sub.rh_pct,
         gypsum: sub.gypsum_pct > 0
       },
@@ -6546,10 +6591,13 @@ function insertBatch(db, b, deltas, userId) {
     const hw0 = sub0.hardwood || 0;
     const wb0 = sub0.wheatbran || 0;
     // v67: corn meal can be part of the dry blend on a recipe that uses it,
-    // so it counts towards the 100% exactly as pellets and bran do.
+    // so it counts towards the 100% exactly as pellets and bran do. Soy hulls
+    // likewise: a 50/50 hardwood and soy hull Charge is 50 + 0 + 0 + 50.
     const cm0 = sub0.corn || 0;
-    if ((hw0 || wb0 || cm0) && Math.abs(hw0 + wb0 + cm0 - 100) > 0.01) {
-      throw new Error('Substrate composition must total 100% (got ' + (hw0 + wb0 + cm0).toFixed(1) + '%)');
+    const sh0 = sub0.soyhull || 0;
+    const summe = hw0 + wb0 + cm0 + sh0;
+    if ((hw0 || wb0 || cm0 || sh0) && Math.abs(summe - 100) > 0.01) {
+      throw new Error('Substrate composition must total 100% (got ' + summe.toFixed(1) + '%)');
     }
   }
   // Vor BEGIN geprüft: ein vertippter pH soll nichts anlegen, nicht halb.
@@ -6561,7 +6609,7 @@ function insertBatch(db, b, deltas, userId) {
     // all-in-one block batches alike); pure block batches simply pass nothing.
     const grainRh = Number.isFinite(b.grainRh) ? b.grainRh : 0;
     db.prepare(
-      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh,sub_coir,grain_kg) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO batches(batch_id,species,strain,strain_id,qty,days,sub_hardwood,sub_wheatbran,sub_rh,sub_gypsum,bag_kg,batch_type,source_id,notes,strain_text,created,due,grain_rh,sub_coir,grain_kg,sub_soyhull) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       b.batchId,
       species,
@@ -6582,7 +6630,8 @@ function insertBatch(db, b, deltas, userId) {
       b.due,
       grainRh,
       sub.coir || 0,
-      b.grainKg || 0
+      b.grainKg || 0,
+      sub.soyhull || 0
     );
     if (ph != null) db.prepare('UPDATE batches SET ph=? WHERE batch_id=?').run(ph, b.batchId);
     // v67: a Charge portioned out of a mix records which mix and how much,
@@ -8923,7 +8972,7 @@ function getOrderForShipping(db, id) {
 }
 
 // -- Inventory Delta --
-const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn', 'calcium'];
+const VALID_MATS = ['hardwood', 'wheatbran', 'gypsum', 'grain', 'coir', 'corn', 'calcium', 'soyhull'];
 
 // Apply a single inventory delta inside an existing transaction. Caller is
 // responsible for BEGIN/COMMIT. Returns the new running total for the material.
@@ -9002,6 +9051,7 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
   db.prepare(
     `UPDATE inventory SET thresh_hardwood=?,thresh_wheatbran=?,thresh_gypsum=?,thresh_grain=?,thresh_coir=?,
        thresh_corn=COALESCE(?, thresh_corn),thresh_calcium=COALESCE(?, thresh_calcium),
+       thresh_soyhull=COALESCE(?, thresh_soyhull),
        avg_hw_pct=?,avg_wb_pct=?,avg_rh_pct=?,avg_bag_kg=?,avg_grain_bag_kg=?,avg_grain_rh_pct=? WHERE id=1`
   ).run(
     (t.hardwood && t.hardwood.minKg) ?? 50,
@@ -9011,6 +9061,7 @@ function updateInventoryConfig(db, thresholds, avgComposition) {
     (t.coir && t.coir.minKg) ?? 0,
     ohneAngabe('corn'),
     ohneAngabe('calcium'),
+    ohneAngabe('soyhull'),
     a.hwPct ?? 75,
     a.wbPct ?? 25,
     a.rhPct ?? 63,
@@ -13429,6 +13480,7 @@ function mapBatchRow(r, bagRows, db, msById) {
     substrate: {
       hardwood: r.sub_hardwood,
       wheatbran: r.sub_wheatbran,
+      soyhull: r.sub_soyhull || 0,
       coir: r.sub_coir || 0,
       rh: r.sub_rh,
       gypsum: r.sub_gypsum === 1
@@ -13605,7 +13657,8 @@ function getInventory(db, logLimit) {
       grain: inv.stock_grain,
       coir: inv.stock_coir || 0,
       corn: inv.stock_corn || 0,
-      calcium: inv.stock_calcium || 0
+      calcium: inv.stock_calcium || 0,
+      soyhull: inv.stock_soyhull || 0
     },
     thresholds: {
       hardwood: { minKg: inv.thresh_hardwood },
@@ -13614,7 +13667,8 @@ function getInventory(db, logLimit) {
       grain: { minKg: inv.thresh_grain },
       coir: { minKg: inv.thresh_coir || 0 },
       corn: { minKg: inv.thresh_corn || 0 },
-      calcium: { minKg: inv.thresh_calcium || 0 }
+      calcium: { minKg: inv.thresh_calcium || 0 },
+      soyhull: { minKg: inv.thresh_soyhull || 0 }
     },
     avgComposition: {
       hwPct: inv.avg_hw_pct,
@@ -13871,7 +13925,7 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
 function insertRecipe(db, r) {
   const res = db
     .prepare(
-      'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created) VALUES(?,?,?,?,?,?,?)'
+      'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created, soyhull_pct) VALUES(?,?,?,?,?,?,?,?)'
     )
     .run(
       r.name,
@@ -13880,7 +13934,8 @@ function insertRecipe(db, r) {
       r.gypsum_pct || 0,
       r.rh_pct || 0,
       r.notes || null,
-      r.created || new Date().toISOString()
+      r.created || new Date().toISOString(),
+      r.soyhull_pct || 0
     );
   incrementDataVersion(db);
   return res.lastInsertRowid;
@@ -13888,11 +13943,12 @@ function insertRecipe(db, r) {
 
 /** Update an existing recipe */
 function updateRecipe(db, id, fields) {
-  const allowed = ['name', 'hardwood_pct', 'wheatbran_pct', 'gypsum_pct', 'rh_pct', 'notes'];
+  const allowed = ['name', 'hardwood_pct', 'wheatbran_pct', 'soyhull_pct', 'gypsum_pct', 'rh_pct', 'notes'];
   const colMap = {
     name: 'name',
     hardwood_pct: 'hardwood_pct',
     wheatbran_pct: 'wheatbran_pct',
+    soyhull_pct: 'soyhull_pct',
     gypsum_pct: 'gypsum_pct',
     rh_pct: 'rh_pct',
     notes: 'notes'
@@ -13928,6 +13984,7 @@ function getAllRecipes(db) {
       name: r.name,
       hardwoodPct: r.hardwood_pct,
       wheatbranPct: r.wheatbran_pct,
+      soyhullPct: r.soyhull_pct || 0,
       gypsumPct: r.gypsum_pct,
       rhPct: r.rh_pct,
       notes: r.notes,
@@ -13944,11 +14001,55 @@ function getRecipeById(db, id) {
     name: r.name,
     hardwoodPct: r.hardwood_pct,
     wheatbranPct: r.wheatbran_pct,
+    soyhullPct: r.soyhull_pct || 0,
     gypsumPct: r.gypsum_pct,
     rhPct: r.rh_pct,
     notes: r.notes,
     created: r.created
   };
+}
+
+// Eine neue Mischung, so wie sie im Ansatz-Formular steht. Bisher ging das nur
+// über das MCP-Werkzeug; wer mit Sojaschalen mischen will, braucht die Mischung
+// aber dort, wo er mischt. Kleie und Sojaschalen sind Teil der Trockenmischung,
+// die Pellets der Rest; Gips kommt obendrauf. Calciumcarbonat gehört nicht dazu:
+// gespeicherte Mischungen kennen es nicht, es kommt je Ansatz dazu.
+//
+// Dieselben Grenzen wie das Formular (validateMixOverride im Server), dazu die
+// Soll-Feuchte als Pflicht: ohne sie lässt sich mit der Mischung nicht rechnen.
+function createMixRecipe(db, d) {
+  const o = d || {};
+  const name = String(o.name == null ? '' : o.name)
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!name) throw new Error('Mischung: Bitte einen Namen eingeben.');
+  if (name.length > 60) throw new Error('Mischung: Der Name hat höchstens 60 Zeichen.');
+  const anteil = (v, feld, lo, hi) => {
+    const n = v == null || v === '' ? 0 : Number(v);
+    if (!Number.isFinite(n) || n < lo || n > hi) {
+      throw new Error('Mischung: ' + feld + ' liegt zwischen ' + lo + ' und ' + hi + ' %.');
+    }
+    return n;
+  };
+  const bran = anteil(o.wheatbranPct, 'Weizenkleie', 0, 95);
+  const soy = anteil(o.soyhullPct, 'Sojaschalen', 0, 95);
+  const gyp = anteil(o.gypsumPct, 'Gips', 0, 20);
+  const rh = anteil(o.rhPct, 'Soll-Feuchte', 20, 90);
+  if (bran + soy >= 100) throw new Error('Mischung: Weizenkleie und Sojaschalen lassen keinen Platz für Pellets.');
+  // UNIQUE in der Tabelle unterscheidet Groß und Klein; zwei Mischungen, die
+  // sich nur darin unterscheiden, wären in der Auswahl nicht auseinanderzuhalten.
+  if (db.prepare('SELECT 1 FROM recipes WHERE name = ? COLLATE NOCASE').get(name)) {
+    throw new Error('Mischung: „' + name + '“ gibt es schon.');
+  }
+  const id = insertRecipe(db, {
+    name,
+    hardwood_pct: 100 - bran - soy,
+    wheatbran_pct: bran,
+    soyhull_pct: soy,
+    gypsum_pct: gyp,
+    rh_pct: rh
+  });
+  return getRecipeById(db, Number(id));
 }
 
 // ── Traceability ─────────────────────────────────────────
@@ -14396,7 +14497,9 @@ const SAFE_ERROR_PREFIXES = [
   // 6 % Zielfeuchte unter der Restfeuchte der Sackware liegen.
   'Zielfeuchte ',
   'Zielmenge muss',
-  'Kleie + Maismehl ergeben ',
+  'Kleie, Maismehl und Sojaschalen ergeben ',
+  // Eine neue Mischung aus dem Ansatz-Formular (createMixRecipe).
+  'Mischung: ',
   'Restfeuchte zu hoch',
   // Sterilisierzeit am Ansatz, pH an der Charge: beides eingetippt.
   'Sterilisierzeit ',
@@ -16895,7 +16998,8 @@ function computeProductionDemand(db) {
     gypsum: inv.stock_gypsum || 0,
     coir: inv.stock_coir || 0,
     corn: inv.stock_corn || 0,
-    calcium: inv.stock_calcium || 0
+    calcium: inv.stock_calcium || 0,
+    soyhull: inv.stock_soyhull || 0
   };
 
   return rows
@@ -16965,6 +17069,7 @@ function blockLineage(db, batchId) {
         hardwoodPct: s.hardwood_pct || 0,
         wheatbranPct: s.wheatbran_pct || 0,
         cornPct: s.corn_pct || 0,
+        soyhullPct: s.soyhull_pct || 0,
         gypsumPct: s.gypsum_pct || 0,
         targetRh: s.rh_pct || s.moisture_pct || null,
         actualRh: s.actual_rh_pct == null ? null : s.actual_rh_pct
@@ -16978,6 +17083,7 @@ function blockLineage(db, batchId) {
       hardwoodPct: b.sub_hardwood || 0,
       wheatbranPct: b.sub_wheatbran || 0,
       cornPct: b.sub_corn || 0,
+      soyhullPct: b.sub_soyhull || 0,
       gypsumPct: 0,
       targetRh: b.sub_rh,
       actualRh: null
@@ -17534,6 +17640,7 @@ module.exports = {
   deleteRecipe,
   getAllRecipes,
   getRecipeById,
+  createMixRecipe,
   traceLineageBack,
   traceLineageForward,
   getProductionPipeline,

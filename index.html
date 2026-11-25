@@ -3528,6 +3528,18 @@
                       oninput="sbBlendEdited('wb')"
                     />
                   </div>
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.soyhull">Sojaschalen</span> %</label>
+                    <input
+                      type="number"
+                      id="sb-soy"
+                      min="0"
+                      max="95"
+                      step="1"
+                      inputmode="decimal"
+                      oninput="sbBlendEdited('soy')"
+                    />
+                  </div>
                   <div id="sb-corn-wrap" style="display: none">
                     <label class="fs-xs"><span data-i18n="sub.corn">Maismehl</span> %</label>
                     <input
@@ -7043,6 +7055,7 @@
                     <label data-i18n="inv.material">Material</label>
                     <select id="del-mat">
                       <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
+                      <option value="soyhull" data-i18n="inv.soyhull">Soy hulls</option>
                       <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                       <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
                       <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>
@@ -7094,6 +7107,7 @@
                     <label data-i18n="inv.material">Material</label>
                     <select id="adj-mat">
                       <option value="hardwood" data-i18n="inv.hardwood">Hardwood pellets</option>
+                      <option value="soyhull" data-i18n="inv.soyhull">Soy hulls</option>
                       <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                       <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
                       <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>
@@ -7163,6 +7177,7 @@
                 <select class="head-select" id="inv-log-filter">
                   <option value="all" data-i18n="inv.allMaterials">All materials</option>
                   <option value="hardwood" data-i18n="inv.hardwood">Hardwood</option>
+                  <option value="soyhull" data-i18n="inv.soyhull">Soy hulls</option>
                   <option value="wheatbran" data-i18n="inv.wheatBran">Wheat bran</option>
                   <option value="gypsum" data-i18n="inv.gypsum">Gypsum</option>
                   <option value="calcium" data-i18n="inv.calcium">Calcium carbonate</option>

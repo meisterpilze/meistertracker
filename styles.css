@@ -10518,6 +10518,35 @@ button.wk-an-zeile:active {
 .wkm-blend label {
   color: var(--c-text-sec);
 }
+/* Rückweg zum Rezept und "Als Mischung speichern" stehen zusammen rechts. */
+.wkm-blend-acts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* Der Name einer neuen Mischung, direkt unter den Zahlen, um die es geht. */
+.wkm-sichern {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wkm-sichern label {
+  font-size: max(0.71875rem, var(--fs-min));
+  color: var(--c-text-sec);
+  font-weight: 600;
+  margin: 0;
+}
+.wkm-sichern-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .wkf-chipsrow {
   display: flex;
   gap: 6px;
