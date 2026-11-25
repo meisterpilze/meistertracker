@@ -19093,8 +19093,8 @@ function _nurSchwarzWeiss(ctx, W, H) {
 
 // Das Etikett eines Fachs, hochkant: man dreht es um 90° und klebt es stehend
 // an den Regalpfosten. Gezeichnet wird es stehend, auf die ganze Rolle
-// (32 × 57 mm, nicht labelDims: das sind 50 × 30 mm, und darauf säße es mit
-// breitem weißem Rand außermittig), von oben nach unten: das schwarze Band mit
+// (32 × 57 mm, fest: es ist für genau diese Rolle gezeichnet, auch wenn
+// labelDims anders eingestellt ist), von oben nach unten: das schwarze Band mit
 // Raum und Regal, darunter die Nummer des Fachs so groß es geht (ohne das
 // Wort "Fach"), ganz unten der QR-Code. Dann wird es auf das liegende Etikett
 // gedreht: was stehend oben ist, liegt links. Aus dem Drucker kommt es also
