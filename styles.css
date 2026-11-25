@@ -1472,7 +1472,7 @@ body:has(.modal-bg.open) .cam-fab {
   /* safe: wird es zu hoch, beginnt es oben, statt oben abgeschnitten zu werden */
   justify-content: safe center;
   padding: 16px;
-  padding-top: calc(64px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   /* Kamera, Kacheln und Knöpfe waren auf einem kleinen Telefon höher als der
      Schirm, und der Rest lag unerreichbar unter dem Rand. */
   overflow-y: auto;
@@ -1481,31 +1481,8 @@ body:has(.modal-bg.open) .cam-fab {
 @media (pointer: coarse) {
   .cam-scan-wrap {
     justify-content: flex-start;
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
   }
-}
-/* Schließen, oben rechts über allem, ob die Seite darunter rollt oder nicht. */
-.cam-close {
-  position: absolute;
-  top: calc(12px + env(safe-area-inset-top, 0px));
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: max(44px, var(--tap-min));
-  padding: 0 16px;
-  border: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
-  font-family: inherit;
-  font-size: max(0.875rem, var(--fs-min));
-  font-weight: 600;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.cam-close:active {
-  background: rgba(255, 255, 255, 0.32);
 }
 
 /* ═══ CAMERA SCAN HUD (continuous scanning overlay) ══════════ */

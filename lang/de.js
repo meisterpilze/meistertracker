@@ -2414,7 +2414,6 @@ window.LANG['de'] = {
   'aria.torchToggle': 'Taschenlampe ein/aus',
   'aria.clearLastScan': 'Letzten Scan zur\u00fccknehmen',
   'aria.clearScan': 'Scan zur\u00fccksetzen (Aktion l\u00f6schen)',
-  'aria.doneScanning': 'Scannen fertig',
   'aria.toggleSidebar': 'Seitenleiste umschalten',
   'aria.mainNav': 'Hauptnavigation',
   'aria.adminNav': 'Admin-Navigation',

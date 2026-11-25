@@ -2399,7 +2399,6 @@ window.LANG['en'] = {
   'aria.torchToggle': 'Toggle flashlight',
   'aria.clearLastScan': 'Undo last scan',
   'aria.clearScan': 'Clear scan (reset action)',
-  'aria.doneScanning': 'Done scanning',
   'aria.toggleSidebar': 'Toggle sidebar',
   'aria.mainNav': 'Main navigation',
   'aria.adminNav': 'Admin navigation',
