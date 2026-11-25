@@ -13206,13 +13206,23 @@ function updateMushroomStrain(db, id, data, jetzt = new Date()) {
   ];
   if (recKeys.some((k) => k in (data || {}))) Object.assign(fields, _strainRecipeFields(data));
   Object.assign(fields, _strainMinFields(data || {}), _strainPlanFields(data || {}));
-  // A limit that changes restarts the grace period before anything is booked
-  // out on its own; one sent unchanged (the editor sends the whole form) does not.
+  // limits_set is the start the Montags-Check counts from (brettFristen: nobody
+  // is asked before the first check after it). It moves only when a time in
+  // incubation or grain spawn is newly set or made shorter — the edits that can
+  // put bags over their time at once. A longer time, a removed one, or a change
+  // to the fruiting tent's numbers (time, minimum, maximum) leaves it, so editing
+  // a Sorte never takes its open "Noch da?" questions out of the current check.
+  // One sent unchanged (the editor sends the whole form) changes nothing.
   const limits = _strainLimitFields(data || {});
   if (Object.keys(limits).length) {
     const before = db.prepare('SELECT * FROM mushroom_strains WHERE id=?').get(id);
-    if (before && Object.entries(limits).some(([col, v]) => (before[col] == null ? null : before[col]) !== v)) {
-      Object.assign(fields, limits, { limits_set: now });
+    const vorher = (col) => (before && before[col] != null ? before[col] : null);
+    if (before && Object.entries(limits).some(([col, v]) => vorher(col) !== v)) {
+      Object.assign(fields, limits);
+      const kuerzer = ['inc_max_days', 'grain_max_days'].some(
+        (col) => col in limits && limits[col] != null && (vorher(col) == null || limits[col] < vorher(col))
+      );
+      if (kuerzer) fields.limits_set = now;
     }
   }
   if (!Object.keys(fields).length) return;

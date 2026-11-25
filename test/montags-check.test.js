@@ -141,6 +141,21 @@ describe('Montags-Check: der Server', () => {
     assert.deepEqual(db.listAutoBookouts(d), []);
   });
 
+  it('wer die Zahlen des Fruchtzelts ändert, nimmt dem Check keine Frage weg', () => {
+    // Montag, 9 Uhr, während des Checks: jemand stellt das Minimum im Fruchtzelt
+    // höher. Der Beutel über seiner Zeit bleibt in diesem Check, wann er
+    // ausgebucht wird, bleibt auch.
+    const bags = charge('TP-050126-01', 1, lokal(2026, 0, 5));
+    stelle(bags, 'TP-050126-01', 'INC_R1', lokal(2026, 0, 5));
+    const vorher = frist(bags[0]);
+    db.updateMushroomStrain(d, sid, { tentMin: 3, tentMax: 9, tentMaxDays: 25 }, new Date(lokal(2026, 2, 2, 9)));
+    assert.deepEqual([frist(bags[0]).askAt, frist(bags[0]).outAt], [vorher.askAt, vorher.outAt]);
+    // Eine längere Zeit in der Inkubation: er ist immer noch drüber und bleibt im
+    // Check von heute; nur der Tag des Ausbuchens folgt der längeren Zeit.
+    db.updateMushroomStrain(d, sid, { incMaxDays: 40 }, new Date(lokal(2026, 2, 2, 9, 5)));
+    assert.ok(frist(bags[0]).askAt <= lokal(2026, 2, 2, 9), 'noch im Check von heute');
+  });
+
   it('die Zeilen tragen den Montag ihres Checks und das Ende der Woche', () => {
     const bags = charge('TP-050126-01', 1, lokal(2026, 0, 5));
     stelle(bags, 'TP-050126-01', 'TENT1', lokal(2026, 1, 1));
