@@ -134,17 +134,21 @@ describe('and the ones it does not', () => {
 describe('a bitmap field', () => {
   // The Regal label is drawn in the browser and sent as one ^GFA image, so the
   // print is exactly the preview. Only the ASCII hex form passes.
-  const W = 400;
-  const H = 240;
+  const W = 456;
+  const H = 256;
   const total = (W / 8) * H;
-  const label = '^XA^PW400^LL240^FO0,0^GFA,' + total + ',' + total + ',50,' + '0F'.repeat(total) + '^FS^PQ1^XZ';
+  const label = '^XA^PW456^LL256^FO0,0^GFA,' + total + ',' + total + ',57,' + '0F'.repeat(total) + '^FS^PQ1^XZ';
 
-  it('accepts a whole 50 x 30 mm label as hex', () => {
+  it('accepts a whole 57 x 32 mm label as hex', () => {
     assert.equal(checkZpl(label), null);
   });
 
   it('accepts several in one job', () => {
     assert.equal(checkZpl(label + '\n' + label), null);
+  });
+
+  it('accepts sixty in one job, as "print all" on the shelf page sends them', () => {
+    assert.equal(checkZpl(Array(60).fill(label).join('\n')), null);
   });
 
   it('refuses the binary form, which could carry a bare ^ or ~', () => {

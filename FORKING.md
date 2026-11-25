@@ -40,13 +40,13 @@ so existing clients re-fetch the shell.
 
 The print pipeline is built tightly around one specific setup:
 
-> **ZPL II · 203 dpi · 50×30 mm landscape · Zebra GK420d (or compatible)**
+> **ZPL II · 203 dpi · 57×32 mm landscape · Zebra GK420d (or compatible)**
 
 Everything else needs varying amounts of work.
 
 #### What works out of the box
 
-Any ZPL-II thermal printer at 203 dpi with 50×30 mm label stock.
+Any ZPL-II thermal printer at 203 dpi with 57×32 mm label stock.
 Verified models include the Zebra **GK420d / GK420t / GX420d / ZD220 /
 ZD230 / ZD420 / ZD500 / ZD620**. ZPL-clone printers (Argox CP-2140,
 Bixolon SLP-TX400 in ZPL mode) at the same dpi/label size also work.
@@ -56,36 +56,39 @@ print bridge can find it.
 
 #### What "slightly different" labels can do
 
-The env vars `LABEL_WIDTH_DOTS` and `LABEL_HEIGHT_DOTS` only change the
-`^PW` / `^LL` headers the printer reads — they do **not** change the
-field layout inside the label. So they're useful when:
+The env vars `LABEL_WIDTH_DOTS` and `LABEL_HEIGHT_DOTS` (default 456 × 256
+dots) set the `^PW` / `^LL` headers the printer reads, and the bag and
+culture labels and the shelf labels are laid out from them: barcode, QR code
+and text are placed within fixed margins, at fixed font sizes. So they're
+useful when:
 
-- ✅ Your label feeder reports slightly different dots (e.g. 408×244 vs. 400×240)
-- ✅ You print the same 50×30mm content on slightly larger stock and accept blank margin
+- ✅ Your label feeder reports slightly different dots (e.g. 448×248 vs. 456×256)
+- ✅ Your stock is a little larger or smaller, e.g. 50×30 mm (400 × 240); the
+  fonts stay the same size, so text wraps or gets shortened sooner
+- ⚠️ `LABEL_RUNTER` in `app.js` and `mcp-server.js` moves every field 5 dots
+  down, measured on one GK420d; check a print and set it to 0 if yours sits
+  where it should
 
 They're **not** enough when:
 
-- ❌ Your labels are a different physical size (e.g. 40×20mm or 75×50mm) — text and barcodes will overflow or sit in the corner
+- ❌ Your labels are a very different physical size (e.g. 40×20mm or 75×50mm) — text and barcodes are sized for this label and will overflow or look lost
 - ❌ Your printer is 300 dpi — every font and coordinate would need to double
 - ❌ Your labels are portrait-oriented
 
-#### What needs a layout refactor (~200 LOC)
+#### What a very different label size needs
 
-The 50×30mm canvas is the single source of truth. The layout assumes
-`width=400` everywhere — the comment at `app.js:9493` says so explicitly.
-Hard-coded coordinates live in:
+The coordinates come from `labelDims` (`LABEL_WIDTH_DOTS` / `LABEL_HEIGHT_DOTS`),
+but font sizes, the 125-dot QR code, the barcode heights (90 down to 60) and
+the margins (`LABEL_RAND`) are fixed numbers, sized for 57×32 mm:
 
 | File | Where | What |
 |---|---|---|
-| `app.js` | `bagLabelItems()` ~9673 | Bag label fields (y=155/185/215, blockW=400, fontH=28/24/24) |
-| `app.js` | `labLabelItems()` ~9743 | Lab/culture label fields (same scheme) |
-| `app.js` | `bcParams()` ~9482 | Barcode width + centering, hardcoded `> 400` and `(400 - w) / 2` |
-| `app.js` | `buildPreviewCell()` UI preview | `viewBox="0 0 400 240"` — the in-app preview is also pinned to 400×240 |
-| `mcp-server.js` | `itemsToZPL()` and `bagLabelItems()` ~121 | Mirror of the client logic for MCP-driven printing |
+| `app.js` | `bagLabelItems()` / `labLabelItems()` | Font sizes of the label lines |
+| `app.js` | `_labelBarcode()` / `_labelQr()` / `LABEL_RAND` | Barcode heights, QR size, margins |
+| `app.js` | `shelfLabelCanvas()` | Shelf labels, drawn as a bitmap inside `SHELF_RAND` |
+| `mcp-server.js` | `itemsToZPL()` and `bagLabelItems()` | Mirror of the client logic for MCP-driven printing (`test/etiketten-zeilen.test.js` keeps the shared block identical) |
 
-Forking for a different label size means editing all five places (or
-introducing a label-template abstraction) and updating the preview
-viewBox. Not impossible, but more than a config tweak.
+For a much smaller or larger label, scale those along with the env vars.
 
 #### What needs a new print backend (much bigger scope)
 
@@ -156,7 +159,7 @@ names ARE translatable; the underlying schema is not.
 | `PORT` | `3000` | env |
 | `DB_FILE` | `meistertracker.db` next to `server.js` | env |
 | `PRINTER_NAME` | `ZDesigner GK420d` | env |
-| `LABEL_WIDTH_DOTS` / `LABEL_HEIGHT_DOTS` | `400` / `240` | env |
+| `LABEL_WIDTH_DOTS` / `LABEL_HEIGHT_DOTS` | `456` / `256` | env |
 | `PM2_PROCESS_NAME` | `meisterpilze` | env (also `update_server.sh` and `START.bat`) |
 | `BACKUP_FILENAME_PREFIX` | `meisterpilze_backup_` | env — pick a fork-specific value **before** the first auto-backup, otherwise existing files won't match the rotation regex |
 | `PUBLIC_HOSTNAME` | derived from `Host:` header | env — recommended in production behind a proxy |
