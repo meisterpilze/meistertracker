@@ -11693,7 +11693,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
       if (uebrig.length) {
         log('error', 'Photo purge left files on disk', {
           photoId: fotoId,
-          files: uebrig.map((abs) => path.relative(path.join(DIR, 'data'), abs))
+          // Mit "/", wie der Pfad in der Datenbank stand, auch auf Windows.
+          files: uebrig.map((abs) => path.relative(path.join(DIR, 'data'), abs).split(path.sep).join('/'))
         });
       }
       if (pfade) broadcastSSE(res);

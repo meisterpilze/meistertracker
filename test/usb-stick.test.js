@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const usbStick = require('../scripts/usb-stick.js');
 const backupCrypto = require('../scripts/backup-crypto.js');
 const { parseRemoved, MIN_SEEN_DAYS } = require('../scripts/photo-mirror.js');
+const { sperreLesen, freigeben, ordnerLink } = require('./helpers/zugriff.js');
 
 backupCrypto.KDF.N = 1024;
 
@@ -358,7 +359,7 @@ describe('links on a stick', () => {
     const outside = tmp('outside');
     put(outside, 'm.enc', 'not the backup’s');
     // A junction on an NTFS stick, pointing at a folder on the PC.
-    fs.symlinkSync(outside, path.join(stick.dir, usbStick.PHOTO_DIR, 'ext'), 'dir');
+    ordnerLink(outside, path.join(stick.dir, usbStick.PHOTO_DIR, 'ext'));
     put(photos, '2026/10/x/b.jpg', crypto.randomBytes(40));
     const later = new Date(Date.now() + 400 * 86400000);
     await assert.rejects(usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null, now: later }), {
@@ -371,7 +372,7 @@ describe('links on a stick', () => {
     const { photos, stick } = await stickWithPhoto();
     const outside = tmp('elsewhere');
     fs.rmSync(path.join(stick.dir, usbStick.PHOTO_DIR), { recursive: true });
-    fs.symlinkSync(outside, path.join(stick.dir, usbStick.PHOTO_DIR), 'dir');
+    ordnerLink(outside, path.join(stick.dir, usbStick.PHOTO_DIR));
     await assert.rejects(usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null }), { code: 'DAMAGED' });
     assert.deepEqual(fs.readdirSync(outside), [], 'no photo written through it');
   });
@@ -387,11 +388,11 @@ describe('a folder on the stick that cannot be read', () => {
     const folder = path.join(stick.dir, usbStick.PHOTO_DIR, '2026', '10');
     const lastFile = path.join(stick.dir, usbStick.LAST_FILE);
     const before = fs.readFileSync(lastFile, 'utf8');
-    fs.chmodSync(folder, 0o000);
+    sperreLesen(folder);
     try {
       await assert.rejects(usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null }), { code: 'DAMAGED' });
     } finally {
-      fs.chmodSync(folder, 0o700);
+      freigeben(folder);
     }
     assert.equal(fs.readFileSync(lastFile, 'utf8'), before, 'not even the note of the run');
   });
@@ -483,11 +484,11 @@ describe('photos on the stick that cannot be read during the key check', () => {
     const { photos, stick } = await stickWithPhotos();
     const dir = path.join(stick.dir, usbStick.PHOTO_DIR, '2026', '10', 'x');
     const files = fs.readdirSync(dir).map((n) => path.join(dir, n));
-    for (const f of files) fs.chmodSync(f, 0o000);
+    for (const f of files) sperreLesen(f);
     try {
       await assert.rejects(usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null }), { code: 'DAMAGED' });
     } finally {
-      for (const f of files) fs.chmodSync(f, 0o600);
+      for (const f of files) freigeben(f);
     }
   });
 });

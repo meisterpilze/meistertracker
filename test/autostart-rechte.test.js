@@ -251,8 +251,10 @@ describe('on Windows, for real', { skip: isWin ? false : 'Windows-only (tokens, 
     // survives DISABLE_MAX_PRIVILEGE is a single privilege, where an ordinary
     // window has five — so a match proves the restricted token was used. The
     // pause proves a closed stdin does not leave the boot run hanging.
+    // whoami by its full path: a test run from Git Bash has that shell's own
+    // whoami first on PATH, which knows no /priv and prints nothing to match.
     const r = powershell(['-File', HELPER, '-Force'], {
-      UNELEVATED_ARGS: '/d /c "pause >nul & cmd /d /c whoami /priv /fo csv & exit 7"'
+      UNELEVATED_ARGS: '/d /c "pause >nul & cmd /d /c %SystemRoot%\\System32\\whoami.exe /priv /fo csv & exit 7"'
     });
     assert.equal(r.status, 7, 'the exit code did not come back: ' + r.stderr);
     const privileges = r.stdout.match(/^"Se\w+Privilege"/gm) || [];
