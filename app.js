@@ -908,7 +908,11 @@ function notifZeileHtml(it) {
   const ts = it.created ? new Date(it.created).getTime() : Date.now();
   const unreadCls = it.read ? '' : 'unread';
   return (
-    '<div class="notif-row">' +
+    // Eine Bestellung, die nicht rausgehen kann, ist rot, auch allein und
+    // auch aufgeklappt in ihrer Gruppe: auf sie wartet ein Kunde.
+    '<div class="notif-row' +
+    (it.type === 'sale_uncovered' ? ' notif-rot' : '') +
+    '">' +
     '<button type="button" class="notif-item ' +
     unreadCls +
     '" data-nid="' +

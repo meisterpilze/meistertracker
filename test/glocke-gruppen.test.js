@@ -131,6 +131,28 @@ describe('Glocke in Gruppen', () => {
     }
   });
 
+  it('eine offene Bestellung ist rot, auch allein und aufgeklappt in der Gruppe', () => {
+    const w = werkbank();
+    const allein = w.notifEintraege([meldung('sale_uncovered', 'Bestellt, aber nicht da: Testpilz')]);
+    assert.ok(allein[0].it, 'allein bleibt sie eine Zeile');
+    const { notifZeileHtml } = new Function(
+      `
+      const esc = (s) => String(s);
+      const t = (k) => k;
+      const formatRelativeTime = () => '';
+      ${hebeFunktion('notifZeileHtml', APP)}
+      return { notifZeileHtml };
+      `
+    )();
+    assert.match(notifZeileHtml(allein[0].it), /class="notif-row notif-rot"/);
+    assert.match(notifZeileHtml(meldung('lab_low', 'Nachproduzieren: Testpilz')), /class="notif-row"/);
+
+    w._notifOffen.add('sale_uncovered');
+    const items = [1, 2].map(() => meldung('sale_uncovered', 'Bestellt, aber nicht da: Testpilz'));
+    const html = w.notifGruppeHtml({ type: 'sale_uncovered', items });
+    assert.equal((html.match(/class="notif-row notif-rot"/g) || []).length, 2);
+  });
+
   it('die Glocke holt genug Meldungen fuer volle Gruppen', () => {
     const src = quelle('server.js');
     assert.match(src, /listNotifications\(database, req\.authUser\.user_id, 100\)/);
