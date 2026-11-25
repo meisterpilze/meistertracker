@@ -13,6 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const usbStick = require('../scripts/usb-stick.js');
 const backupCrypto = require('../scripts/backup-crypto.js');
 const restore = require('../scripts/usb-restore.js');
+const { sperreLesen, freigeben, ordnerLink } = require('./helpers/zugriff.js');
 
 // scrypt at the format's real cost is a second per key; see usb-stick.test.js.
 backupCrypto.KDF.N = 1024;
@@ -240,7 +241,7 @@ describe('usb-restore', () => {
     const stick = await usbStick.initStick(r2, key);
     await usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null });
     const outside = tmp('outside');
-    fs.symlinkSync(outside, path.join(stick.dir, usbStick.PHOTO_DIR, 'ext'), 'dir');
+    ordnerLink(outside, path.join(stick.dir, usbStick.PHOTO_DIR, 'ext'));
     const r = await restore.verify({ root: r2, key });
     assert.equal(r.photos.ok, 3);
     assert.deepEqual(r.photos.bad, [{ rel: 'ext', error: 'LINK' }]);
@@ -251,7 +252,7 @@ describe('usb-restore', () => {
     const stick = await usbStick.initStick(r2, key);
     await usbStick.writeBackup({ stick, photoDir: photos, dbSnapshot: null });
     const folder = path.join(stick.dir, usbStick.PHOTO_DIR, '2026', '10');
-    fs.chmodSync(folder, 0o000);
+    sperreLesen(folder);
     try {
       const r = await restore.verify({ root: r2, key });
       assert.equal(r.photos.ok, 1, 'only the photo outside that folder');
@@ -259,7 +260,7 @@ describe('usb-restore', () => {
       const back = await restore.restorePhotos({ root: r2, key, target: tmp('back') });
       assert.deepEqual(back.bad, [{ rel: '2026/10', error: 'UNREADABLE' }]);
     } finally {
-      fs.chmodSync(folder, 0o700);
+      freigeben(folder);
     }
   });
 

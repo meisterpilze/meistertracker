@@ -134,18 +134,32 @@ function connectTls(port) {
 function untilClosed(s, from = Date.now(), openMs = OPEN_MS) {
   return new Promise((resolve, reject) => {
     let text = '';
+    let reset = false;
     s.setEncoding('latin1');
     s.on('data', (d) => (text += d));
-    s.on('error', () => {});
+    s.on('error', (e) => (reset = reset || e.code === 'ECONNRESET'));
     const open = setTimeout(() => {
       s.destroy();
       reject(new Error('still open after ' + openMs + ' ms'));
     }, openMs);
     s.on('close', () => {
       clearTimeout(open);
-      resolve({ ms: Date.now() - from, text });
+      resolve({ ms: Date.now() - from, text, reset });
     });
   });
+}
+
+// The 408 the server sends before it closes, after `before`. On Windows a close
+// that finds the client's next bytes still unread goes out as a reset, and the
+// reset throws away, on the client, whatever it had not read yet: the 408 left
+// but cannot be seen. That nothing else came still can, and the callers check
+// when the connection was cut off.
+function assertTimedOut({ text, reset }, before = /^/) {
+  const head = text.match(before);
+  assert.ok(head && head.index === 0, 'not what came first:\n' + text);
+  const rest = text.slice(head[0].length);
+  if (process.platform === 'win32' && reset && rest === '') return;
+  assert.match(rest, /^HTTP\/1\.1 408 /);
 }
 
 // Writes text one character at a time, every `everyMs`, until done or closed.
@@ -197,9 +211,9 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     const closed = untilClosed(s);
     // One byte every 100 ms: the connection never goes quiet.
     trickle(s, SLOW_REQUEST, 100);
-    const { ms, text } = await closed;
-    assert.match(text, /^HTTP\/1\.1 408 /);
-    assert.ok(ms < LIMITS.headersMs + SLACK_MS, 'closed after ' + ms + ' ms');
+    const result = await closed;
+    assertTimedOut(result);
+    assert.ok(result.ms < LIMITS.headersMs + SLACK_MS, 'closed after ' + result.ms + ' ms');
   });
 
   it('starts the header deadline again for the next request on a kept-alive connection', async () => {
@@ -207,9 +221,11 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     const closed = untilClosed(s);
     s.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
     await once(s, 'data');
+    const second = Date.now();
     trickle(s, SLOW_REQUEST, 100);
-    const { text } = await closed;
-    assert.match(text, /^HTTP\/1\.1 200 OK\r\n[\s\S]*\r\n\r\nokHTTP\/1\.1 408 /);
+    assertTimedOut(await closed, /^HTTP\/1\.1 200 OK\r\n[\s\S]*?\r\n\r\nok/);
+    const ms = Date.now() - second;
+    assert.ok(ms < LIMITS.headersMs + SLACK_MS, 'the second request was cut off after ' + ms + ' ms');
   });
 
   it('cuts off a body still arriving at requestMs', async () => {
@@ -217,8 +233,9 @@ describe('the HTTPS port', { concurrency: true, timeout: 30000 }, () => {
     const closed = untilClosed(s);
     s.write('POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n');
     trickle(s, 'x'.repeat(1000), 100);
-    const { ms, text } = await closed;
-    assert.match(text, /^HTTP\/1\.1 408 /);
+    const result = await closed;
+    assertTimedOut(result);
+    const { ms } = result;
     assert.ok(ms >= LIMITS.requestMs - 50, 'closed after ' + ms + ' ms, before requestMs');
     assert.ok(ms < LIMITS.requestMs + SLACK_MS, 'closed after ' + ms + ' ms');
   });

@@ -16,6 +16,7 @@ const { createUsbBackup } = require('../scripts/usb-backup.js');
 const usbStick = require('../scripts/usb-stick.js');
 const backupCrypto = require('../scripts/backup-crypto.js');
 const atomicFile = require('../scripts/atomic-file.js');
+const { sperreLesen, sperreSchreiben, freigeben } = require('./helpers/zugriff.js');
 
 // scrypt at the format's real cost is a second per key; see usb-stick.test.js.
 backupCrypto.KDF.N = 1024;
@@ -166,14 +167,14 @@ describe('USB backup service', () => {
     const locked = put(f.photoDir, '2026/10/exp-1/locked.jpg', crypto.randomBytes(50));
     put(f.photoDir, '2026/11/exp-2/c.jpg', crypto.randomBytes(50));
     const folder = path.join(f.photoDir, '2026', '11');
-    fs.chmodSync(locked, 0o000);
-    fs.chmodSync(folder, 0o000);
+    sperreLesen(locked);
+    sperreLesen(folder);
     try {
       await svc.tick();
       await svc._running();
     } finally {
-      fs.chmodSync(locked, 0o600);
-      fs.chmodSync(folder, 0o700);
+      freigeben(locked);
+      freigeben(folder);
     }
     let s = svc.status();
     assert.equal(s.run.state, 'done', 'what could be read is on the stick');
@@ -485,11 +486,11 @@ describe('USB backup service', () => {
     f.plugged.add(a);
     f.plugged.add(b);
     // The key is saved, then the stick refuses to be written: write-protected.
-    fs.chmodSync(a, 0o500);
+    sperreSchreiben(a);
     try {
       await assert.rejects(svc.setup({ root: a }), (e) => ['EACCES', 'EPERM', 'EROFS'].includes(e.code));
     } finally {
-      fs.chmodSync(a, 0o700);
+      freigeben(a);
     }
     const s = svc.status();
     assert.equal(s.configured, true);
