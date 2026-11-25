@@ -1697,6 +1697,25 @@
       style="background: rgba(0, 0, 0, 0.85)"
       hidden
     >
+      <!-- Schließen: immer oben in der Ecke. Der grüne Haken unten schließt
+           auch, aber unter Kamera und Kacheln lag er auf manchem Telefon
+           unter dem Bildrand, und das X daneben setzt nur den Scan zurück. -->
+      <button type="button" id="cam-close" class="cam-close">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+        <span data-i18n="common.close">Schließen</span>
+      </button>
       <div class="cam-scan-wrap">
         <div
           id="cam-reader"
@@ -1929,6 +1948,8 @@
               data-i18n-aria-label="aria.clearScan"
               aria-label="Scan zur\u00fccksetzen"
             >
+              <!-- Ein Radiergummi, kein X: ein X liest man als Schließen, und
+                   dieser Knopf löscht nur den Vorgang. -->
               <svg
                 width="20"
                 height="20"
@@ -1939,9 +1960,9 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" />
-                <line x1="9" y1="9" x2="15" y2="15" />
+                <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                <path d="M22 21H7" />
+                <path d="m5 11 9 9" />
               </svg>
             </button>
             <button
