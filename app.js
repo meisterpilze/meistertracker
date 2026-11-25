@@ -11787,20 +11787,32 @@ function openZoneCheck(zoneId) {
   document.getElementById('m-zonecheck').classList.add('open');
 }
 // Lab stocktake. Cultures have no location, so "expected" means every culture
-// the records still say you hold (aktiv / eingelagert). Scan what is really on
-// the shelf; whatever is left over is gone and gets marked aufgebraucht.
+// the records still say you hold. Scan what is really on the shelf; whatever is
+// left over is gone and gets marked aufgebraucht.
 //
 // Only the containers ticked at the top count. Scanning the Petri shelf and the
 // FK-Gläser said nothing about the Slants or the Spritzen, and with every kind
 // in the list "nicht gefunden → aufgebraucht" wrote all of those off as well.
 // Petri and FK-Glas are ticked to begin with; the choice is remembered.
 //
-// What has been scanned is kept on the phone for a day: a stocktake of a whole
-// shelf survives a locked screen or a reload of the app.
+// Eingelagert ist ein eigener Knopf, zu Beginn aus: was eingelagert ist, steht
+// meist woanders (Kühlschrank), und wer das Regal durchscannt, schrieb es sonst
+// mit ab.
+//
+// What has been scanned is kept on the phone for a day from the first tick: a
+// stocktake of a whole shelf survives a locked screen or a reload of the app.
+// Ein Blick aufs Blatt verlängert das nicht. Geht es weiter, sagt die Zählzeile,
+// seit wann.
 const LC_KINDS = ['PD', 'LC', 'MC', 'SY', 'G2G', 'GS', 'DU'];
 const LC_KEY = 'mp-lab-check';
 const LC_FRIST = 24 * 3600 * 1000;
 const _lcKinds = new Set(['PD', 'LC']);
+let _lcLager = false;
+let _lcStart = null; // der erste Haken dieses Durchgangs
+let _lcResumed = null; // gesetzt, wenn die Haken von früher kamen
+// Kulturen, die ein Scan aus "aufgebraucht" oder "kontaminiert" zurückgeholt
+// hat, mit dem Status davor: ein Fehlscan lässt sich so zurücknehmen.
+const _lcRevived = new Map();
 function _lcLies() {
   try {
     return JSON.parse(localStorage.getItem(LC_KEY) || 'null') || {};
@@ -11808,66 +11820,100 @@ function _lcLies() {
     return {};
   }
 }
-function _lcMerke() {
+function _lcSchreibe(stand) {
   try {
-    localStorage.setItem(LC_KEY, JSON.stringify({ at: Date.now(), found: [..._zcFound], kinds: [..._lcKinds] }));
+    localStorage.setItem(LC_KEY, JSON.stringify(stand));
   } catch {
     /* privates Fenster: dann eben ohne Gedächtnis */
   }
 }
+function _lcStand(found, revived, start) {
+  return {
+    start,
+    found: [...found],
+    revived: Object.fromEntries(revived),
+    kinds: [..._lcKinds],
+    lager: _lcLager
+  };
+}
+// Nur im Labor: _zcFound teilt sich die Inventur mit der Zonenprüfung.
+function _lcMerke() {
+  if (_zcMode !== 'culture') return;
+  if (!_zcFound.size) {
+    _lcStart = null;
+    _lcResumed = null;
+    _lcRevived.clear();
+  } else if (!_lcStart) _lcStart = Date.now();
+  _lcSchreibe(_lcStand(_zcFound, _lcRevived, _lcStart));
+}
 function _lcVergiss() {
-  try {
-    const s = _lcLies();
-    localStorage.setItem(LC_KEY, JSON.stringify({ kinds: s.kinds || [..._lcKinds] }));
-  } catch {
-    /* s.o. */
-  }
+  _lcSchreibe({ kinds: [..._lcKinds], lager: _lcLager });
 }
 function openLabCheck() {
   _zcMode = 'culture';
   _zcZone = null;
   _zcFound.clear();
   _zcMoved = 0;
+  _lcRevived.clear();
+  _lcStart = null;
+  _lcResumed = null;
   const s = _lcLies();
-  if (Array.isArray(s.kinds) && s.kinds.length) {
+  // Auch eine leere Liste ist eine Wahl.
+  if (Array.isArray(s.kinds)) {
     _lcKinds.clear();
     s.kinds.filter((k) => LC_KINDS.includes(k)).forEach((k) => _lcKinds.add(k));
   }
-  if (Array.isArray(s.found) && s.at && Date.now() - s.at < LC_FRIST) s.found.forEach((id) => _zcFound.add(id));
+  _lcLager = s.lager === true;
+  // `at` schrieb die erste Fassung; es zählt wie ein Anfang.
+  const start = Number(s.start || s.at) || 0;
+  if (Array.isArray(s.found) && s.found.length && start && Date.now() - start < LC_FRIST) {
+    s.found.forEach((id) => _zcFound.add(id));
+    for (const [id, st] of Object.entries(s.revived || {})) if (typeof st === 'string') _lcRevived.set(id, st);
+    _lcStart = start;
+    _lcResumed = start;
+  }
   renderZoneCheck();
   document.getElementById('m-zonecheck').classList.add('open');
 }
+// Was die Inventur erwartet: aktiv, und eingelagert nur mit dem Knopf.
 function _lcGehalten() {
-  return cultures.filter((c) => c.status === 'active' || c.status === 'stored');
+  return cultures.filter((c) => c.status === 'active' || (_lcLager && c.status === 'stored'));
 }
-// Die Knöpfe oben: je Gefäß, das es gerade gibt, mit seiner Zahl.
+// Der Name eines Gefäßes; eine Art, die diese Liste nicht kennt, heißt wie ihr
+// Kürzel statt wie der Übersetzungsschlüssel.
+function _lcKindName(k) {
+  const key = 'labCheck.kind.' + k;
+  const v = t(key);
+  return v === key ? k : v;
+}
+// Die Knöpfe oben: je Gefäß, das es gerade gibt, mit seiner Zahl, und
+// Eingelagert, wenn etwas eingelagert ist.
 function _lcKindsHtml() {
   const n = {};
   for (const c of _lcGehalten()) n[c.type] = (n[c.type] || 0) + 1;
   const da = LC_KINDS.filter((k) => n[k] || _lcKinds.has(k));
+  const lagerN = cultures.filter((c) => c.status === 'stored' && _lcKinds.has(c.type)).length;
+  const knopf = (attr, on, text) =>
+    `<button type="button" class="lf-size${on ? ' on' : ''}" ${attr} aria-pressed="${on}">${esc(text)}</button>`;
   return (
     '<div class="lf-sizes" role="group" aria-label="' +
     esc(t('labCheck.kinds')) +
     '">' +
-    da
-      .map((k) => {
-        const on = _lcKinds.has(k);
-        return (
-          `<button type="button" class="lf-size${on ? ' on' : ''}" data-zc-kind="${k}" aria-pressed="${on}">` +
-          esc(t('labCheck.kind.' + k)) +
-          ' · ' +
-          (n[k] || 0) +
-          '</button>'
-        );
-      })
-      .join('') +
+    da.map((k) => knopf(`data-zc-kind="${k}"`, _lcKinds.has(k), _lcKindName(k) + ' · ' + (n[k] || 0))).join('') +
+    (lagerN || _lcLager ? knopf('data-zc-lager="1"', _lcLager, t('labCheck.stored') + ' · ' + lagerN) : '') +
     '</div>'
   );
 }
 function _lcKindsText() {
-  return LC_KINDS.filter((k) => _lcKinds.has(k))
-    .map((k) => t('labCheck.kind.' + k))
-    .join(', ');
+  const namen = LC_KINDS.filter((k) => _lcKinds.has(k)).map(_lcKindName);
+  if (_lcLager) namen.push(t('labCheck.storedToo'));
+  return namen.join(', ');
+}
+function _lcSeit(ms) {
+  const d = new Date(ms);
+  const heute = new Date(Date.now()).toDateString() === d.toDateString();
+  const opt = heute ? { hour: '2-digit', minute: '2-digit' } : { weekday: 'short', hour: '2-digit', minute: '2-digit' };
+  return d.toLocaleString(currentLang || 'de', opt);
 }
 function _zcExpected() {
   if (_zcMode === 'culture') {
@@ -11889,7 +11935,8 @@ function renderZoneCheck() {
     : t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
   document.getElementById('zc-count').textContent =
     t('zoneCheck.count', { found, total: expected.length }) +
-    (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '');
+    (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '') +
+    (kultur && _lcResumed && _zcFound.size ? ' · ' + t('labCheck.resumed', { time: _lcSeit(_lcResumed) }) : '');
   const kinds = document.getElementById('zc-kinds');
   if (kinds) kinds.innerHTML = kultur ? _lcKindsHtml() : '';
   if (kultur) _lcMerke();
@@ -11930,8 +11977,8 @@ function renderZoneCheck() {
   const missingBtns = kultur
     ? `<button type="button" data-zc-act="used" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>` +
       vonVorn
-      : `<button type="button" data-zc-act="move" class="fs-sm" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
-        `<button type="button" data-zc-act="remove" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
+    : `<button type="button" data-zc-act="move" class="fs-sm" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
+      `<button type="button" data-zc-act="remove" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
   document.getElementById('zc-foot').innerHTML =
     scanBtn +
     (missing
@@ -11939,10 +11986,27 @@ function renderZoneCheck() {
       : `<div class="fs-sm" style="flex:1;text-align:center;padding:10px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>` +
         (kultur ? vonVorn : ''));
 }
+// Ein Tipp auf eine Zeile hakt ab oder nicht mehr. Eine Kultur, die ein Scan
+// eben aus "aufgebraucht" zurückgeholt hat, geht beim Abhaken wieder dorthin:
+// so nimmt man einen Fehlscan zurück.
+function _zcRowToggle(id) {
+  if (!_zcFound.has(id)) {
+    _zcFound.add(id);
+    return renderZoneCheck();
+  }
+  _zcFound.delete(id);
+  if (_zcMode === 'culture' && _lcRevived.has(id)) {
+    setCultureStatus(id, _lcRevived.get(id));
+    _lcRevived.delete(id);
+    _zcMoved = Math.max(0, _zcMoved - 1);
+    toast(t('labCheck.reviveUndone', { id }));
+  }
+  renderZoneCheck();
+}
 // A culture scanned during a lab check is physically on the shelf: tick it off,
 // and if the records had already written it off (aufgebraucht/kontaminiert),
 // put it back to aktiv — the same "found where the records didn't expect it"
-// correction the zone check does for bags.
+// correction the zone check does for bags. Der Status davor bleibt gemerkt.
 function labCheckScanned(cultureId) {
   const c = cultures.find((x) => x.id && x.id.toUpperCase() === cultureId.toUpperCase());
   if (!c) {
@@ -11955,6 +12019,7 @@ function labCheckScanned(cultureId) {
   }
   const gehalten = c.status === 'active' || c.status === 'stored';
   if (!gehalten) {
+    _lcRevived.set(c.id, c.status);
     setCultureStatus(c.id, 'active');
     _zcMoved++;
   }
@@ -11963,10 +12028,26 @@ function labCheckScanned(cultureId) {
   if (!gehalten) return _zcFeedback('ok', t('labCheck.scanRevived', { id: c.id }));
   // Ein Gefäß, das oben nicht angetippt ist: abgehakt, aber nicht mitgezählt.
   if (!_lcKinds.has(c.type))
-    return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: t('labCheck.kind.' + c.type) }));
+    return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: _lcKindName(c.type) }));
+  if (c.status === 'stored' && !_lcLager)
+    return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: t('labCheck.stored') }));
   const expected = _zcExpected();
   const found = expected.filter(([id]) => _zcFound.has(id)).length;
   _zcFeedback('ok', t('zoneCheck.scanOk', { found, total: expected.length }));
+}
+// Rückgängig nach Ausbuchen oder Von vorn: die Haken zurück. Steht gerade eine
+// Zonenprüfung offen, gehören sie nicht in deren Liste, sondern in den Speicher,
+// aus dem die nächste Laborinventur sie holt.
+function _lcZurueck(haken, wieder, start, moved) {
+  if (_zcMode !== 'culture') {
+    _lcSchreibe(_lcStand(haken, new Map(wieder), start));
+    return;
+  }
+  haken.forEach((id) => _zcFound.add(id));
+  wieder.forEach(([id, st]) => _lcRevived.set(id, st));
+  _lcStart = start;
+  _zcMoved = moved;
+  renderZoneCheck();
 }
 // Mark every culture that wasn't found as used up.
 function _zcMarkMissingUsed() {
@@ -11979,14 +12060,18 @@ function _zcMarkMissingUsed() {
     // Wie es vorher war, für Rückgängig: der Status jeder Kultur und die Haken.
     const vorher = missing.map((id) => [id, (cultures.find((c) => c.id === id) || {}).status]);
     const haken = [..._zcFound];
+    const wieder = [..._lcRevived];
+    const start = _lcStart;
     missing.forEach((id) => setCultureStatus(id, 'used'));
     _zcFound.clear();
+    _lcRevived.clear();
+    _lcStart = null;
+    _lcResumed = null;
     _lcVergiss();
     document.getElementById('m-zonecheck').classList.remove('open');
     showUndoBar(t('labCheck.done', { n: missing.length }), () => {
       vorher.forEach(([id, st]) => st && setCultureStatus(id, st));
-      haken.forEach((id) => _zcFound.add(id));
-      _lcMerke();
+      _lcZurueck(haken, wieder, start, 0);
     });
   });
 }
@@ -11997,14 +12082,25 @@ function _lcKindToggle(k) {
   else _lcKinds.add(k);
   renderZoneCheck();
 }
+function _lcLagerToggle() {
+  _lcLager = !_lcLager;
+  renderZoneCheck();
+}
+// Von vorn: alle Haken weg, und was ein Scan zurückgeholt hat, geht wieder
+// dorthin, wo es stand. Rückgängig holt beides zurück.
 function _lcVonVorn() {
   const haken = [..._zcFound];
+  const wieder = [..._lcRevived];
+  const start = _lcStart;
+  const moved = _zcMoved;
+  wieder.forEach(([id, st]) => setCultureStatus(id, st));
   _zcFound.clear();
+  _lcRevived.clear();
   _zcMoved = 0;
   renderZoneCheck();
   showUndoBar(t('labCheck.restarted'), () => {
-    haken.forEach((id) => _zcFound.add(id));
-    renderZoneCheck();
+    wieder.forEach(([id]) => setCultureStatus(id, 'active'));
+    _lcZurueck(haken, wieder, start, moved);
   });
 }
 // Load the not-found bags into the shared selection, then hand off to the normal
@@ -38804,14 +38900,9 @@ function initEventListeners() {
     if (e.target === this) this.classList.remove('open');
     const kind = e.target.closest('[data-zc-kind]');
     if (kind) return _lcKindToggle(kind.dataset.zcKind);
+    if (e.target.closest('[data-zc-lager]')) return _lcLagerToggle();
     const row = e.target.closest('[data-zc-bag]');
-    if (row) {
-      const id = row.dataset.zcBag;
-      if (_zcFound.has(id)) _zcFound.delete(id);
-      else _zcFound.add(id);
-      renderZoneCheck();
-      return;
-    }
+    if (row) return _zcRowToggle(row.dataset.zcBag);
     const act = e.target.closest('[data-zc-act]');
     if (!act) return;
     if (act.dataset.zcAct === 'scan') {
