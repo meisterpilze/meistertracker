@@ -11789,18 +11789,90 @@ function openZoneCheck(zoneId) {
 // Lab stocktake. Cultures have no location, so "expected" means every culture
 // the records still say you hold (aktiv / eingelagert). Scan what is really on
 // the shelf; whatever is left over is gone and gets marked aufgebraucht.
+//
+// Only the containers ticked at the top count. Scanning the Petri shelf and the
+// FK-Gläser said nothing about the Slants or the Spritzen, and with every kind
+// in the list "nicht gefunden → aufgebraucht" wrote all of those off as well.
+// Petri and FK-Glas are ticked to begin with; the choice is remembered.
+//
+// What has been scanned is kept on the phone for a day: a stocktake of a whole
+// shelf survives a locked screen or a reload of the app.
+const LC_KINDS = ['PD', 'LC', 'MC', 'SY', 'G2G', 'GS', 'DU'];
+const LC_KEY = 'mp-lab-check';
+const LC_FRIST = 24 * 3600 * 1000;
+const _lcKinds = new Set(['PD', 'LC']);
+function _lcLies() {
+  try {
+    return JSON.parse(localStorage.getItem(LC_KEY) || 'null') || {};
+  } catch {
+    return {};
+  }
+}
+function _lcMerke() {
+  try {
+    localStorage.setItem(LC_KEY, JSON.stringify({ at: Date.now(), found: [..._zcFound], kinds: [..._lcKinds] }));
+  } catch {
+    /* privates Fenster: dann eben ohne Gedächtnis */
+  }
+}
+function _lcVergiss() {
+  try {
+    const s = _lcLies();
+    localStorage.setItem(LC_KEY, JSON.stringify({ kinds: s.kinds || [..._lcKinds] }));
+  } catch {
+    /* s.o. */
+  }
+}
 function openLabCheck() {
   _zcMode = 'culture';
   _zcZone = null;
   _zcFound.clear();
   _zcMoved = 0;
+  const s = _lcLies();
+  if (Array.isArray(s.kinds) && s.kinds.length) {
+    _lcKinds.clear();
+    s.kinds.filter((k) => LC_KINDS.includes(k)).forEach((k) => _lcKinds.add(k));
+  }
+  if (Array.isArray(s.found) && s.at && Date.now() - s.at < LC_FRIST) s.found.forEach((id) => _zcFound.add(id));
   renderZoneCheck();
   document.getElementById('m-zonecheck').classList.add('open');
 }
+function _lcGehalten() {
+  return cultures.filter((c) => c.status === 'active' || c.status === 'stored');
+}
+// Die Knöpfe oben: je Gefäß, das es gerade gibt, mit seiner Zahl.
+function _lcKindsHtml() {
+  const n = {};
+  for (const c of _lcGehalten()) n[c.type] = (n[c.type] || 0) + 1;
+  const da = LC_KINDS.filter((k) => n[k] || _lcKinds.has(k));
+  return (
+    '<div class="lf-sizes" role="group" aria-label="' +
+    esc(t('labCheck.kinds')) +
+    '">' +
+    da
+      .map((k) => {
+        const on = _lcKinds.has(k);
+        return (
+          `<button type="button" class="lf-size${on ? ' on' : ''}" data-zc-kind="${k}" aria-pressed="${on}">` +
+          esc(t('labCheck.kind.' + k)) +
+          ' · ' +
+          (n[k] || 0) +
+          '</button>'
+        );
+      })
+      .join('') +
+    '</div>'
+  );
+}
+function _lcKindsText() {
+  return LC_KINDS.filter((k) => _lcKinds.has(k))
+    .map((k) => t('labCheck.kind.' + k))
+    .join(', ');
+}
 function _zcExpected() {
   if (_zcMode === 'culture') {
-    return cultures
-      .filter((c) => c.status === 'active' || c.status === 'stored')
+    return _lcGehalten()
+      .filter((c) => _lcKinds.has(c.type))
       .map((c) => [c.id, { batchId: (c.species || '') + (c.strainText ? ' · ' + c.strainText : '') }])
       .sort((a, b) => a[0].localeCompare(b[0]));
   }
@@ -11808,15 +11880,24 @@ function _zcExpected() {
 }
 function renderZoneCheck() {
   const expected = _zcExpected();
-  document.getElementById('zc-title').textContent =
-    _zcMode === 'culture' ? t('labCheck.title') : t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
+  const kultur = _zcMode === 'culture';
+  // Abgehakt kann auch eine Kultur in einem Gefäß sein, das oben nicht angetippt
+  // ist: gezählt wird nur, was in dieser Liste steht.
+  const found = expected.filter(([id]) => _zcFound.has(id)).length;
+  document.getElementById('zc-title').textContent = kultur
+    ? t('labCheck.title')
+    : t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
   document.getElementById('zc-count').textContent =
-    t('zoneCheck.count', { found: _zcFound.size, total: expected.length }) +
+    t('zoneCheck.count', { found, total: expected.length }) +
     (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '');
+  const kinds = document.getElementById('zc-kinds');
+  if (kinds) kinds.innerHTML = kultur ? _lcKindsHtml() : '';
+  if (kultur) _lcMerke();
   const body = document.getElementById('zc-body');
   if (!expected.length) {
+    const leer = !kultur ? 'zoneCheck.empty' : _lcKinds.size ? 'labCheck.empty' : 'labCheck.pickKind';
     body.innerHTML =
-      '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t('zoneCheck.empty')) + '</div>';
+      '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t(leer)) + '</div>';
     document.getElementById('zc-foot').innerHTML = '';
     return;
   }
@@ -11832,7 +11913,7 @@ function renderZoneCheck() {
       );
     })
     .join('');
-  const missing = expected.length - _zcFound.size;
+  const missing = expected.length - found;
   // The size lives on a class at each use rather than in this string: an
   // inline font-size beats every rule in the sheet, and the scan button next
   // to these wants the step above.
@@ -11840,17 +11921,23 @@ function renderZoneCheck() {
     'flex:1;min-width:130px;padding:11px;border-radius:10px;font-weight:600;cursor:pointer;border:1px solid var(--c-border)';
   // Scanning is the primary way to work through a zone; tapping rows is the
   // fallback for a bag whose label won't read.
-  const scanBtn = `<button type="button" data-zc-act="scan" class="fs-base" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;padding:13px">📷 ${esc(t('zoneCheck.scanBtn'))}</button>`;
-  const missingBtns =
-    _zcMode === 'culture'
-      ? `<button type="button" data-zc-act="used" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>`
+  const scanBtn = `<button type="button" data-zc-act="scan" class="fs-base" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;padding:13px">📷 ${esc(t(kultur ? 'labCheck.scanBtn' : 'zoneCheck.scanBtn'))}</button>`;
+  // Von vorn: die Haken von einem halben Durchgang gestern weg, mit Rückgängig.
+  const vonVorn =
+    kultur && _zcFound.size
+      ? `<button type="button" data-zc-act="restart" class="fs-sm" style="${btn};flex:0 1 auto;min-width:0;background:var(--c-surface);color:var(--c-text-sec)">${esc(t('labCheck.restart'))}</button>`
+      : '';
+  const missingBtns = kultur
+    ? `<button type="button" data-zc-act="used" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('labCheck.missingUsed', { n: missing }))}</button>` +
+      vonVorn
       : `<button type="button" data-zc-act="move" class="fs-sm" style="${btn};background:var(--c-primary,#16a34a);color:#fff;border-color:transparent">${esc(t('zoneCheck.missingMove', { n: missing }))}</button>` +
         `<button type="button" data-zc-act="remove" class="fs-sm" style="${btn};background:var(--c-surface);color:var(--c-red-dark)">${esc(t('zoneCheck.missingRemove', { n: missing }))}</button>`;
   document.getElementById('zc-foot').innerHTML =
     scanBtn +
     (missing
       ? missingBtns
-      : `<div class="fs-sm" style="flex:1;text-align:center;padding:10px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>`);
+      : `<div class="fs-sm" style="flex:1;text-align:center;padding:10px;font-weight:600;color:var(--c-primary,#16a34a)">${esc(t('zoneCheck.allFound'))}</div>` +
+        (kultur ? vonVorn : ''));
 }
 // A culture scanned during a lab check is physically on the shelf: tick it off,
 // and if the records had already written it off (aufgebraucht/kontaminiert),
@@ -11866,16 +11953,20 @@ function labCheckScanned(cultureId) {
     _zcFeedback('info', t('zoneCheck.scanDup', { bag: c.id }));
     return;
   }
-  const total = _zcExpected().length;
-  if (c.status === 'active' || c.status === 'stored') {
-    _zcFound.add(c.id);
-    _zcFeedback('ok', t('zoneCheck.scanOk', { found: _zcFound.size, total: total }));
-    return;
+  const gehalten = c.status === 'active' || c.status === 'stored';
+  if (!gehalten) {
+    setCultureStatus(c.id, 'active');
+    _zcMoved++;
   }
-  setCultureStatus(c.id, 'active');
   _zcFound.add(c.id);
-  _zcMoved++;
-  _zcFeedback('ok', t('labCheck.scanRevived', { id: c.id }));
+  _lcMerke();
+  if (!gehalten) return _zcFeedback('ok', t('labCheck.scanRevived', { id: c.id }));
+  // Ein Gefäß, das oben nicht angetippt ist: abgehakt, aber nicht mitgezählt.
+  if (!_lcKinds.has(c.type))
+    return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: t('labCheck.kind.' + c.type) }));
+  const expected = _zcExpected();
+  const found = expected.filter(([id]) => _zcFound.has(id)).length;
+  _zcFeedback('ok', t('zoneCheck.scanOk', { found, total: expected.length }));
 }
 // Mark every culture that wasn't found as used up.
 function _zcMarkMissingUsed() {
@@ -11883,10 +11974,37 @@ function _zcMarkMissingUsed() {
     .map(([id]) => id)
     .filter((id) => !_zcFound.has(id));
   if (!missing.length) return;
-  confirm2(t('labCheck.confirmTitle'), t('labCheck.confirmMsg', { n: missing.length }), t('lab.usedUp'), () => {
+  const msg = t('labCheck.confirmMsg', { n: missing.length, kinds: _lcKindsText() });
+  confirm2(t('labCheck.confirmTitle'), msg, t('lab.usedUp'), () => {
+    // Wie es vorher war, für Rückgängig: der Status jeder Kultur und die Haken.
+    const vorher = missing.map((id) => [id, (cultures.find((c) => c.id === id) || {}).status]);
+    const haken = [..._zcFound];
     missing.forEach((id) => setCultureStatus(id, 'used'));
+    _zcFound.clear();
+    _lcVergiss();
     document.getElementById('m-zonecheck').classList.remove('open');
-    setFb('ok', t('labCheck.done', { n: missing.length }));
+    showUndoBar(t('labCheck.done', { n: missing.length }), () => {
+      vorher.forEach(([id, st]) => st && setCultureStatus(id, st));
+      haken.forEach((id) => _zcFound.add(id));
+      _lcMerke();
+    });
+  });
+}
+// Ein Tipp auf ein Gefäß oben: es zählt mit oder nicht mehr. Die Haken bleiben.
+function _lcKindToggle(k) {
+  if (!LC_KINDS.includes(k)) return;
+  if (_lcKinds.has(k)) _lcKinds.delete(k);
+  else _lcKinds.add(k);
+  renderZoneCheck();
+}
+function _lcVonVorn() {
+  const haken = [..._zcFound];
+  _zcFound.clear();
+  _zcMoved = 0;
+  renderZoneCheck();
+  showUndoBar(t('labCheck.restarted'), () => {
+    haken.forEach((id) => _zcFound.add(id));
+    renderZoneCheck();
   });
 }
 // Load the not-found bags into the shared selection, then hand off to the normal
@@ -38675,6 +38793,8 @@ function initEventListeners() {
   $('zc-close').addEventListener('click', () => document.getElementById('m-zonecheck').classList.remove('open'));
   $('m-zonecheck').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
+    const kind = e.target.closest('[data-zc-kind]');
+    if (kind) return _lcKindToggle(kind.dataset.zcKind);
     const row = e.target.closest('[data-zc-bag]');
     if (row) {
       const id = row.dataset.zcBag;
@@ -38691,6 +38811,10 @@ function initEventListeners() {
     }
     if (act.dataset.zcAct === 'used') {
       _zcMarkMissingUsed();
+      return;
+    }
+    if (act.dataset.zcAct === 'restart') {
+      _lcVonVorn();
       return;
     }
     if (!_zcSelectMissing()) return;
