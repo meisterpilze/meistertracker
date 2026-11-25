@@ -3127,6 +3127,8 @@ window.LANG['de'] = {
   'brett.gone': 'Sind raus',
   'brett.move': 'Umziehen',
   'brett.add': 'Dazu',
+  'brett.scanBags': 'Beutel scannen',
+  'brett.scanHelp': 'Jeder Beutel, den du scannst, kommt in dieses Fach. Scannst du ein anderes Fach, geht es dort weiter.',
   'brett.emptyBtn': 'Leer',
   'brett.wrongCount': 'Stimmt nicht',
   'brett.back': 'Zurück',
