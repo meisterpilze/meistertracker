@@ -37827,6 +37827,7 @@ function initEventListeners() {
     if (e.target === this) closeCamScan();
   });
   $('cls-16').addEventListener('click', closeCamScan);
+  $('cam-close').addEventListener('click', closeCamScan);
   $('btn-flip-cam').addEventListener('click', flipCamera);
   $('btn-cam-torch').addEventListener('click', toggleTorch);
   $('btn-cam-contam').addEventListener('click', toggleContamScan);
