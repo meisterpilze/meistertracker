@@ -8071,7 +8071,7 @@ function renderWorkChain() {
   const rows = sorteRollup();
   const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
   const short = rows.filter((r) => r.supply === 'now' || r.supply === 'nospawn').length;
-  const nLab = cultures.filter(_kbDa).length;
+  const nLab = cultures.filter(_kbBestand).length;
   const kg = sum('grain');
   set('lab', num(nLab), tp('work.atLab', nLab));
   set('grain', num(short), tp('work.atGrain', short), short > 0);
@@ -15104,6 +15104,10 @@ const KB_TITEL = { MC: 'lab.motherCultures', LC: 'lab.liquidCultures', PD: 'lab.
 const KB_KURZ = { MC: 'lb.short.MC', LC: 'lb.short.LC', PD: 'lb.short.PD', SY: 'lb.short.SYall' };
 const KB_STATUS = { active: 'lab.active', stored: 'lab.stored', used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated' };
 const _kbDa = (c) => c.status === 'active' || c.status === 'stored';
+// Bestand ist, was da ist und nicht in der Forschung steht: eine Kultur dort
+// bleibt in der Liste, mit ihrem Vermerk, zaehlt aber nicht mit — wie auf dem
+// Server (labStock).
+const _kbBestand = (c) => _kbDa(c) && !c.researchAt;
 function _kbSorte(c) {
   const ms = c.strainId ? (mushroomStrains || []).find((m) => m.id === c.strainId) : null;
   return { key: sorteKey(c), name: (ms && ms.name) || sorteName(c) || '—' };
@@ -15127,12 +15131,13 @@ const SL_KULTUREN = {
     if (c.type === 'SY') rechts.push(syMl(c) + ' ml');
     if (archiv) rechts.push(t(KB_STATUS[c.status] || c.status));
     else {
+      if (c.researchAt) rechts.push(t('kb.research'));
       if (c.status === 'stored') rechts.push(t('lab.stored'));
       rechts.push(slAlter(c.created));
     }
     return { id: c.id, rechts: rechts.join(' · ') };
   },
-  zaehler: () => t('kb.count', { n: cultures.filter(_kbDa).length }),
+  zaehler: () => t('kb.count', { n: cultures.filter(_kbBestand).length }),
   leer: (archiv) => t(archiv ? 'sl.archiveEmpty' : 'lab.noCultures'),
   oeffnen: (id) => {
     const c = cultures.find((x) => x.id === id);
@@ -33403,7 +33408,10 @@ function setCultureResearch(id, an) {
       c.researchAt = vorher;
       pjRefresh();
       toast(t('common.error') + ': ' + r.error, 'err');
+      return;
     }
+    // Forschung ist kein Bestand: die Zahlen je Art rechnet der Server neu.
+    loadLabStock();
   });
 }
 function renderCiActions(c) {
