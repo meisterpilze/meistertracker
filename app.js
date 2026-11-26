@@ -405,6 +405,8 @@ let shelfItems = [];
 // beantwortet hat, wer wann "Noch da" sagte (Beutel → Zeit), und die Fristen,
 // nach denen der Server rechnet (siehe REGALBRETTER).
 let autoBookouts = [];
+// Chargen, deren übrige Beutel jemand ansehen soll (v125, db.listBatchChecks).
+let batchChecks = [];
 let stillThere = {};
 let brettRules = { confirmDays: 14, checkDay: 1 };
 // Je Beutel, wann der Montags-Check fragt und wann der Server ausbucht, so wie
@@ -725,6 +727,7 @@ function applyData(d) {
   recurringTasks = d.recurringTasks || [];
   shelfItems = d.shelf || [];
   autoBookouts = d.autoBookouts || [];
+  batchChecks = Array.isArray(d.batchChecks) ? d.batchChecks : [];
   stillThere = d.stillThere || {};
   brettFragen = new Map((Array.isArray(d.brettFragen) ? d.brettFragen : []).map((f) => [f.bag, f]));
   if (
@@ -1130,6 +1133,10 @@ function onNotifItemClick(e) {
     go('lab', 'n-lab');
     openStab('lab', 'stock');
     lfScanned(linkId);
+  } else if (linkType === 'batch_check' && linkId) {
+    // "Charge prüfen" (raiseBatchCheckBell): die Karte steht oben auf Arbeit.
+    go('work', 'n-work');
+    document.getElementById('wk-charge')?.scrollIntoView({ block: 'start' });
   } else if (linkType === 'shelf' && linkId) {
     // "Nachproduzieren" (checkShelf): das Fach unter Lager → Regal, mit seinem Blatt.
     go('inv', 'n-inv');
@@ -8080,6 +8087,7 @@ function renderWorkChain() {
   set('harvest', num(sum('fruiting')), t('work.atHarvest'));
 }
 function renderDashBatchTasks() {
+  renderChargePruefen();
   renderWorkBretter();
   renderWorkTents();
   renderWorkChain();
@@ -11258,6 +11266,95 @@ function renderWorkBretter() {
     box.addEventListener('click', brettStartKlick);
   }
   renderMontagsCheck(now);
+}
+
+// ── Startseite: Charge prüfen (v125) ──
+// Ein kontaminierter Beutel schickt jemanden zu den anderen seiner Charge. Die
+// Karte steht über allem anderen, bis jemand "Geprüft" tippt, und sagt, wo die
+// übrigen Beutel stehen: Fächer heißen für Menschen nicht nach Beutel-Nummern,
+// also je Platz eine Zahl. Wer noch einen kaputten findet, meldet ihn wie
+// sonst; die offene Prüfung zählt ihn mit.
+
+// Ein Platz in Worten, mit Raum: "Inkubation · Regal 2 · Fach 3".
+function chargeOrtName(loc) {
+  const z = toZone(loc);
+  const raum = zoneDisplayName(z);
+  if (brettVon(loc)) return raum + ' · ' + brettName(loc);
+  const zone = ZONE_BY_ID[z];
+  if (loc === z) return brettZoneMitBrettern(zone) ? t('frei.title', { zone: raum }) : raum;
+  const r = rackVon(loc);
+  if (r && r.levels > 0) return t('frei.title', { zone: raum });
+  return raum + ' · ' + rackLabel(String(loc).split(':')[0]);
+}
+// Wo die Beutel einer Charge stehen, die noch im Bestand sind: je Platz eine
+// Zahl, die meisten zuerst. Kontaminationszonen zählen nicht.
+function chargeOrte(batchId) {
+  const je = new Map();
+  for (const e of placementByBag().values()) {
+    if (e.batch !== batchId || e.action === 'REMOVE' || !e.to) continue;
+    const zone = ZONE_BY_ID[toZone(e.to)];
+    if (zone && zone.role === 'contaminated') continue;
+    je.set(e.to, (je.get(e.to) || 0) + 1);
+  }
+  return [...je]
+    .map(([loc, n]) => ({ loc, n, name: chargeOrtName(loc) }))
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+}
+function renderChargePruefen() {
+  const card = document.getElementById('wk-charge');
+  const box = document.getElementById('wk-charge-list');
+  if (!card || !box) return;
+  card.hidden = !batchChecks.length;
+  box.innerHTML = batchChecks
+    .map((c) => {
+      const b = batchById(c.batchId);
+      const orte = chargeOrte(c.batchId);
+      const n = orte.reduce((a, o) => a + o.n, 0);
+      const wo = n
+        ? `<span class="wk-charge-n">${esc(tp('charge.left', n))}</span><ul class="wk-charge-orte">` +
+          orte.map((o) => `<li><span>${esc(o.name)}</span><b>${o.n}</b></li>`).join('') +
+          '</ul>'
+        : `<span class="wk-charge-n">${esc(t('charge.noneLeft'))}</span>`;
+      return (
+        `<div class="wk-bretter-row wk-bretter-ask wk-charge-row"><span class="wk-bretter-t">` +
+        `<b>${esc(b ? sorteName(b) + ' · ' : '')}${esc(c.batchId)}</b>` +
+        `<span>${esc(t('charge.since', { n: c.reports, d: fmtDtShort(c.openedAt) }))}</span>${wo}</span>` +
+        `<span class="wk-bretter-btns"><button type="button" class="btn btn-sm" data-charge-ok="${Number(c.id)}">${esc(t('charge.done'))}</button></span></div>`
+      );
+    })
+    .join('');
+  if (!box.dataset.bound) {
+    box.dataset.bound = '1';
+    box.addEventListener('click', chargeKlick);
+  }
+}
+// "Geprüft": sofort weg, mit Rückgängig. Schlägt das Speichern fehl, steht
+// die Charge wieder da.
+function chargeKlick(ev) {
+  const el = ev.target.closest('[data-charge-ok]');
+  if (!el) return;
+  const id = Number(el.dataset.chargeOk);
+  const i = batchChecks.findIndex((c) => c.id === id);
+  if (i < 0) return;
+  const c = batchChecks[i];
+  const zurueck = () => {
+    if (!batchChecks.some((x) => x.id === id)) batchChecks.splice(Math.min(i, batchChecks.length), 0, c);
+    renderChargePruefen();
+  };
+  batchChecks.splice(i, 1);
+  renderChargePruefen();
+  apiPost('/api/batch-checks/close', { id }).then((r) => {
+    if (!r || r.error) {
+      zurueck();
+      toast(t('charge.saveFailed'), 'err');
+    }
+  });
+  showUndoBar(t('charge.doneToast', { batch: c.batchId }), () => {
+    zurueck();
+    apiPost('/api/batch-checks/close', { id, undo: true }).then((r) => {
+      if (!r || r.error) toast(t('charge.saveFailed'), 'err');
+    });
+  });
 }
 
 // ── Startseite: Montags-Check ──
@@ -29590,6 +29687,15 @@ async function _crSubmit() {
       return;
     }
     closeContamReport();
+    // Eine neue oder offene Prüfung der Charge: steht im Speicher, bevor die
+    // nächste Auffrischung kommt, und die Quittung sagt, was jetzt zu tun ist.
+    const pruefen = r && Array.isArray(r.batchChecks) ? r.batchChecks.filter((c) => c.left > 0) : [];
+    for (const c of pruefen) {
+      if (!batchChecks.some((x) => x.id === c.id))
+        batchChecks.unshift({ id: c.id, batchId: c.batchId, openedAt: new Date().toISOString(), reports: 1 });
+    }
+    if (pruefen.length) renderChargePruefen();
+    const nachsehen = pruefen.map((c) => ' ' + t('charge.receipt', { batch: c.batchId, n: c.left })).join('');
     if (r && r.queued) {
       // Service worker queued the report because the network was unreachable.
       // The browse list won't have this entry yet — replayed when WiFi returns.
@@ -29600,15 +29706,15 @@ async function _crSubmit() {
       const moved = _crAusgebucht(r);
       setFb(
         'ok',
-        moved
+        (moved
           ? t('contam.reportsSavedAutoMoved', { n: bags.length, moved: moved })
-          : t('contam.reportsSaved', { n: bags.length })
+          : t('contam.reportsSaved', { n: bags.length })) + nachsehen
       );
     } else {
       // Hat der Server den Beutel ausgebucht, sagt die Quittung das, damit
       // niemand ihn danach noch im Regal sucht.
       const msgKey = _crAusgebucht(r) ? 'contam.reportSavedAutoMoved' : 'contam.reportSaved';
-      setFb('ok', t(msgKey, { id: r.id, photos: (r.photoIds || []).length }));
+      setFb('ok', t(msgKey, { id: r.id, photos: (r.photoIds || []).length }) + nachsehen);
       // Refresh browse view if it's the active sub-tab
       if (document.getElementById('sp-lab-contam')?.classList.contains('active')) {
         renderContamReports();

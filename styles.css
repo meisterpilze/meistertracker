@@ -13295,6 +13295,40 @@ button.wk-an-zeile:active {
   border-radius: 14px;
   background: var(--c-amber-light);
 }
+/* Charge prüfen (renderChargePruefen, v125): rot umrandet, weil ein
+   kontaminierter Beutel die Nachbarn angesteckt haben kann und das nicht bis
+   Montag wartet. Je Platz eine Zeile: wo, und wie viele. */
+.wk-teil-charge {
+  margin: 24px 0;
+  padding: 14px 16px;
+  border: 2px solid var(--c-red);
+  border-radius: 14px;
+  background: var(--c-surface);
+}
+.wk-teil-charge .wk-teil-kopf {
+  margin-bottom: 4px;
+}
+.wk-charge-n {
+  margin-top: 6px;
+  color: var(--c-text) !important;
+  font-weight: 600;
+}
+.wk-charge-orte {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.wk-charge-orte li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  color: var(--c-text-sec);
+}
+.wk-charge-orte b {
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
 .wk-teil-montag .wk-teil-kopf {
   margin-bottom: 4px;
 }
