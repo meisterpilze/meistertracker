@@ -165,7 +165,7 @@ window.LANG['de'] = {
   'proj.noteDelMsg': 'Die Notiz ist danach weg. Versuche und Recherche bleiben.',
   'proj.research': 'Aus der Recherche ({n})',
   'proj.cultures': 'Kulturen in der Forschung ({n})',
-  'proj.culturesNone': 'Noch keine. Eine Flüssigkultur scannen und „Zur Forschung“ tippen.',
+  'proj.culturesNone': 'Noch keine. Eine Flüssigkultur, Spritze oder Petrischale scannen und „Zur Forschung“ tippen.',
   'proj.culturesSince': 'seit {d}',
   'proj.docLoading': 'Wird geladen …',
   'proj.docLoadErr': 'Konnte nicht geladen werden.',

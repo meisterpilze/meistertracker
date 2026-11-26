@@ -162,7 +162,7 @@ window.LANG['en'] = {
   'proj.noteDelMsg': 'The note is gone afterwards. Experiments and research stay.',
   'proj.research': 'From the research ({n})',
   'proj.cultures': 'Cultures in research ({n})',
-  'proj.culturesNone': 'None yet. Scan a liquid culture and tap “To research”.',
+  'proj.culturesNone': 'None yet. Scan a liquid culture, syringe or petri dish and tap “To research”.',
   'proj.culturesSince': 'since {d}',
   'proj.docLoading': 'Loading…',
   'proj.docLoadErr': 'Could not be loaded.',
