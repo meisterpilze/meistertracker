@@ -1305,6 +1305,7 @@ window.LANG['de'] = {
   'ci.researchDone': '{id} steht jetzt in der Forschung.',
   'ci.researchOffDone': '{id} ist aus der Forschung genommen.',
   'kb.count': '{n} da',
+  'kb.research': 'Forschung',
   'kb.scan': 'Kultur scannen',
   'sl.today': 'heute',
   'sl.days': '{n} T',
