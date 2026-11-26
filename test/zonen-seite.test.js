@@ -61,6 +61,9 @@ function seite({ zones = ZONEN, beutel = {}, regalBeutel = {}, frei = {} } = {})
     const brettArt = (id) => (id === 7 ? { name: 'Testpilz' } : null);
     const rackLabel = (id) => 'Regal ' + id.slice(-1);
     const zoneDisplayName = (id) => zones.find((z) => z.id === id).name;
+    const zonenSucheHtml = () => '';
+    const _zonenAuf = new Set();
+    const zonenRegalHtml = (r) => '<div data-zonen-regal="' + r.id + '"></div>';
     ${ROLLEN}
     ${hebeFunktion('zonenReihe', APP)}
     ${hebeFunktion('zonenKarte', APP)}

@@ -2290,6 +2290,10 @@ window.LANG['en'] = {
   'zones.deleteRoom': 'Delete zone',
   'zones.deleteBlocked': 'Only once no bag is left in it (now {n}).',
   'zones.capacityBtn': 'Max.: {n}',
+  'zones.find': 'Where is …?',
+  'zones.findPick': 'Pick a species',
+  'zones.notInFach': 'not on a shelf',
+  'zones.rackSettings': 'Edit rack',
   'scanFb.preferRack': '⚠ "{loc}" is a zone — scan a rack for precise tracking (e.g. {example})',
   // Calendar entry modal
   'calEntry.titleNew': 'New entry',

@@ -47,6 +47,9 @@ function umgebung({ zones, datenGeladen }) {
         const brettArt = () => null;
         const rackLabel = (id) => id;
         const zoneDisplayName = (id) => id;
+        const zonenSucheHtml = () => '';
+        const _zonenAuf = new Set();
+        const zonenRegalHtml = () => '';
         ${extra}
         ${code}
         ${name}();

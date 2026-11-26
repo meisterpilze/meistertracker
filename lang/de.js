@@ -2304,6 +2304,10 @@ window.LANG['de'] = {
   'zones.deleteRoom': 'Raum löschen',
   'zones.deleteBlocked': 'Geht erst, wenn kein Beutel mehr im Raum ist (jetzt {n}).',
   'zones.capacityBtn': 'Höchstzahl: {n}',
+  'zones.find': 'Wo steht …?',
+  'zones.findPick': 'Sorte wählen',
+  'zones.notInFach': 'in keinem Fach',
+  'zones.rackSettings': 'Regal bearbeiten',
   'scanFb.preferRack': '⚠ „{loc}" ist eine Zone — scanne ein Rack für genaues Tracking (z.B. {example})',
   // Calendar entry modal
   'calEntry.titleNew': 'Neuer Eintrag',
