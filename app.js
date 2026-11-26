@@ -23013,7 +23013,11 @@ function pjRefresh() {
   // oder Zurueckholen steht der Fokus auf einem, ohne dass jemand etwas tut.
   const fokus = document.activeElement;
   const tippt = !!fokus && offen.contains(fokus) && /^(INPUT|TEXTAREA|SELECT)$/.test(fokus.tagName || '');
-  const veraltet = versuch && pjVersuchGezeigt !== pjVersuchStand() && !tippt;
+  const veraltet =
+    !tippt &&
+    (versuch
+      ? pjVersuchGezeigt !== pjVersuchStand()
+      : offen.id === 'pj-research' && projectDocs && pjKulturenGezeigt !== pjKulturenStand());
   if (!leer && !andereSprache && !veraltet) return;
   if (versuch) renderVersuch();
   else renderProjekte(offen.id.replace('pj-', ''));
@@ -25286,6 +25290,47 @@ async function pjDocImportieren(key, datei) {
   toast(t('proj.docImported', { n: (r.tabs || []).length }));
   renderProjekte(key);
 }
+// ── Kulturen in der Forschung ───────────────────────────────
+//
+// Eine Kultur, die beim Scannen "Zur Forschung" bekommen hat (renderCiActions),
+// steht hier, die neueste oben. Ein Tipp auf die Zeile oeffnet dasselbe Fenster
+// wie der Scan. Auch eine, die schon raus ist, bleibt stehen und sagt, warum:
+// in der Forschung ist eine kontaminierte Flaeche auch ein Ergebnis.
+// Herausnehmen geht im Fenster, mit Rueckgaengig.
+function pjForschungKulturen() {
+  return cultures
+    .filter((c) => c.researchAt)
+    .sort((a, b) => String(b.researchAt).localeCompare(String(a.researchAt)));
+}
+function pjKulturenStand() {
+  return JSON.stringify(pjForschungKulturen().map((c) => [c.id, c.status, c.researchAt]));
+}
+let pjKulturenGezeigt = null; // pjKulturenStand() beim letzten Zeichnen
+function pjKulturZeile(c) {
+  const name = c.strainName || c.species || '';
+  const STATUS = { used: 'lab.usedUp', sold: 'lab.sold', contam: 'lab.contaminated', stored: 'lab.stored' };
+  const zustand = STATUS[c.status] ? t(STATUS[c.status]) : '';
+  return (
+    `<button type="button" class="pj-liste-zeile" data-pj-kultur="${esc(c.id)}">` +
+    `<span class="pj-liste-mitte"><span class="pj-liste-titel">${esc(c.id)}</span>` +
+    `<span class="pj-liste-meta">${esc([name, (c.strainText || '').trim()].filter(Boolean).join(' · ') || '—')}</span></span>` +
+    `<span class="pj-liste-rechts"><span class="pj-liste-meta">${esc(t('proj.culturesSince', { d: fmtDt(c.researchAt) }))}</span>` +
+    (zustand ? `<span class="pj-liste-meta">${esc(zustand)}</span>` : '') +
+    '</span><span class="pj-liste-pfeil" aria-hidden="true">›</span></button>'
+  );
+}
+function pjKulturen() {
+  const liste = pjForschungKulturen();
+  pjKulturenGezeigt = pjKulturenStand();
+  return (
+    '<div class="card pj-sec">' +
+    `<div class="sec">${esc(t('proj.cultures', { n: liste.length }))}</div>` +
+    (liste.length
+      ? '<div class="pj-liste">' + liste.map(pjKulturZeile).join('') + '</div>'
+      : `<p class="pj-empty">${esc(t('proj.culturesNone'))}</p>`) +
+    '</div>'
+  );
+}
 function renderProjekte(key) {
   const el = document.getElementById('pj-' + key);
   if (!el) return;
@@ -25294,11 +25339,21 @@ function renderProjekte(key) {
     pjDocsWarten(el, key);
     return;
   }
+  // Eine angefangene Notiz übersteht das Neuzeichnen, wenn eine Kultur dazukommt.
+  const notizFeld = key === 'research' ? document.getElementById('pj-note-new') : null;
+  const angefangen = notizFeld ? notizFeld.value : '';
+  pjProjekteZeichnen(el, key);
+  const neuesFeld = angefangen ? document.getElementById('pj-note-new') : null;
+  if (neuesFeld) neuesFeld.value = angefangen;
+}
+function pjProjekteZeichnen(el, key) {
+  const kulturen = key === 'research' ? pjKulturen() : '';
   const doc = projectDocs[key];
   if (!doc) {
     // Noch nichts importiert. Die Notizen hängen nicht an der Unterlage und
     // bleiben auch ohne sie benutzbar.
     el.innerHTML =
+      kulturen +
       '<div class="card pj-sec">' +
       `<p class="pj-empty">${esc(t('proj.docNone'))}</p>` +
       pjDocImport(key, false) +
@@ -25324,6 +25379,7 @@ function renderProjekte(key) {
           )
           .join('');
   el.innerHTML =
+    kulturen +
     '<div class="card pj-head">' +
     `<div class="pj-title">${pjText(doc.title)}</div>` +
     `<div class="pj-meta">${pjText(doc.meta)}</div>` +
@@ -25360,6 +25416,12 @@ function pjClick(e) {
   }
   if (pjVersuchClick(e)) return;
   if (pjNotizClick(e)) return;
+  const kultur = e.target.closest('[data-pj-kultur]');
+  if (kultur) {
+    const c = cultures.find((x) => x.id === kultur.dataset.pjKultur);
+    if (c) openCultureSheet(c);
+    return;
+  }
   const importieren = e.target.closest('[data-pj-doc-import]');
   if (importieren) {
     const feld = document.getElementById('pj-doc-datei-' + importieren.dataset.pjDocImport);
@@ -33324,6 +33386,26 @@ function ciHerkunftHtml(c) {
 // Was als Kultur auch im Shop steht.
 // Flüssigkultur geht auch an Kunden, im Glas.
 const CI_VERKAUFBAR = ['SY', 'PD', 'LC'];
+// Was beim Scannen in die Forschung gelegt werden kann. Erst einmal nur
+// Flüssigkultur; der Server nimmt jede Art, die Grenze ist diese Zeile.
+const CI_FORSCHUNG = ['LC'];
+// In die Forschung oder heraus, sofort und mit Rückgängig. Der Zeitpunkt steht
+// gleich hier; der Server setzt seinen eigenen, und der nächste Datenstand
+// bringt ihn.
+function setCultureResearch(id, an) {
+  const c = cultures.find((x) => x.id === id);
+  if (!c) return;
+  const vorher = c.researchAt || null;
+  c.researchAt = an ? vorher || new Date().toISOString() : null;
+  pjRefresh();
+  apiPatch('/api/cultures/' + encodeURIComponent(id), { research: an }).then((r) => {
+    if (r && r.error) {
+      c.researchAt = vorher;
+      pjRefresh();
+      toast(t('common.error') + ': ' + r.error, 'err');
+    }
+  });
+}
 function renderCiActions(c) {
   const el = document.getElementById('bi-actions');
   if (!el) return;
@@ -33348,6 +33430,19 @@ function renderCiActions(c) {
     html += `<button type="button" data-bi="ci-beimpfen" class="fs-base" style="${sec};color:var(--c-text);font-weight:600">${esc(t('ci.beimpfen'))}</button>`;
   html += `<button type="button" data-bi="ci-lineage" class="fs-base" style="${sec};color:var(--c-text-sec)">${esc(t('ci.lineage'))}</button>`;
   html += '</div>';
+  // Zur Forschung: die Kultur steht danach im Reiter Forschung. Eine, die schon
+  // dort steht, sagt seit wann und kann wieder heraus — auch wenn sie
+  // inzwischen raus ist, sonst bliebe sie fuer immer in der Liste.
+  if (CI_FORSCHUNG.includes(c.type) && (c.researchAt || aktiv)) {
+    html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
+    if (c.researchAt)
+      html +=
+        `<span class="fs-meta" style="color:var(--c-primary);font-weight:600">${esc(t('ci.inResearch', { d: fmtDt(c.researchAt) }))}</span>` +
+        `<button type="button" data-bi="ci-research-off" class="fs-base" style="${sec};flex:0 0 auto;color:var(--c-text-sec)">${esc(t('ci.researchOff'))}</button>`;
+    else
+      html += `<button type="button" data-bi="ci-research" class="fs-base" style="${sec};flex:0 0 auto;color:var(--c-text);font-weight:600">${esc(t('ci.research'))}</button>`;
+    html += '</div>';
+  }
   if (aktiv)
     html += `<button type="button" data-bi="ci-contam" class="fs-base" style="${big};padding:13px;background:var(--c-red-light);color:var(--c-red-dark);border:1px solid var(--c-red-border)">${esc(t('ci.contam'))}</button>`;
   // Was die Tabelle der Kulturbibliothek je Zeile hatte: drucken, löschen, und
@@ -33378,6 +33473,14 @@ function ciAction(a) {
   if (a === 'ci-contam') return ciSetStatus('contam', 'ci.contamDone');
   if (a === 'ci-active') return ciSetStatus('active', 'ci.activeDone');
   document.getElementById('m-baginfo').classList.remove('open');
+  if (a === 'ci-research' || a === 'ci-research-off') {
+    const an = a === 'ci-research';
+    setCultureResearch(c.id, an);
+    showUndoBar(t(an ? 'ci.researchDone' : 'ci.researchOffDone', { id: c.id }), () =>
+      setCultureResearch(c.id, !an)
+    );
+    return;
+  }
   if (a === 'ci-print') return quickPrintCulture(c.id);
   if (a === 'ci-delete') return kulturenLoeschen([c]);
   if (a === 'ci-lineage') {

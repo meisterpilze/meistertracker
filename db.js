@@ -3497,6 +3497,17 @@ const MIGRATIONS = [
       // Die Charge haelt fest, woraus ihre Beutel sind, wie bei Kleie und Mais.
       addCol('batches', 'sub_soyhull', 'REAL DEFAULT 0');
     }
+  },
+  {
+    version: 125,
+    description: 'Kulturen in der Forschung: seit wann eine Kultur dort steht',
+    fn(db) {
+      // Eine Kultur, die beim Scannen in die Forschung gelegt wird, steht im
+      // Reiter Forschung. NULL heisst: nicht dort. Ein Zeitpunkt statt eines
+      // Hakens, weil die Liste danach sortiert und ihn anzeigt.
+      const has = db.prepare("SELECT COUNT(*) AS c FROM pragma_table_info('cultures') WHERE name='research_at'").get();
+      if (!has.c) db.exec('ALTER TABLE cultures ADD COLUMN research_at TEXT');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -4437,7 +4448,8 @@ function readAll(db, opts = {}) {
         source: r.source,
         status: r.status,
         notes: r.notes,
-        created: r.created
+        created: r.created,
+        researchAt: r.research_at || null
       };
     });
 
@@ -7569,13 +7581,29 @@ function updateCulture(db, id, fields) {
     }
     fields.ml = Number(fields.ml);
   }
+  // In die Forschung und wieder heraus: true setzt den Zeitpunkt, false loescht
+  // ihn. Ein zweites true laesst den ersten Zeitpunkt stehen.
+  if (fields.research !== undefined) {
+    if (typeof fields.research !== 'boolean') throw new Error('research must be true or false');
+    if (fields.research) {
+      db.prepare('UPDATE cultures SET research_at=? WHERE id=? AND research_at IS NULL').run(
+        new Date().toISOString(),
+        id
+      );
+    } else {
+      db.prepare('UPDATE cultures SET research_at=NULL WHERE id=?').run(id);
+    }
+  }
   const allowed = ['status', 'notes', 'species', 'strain', 'source', 'strain_text', 'ml'];
   // Map camelCase to snake_case for DB
   if (fields.strainText != null && fields.strain_text == null) {
     fields.strain_text = fields.strainText;
   }
   const cols = Object.keys(fields).filter((k) => allowed.includes(k));
-  if (!cols.length && fields.strainId == null) return;
+  if (!cols.length && fields.strainId == null) {
+    if (fields.research !== undefined) incrementDataVersion(db);
+    return;
+  }
   if (cols.length) {
     const sets = cols.map((c) => `${c}=?`).join(',');
     db.prepare(`UPDATE cultures SET ${sets} WHERE id=?`).run(...cols.map((c) => fields[c]), id);
@@ -7632,6 +7660,7 @@ function getCultureById(db, id) {
     status: r.status,
     notes: r.notes,
     created: r.created,
+    researchAt: r.research_at || null,
     children,
     batches
   };
@@ -13596,7 +13625,8 @@ function getAllCultures(db) {
         source: r.source,
         status: r.status,
         notes: r.notes,
-        created: r.created
+        created: r.created,
+        researchAt: r.research_at || null
       };
     });
 }
