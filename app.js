@@ -2048,10 +2048,29 @@ function sbSubInit() {
   list.addEventListener('click', (e) => {
     const btn = e.target.closest('.sb-sub-btn');
     if (!btn) return;
-    const stab = document.getElementById('st-' + btn.id.slice(3));
-    if (stab) stab.click();
-    sbCloseMobile();
+    sbSubOpen(btn);
   });
+}
+// A view picked from the list. On a desk the list only stands under the page
+// that is open; on a phone the sheet lists the views of every page, so the one
+// asked for may belong to a page that is not open yet.
+//
+// Then the page is opened first, the way a person would: by its own entry,
+// which is what clears a filter or draws the list (see gsNav). The question
+// about unsaved changes is asked once, here and before anything moves, for the
+// reason gsGoto() gives: a "cancel" that arrives inside go() cannot reach the
+// step behind it, and the view would change under a page nobody left.
+function sbSubOpen(btn) {
+  const stab = document.getElementById('st-' + btn.id.slice(3));
+  if (!stab) return;
+  const page = btn.parentElement.dataset.page;
+  const pg = document.getElementById('p-' + page);
+  if (pg && !pg.classList.contains('active')) {
+    if (!mayLeavePage()) return;
+    gsNav('n-' + page, page);
+  }
+  stab.click();
+  sbCloseMobile();
 }
 
 // The name at the top of the page: the phone's bar and the desk's page head.
