@@ -2061,6 +2061,10 @@ window.LANG['pt'] = {
   'zones.deleteRoom': 'Excluir zona',
   'zones.deleteBlocked': 'Só quando não restar nenhum saco (agora {n}).',
   'zones.capacityBtn': 'Máx.: {n}',
+  'zones.find': 'Onde está …?',
+  'zones.findPick': 'Escolher variedade',
+  'zones.notInFach': 'sem prateleira',
+  'zones.rackSettings': 'Editar estante',
   'scanFb.preferRack': '⚠ "{loc}" é uma zona — escaneie um rack para rastreamento preciso (ex. {example})',
   // Calendar entry modal
   'calEntry.titleNew': 'Nova entrada',

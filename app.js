@@ -10230,6 +10230,31 @@ function brettAelter(x, y) {
 function brettBeutel(loc) {
   return (brettPlaetze().get(loc) || []).map(_brettInfo).sort(brettAelter);
 }
+// Wie schwer ein Körnerbeutel ist: sein Gewicht aus bagWeights, sonst das der
+// Charge. Ein Block hat keine Größe, die jemand am Regal sucht: null.
+function beutelKg(x) {
+  const b = x && x.b;
+  if (!b || b.batchType !== 'grain') return null;
+  const w = b.bagWeights || {};
+  const k = Number.isFinite(w[x.bag]) ? w[x.bag] : w[String(x.bag || '').toUpperCase()];
+  if (Number.isFinite(k) && k > 0) return k;
+  return Number.isFinite(b.bagKg) && b.bagKg > 0 ? b.bagKg : null;
+}
+function kgText(kg) {
+  return String(kg).replace('.', ',') + ' kg';
+}
+// "2 × 1 kg · 4 × 5 kg", die kleinen zuerst; '' wenn keiner eine Größe hat.
+function kgAufstellung(list) {
+  const n = new Map();
+  for (const x of list) {
+    const kg = beutelKg(x);
+    if (kg) n.set(kg, (n.get(kg) || 0) + 1);
+  }
+  return [...n.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([kg, k]) => k + ' × ' + kgText(kg))
+    .join(' · ');
+}
 // Je Charge eine Zeile, die älteste zuerst.
 function brettGruppen(list) {
   const g = new Map();
@@ -10603,9 +10628,12 @@ function _brettZeilenHtml(list, now) {
             _bb('raus', g.batch, t('brett.gone'), 'btn-sm btn-r', false) +
             '</span>'
           : '';
+      // Körnerbrut: wie schwer die Beutel sind, "4 × 5 kg"; Blöcke haben keine Größe.
+      const kg = kgAufstellung(g.bags);
+      const klein = t('brett.made', { d: fmtDtShort(g.made) }) + (kg ? ' · ' + kg : '');
       return (
         `<div class="brett-row brett-${z.k}"><b>${g.bags.length}</b>` +
-        `<span class="brett-row-t">${spDot(art)}${esc(art)}<small>${esc(t('brett.made', { d: fmtDtShort(g.made) }))}</small></span>` +
+        `<span class="brett-row-t">${spDot(art)}${esc(art)}<small>${esc(klein)}</small></span>` +
         `<span class="brett-tag">${esc(z.txt)}</span>${knoepfe}</div>`
       );
     })
@@ -21635,20 +21663,214 @@ function renderZones() {
     el.innerHTML = '<div class="empty">' + esc(t(datenGeladen ? 'zones.empty' : 'common.loading')) + '</div>';
     return;
   }
-  el.innerHTML = zonenReihe().map(zonenKarte).join('');
+  el.innerHTML = zonenSucheHtml() + zonenReihe().map(zonenKarte).join('');
+}
+
+// ── Wo steht was ──
+// Oben eine Sorte wählen, darunter jedes Fach, in dem sie steht, mit der Zahl
+// und bei Körnerbrut der Größe. Ein Tipp auf eine Regal-Kachel klappt seine
+// Fächer auf, mit dem, was darin steht. Beides öffnet dasselbe Blatt wie das
+// Etikett am Fach; nachsehen kostet keinen Scan und keinen Umweg über Chargen.
+let _zonenArt = ''; // die gewählte Sorte, klein geschrieben; '' = keine
+const _zonenAuf = new Set(); // aufgeklappte Regale
+function _zonenArtName(x) {
+  return x.b ? sorteName(x.b) : t('batch.noSorte');
+}
+// Jeder Beutel, der gerade in einem Raum steht, ohne Kontamination.
+function zonenBeutel() {
+  const ok = new Set(zonenReihe().map((z) => z.id));
+  const out = [];
+  for (const [loc, list] of brettPlaetze()) {
+    if (!ok.has(toZone(loc))) continue;
+    for (const e of list) out.push(_brettInfo(e));
+  }
+  return out.sort(brettAelter);
+}
+// Die Sorten, die im Haus stehen, mit ihrer Zahl, nach Namen.
+function zonenArten(alle) {
+  const m = new Map();
+  for (const x of alle) {
+    const name = _zonenArtName(x);
+    const k = name.toLowerCase();
+    const a = m.get(k) || { key: k, name, n: 0 };
+    a.n++;
+    m.set(k, a);
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+// Wohin ein Beutel gehört, wenn man ihn sucht: ein Fach, "in keinem Fach" eines
+// Raums mit Fächern, ein Zelt (eine Zahl je Art), sonst das Regal oder der Raum.
+function zonenPlatz(x) {
+  const zone = toZone(x.loc);
+  const z = ZONE_BY_ID[zone];
+  const b = brettVon(x.loc);
+  if (b) {
+    return {
+      key: 'f:' + x.loc,
+      open: { kind: 'platz', loc: x.loc },
+      name: zoneDisplayName(zone) + ' · ' + brettName(x.loc),
+      sort: [0, b.rackId, b.level]
+    };
+  }
+  if (z && z.role === 'fruiting') {
+    return {
+      key: 'z:' + zone + ':' + x.strainId,
+      open: { kind: 'zelt', zone, strainId: x.strainId },
+      name: zoneDisplayName(zone),
+      sort: [0, '', 0]
+    };
+  }
+  const r = rackVon(x.loc);
+  if (brettZoneMitBrettern(z) && (x.loc === zone || (r && r.levels > 0))) {
+    return {
+      key: 'o:' + zone + ':' + x.strainId,
+      open: { kind: 'frei', zone, strainId: x.strainId },
+      name: zoneDisplayName(zone) + ' · ' + t('zones.notInFach'),
+      sort: [1, '', 0]
+    };
+  }
+  return {
+    key: 'p:' + x.loc,
+    open: { kind: 'platz', loc: x.loc },
+    name: r ? zoneDisplayName(zone) + ' · ' + rackLabel(x.loc) : zoneDisplayName(zone),
+    sort: [0, r ? x.loc : '', 0]
+  };
+}
+// Wo eine Sorte steht: je Platz ihre Beutel, in der Reihe der Räume, dann Regal
+// und Fach; was in keinem Fach steht, am Ende seines Raums.
+function zonenFunde(alle, key) {
+  const rang = new Map(zonenReihe().map((z, i) => [z.id, i]));
+  const m = new Map();
+  for (const x of alle) {
+    if (_zonenArtName(x).toLowerCase() !== key) continue;
+    const p = zonenPlatz(x);
+    const f = m.get(p.key) || Object.assign(p, { zone: toZone(x.loc), bags: [] });
+    f.bags.push(x);
+    m.set(p.key, f);
+  }
+  return [...m.values()].sort(
+    (a, b) =>
+      (rang.get(a.zone) ?? 99) - (rang.get(b.zone) ?? 99) ||
+      a.sort[0] - b.sort[0] ||
+      String(a.sort[1]).localeCompare(String(b.sort[1]), undefined, { numeric: true }) ||
+      a.sort[2] - b.sort[2]
+  );
+}
+// Je Sorte und Größe ein Chip, "4× Reishi · 5 kg"; die Farbe sagt, ob die
+// ältesten fällig oder über der Zeit sind. ohneName: nur Zahl und Größe.
+function fachChips(list, now, ohneName) {
+  const g = new Map();
+  for (const x of list) {
+    const name = _zonenArtName(x);
+    const kg = beutelKg(x);
+    const k = name + '|' + (kg || '');
+    const e = g.get(k) || { name, kg, bags: [] };
+    e.bags.push(x);
+    g.set(k, e);
+  }
+  return [...g.values()]
+    .map((e) => {
+      const z = brettZustand(e.bags[0], now);
+      const text = [ohneName ? '' : e.name, e.kg ? kgText(e.kg) : ''].filter(Boolean).join(' · ');
+      return `<span class="brett-chip brett-${z.k}"><b>${e.bags.length}×</b>${text ? ' ' + esc(text) : ''}</span>`;
+    })
+    .join('');
+}
+function _zonenOffen(o) {
+  return (
+    `data-fund-kind="${esc(o.kind)}"` +
+    (o.loc ? ` data-fund-loc="${esc(o.loc)}"` : '') +
+    (o.zone ? ` data-fund-zone="${esc(o.zone)}"` : '') +
+    (o.strainId != null ? ` data-fund-strain="${esc(String(o.strainId))}"` : '')
+  );
+}
+function zonenSucheHtml() {
+  const alle = zonenBeutel();
+  const arten = zonenArten(alle);
+  if (_zonenArt && !arten.some((a) => a.key === _zonenArt)) _zonenArt = '';
+  const wahl =
+    `<option value="">${esc(t('zones.findPick'))}</option>` +
+    arten
+      .map(
+        (a) =>
+          `<option value="${esc(a.key)}"${a.key === _zonenArt ? ' selected' : ''}>${esc(a.name + ' · ' + tp('dash.bags', a.n))}</option>`
+      )
+      .join('');
+  let funde = '';
+  if (_zonenArt) {
+    const now = new Date();
+    funde =
+      '<div class="zonen-funde">' +
+      zonenFunde(alle, _zonenArt)
+        .map(
+          (f) =>
+            `<button type="button" class="brett-zeile zonen-fund" ${_zonenOffen(f.open)}>` +
+            `<span class="zonen-fund-ort">${esc(f.name)}</span>` +
+            `<span class="brett-zeile-chips">${fachChips(f.bags, now, true)}</span></button>`
+        )
+        .join('') +
+      '</div>';
+  }
+  return (
+    '<div class="zonen-suche">' +
+    `<label for="zonen-art">${esc(t('zones.find'))}</label>` +
+    `<select id="zonen-art">${wahl}</select>` +
+    '</div>' +
+    funde
+  );
+}
+// Die Fächer eines aufgeklappten Regals, je Fach eine Zeile; ein Regal ohne
+// Fächer ist eine Zeile. Darunter, was am Regal selbst einzustellen ist.
+function zonenRegalHtml(r) {
+  const now = new Date();
+  const zeile = (ort, nr) => {
+    const list = brettBeutel(ort);
+    const chips = list.length ? fachChips(list, now) : `<span class="brett-chip-leer">${esc(t('brett.emptyShort'))}</span>`;
+    return (
+      `<button type="button" class="brett-zeile" ${_zonenOffen({ kind: 'platz', loc: ort })}>` +
+      `<span class="brett-zeile-n">${esc(nr)}</span><span class="brett-zeile-chips">${chips}</span></button>`
+    );
+  };
+  let zeilen = '';
+  if (r.levels > 0) for (let l = 1; l <= r.levels; l++) zeilen += zeile(brettOrt(r.id, l), String(l));
+  else zeilen = zeile(r.id, '–');
+  return (
+    `<div class="zonen-regal" data-zonen-regal="${esc(r.id)}">` +
+    '<div class="zonen-regal-h">' +
+    `<b>${esc(rackLabel(r.id))}</b>` +
+    `<button type="button" class="btn btn-sm" data-action="rack-edit" data-rack="${esc(r.id)}">${esc(t('zones.rackSettings'))}</button>` +
+    '</div>' +
+    zeilen +
+    '</div>'
+  );
+}
+function zonenRegalUmschalten(rackId) {
+  if (_zonenAuf.has(rackId)) _zonenAuf.delete(rackId);
+  else _zonenAuf.add(rackId);
+  renderZones();
+}
+// Was ein Tipp auf eine Zeile öffnet, aus ihren data-fund-* zurückgelesen.
+function zonenFundZiel(d) {
+  const o = { kind: d.fundKind };
+  if (d.fundLoc) o.loc = d.fundLoc;
+  if (d.fundZone) o.zone = d.fundZone;
+  if (d.fundStrain !== undefined && d.fundStrain !== '') o.strainId = Number(d.fundStrain);
+  return o;
 }
 // Eine Karte: Raum, Zahl der Beutel, "Bearbeiten"; in einem Raum mit Fächern
 // die Beutel, die noch in keinem Fach stehen (ein Tipp öffnet ihre Liste); dann
-// die Regale.
+// die Regale, und unter ihnen die aufgeklappten mit ihren Fächern.
 function zonenKarte(z) {
   const n = Object.keys(getZoneBags(z.id)).length;
   const frei = brettZoneMitBrettern(z) ? brettOhne(z.id).length : 0;
+  const auf = z.racks.filter((r) => _zonenAuf.has(r.id));
   const kacheln = z.racks
     .map((r) => {
       const nR = Object.keys(getRackBags(r.id)).length;
       const art = brettArt(r.strainId);
+      const offen = _zonenAuf.has(r.id);
       return (
-        `<button type="button" class="zone-tile" data-action="rack-open" data-rack="${esc(r.id)}">` +
+        `<button type="button" class="zone-tile${offen ? ' on' : ''}" data-action="rack-open" data-rack="${esc(r.id)}" aria-expanded="${offen}">` +
         `<b>${esc(rackLabel(r.id))}</b>` +
         `<span>${esc(r.levels > 0 ? tp('rackEdit.chip', r.levels) : t('zones.noShelves'))}</span>` +
         `<span>${esc(tp('dash.bags', nR))}</span>` +
@@ -21658,7 +21880,7 @@ function zonenKarte(z) {
     })
     .join('');
   const unten = z.racks.length
-    ? `<div class="zone-tiles">${kacheln}</div>`
+    ? `<div class="zone-tiles">${kacheln}</div>` + auf.map(zonenRegalHtml).join('')
     : `<p class="zone-hint">${esc(t(z.role === 'fruiting' ? 'zones.tentHint' : 'zones.noRacks'))}</p>`;
   return (
     `<div class="zone-card" data-find="zone:${esc(z.id)}" data-zone-id="${esc(z.id)}" style="--zc:${safeColor(z.color)}">` +
@@ -38125,8 +38347,20 @@ function initEventListeners() {
     if (!btn) return;
     const action = btn.dataset.action;
     if (action === 'zone-open') zoneEditOpen(btn.dataset.zone);
-    else if (action === 'rack-open') rackEditOpen(btn.dataset.rack);
+    else if (action === 'rack-open') zonenRegalUmschalten(btn.dataset.rack);
+    else if (action === 'rack-edit') rackEditOpen(btn.dataset.rack);
     else if (action === 'frei-open') brettOeffne({ kind: 'frei', zone: btn.dataset.zone });
+  });
+  // Ein Fach, ein Regal, "in keinem Fach" oder ein Zelt aus "Wo steht …?" oder
+  // einem aufgeklappten Regal: dasselbe Blatt wie das Etikett.
+  $('zones-list').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-fund-kind]');
+    if (el) brettOeffne(zonenFundZiel(el.dataset));
+  });
+  $('zones-list').addEventListener('change', (e) => {
+    if (e.target.id !== 'zonen-art') return;
+    _zonenArt = e.target.value;
+    renderZones();
   });
   $('n-print').addEventListener('click', () => {
     go('print', 'n-print');

@@ -7790,6 +7790,54 @@ body:has(#m-camscan.open) .update-bar {
 .zone-tile .zone-tile-leer {
   font-style: italic;
 }
+/* An open rack: its tile is marked, its Fächer stand under the tiles. */
+.zone-tile.on {
+  border-color: var(--c-primary);
+  box-shadow: inset 0 0 0 1px var(--c-primary);
+}
+.zonen-regal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.zonen-regal-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zonen-regal-h .btn {
+  margin-left: auto;
+}
+/* "Wo steht …?": the label and the picker in one line, the places below. */
+.zonen-suche {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.zonen-suche label {
+  flex: none;
+  font-weight: 600;
+}
+.zonen-suche select {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.zonen-funde {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.brett-zeile.zonen-fund {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.zonen-fund-ort {
+  font-weight: 600;
+}
 .zone-hint {
   margin: 6px 0 0;
   font-size: var(--fs-sm);
