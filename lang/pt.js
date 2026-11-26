@@ -161,7 +161,7 @@ window.LANG['pt'] = {
   'proj.noteDelMsg': 'Depois a nota desaparece. Ensaios e pesquisa ficam.',
   'proj.research': 'Da pesquisa ({n})',
   'proj.cultures': 'Culturas na pesquisa ({n})',
-  'proj.culturesNone': 'Ainda nenhuma. Leia uma cultura líquida e toque em “Para a pesquisa”.',
+  'proj.culturesNone': 'Ainda nenhuma. Leia uma cultura líquida, seringa ou placa de Petri e toque em “Para a pesquisa”.',
   'proj.culturesSince': 'desde {d}',
   'proj.docLoading': 'A carregar…',
   'proj.docLoadErr': 'Não foi possível carregar.',

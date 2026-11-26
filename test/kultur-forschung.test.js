@@ -71,8 +71,13 @@ describe('Kultur-Fenster: Zur Forschung', () => {
   it('eine verbrauchte, die nie dort war, kommt nicht mehr hinein', () => {
     assert.ok(!knoepfe({ id: 'LC-TST-261126-01', type: 'LC', status: 'used' }).includes('ci-research'));
   });
-  it('erst einmal nur Flüssigkultur', () => {
-    for (const type of ['SY', 'PD', 'MC']) {
+  it('Spritze und Petrischale auch', () => {
+    for (const type of ['SY', 'PD']) {
+      assert.ok(knoepfe({ id: type + '-TST-261126-01', type, status: 'active' }).includes('ci-research'), type);
+    }
+  });
+  it('ein Slant, Körnerbrut oder Dübel nicht', () => {
+    for (const type of ['MC', 'G2G', 'GS', 'DU']) {
       assert.ok(!knoepfe({ id: type + '-TST-261126-01', type, status: 'active' }).includes('ci-research'), type);
     }
   });
@@ -166,14 +171,19 @@ describe('Forschung ist kein Bestand', () => {
       assert.deepEqual(lc(), [3, 3], 'aus der Forschung heraus zählt sie wieder');
     });
   });
-  it('auch nicht im Verkaufsbestand, falls einmal mehr als Flüssigkultur hineindarf', () => {
+  it('eine Petrischale oder Spritze in der Forschung zählt nicht im Verkaufsbestand', () => {
     mitDb((d) => {
       const art = Number(db.createMushroomStrain(d, { name: 'Testart Forschung PD', kuerzel: 'TFP' }));
-      db.insertCultures(d, [kultur(art, 'PD', 1), kultur(art, 'PD', 2)]);
-      const pd = () => db.listSyringeStock(d).find((r) => r.strainId === art && r.type === 'PD').count;
-      assert.equal(pd(), 2);
+      db.insertCultures(d, [kultur(art, 'PD', 1), kultur(art, 'PD', 2), kultur(art, 'SY', 1), kultur(art, 'SY', 2)]);
+      const zahl = (type) =>
+        db
+          .listSyringeStock(d)
+          .filter((r) => r.strainId === art && r.type === type)
+          .reduce((s, r) => s + r.count, 0);
+      assert.deepEqual([zahl('PD'), zahl('SY')], [2, 2]);
       db.updateCulture(d, kultur(art, 'PD', 1).id, { research: true });
-      assert.equal(pd(), 1);
+      db.updateCulture(d, kultur(art, 'SY', 1).id, { research: true });
+      assert.deepEqual([zahl('PD'), zahl('SY')], [1, 1]);
     });
   });
   it('in der Kulturliste bleibt sie stehen, mit Vermerk, zählt aber nicht mit', () => {

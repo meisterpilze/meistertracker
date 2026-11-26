@@ -33391,9 +33391,12 @@ function ciHerkunftHtml(c) {
 // Was als Kultur auch im Shop steht.
 // Flüssigkultur geht auch an Kunden, im Glas.
 const CI_VERKAUFBAR = ['SY', 'PD', 'LC'];
-// Was beim Scannen in die Forschung gelegt werden kann. Erst einmal nur
-// Flüssigkultur; der Server nimmt jede Art, die Grenze ist diese Zeile.
-const CI_FORSCHUNG = ['LC'];
+// Was beim Scannen in die Forschung gelegt werden kann: Flüssigkultur,
+// Spritze und Petrischale. Der Server nimmt jede Art, die Grenze ist diese
+// Zeile. Spritze und Petrischale zählen dann auch nicht mehr im Verkaufsbestand
+// (listSyringeStock); den Shops meldet das die Neuzählung nach jedem
+// Schreiben (broadcastSSE → syringe-stock.js).
+const CI_FORSCHUNG = ['LC', 'SY', 'PD'];
 // In die Forschung oder heraus, sofort und mit Rückgängig. Der Zeitpunkt steht
 // gleich hier; der Server setzt seinen eigenen, und der nächste Datenstand
 // bringt ihn.
