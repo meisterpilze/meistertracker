@@ -775,6 +775,11 @@ paths:
                 source:
                   type: string
                   nullable: true
+                research:
+                  type: boolean
+                  description: >-
+                    true puts the culture on the Projects research tab (stamps
+                    research_at once); false takes it off again.
       responses:
         '200':
           description: Culture updated

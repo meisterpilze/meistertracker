@@ -40,6 +40,12 @@ const TEILE = [
   'pjDocsLaden',
   'pjDocsWarten',
   'pjDocImport',
+  'fmtDt',
+  'pjForschungKulturen',
+  'pjKulturenStand',
+  'pjKulturZeile',
+  'pjKulturen',
+  'pjProjekteZeichnen',
   'renderProjekte'
 ];
 
@@ -50,6 +56,12 @@ function laden() {
     let currentUser = null;
     const currentLang = 'de';
     let pjDocsAbruf = null;
+    let pjKulturenGezeigt = null;
+    const cultures = [
+      { id: 'LC-TFO-261126-01', type: 'LC', species: 'Testart', strainText: '<b>x</b>', status: 'contam',
+        researchAt: '2026-11-26T09:00:00Z' },
+      { id: 'LC-TFO-261126-02', type: 'LC', species: 'Testart', status: 'active', researchAt: null }
+    ];
     const PJ_CHK = 'test';
     const abrufe = [];
     let antwort = { docs: {} };
@@ -151,6 +163,19 @@ describe('Vorhaben-Reiter', () => {
     const forschung = ui.els['pj-research'].innerHTML;
     assert.ok(forschung.includes('proj.docNone'));
     assert.ok(forschung.includes('pj-notebox'), 'notes do not depend on the document');
+  });
+
+  it('zeigt oben die Kulturen in der Forschung, auch ohne Unterlage', () => {
+    ui.setzeDocs({});
+    ui.renderProjekte('research');
+    const html = ui.els['pj-research'].innerHTML;
+    assert.ok(html.indexOf('proj.cultures{"n":1}') < html.indexOf('proj.docNone'), 'the list comes first');
+    assert.ok(html.includes('data-pj-kultur="LC-TFO-261126-01"'));
+    assert.equal(html.includes('LC-TFO-261126-02'), false, 'only cultures put into research');
+    assert.ok(html.includes('lab.contaminated'), 'a culture that is gone says why');
+    assert.ok(html.includes('&lt;b&gt;x'), 'the strain text is escaped');
+    ui.renderProjekte('build');
+    assert.equal(ui.els['pj-build'].innerHTML.includes('proj.cultures'), false, 'only the research tab has it');
   });
 
   it('bleibt nach einem Fehler nicht im Laden haengen', async () => {

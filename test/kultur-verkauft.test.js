@@ -13,6 +13,7 @@ const db = require('../db');
 const APP = quelle();
 const hebe = (n) => _hf(n, APP);
 const VERKAUFBAR = APP.match(/const CI_VERKAUFBAR = \[[^\]]*\];/)[0];
+const FORSCHUNG = APP.match(/const CI_FORSCHUNG = \[[^\]]*\];/)[0];
 
 // renderCiActions schreibt in #bi-actions; hier ein Platzhalter dafür.
 function knoepfe(c) {
@@ -23,13 +24,15 @@ function knoepfe(c) {
     't',
     'esc',
     '_lbDarfWeg',
-    `${VERKAUFBAR}\n${hebe('renderCiActions')}\nrenderCiActions(${JSON.stringify(c)});`
+    'fmtDt',
+    `${VERKAUFBAR}\n${FORSCHUNG}\n${hebe('renderCiActions')}\nrenderCiActions(${JSON.stringify(c)});`
   )(
     { getElementById: () => el },
     () => ['KB'],
     (k) => k,
     (s) => String(s),
-    () => true
+    () => true,
+    (d) => String(d)
   );
   return [...el.innerHTML.matchAll(/data-bi="([^"]+)"/g)].map((m) => m[1]);
 }
