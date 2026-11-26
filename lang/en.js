@@ -1300,6 +1300,7 @@ window.LANG['en'] = {
   'ci.researchDone': '{id} is now in research.',
   'ci.researchOffDone': '{id} is out of research.',
   'kb.count': '{n} in stock',
+  'kb.research': 'Research',
   'kb.scan': 'Scan culture',
   'sl.today': 'today',
   'sl.days': '{n} d',

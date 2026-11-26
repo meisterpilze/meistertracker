@@ -15761,7 +15761,7 @@ function listSyringeStock(db, now = new Date()) {
       `WITH sz(type, ml) AS (VALUES ${slots})
        SELECT ms.id AS strain_id, ms.name, ms.im_programm, sz.type, sz.ml,
               (SELECT COUNT(*) FROM cultures c
-                WHERE sz.type <> 'GS' AND c.type = sz.type AND c.status IN (${st})
+                WHERE sz.type <> 'GS' AND c.type = sz.type AND c.status IN (${st}) AND c.research_at IS NULL
                   AND (sz.type = 'PD' OR COALESCE(c.ml, 10) = sz.ml)
                   AND (c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name))) AS n,
               s.sku, s.pushed_count, s.pushed_at, s.billbee_stock, s.last_error, s.last_try, s.soll, ms.min_pd
@@ -16331,7 +16331,9 @@ function grainPlan(db, now = new Date()) {
  *
  * Jede Art steht da; eine ausser Programm ohne Bestand, Bestellung und Shop
  * heisst ruht, und die Laborseite klappt sie ein. Gezaehlt wird ueberall
- * gleich: Kulturen aktiv und gelagert, Koernerbrut was im Regal steht.
+ * gleich: Kulturen aktiv und gelagert, Koernerbrut was im Regal steht. Eine
+ * Kultur in der Forschung (research_at) ist kein Bestand: sie steht im Labor,
+ * aber nicht fuer die Produktion oder den Verkauf bereit.
  */
 function labStock(db, now = new Date()) {
   const nowIso = now.toISOString();
@@ -16344,7 +16346,7 @@ function labStock(db, now = new Date()) {
       `SELECT ms.id AS strain_id, c.type, COUNT(*) AS n
          FROM cultures c JOIN mushroom_strains ms
            ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
-        WHERE c.type IN ('MC', 'LC') AND c.status IN ('active', 'stored')
+        WHERE c.type IN ('MC', 'LC') AND c.status IN ('active', 'stored') AND c.research_at IS NULL
         GROUP BY ms.id, c.type`
     )
     .all())
@@ -16492,7 +16494,7 @@ function _labFachCounts(db, nowIso) {
       `SELECT ms.id AS strain_id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END AS ml, COUNT(*) AS n
          FROM cultures c JOIN mushroom_strains ms
            ON c.strain_id = ms.id OR (c.strain_id IS NULL AND c.species = ms.name)
-        WHERE c.type IN ('LC', 'PD', 'SY') AND c.status IN (${st})
+        WHERE c.type IN ('LC', 'PD', 'SY') AND c.status IN (${st}) AND c.research_at IS NULL
         GROUP BY ms.id, c.type, CASE WHEN c.type = 'SY' THEN COALESCE(c.ml, 10) ELSE 0 END`
     )
     .all(...SYRINGE_STOCK_STATUSES);

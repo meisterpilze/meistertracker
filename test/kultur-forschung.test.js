@@ -141,3 +141,48 @@ describe('Der Server merkt sich, seit wann', () => {
     });
   });
 });
+
+describe('Forschung ist kein Bestand', () => {
+  const kultur = (art, type, n) => ({
+    id: type + '-TFB-261126-0' + n,
+    type,
+    strainId: art,
+    status: 'active',
+    notes: '',
+    created: '2026-11-26T08:00:00Z'
+  });
+  it('eine Flüssigkultur in der Forschung zählt weder im Laborbestand noch im Fach', () => {
+    mitDb((d) => {
+      const art = Number(db.createMushroomStrain(d, { name: 'Testart Forschung', kuerzel: 'TFB' }));
+      db.insertCultures(d, [kultur(art, 'LC', 1), kultur(art, 'LC', 2), kultur(art, 'LC', 3)]);
+      const lc = () => {
+        const s = db.labStock(d).find((x) => x.strainId === art);
+        return [s.items.find((i) => i.key === 'LC').have, s.fach.find((f) => f.slot === 'LC').have];
+      };
+      assert.deepEqual(lc(), [3, 3]);
+      db.updateCulture(d, kultur(art, 'LC', 1).id, { research: true });
+      assert.deepEqual(lc(), [2, 2]);
+      db.updateCulture(d, kultur(art, 'LC', 1).id, { research: false });
+      assert.deepEqual(lc(), [3, 3], 'aus der Forschung heraus zählt sie wieder');
+    });
+  });
+  it('auch nicht im Verkaufsbestand, falls einmal mehr als Flüssigkultur hineindarf', () => {
+    mitDb((d) => {
+      const art = Number(db.createMushroomStrain(d, { name: 'Testart Forschung PD', kuerzel: 'TFP' }));
+      db.insertCultures(d, [kultur(art, 'PD', 1), kultur(art, 'PD', 2)]);
+      const pd = () => db.listSyringeStock(d).find((r) => r.strainId === art && r.type === 'PD').count;
+      assert.equal(pd(), 2);
+      db.updateCulture(d, kultur(art, 'PD', 1).id, { research: true });
+      assert.equal(pd(), 1);
+    });
+  });
+  it('in der Kulturliste bleibt sie stehen, mit Vermerk, zählt aber nicht mit', () => {
+    assert.match(APP, /const _kbBestand = \(c\) => _kbDa\(c\) && !c\.researchAt;/);
+    assert.match(APP, /zaehler: \(\) => t\('kb\.count', \{ n: cultures\.filter\(_kbBestand\)\.length \}\)/);
+    assert.match(APP, /const nLab = cultures\.filter\(_kbBestand\)\.length;/);
+    assert.match(APP, /if \(c\.researchAt\) rechts\.push\(t\('kb\.research'\)\)/);
+  });
+  it('nach dem Umschalten holt die App die Zahlen je Art neu', () => {
+    assert.match(hebe('setCultureResearch'), /loadLabStock\(\)/);
+  });
+});

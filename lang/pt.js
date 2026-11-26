@@ -908,6 +908,7 @@ window.LANG['pt'] = {
   'ci.researchDone': '{id} está agora na pesquisa.',
   'ci.researchOffDone': '{id} saiu da pesquisa.',
   'kb.count': '{n} em stock',
+  'kb.research': 'Pesquisa',
   'kb.scan': 'Ler cultura',
   'sl.today': 'hoje',
   'sl.days': '{n} d',
