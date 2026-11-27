@@ -9744,6 +9744,45 @@ button.wk-an-zeile:active {
   }
 }
 
+/* What is due today, as a figure on the job that does it (renderWorkTileDue).
+   Dark while it is only due, red once something is late. On a phone the jobs
+   are rows, so the figure stands at the end of its row and the words stop
+   before it; on tiles it stands in the corner. */
+.wk-due {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--c-text);
+  color: var(--c-surface);
+  font-size: max(0.8125rem, var(--fs-min));
+  font-weight: 650;
+  line-height: 1;
+}
+.wk-due[hidden] {
+  display: none;
+}
+.wk-due.rot {
+  background: var(--c-red-strong);
+}
+@media (max-width: 768px) {
+  .wk-due {
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+  }
+  .wk-tile:has(.wk-due:not([hidden])) {
+    padding-right: 52px;
+  }
+}
+
 /* ── The notices, in one row ────────────────────────────────────────────────
    Side by side while they fit and wrapped when they do not. Each one on its
    own line cost a phone 56px per notice before the first job. On a quiet day

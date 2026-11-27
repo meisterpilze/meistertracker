@@ -3025,6 +3025,9 @@
                not in the lab (renderWorkNachproduzieren); tapping opens the
                Nachproduzieren card on the Labor page. -->
           <button type="button" class="wk-alert wk-np" id="wk-np" hidden></button>
+          <!-- Parcels to pack today, from the packing board (renderWorkPack);
+               tapping opens Bestellungen › Packen. -->
+          <button type="button" class="wk-alert wk-pack" id="wk-pack" hidden></button>
           <!-- Admins only: today's USB stick backup — due, running, done (take
                the stick out), failed, or not set up yet. Filled by
                renderUsbReminder(); tapping opens Settings → Backup. -->
@@ -3049,6 +3052,7 @@
               <span class="wk-tile-t" data-i18n="work.move">Umziehen</span>
               <span class="wk-tile-when" data-i18n="work.moveWhen">Inkubation → Fruchtzelt → Lager</span>
               <span class="wk-stand" id="wk-n-move" hidden></span>
+              <span class="wk-due" id="wk-due-move" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-harvest" style="--wk-c: var(--c-amber-dark); --wk-cl: var(--c-amber-light)">
               <span class="wk-nr" aria-hidden="true">5</span>
@@ -3063,6 +3067,7 @@
               <span class="wk-tile-t" data-i18n="work.harvest">Ernte erfassen</span>
               <span class="wk-tile-when" data-i18n="work.harvestWhen">Gramm pro Beutel, nach dem Ernten</span>
               <span class="wk-stand" id="wk-n-harvest" hidden></span>
+              <span class="wk-due" id="wk-due-harvest" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-batch" style="--wk-c: var(--c-green-dark); --wk-cl: var(--c-primary-light)">
               <span class="wk-nr" aria-hidden="true">3</span>
@@ -3086,6 +3091,7 @@
               <span class="wk-tile-t" data-i18n="work.tileBatch">Beutel beimpfen</span>
               <span class="wk-tile-when" data-i18n="work.batchWhen">wenn Körnerbrut durchgewachsen ist</span>
               <span class="wk-stand" id="wk-n-batch" hidden></span>
+              <span class="wk-due" id="wk-due-batch" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-lab" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
               <span class="wk-nr" aria-hidden="true">1</span>
@@ -3105,6 +3111,7 @@
               <span class="wk-tile-t" data-i18n="work.lab">Labor</span>
               <span class="wk-tile-when" data-i18n="work.labWhen">Slant, Petri, Flüssigkultur, Spritzen, Korn-zu-Korn</span>
               <span class="wk-stand" id="wk-n-lab" hidden></span>
+              <span class="wk-due" id="wk-due-lab" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-grain" style="--wk-c: var(--c-purple-dark); --wk-cl: var(--c-purple-light)">
               <span class="wk-nr" aria-hidden="true">2</span>
@@ -3127,6 +3134,7 @@
               <span class="wk-tile-t" data-i18n="work.grain">Körnerbrut</span>
               <span class="wk-tile-when" data-i18n="work.grainWhen">wenn eine Flüssigkultur fertig ist</span>
               <span class="wk-stand" id="wk-n-grain" hidden></span>
+              <span class="wk-due" id="wk-due-grain" hidden></span>
             </button>
             <button type="button" class="wk-tile" id="wk-t-sub" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
               <span class="wk-tile-art" aria-hidden="true">
