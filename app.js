@@ -37810,6 +37810,51 @@ function _camScharfLesen() {
   };
   proto._mtScharf = true;
 }
+// Was die Kamera sucht: was die App druckt (QR, Code 128), das GLS-Etikett
+// (DataMatrix, ITF) und EAN-13, damit ein Produkt-Strichcode noch "kein
+// Etikett von hier" bekommt. Jede Art kostet je Bild Zeit; ohne Liste suchte
+// sie siebzehn, und die gründliche Suche (_camGruendlich) wäre langsam.
+function _camFormate() {
+  const F = window.Html5QrcodeSupportedFormats;
+  return F ? [F.QR_CODE, F.CODE_128, F.DATA_MATRIX, F.ITF, F.EAN_13] : undefined;
+}
+// Der eigene Leser von html5-qrcode (ZXing, auf dem iPhone der einzige) lief
+// mit TRY_HARDER aus: ein Strichcode wurde nur auf 15 Zeilen um die Mitte des
+// Kastens gesucht und nie quer, also nur, wenn er genau mittig und waagrecht
+// lag. Jetzt sucht er jede Zeile und dreht das Bild, wenn er nichts findet.
+// Wo der Leser des Telefons liest, las ZXing dazu jedes zweite Bild mit
+// (getDecoder wechselt ab), langsamer und schlechter: da liest jetzt nur der
+// des Telefons.
+const ZXING_TRY_HARDER = 3; // DecodeHintType.TRY_HARDER der mitgelieferten ZXing
+function _camGruendlich(scanner) {
+  const q = scanner && scanner.qrcode;
+  if (!q || !q.primaryDecoder) return;
+  q.secondaryDecoder = null;
+  const hints = q.primaryDecoder.hints;
+  if (hints instanceof Map) hints.set(ZXING_TRY_HARDER, true);
+}
+// Nach jedem Treffer liest die Kamera kurz nicht (pause), dann geht es weiter.
+// Früher hielt pause(true) auch das Video an, und html5-qrcode liest erst
+// wieder, wenn das Video danach "playing" meldet. Auf manchem Telefon kam das
+// nach ein paar Scans nicht mehr: die Kamera stand, mit dem grünen Rahmen vom
+// letzten Treffer, bis man sie zu- und wieder aufmachte. Jetzt läuft das Bild
+// weiter, und liest die Kamera nach dem Weiter noch immer nicht, versucht sie
+// es gleich noch einmal.
+const CAM_PAUSIERT = 3; // Html5QrcodeScannerState.PAUSED
+function _camWeiter(scanner, versuch) {
+  if (scanner !== _camScanner || _camState !== CAM_OPEN) return;
+  let steht = false;
+  try {
+    if (scanner.getState() === CAM_PAUSIERT) {
+      scanner.resume();
+      steht = scanner.getState() === CAM_PAUSIERT; // wartet noch aufs Video
+    }
+  } catch (e) {
+    steht = true;
+    console.warn('Kamera: Weiterlesen ging nicht', e);
+  }
+  if (steht && versuch < 5) setTimeout(() => _camWeiter(scanner, versuch + 1), 1000);
+}
 // Returns the active video MediaStreamTrack from the html5-qrcode reader, or
 // null if the camera hasn't attached one yet.
 function _camActiveTrack() {
@@ -37896,13 +37941,20 @@ function openCamScan() {
     return;
   }
   _camScharfLesen();
-  _camScanner = new Html5Qrcode('cam-reader', { useBarCodeDetectorIfSupported: _camNativ, verbose: false });
+  _camScanner = new Html5Qrcode('cam-reader', {
+    formatsToSupport: _camFormate(),
+    useBarCodeDetectorIfSupported: _camNativ,
+    verbose: false
+  });
+  _camGruendlich(_camScanner);
   const scanner = _camScanner;
   scanner
     .start(
       { facingMode: _camFacingMode },
       {
-        fps: 10,
+        // Wie oft je Sekunde gelesen wird, mit der Pause dazwischen; ein Bild
+        // zu lesen dauert selbst schon, darum 15 statt 10.
+        fps: 15,
         qrbox: function (vw, vh) {
           // Wide-short rectangle — fits 1D barcodes (EAN/Code128) without clipping,
           // and QR codes still sit comfortably inside the width. Bumped from
@@ -37934,21 +37986,26 @@ function openCamScan() {
         }
         _camLastDecoded = decoded;
         _camLastDecodedAt = now;
-        scanner.pause(true);
-        processScan(decoded);
+        // Kurz nicht lesen; das Bild läuft weiter (_camWeiter sagt, warum).
+        try {
+          scanner.pause(false);
+        } catch (e) {
+          /* las gerade nicht: dann gibt es nichts anzuhalten */
+        }
         // Stocktake runs bag-to-bag at pace, and every bag is a different code,
         // so the 3 s dedup window already covers double-reads — a long pause on
         // top of it just makes the walk feel sluggish.
         const pauseMs = _zcScanMode ? ZC_SCAN_PAUSE_MS : SCAN_PAUSE_MS;
-        setTimeout(function () {
-          // Only resume if we're still the active scanner AND the state hasn't
-          // moved to closing in the meantime.
-          if (scanner === _camScanner && _camState === CAM_OPEN) {
-            try {
-              scanner.resume();
-            } catch (e) {}
-          }
-        }, pauseMs);
+        // Das Weiter steht vor dem Scan: wirft der einen Fehler, liest die Kamera
+        // trotzdem weiter, statt stehen zu bleiben. Ob sie noch offen ist, prüft
+        // _camWeiter.
+        setTimeout(() => _camWeiter(scanner, 0), pauseMs);
+        try {
+          processScan(decoded);
+        } catch (e) {
+          console.error('Scan failed:', decoded, e);
+          setFb('err', t('cam.scanFailed'));
+        }
       },
       function () {}
     )

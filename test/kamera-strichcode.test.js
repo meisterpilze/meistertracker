@@ -155,7 +155,7 @@ describe('Kamera: der Barcode-Leser des Telefons nur, wenn er liest', () => {
     );
     assert.match(
       start,
-      /new Html5Qrcode\('cam-reader', \{ useBarCodeDetectorIfSupported: _camNativ, verbose: false \}\)/
+      /new Html5Qrcode\('cam-reader', \{\s*formatsToSupport: _camFormate\(\),\s*useBarCodeDetectorIfSupported: _camNativ,\s*verbose: false\s*\}\);\s*_camGruendlich\(_camScanner\);/
     );
     assert.match(APP, /^let _camNativ = null;/m);
   });
@@ -178,5 +178,65 @@ describe('Kamera: was sie von html5-qrcode braucht', () => {
   });
   it('useBarCodeDetectorIfSupported: false heißt der eigene Leser', () => {
     assert.match(LIB, /if\(!f\(t\.useBarCodeDetectorIfSupported\)\)return!1!==t\.useBarCodeDetectorIfSupported/);
+  });
+});
+
+// Gründlich lesen: ZXing (auf dem iPhone der einzige Leser) mit TRY_HARDER, und
+// wo der Leser des Telefons liest, nur er. Dazu nur die Arten, die es hier gibt.
+describe('Kamera: gründlich lesen', () => {
+  const gruendlich = new Function(
+    APP.match(/^const ZXING_TRY_HARDER = 3;.*$/m)[0] +
+      '\n' +
+      hebeFunktion('_camGruendlich') +
+      '\nreturn _camGruendlich;'
+  )();
+
+  it('ZXing allein: TRY_HARDER an', () => {
+    const hints = new Map([
+      [2, [0, 5]],
+      [3, false]
+    ]);
+    const q = { primaryDecoder: { hints } };
+    gruendlich({ qrcode: q });
+    assert.equal(hints.get(3), true);
+    assert.deepEqual(hints.get(2), [0, 5], 'die Arten bleiben');
+  });
+  it('der Leser des Telefons und ZXing: nur noch der des Telefons', () => {
+    const zxing = { hints: new Map([[3, false]]) };
+    const q = { primaryDecoder: { detector: {} }, secondaryDecoder: zxing };
+    gruendlich({ qrcode: q });
+    assert.equal(q.secondaryDecoder, null);
+  });
+  it('ohne Leser nichts, und kein Fehler', () => {
+    gruendlich(null);
+    gruendlich({});
+    gruendlich({ qrcode: {} });
+  });
+  it('die Arten: QR, Code 128, DataMatrix, ITF, EAN-13; ohne die Liste der Bibliothek alle', () => {
+    const formate = (F) =>
+      new Function('window', hebeFunktion('_camFormate') + '\nreturn _camFormate();')({
+        Html5QrcodeSupportedFormats: F
+      });
+    const F = { QR_CODE: 0, CODE_128: 5, DATA_MATRIX: 6, ITF: 8, EAN_13: 9 };
+    assert.deepEqual(formate(F), [0, 5, 6, 8, 9]);
+    assert.equal(formate(undefined), undefined);
+  });
+  it('15 Bilder je Sekunde statt 10', () => {
+    assert.match(hebeFunktion('openCamScan'), /fps: 15,/);
+  });
+  it('was das von html5-qrcode braucht', () => {
+    // TRY_HARDER steht in einer Map auf dem ZXing-Leser, mit dem Schlüssel 3,
+    // und wird bei jedem Bild neu gelesen.
+    assert.match(LIB, /t\[t\.TRY_HARDER=3\]="TRY_HARDER"/);
+    assert.match(LIB, /o\.set\(E\.DecodeHintType\.TRY_HARDER,!1\),this\.hints=o/);
+    assert.match(LIB, /new E\.MultiFormatReader\(this\.verbose,this\.hints\)/);
+    // Mit dem Leser des Telefons kommt ZXing als zweiter dazu, und beide wechseln ab.
+    assert.match(LIB, /this\.primaryDecoder=new S\(t,r,n\),this\.secondaryDecoder=new I\(t,r,n\)/);
+    assert.match(LIB, /getDecoder=function\(\)\{return this\.secondaryDecoder\?/);
+    // Die Arten, wie _camFormate sie nimmt.
+    assert.match(LIB, /t\[t\.QR_CODE=0\]="QR_CODE"/);
+    assert.match(LIB, /t\[t\.CODE_128=5\]="CODE_128",t\[t\.DATA_MATRIX=6\]="DATA_MATRIX"/);
+    assert.match(LIB, /t\[t\.ITF=8\]="ITF",t\[t\.EAN_13=9\]="EAN_13"/);
+    assert.match(LIB, /Html5QrcodeSupportedFormats = window\.__Html5QrcodeLibrary__\.Html5QrcodeSupportedFormats/);
   });
 });
