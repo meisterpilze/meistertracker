@@ -7370,9 +7370,10 @@ body:has(#m-camscan.open) .update-bar {
   .sb-in-bottom-nav {
     display: none;
   }
-  /* The page that is open stays, when it has views to list: they stand under
-     its name, and a list under no name reads as part of the group above it. */
-  .sb-btn.sb-in-bottom-nav.active:has(+ .sb-sub) {
+  /* A page with views stays, open or not: its views stand under its name in
+     the sheet (see "The index" below), and a list under no name reads as part
+     of the group above it. Only a page without views is left to the bar. */
+  .sb-btn.sb-in-bottom-nav:has(+ .sb-sub) {
     display: flex;
   }
   /* Both of these describe the grids, and below this breakpoint there are no
@@ -12774,6 +12775,40 @@ button.wk-an-zeile:active {
   .sb-nav > .sb-btn.active:has(+ .sb-sub),
   .sb-nav > .sb-btn.active + .sb-sub {
     order: -1;
+  }
+  /* ── The index ──
+     Every page lists its views here, not only the page that is open. A view of
+     another page was four taps away (the sheet, the page, the sheet again, the
+     view), and nothing said it existed before the second sheet. Now it is two,
+     and the sheet is the one place that shows everything the app has.
+
+     The views stand under their page as pills in a row that wraps, quieter
+     than the entries: the names of the pages stay the line the eye runs down.
+     They begin where the page's name begins (the entry's padding, its icon,
+     the gap). The selector names the entry in front of the list so that it
+     outranks ".sb-btn.active + .sb-sub { display: block }" by coming later. */
+  .sb-nav > .sb-btn + .sb-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 2px 8px 10px 44px;
+  }
+  .sb-sub > .sb-sub-btn {
+    width: auto;
+    margin: 0;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: var(--c-bg);
+    color: var(--c-text-sec);
+    font-weight: 500;
+  }
+  /* The mark belongs to the view that is showing, on the page that is open.
+     Every strip keeps an active tab of its own, and that one does not say
+     "you are here". */
+  .sb-btn.active + .sb-sub > .sb-sub-btn.active {
+    background: var(--c-text);
+    color: var(--c-surface);
+    font-weight: 600;
   }
   .sb-header {
     position: sticky;

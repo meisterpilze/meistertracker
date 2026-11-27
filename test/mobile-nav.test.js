@@ -158,14 +158,17 @@ describe('the views of a page, in the navigation', () => {
   // navigation now, under the page they belong to and only while it is open.
   // Four places have to agree for that to work, and none of them throws alone.
   const INIT = APP.match(/function sbSubInit\(\) \{[\s\S]*?\n\}/);
+  const OPEN = APP.match(/function sbSubOpen\(btn\) \{[\s\S]*?\n\}/);
 
   it('builds the list from the strips in the markup, not from a table of its own', () => {
     assert.ok(INIT, 'sbSubInit() is gone');
     assert.match(INIT[0], /querySelectorAll\('\.page > \.stabs'\)/);
     assert.match(APP, /\bsbSubInit\(\);/, 'sbSubInit() is never called');
     // One click, one loader: an entry forwards to its tab.
-    assert.match(INIT[0], /getElementById\('st-' \+ btn\.id\.slice\(3\)\)/);
-    assert.match(INIT[0], /stab\.click\(\)/);
+    assert.match(INIT[0], /sbSubOpen\(btn\)/, 'a tap on a view in the list does nothing');
+    assert.ok(OPEN, 'sbSubOpen() is gone');
+    assert.match(OPEN[0], /getElementById\('st-' \+ btn\.id\.slice\(3\)\)/);
+    assert.match(OPEN[0], /stab\.click\(\)/);
   });
 
   it('leaves Admin its own list', () => {
@@ -199,9 +202,75 @@ describe('the views of a page, in the navigation', () => {
     assert.match(go, /getElementById\('sn-' \+ shown\.id\.slice\(3\)\)/);
   });
 
-  it('keeps the open page in the sheet on a phone, with its views under its name', () => {
+  it('keeps a page with views in the sheet on a phone, with its views under its name', () => {
     const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
-    assert.match(phone, /\.sb-btn\.sb-in-bottom-nav\.active:has\(\+ \.sb-sub\) \{\s*display: flex;/);
+    assert.match(phone, /\.sb-btn\.sb-in-bottom-nav:has\(\+ \.sb-sub\) \{\s*display: flex;/);
+  });
+});
+
+describe('the sheet on a phone is an index', () => {
+  // "Mehr" listed the pages, and under the page that was open, that page's
+  // views. A view of any other page was four taps away and nothing said it
+  // existed. The sheet lists the views of every page now, and a tap on one
+  // opens its page first.
+  const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
+  const OPEN = APP.match(/function sbSubOpen\(btn\) \{[\s\S]*?\n\}/);
+
+  it('lists the views of every page, not only the open one', () => {
+    assert.match(phone, /\.sb-nav > \.sb-btn \+ \.sb-sub \{\s*display: flex;\s*flex-wrap: wrap;/);
+    // Same weight as ".sb-btn.active + .sb-sub { display: block }", so it wins
+    // only by standing later in the file. Moved above it, the open page's views
+    // fall back to a column while every other page's stay a row of pills.
+    const base = CSS.indexOf('.sb-btn.active + .sb-sub {');
+    const index = CSS.indexOf('.sb-nav > .sb-btn + .sb-sub {');
+    assert.ok(base > 0 && index > base, 'the index rule stands before the rule it has to outrank');
+  });
+
+  it('keeps the list under the open page only on a desk', () => {
+    const MIN_WIDTH_BLOCK = /@media[^{]*min-width[^{]*\{/g;
+    let outside = CSS;
+    for (const b of blocks(CSS, MAX_WIDTH_BLOCK)) outside = outside.replace(b.body, '');
+    for (const b of blocks(CSS, MIN_WIDTH_BLOCK)) outside = outside.replace(b.body, '');
+    assert.doesNotMatch(outside, /\.sb-btn \+ \.sb-sub \{/, 'every page lists its views in the sidebar of a desk too');
+  });
+
+  it('marks only the view that is showing on the page that is open', () => {
+    // Every strip keeps an active tab of its own. Marked by ".sb-sub-btn.active"
+    // alone, the sheet would show one dark pill under each page.
+    assert.match(phone, /\.sb-btn\.active \+ \.sb-sub > \.sb-sub-btn\.active \{/);
+    assert.doesNotMatch(phone, /\n\s*\.sb-sub > \.sb-sub-btn\.active \{/);
+  });
+
+  // sbSubOpen() run for real, against the least of a page it needs.
+  function run({ pageOpen, mayLeave }) {
+    const log = [];
+    const pg = { classList: { contains: () => pageOpen } };
+    const stab = { click: () => log.push('view') };
+    const document = { getElementById: (id) => (id === 'st-lab-cultures' ? stab : id === 'p-lab' ? pg : null) };
+    const fn = new Function('document', 'mayLeavePage', 'gsNav', 'sbCloseMobile', OPEN[0] + '\nreturn sbSubOpen;')(
+      document,
+      () => {
+        log.push('ask');
+        return mayLeave;
+      },
+      (btnId, page) => log.push('page ' + btnId + ' ' + page),
+      () => log.push('close')
+    );
+    fn({ id: 'sn-lab-cultures', parentElement: { dataset: { page: 'lab' } } });
+    return log;
+  }
+
+  it('opens the view at once when its page is open', () => {
+    assert.deepEqual(run({ pageOpen: true, mayLeave: true }), ['view', 'close']);
+  });
+
+  it('opens the page first, by its own entry, when the view belongs to another page', () => {
+    assert.deepEqual(run({ pageOpen: false, mayLeave: true }), ['ask', 'page n-lab lab', 'view', 'close']);
+  });
+
+  it('changes nothing when the person stays to save what is unsaved', () => {
+    // Not even the sheet: it was opened to go somewhere, and it still offers to.
+    assert.deepEqual(run({ pageOpen: false, mayLeave: false }), ['ask']);
   });
 });
 
