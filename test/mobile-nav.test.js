@@ -202,28 +202,27 @@ describe('the views of a page, in the navigation', () => {
     assert.match(go, /getElementById\('sn-' \+ shown\.id\.slice\(3\)\)/);
   });
 
-  it('keeps a page with views in the sheet on a phone, with its views under its name', () => {
+  it('keeps a page with views in the sheet on a phone, as the way to its other views', () => {
     const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
     assert.match(phone, /\.sb-btn\.sb-in-bottom-nav:has\(\+ \.sb-sub\) \{\s*display: flex;/);
   });
 });
 
-describe('the sheet on a phone is an index', () => {
-  // "Mehr" listed the pages, and under the page that was open, that page's
-  // views. A view of any other page was four taps away and nothing said it
-  // existed. The sheet lists the views of every page now, and a tap on one
-  // opens its page first.
+describe('a view picked in the sheet on a phone', () => {
+  // The sheet shows the pages as tiles and, after a tap on a page with several
+  // views, those views (test/mehr-blatt.test.js). A view picked there may
+  // belong to a page that is not open yet, so its page is opened first.
   const phone = [...blocks(CSS, MAX_WIDTH_BLOCK)].map((b) => b.body).join('\n');
   const OPEN = APP.match(/function sbSubOpen\(btn\) \{[\s\S]*?\n\}/);
 
-  it('lists the views of every page, not only the open one', () => {
-    assert.match(phone, /\.sb-nav > \.sb-btn \+ \.sb-sub \{\s*display: flex;\s*flex-wrap: wrap;/);
+  it('does not list the views under every page any more', () => {
+    assert.match(phone, /\.sb-nav > \.sb-btn \+ \.sb-sub \{\s*display: none;/);
     // Same weight as ".sb-btn.active + .sb-sub { display: block }", so it wins
-    // only by standing later in the file. Moved above it, the open page's views
-    // fall back to a column while every other page's stay a row of pills.
+    // only by standing later in the file. Moved above it, the views of the open
+    // page would stand between the tiles.
     const base = CSS.indexOf('.sb-btn.active + .sb-sub {');
-    const index = CSS.indexOf('.sb-nav > .sb-btn + .sb-sub {');
-    assert.ok(base > 0 && index > base, 'the index rule stands before the rule it has to outrank');
+    const kacheln = CSS.indexOf('.sb-nav > .sb-btn + .sb-sub {');
+    assert.ok(base > 0 && kacheln > base, 'the rule stands before the rule it has to outrank');
   });
 
   it('keeps the list under the open page only on a desk', () => {
@@ -236,9 +235,9 @@ describe('the sheet on a phone is an index', () => {
 
   it('marks only the view that is showing on the page that is open', () => {
     // Every strip keeps an active tab of its own. Marked by ".sb-sub-btn.active"
-    // alone, the sheet would show one dark pill under each page.
-    assert.match(phone, /\.sb-btn\.active \+ \.sb-sub > \.sb-sub-btn\.active \{/);
-    assert.doesNotMatch(phone, /\n\s*\.sb-sub > \.sb-sub-btn\.active \{/);
+    // alone, the list of a page one is not on would show a view as "here".
+    assert.match(phone, /\.sb-btn\.active \+ \.sb-sub\.mehr-offen > \.sb-sub-btn\.active \{/);
+    assert.doesNotMatch(phone, /\n\s*\.sb-sub(\.mehr-offen)? > \.sb-sub-btn\.active \{/);
   });
 
   // sbSubOpen() run for real, against the least of a page it needs.

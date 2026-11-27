@@ -1671,11 +1671,10 @@ function toggleSidebar() {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
-    // The sheet opens at its top: the search, the places one was in last, then
-    // the groups, with the one of the open page unfolded.
+    // The sheet opens at its top, on the tiles: the list of a page's views is
+    // where somebody was last time, not where they start.
     if (sb.classList.contains('sb-open')) {
       mehrZeichne();
-      zuletztZeichne();
       sb.scrollTop = 0;
     }
   } else {
@@ -2169,221 +2168,76 @@ function sbSubOpen(btn) {
   sbCloseMobile();
 }
 
-// ── "Mehr" am Telefon: Gruppen, die auf- und zugehen ──
-// Das Blatt zeigte jede Seite mit allen ihren Ansichten auf einmal: an die
-// vierzig Ziele untereinander, zwei Bildschirme lang, und wer eines suchte, las
-// sie alle. Jetzt steht jede Gruppe der Liste als Überschrift da, und ein Tipp
-// klappt sie auf. Offen ist, was man offen gelassen hat (je Gerät gemerkt), und
-// die Gruppe der Seite, auf der man steht: dort will man am ehesten weiter.
+// ── "Mehr" am Telefon: Kacheln ──
+// Das Blatt war eine Liste: erst jede Seite mit all ihren Ansichten als Pillen,
+// zwei Bildschirme lang, dann sechs Überschriften, die auf- und zugehen. Beides
+// las sich als Text, den man absuchen muss. Jetzt steht jede Seite als Kachel
+// da, mit ihrem Bild und ihrem Namen, drei nebeneinander, alle auf einem
+// Schirm, so wie die Arbeitsgänge auf der Startseite.
 //
-// Die Liste bleibt flach, wie sie im Markup steht. Was zu einer Gruppe gehört,
-// ist alles zwischen ihrer Überschrift und der nächsten, auch die Listen der
-// Ansichten, die sbSubInit() erst einhängt; zugeklappt trägt jedes davon
-// .sb-fold-zu, und nur der Telefon-Block der styles.css kennt die Klasse. Am
-// Schreibtisch klappt nichts: dort ist die Überschrift eine Überschrift, ohne
-// Rolle und ohne Tabulator.
-const MEHR_KEY = 'mp-mehr-auf';
-let _mehrAuf = null;
-function mehrAuf() {
-  if (!_mehrAuf) {
-    _mehrAuf = new Set();
-    try {
-      for (const k of JSON.parse(localStorage.getItem(MEHR_KEY) || '[]')) _mehrAuf.add(String(k));
-    } catch {
-      // Nichts gemerkt oder nichts lesbar: dann ist nur die Gruppe der offenen Seite auf.
-    }
-  }
-  return _mehrAuf;
+// Ein Tipp auf eine Kachel öffnet die Seite. Hat die Seite mehrere Ansichten,
+// zeigt das Blatt zuerst diese als kurze Liste, mit einem Weg zurück zu den
+// Kacheln; ein Tipp auf eine Ansicht öffnet sie (sbSubOpen). Was unten in der
+// Leiste steht, ist keine Kachel: dorthin führt die Leiste.
+//
+// Das Markup bleibt die flache Liste, die ein Schreibtisch als Seitenleiste
+// zeigt: Überschriften, Einträge, und unter jedem Eintrag die Liste seiner
+// Ansichten (sbSubInit). Kacheln macht daraus allein der Telefon-Block der
+// styles.css; hier wird nur umgeschaltet, was das Blatt gerade zeigt.
+function mehrListe(page) {
+  return document.querySelector('.sb-nav > .sb-sub[data-page="' + page + '"]');
 }
-function mehrMerk(key, offen) {
-  mehrAuf()[offen ? 'add' : 'delete'](key);
-  try {
-    localStorage.setItem(MEHR_KEY, JSON.stringify([...mehrAuf()]));
-  } catch {
-    // Gilt bis zum nächsten Laden.
-  }
+// Die Ansichten einer Seite, die dieser Benutzer sieht.
+function mehrAnsichten(page) {
+  const liste = mehrListe(page);
+  return liste ? [...liste.children].filter((b) => b.style.display !== 'none') : [];
 }
-function mehrGruppen() {
-  const out = [];
-  document.querySelectorAll('.sb-nav > .sb-group-label[data-group]').forEach((label) => {
-    const teile = [];
-    for (let el = label.nextElementSibling; el && !el.classList.contains('sb-group-label'); el = el.nextElementSibling) {
-      teile.push(el);
-    }
-    out.push({ label, key: label.dataset.group, teile });
-  });
-  return out;
+// Zurück zu den Kacheln. Auch der Zustand, in dem das Blatt aufgeht, und der
+// eines Schreibtischs: dort kennt niemand die zwei Klassen.
+function mehrRaster() {
+  const nav = document.querySelector('.sb-nav');
+  if (!nav) return;
+  nav.classList.remove('mehr-seite');
+  nav.querySelectorAll('.sb-sub.mehr-offen').forEach((l) => l.classList.remove('mehr-offen'));
 }
-function mehrSetze(g, offen) {
-  g.label.classList.toggle('sb-zu', !offen);
-  g.label.setAttribute('aria-expanded', String(offen));
-  for (const el of g.teile) el.classList.toggle('sb-fold-zu', !offen);
+// Die Ansichten einer Seite, statt der Kacheln.
+function mehrSeite(page) {
+  const nav = document.querySelector('.sb-nav');
+  const liste = mehrListe(page);
+  const eintrag = document.getElementById('n-' + page);
+  if (!nav || !liste || !eintrag) return;
+  mehrRaster();
+  nav.classList.add('mehr-seite');
+  liste.classList.add('mehr-offen');
+  const name = document.getElementById('mehr-zurueck-name');
+  const label = eintrag.querySelector('[data-i18n]');
+  if (name && label) name.textContent = label.textContent;
+  const sb = document.getElementById('sidebar');
+  if (sb) sb.scrollTop = 0;
 }
 // Beim Start, bei jedem Öffnen des Blatts und wenn das Fenster die Grenze
-// zwischen Telefon und Schreibtisch überschreitet.
+// zwischen Telefon und Schreibtisch überschreitet: die Kacheln.
 function mehrZeichne() {
-  const telefon = sbIsPhone();
-  for (const g of mehrGruppen()) {
-    if (!telefon) {
-      g.label.classList.remove('sb-zu');
-      for (const a of ['role', 'tabindex', 'aria-expanded']) g.label.removeAttribute(a);
-      for (const el of g.teile) el.classList.remove('sb-fold-zu');
-      continue;
-    }
-    g.label.setAttribute('role', 'button');
-    g.label.setAttribute('tabindex', '0');
-    const hier = g.teile.some((el) => el.classList.contains('sb-btn') && el.classList.contains('active'));
-    mehrSetze(g, hier || mehrAuf().has(g.key));
-  }
+  mehrRaster();
 }
-// Ein Tipp auf eine Überschrift. Nur diese Gruppe ändert sich: die der offenen
-// Seite darf man für dieses Mal zuklappen, beim nächsten Öffnen ist sie wieder auf.
-function mehrUmschalten(label) {
-  if (!sbIsPhone()) return;
-  const g = mehrGruppen().find((x) => x.label === label);
-  if (!g) return;
-  const offen = label.classList.contains('sb-zu');
-  // Die Gruppe der offenen Seite zuzuklappen gilt für dieses Mal und vergisst
-  // nicht, dass man sie offen gelassen hatte.
-  const hier = g.teile.some((el) => el.classList.contains('sb-btn') && el.classList.contains('active'));
-  if (offen || !hier) mehrMerk(g.key, offen);
-  mehrSetze(g, offen);
-}
-
-// ── Zuletzt: die Orte, an denen man eben war ──
-// Die meisten Tage braucht man drei, vier Stellen der App, immer dieselben.
-// Sie stehen oben im Blatt, je ein Tipp, die jüngste zuerst.
-//
-// Gemerkt wird ein Ort, wenn man ihn mit einem Tipp verlässt: zurueckMerk()
-// kennt diesen Augenblick schon (ein Wechsel ist ein Schritt, go() und gleich
-// danach openStab() sind einer, ein Schritt zurück und alles vor der ersten
-// Berührung zählen nicht). Ein zweites Zählwerk in go() hätte jeden Sprung
-// gemerkt, den die App von selbst macht.
-//
-// Ein Ort ist eine Seite (ihr Eintrag in der Liste) und, wo sie Ansichten hat,
-// die Ansicht. Je Gerät gemerkt, ein paar mehr, als gezeigt werden: was dieser
-// Benutzer nicht sieht, fällt beim Zeigen heraus und soll keine Lücke lassen.
-const ZULETZT_KEY = 'mp-zuletzt';
-const ZULETZT_ZEIGEN = 4;
-const ZULETZT_MERKEN = 12;
-let _zuletzt = null;
-function zuletztListe() {
-  if (!_zuletzt) {
-    _zuletzt = [];
-    try {
-      for (const o of JSON.parse(localStorage.getItem(ZULETZT_KEY) || '[]')) {
-        if (o && typeof o.b === 'string') _zuletzt.push({ b: o.b, s: typeof o.s === 'string' ? o.s : null });
-      }
-    } catch {
-      // Nichts gemerkt oder nichts lesbar: die Zeile fängt leer an.
-    }
-  }
-  return _zuletzt;
-}
-// Der Ort aus whereAmI(), wie er gemerkt wird. Auf einer Seite mit eigener
-// Liste ihrer Ansichten (Admin am Telefon) ist die Liste selbst ein Ort.
-function zuletztOrt(w) {
-  if (!w || !w.page || !/^n-/.test(w.btnId || '')) return null;
-  const seite = document.getElementById('p-' + w.page);
-  const aufListe = !!seite && seite.classList.contains('stab-drill') && sbIsPhone() && !w.drilled;
-  return { b: w.btnId, s: aufListe ? null : w.stab || null };
-}
-const _zuletztGleich = (a, b) => a.b === b.b && (a.s || null) === (b.s || null);
-// Der Ort nach vorn, einmal, und nicht mehr als gemerkt wird.
-function zuletztNeu(liste, ort) {
-  if (!ort) return liste;
-  return [ort].concat(liste.filter((x) => !_zuletztGleich(x, ort))).slice(0, ZULETZT_MERKEN);
-}
-function zuletztMerk(w) {
-  const ort = zuletztOrt(w);
-  if (!ort) return;
-  _zuletzt = zuletztNeu(zuletztListe(), ort);
-  try {
-    localStorage.setItem(ZULETZT_KEY, JSON.stringify(_zuletzt));
-  } catch {
-    // Gilt bis zum nächsten Laden.
-  }
-}
-// Was davon zu zeigen ist. Nicht der Ort, an dem man steht. Nichts, was es
-// nicht mehr gibt oder was dieser Benutzer nicht sieht (Admin, eine
-// ausgeblendete Ansicht). Und nicht, wohin die Leiste unten ohnehin führt: eine
-// Seite der Leiste auf der Ansicht, mit der sie aufgeht.
-//
-// Der Name folgt der Kopfzeile (setPageTitle): auf der ersten Ansicht einer
-// Seite heißt der Ort wie die Seite, sonst wie die Ansicht.
-function zuletztOrte() {
-  const hier = zuletztOrt(whereAmI());
-  const out = [];
-  for (const o of zuletztListe()) {
-    if (hier && _zuletztGleich(o, hier)) continue;
-    const nav = document.getElementById(o.b);
-    if (!nav || nav.style.display === 'none') continue;
-    const stab = o.s ? document.getElementById(o.s) : null;
-    if (o.s && (!stab || stab.style.display === 'none')) continue;
-    const strip = stab ? stab.closest('.stabs') : null;
-    const erste = !stab || (!!strip && stab.id === strip.dataset.stabDefault);
-    if (erste && nav.classList.contains('sb-in-bottom-nav')) continue;
-    const eigen = !!stab && (!erste || stab.dataset.pageTitle !== undefined);
-    const quelle = eigen ? stab : nav.querySelector('[data-i18n]');
-    if (!quelle) continue;
-    out.push({ b: o.b, s: o.s, text: quelle.dataset.i18n ? t(quelle.dataset.i18n) : quelle.textContent.trim() });
-    if (out.length === ZULETZT_ZEIGEN) break;
-  }
-  return out;
-}
-function zuletztZeichne() {
-  const box = document.getElementById('sb-zuletzt');
-  const liste = document.getElementById('sb-zuletzt-liste');
-  if (!box || !liste) return;
-  const orte = zuletztOrte();
-  box.hidden = !orte.length;
-  liste.innerHTML = orte
-    .map(
-      (o) =>
-        `<button type="button" class="sb-zuletzt-btn" data-zuletzt-b="${esc(o.b)}"${o.s ? ` data-zuletzt-s="${esc(o.s)}"` : ''}>${esc(o.text)}</button>`
-    )
-    .join('');
-}
-// Dorthin, wie die Liste darunter es tut (sbSubOpen): die Seite über ihren
-// eigenen Eintrag, dann die Ansicht über ihren Reiter, und die Frage nach
-// Ungespeichertem einmal, bevor sich etwas bewegt.
-function zuletztOeffnen(btnId, stabId) {
-  const nav = document.getElementById(btnId);
-  if (!nav) return;
-  const page = nav.dataset.page;
-  const seite = document.getElementById('p-' + page);
-  if (seite && !seite.classList.contains('active')) {
-    if (!mayLeavePage()) return;
-    gsNav(btnId, page);
-  }
-  const stab = stabId ? document.getElementById(stabId) : null;
-  if (stab) stab.click();
-  // Der Ort war die Liste der Ansichten selbst (Admin am Telefon): zurück auf sie.
-  else if (seite && seite.classList.contains('stab-drill') && sbIsPhone()) seite.classList.remove('stab-drilled');
-  sbCloseMobile();
+// Ein Tipp auf eine Kachel, bevor ihr eigener Knopf ihn bekommt. Nur ein echter
+// Tipp im offenen Blatt: die Leiste unten, die Suche und sbSubOpen() drücken
+// dieselben Einträge von sich aus (click()), und die sollen die Seite öffnen,
+// nicht ihre Liste. Eine Seite mit einer Ansicht geht einfach auf.
+function mehrKachelTipp(e) {
+  if (!e.isTrusted || !sbIsPhone() || !document.body.classList.contains('sb-mobile-open')) return;
+  const kachel = e.target.closest('.sb-nav > .sb-btn[data-page]');
+  if (!kachel || mehrAnsichten(kachel.dataset.page).length < 2) return;
+  e.stopPropagation();
+  e.preventDefault();
+  mehrSeite(kachel.dataset.page);
 }
 function mehrInit() {
   const nav = document.querySelector('.sb-nav');
-  if (nav) {
-    nav.addEventListener('click', (e) => {
-      const label = e.target.closest('.sb-group-label[data-group]');
-      if (label) mehrUmschalten(label);
-    });
-    // Eine Überschrift mit der Rolle eines Knopfs muss auch auf die Tasten hören.
-    nav.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      if (!e.target.matches || !e.target.matches('.sb-group-label[data-group]')) return;
-      e.preventDefault();
-      mehrUmschalten(e.target);
-    });
-  }
-  const zuletzt = document.getElementById('sb-zuletzt-liste');
-  if (zuletzt) {
-    zuletzt.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-zuletzt-b]');
-      if (b) zuletztOeffnen(b.dataset.zuletztB, b.dataset.zuletztS || null);
-    });
-  }
+  // In der Fangphase: so kommt der Tipp hier an, bevor go() die Seite öffnet.
+  if (nav) nav.addEventListener('click', mehrKachelTipp, true);
+  const zurueck = document.getElementById('mehr-zurueck');
+  if (zurueck) zurueck.addEventListener('click', mehrRaster);
   mehrZeichne();
 }
 
@@ -37487,7 +37341,6 @@ function zurueckMerk(page, sub) {
   _zZeit = jetzt;
   _zSpur.push(w);
   if (_zSpur.length > Z_SPUR_MAX) _zSpur.shift();
-  zuletztMerk(w);
   _zAbgleichSpaeter();
 }
 
