@@ -9760,55 +9760,53 @@ button.wk-an-zeile:active {
   }
 }
 
-/* What is due today, as a figure on the job that does it (renderWorkTileDue).
-   Dark while it is only due, red once something is late. On a phone the jobs
-   are rows, so the figure stands at the end of its row and the words stop
-   before it; on tiles it stands in the corner. */
+/* What is due today, in words on the job that does it (renderWorkTileDue):
+   "2 überfällig" in red, "3 fällig" dark. It stands in the flow of the job and
+   never over it. It was a bare figure in a corner once: nobody knew what it
+   counted, and the words of the job ran under it. On tiles and on the chain of
+   a desk it follows the job's text; on a phone, where the jobs are rows, it
+   has a column of its own at the end of the row, so the text stops before it. */
 .wk-due {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  position: relative;
   z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--c-text);
-  color: var(--c-surface);
-  font-size: max(0.8125rem, var(--fs-min));
-  font-weight: 650;
-  line-height: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-self: start;
+  align-self: start;
 }
 .wk-due[hidden] {
   display: none;
 }
-/* "2 fällig" for a screen reader; the eye has the figure. */
-.wk-due-wort {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
+.wk-due-p {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--c-text);
+  color: var(--c-surface);
+  font-size: max(0.75rem, var(--fs-min));
+  font-weight: 650;
+  line-height: 1.2;
   white-space: nowrap;
 }
-.wk-due.rot {
+.wk-due-p.rot {
   background: var(--c-red-strong);
 }
 @media (max-width: 768px) {
-  .wk-due {
-    top: 50%;
-    right: 14px;
-    transform: translateY(-50%);
+  .wk-tile {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
   }
-  .wk-tile:has(.wk-due:not([hidden])) {
-    padding-right: 52px;
+  .wk-due {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: center;
+    justify-self: end;
+  }
+}
+@media (min-width: 1024px) {
+  .wk-due {
+    margin-top: 8px;
   }
 }
 

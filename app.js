@@ -7782,7 +7782,8 @@ function _wkAnGruppeHtml(g, items) {
 // blättern, um zu sehen, was er tun SOLL. Die Liste nach oben zu holen hieße,
 // die Arbeitsgänge unter den Falz zu schieben, und die stehen mit Absicht oben.
 // Also sagt jeder Arbeitsgang selbst, wie viel heute auf ihn wartet: dieselben
-// Zeilen wie "Was ansteht" (buildWeekPlan, der heutige Tag), nur gezählt.
+// Zeilen wie "Was ansteht" (buildWeekPlan, der heutige Tag), nur gezählt, und
+// wie viele davon zu spät sind.
 //
 // Substrat und Kontamination haben keine Zahl: nichts im Plan verlangt sie.
 // 'grain' heißt im Plan "Beimpfen": durchgewachsene Körnerbrut wartet auf Beutel.
@@ -7800,10 +7801,11 @@ function wkTileDue(open) {
     const rows = it.kind === 'labgroup' ? (dashLabGroupOpen ? [] : _labRows(it)) : null;
     const n = rows ? rows.length : 1;
     if (!n) continue;
-    const late = rows ? rows.some((l) => l.empty) : !!it.overdue;
-    const d = out[tile] || (out[tile] = { n: 0, late: false });
+    // Wie viele davon zu spät sind: die sagt die Kachel eigens, in Rot.
+    const late = rows ? rows.filter((l) => l.empty).length : it.overdue ? 1 : 0;
+    const d = out[tile] || (out[tile] = { n: 0, late: 0 });
     d.n += n;
-    if (late) d.late = true;
+    d.late += late;
   }
   return out;
 }
@@ -7815,12 +7817,14 @@ function renderWorkTileDue(open) {
     const d = due[tile];
     el.hidden = !d || !d.n;
     if (el.hidden) continue;
-    // Die Zahl für das Auge, die Worte für den Bildschirmleser: ein aria-label
-    // an einem span ohne Rolle wird nicht vorgelesen, und der Knopf hieße
-    // "Ernte erfassen … 2".
+    // In Worten, nicht als bloße Zahl: "2 überfällig" in Rot, "3 fällig"
+    // dunkel. Eine rote 2 neben "Ernte erfassen" sagte niemandem, was sie
+    // zählt. Dieselben Worte wie in "Was ansteht" darunter, und ein
+    // Bildschirmleser liest sie mit, weil sie Text sind.
+    const rest = d.n - d.late;
     el.innerHTML =
-      '<span aria-hidden="true">' + d.n + '</span><span class="wk-due-wort">' + esc(tp('work.dueN', d.n)) + '</span>';
-    el.classList.toggle('rot', d.late);
+      (d.late ? `<span class="wk-due-p rot">${esc(tp('work.grp.late', d.late))}</span>` : '') +
+      (rest > 0 ? `<span class="wk-due-p">${esc(tp('work.dueN', rest))}</span>` : '');
   }
 }
 // Pakete, die heute zu packen sind, als Hinweis über den Arbeitsgängen: das

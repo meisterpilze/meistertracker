@@ -42,15 +42,15 @@ const zaehle = (open, labGroupOpen = false) =>
 describe('Heute: which job a row of the day list belongs to', () => {
   it('counts a move, a harvest and a lab row on their jobs', () => {
     assert.deepEqual(zaehle([{ kind: 'fruiting' }, { kind: 'fruiting' }, { kind: 'harvest' }, { kind: 'labmin' }]), {
-      move: { n: 2, late: false },
-      harvest: { n: 1, late: false },
-      lab: { n: 1, late: false }
+      move: { n: 2, late: 0 },
+      harvest: { n: 1, late: 0 },
+      lab: { n: 1, late: 0 }
     });
   });
 
   it('puts grain spawn that is ready for bags on "Beutel beimpfen"', () => {
     // The plan calls that row 'grain'; the job it asks for is the bags.
-    assert.deepEqual(zaehle([{ kind: 'grain' }]), { batch: { n: 1, late: false } });
+    assert.deepEqual(zaehle([{ kind: 'grain' }]), { batch: { n: 1, late: 0 } });
   });
 
   it('puts a Sorte with nothing coming on the job that is missing: grain first, else bags', () => {
@@ -59,24 +59,24 @@ describe('Heute: which job a row of the day list belongs to', () => {
         { kind: 'supply', task: { taskAction: 'make-grain' } },
         { kind: 'supply', task: { taskAction: 'make-blocks' } }
       ]),
-      { grain: { n: 1, late: false }, batch: { n: 1, late: false } }
+      { grain: { n: 1, late: 0 }, batch: { n: 1, late: 0 } }
     );
   });
 
-  it('is red once one row of the job is late', () => {
+  it('counts how many rows of the job are late', () => {
     const d = zaehle([{ kind: 'harvest' }, { kind: 'harvest', overdue: true }]);
-    assert.deepEqual(d.harvest, { n: 2, late: true });
+    assert.deepEqual(d.harvest, { n: 2, late: 1 });
   });
 
   it('counts a bundled lab row as the species it stands for', () => {
     const bundle = { kind: 'labgroup', task: { rows: [{ empty: false }, { empty: true }, { empty: false }] } };
-    assert.deepEqual(zaehle([bundle]), { lab: { n: 3, late: true } });
+    assert.deepEqual(zaehle([bundle]), { lab: { n: 3, late: 1 } });
   });
 
   it('does not count the bundle and its rows when the bundle is open', () => {
     const bundle = { kind: 'labgroup', task: { rows: [{ empty: false }, { empty: false }] } };
     const d = zaehle([bundle, { kind: 'labmin' }, { kind: 'labmin' }], true);
-    assert.deepEqual(d, { lab: { n: 2, late: false } });
+    assert.deepEqual(d, { lab: { n: 2, late: 0 } });
   });
 
   it('leaves out what no job on the page does', () => {
@@ -87,17 +87,7 @@ describe('Heute: which job a row of the day list belongs to', () => {
 describe('Heute: the figure on the job', () => {
   function zeichne(open) {
     const els = {};
-    const el = (id) =>
-      (els[id] = els[id] || {
-        hidden: true,
-        innerHTML: '',
-        rot: false,
-        classList: {
-          toggle(k, an) {
-            els[id].rot = !!an;
-          }
-        }
-      });
+    const el = (id) => (els[id] = els[id] || { hidden: true, innerHTML: '' });
     new Function(
       'document',
       'tp',
@@ -107,23 +97,28 @@ describe('Heute: the figure on the job', () => {
     )(
       { getElementById: el },
       (k, n) => k + ':' + n,
-      (s) => String(s),
+      (x) => String(x),
       false
     )(open);
     return els;
   }
 
-  it('shows the count to the eye and says it in words to a screen reader, red when late', () => {
-    const els = zeichne([{ kind: 'harvest', overdue: true }, { kind: 'harvest' }, { kind: 'fruiting' }]);
-    const ernte = els['wk-due-harvest'];
-    assert.equal(ernte.hidden, false);
-    assert.equal(ernte.rot, true);
-    // An aria-label on a span without a role is not read out; the words are text.
-    assert.equal(ernte.innerHTML, '<span aria-hidden="true">2</span><span class="wk-due-wort">work.dueN:2</span>');
-    assert.equal(els['wk-due-move'].rot, false);
-    assert.match(els['wk-due-move'].innerHTML, /^<span aria-hidden="true">1<\/span>/);
-    assert.doesNotMatch(hebe('renderWorkTileDue'), /setAttribute\('aria-label'/);
-    assert.match(CSS, /\.wk-due-wort \{[^}]*clip: rect\(0 0 0 0\);/);
+  it('says in words what it counts: what is late in red, the rest beside it', () => {
+    // A bare red "2" beside "Ernte erfassen" told nobody what it counted.
+    const els = zeichne([{ kind: 'harvest', overdue: true }, { kind: 'harvest' }, { kind: 'harvest' }]);
+    assert.equal(els['wk-due-harvest'].hidden, false);
+    assert.equal(
+      els['wk-due-harvest'].innerHTML,
+      '<span class="wk-due-p rot">work.grp.late:1</span><span class="wk-due-p">work.dueN:2</span>'
+    );
+  });
+
+  it('shows only the one that applies', () => {
+    assert.equal(zeichne([{ kind: 'fruiting' }])['wk-due-move'].innerHTML, '<span class="wk-due-p">work.dueN:1</span>');
+    assert.equal(
+      zeichne([{ kind: 'fruiting', overdue: true }])['wk-due-move'].innerHTML,
+      '<span class="wk-due-p rot">work.grp.late:1</span>'
+    );
   });
 
   it('hides the figure of a job with nothing due, and takes an old one away', () => {
@@ -154,12 +149,24 @@ describe('Heute: the figure on the job', () => {
     );
   });
 
-  it('stands at the end of the row on a phone, and the words stop before it', () => {
-    const phone = CSS.match(/@media \(max-width: 768px\) \{\s*\.wk-due \{[\s\S]*?\n\}/);
-    assert.ok(phone, 'no phone rule for .wk-due');
-    assert.match(phone[0], /top: 50%;[\s\S]*transform: translateY\(-50%\);/);
-    assert.match(phone[0], /\.wk-tile:has\(\.wk-due:not\(\[hidden\]\)\) \{\s*padding-right: 52px;/);
+  it('stands in the flow of the job, never laid over it', () => {
+    // It was position:absolute in a corner, and the words of the job ran under it.
+    const regel = CSS.match(/\n\.wk-due \{[^}]*\}/);
+    assert.ok(regel, 'no rule for .wk-due');
+    assert.doesNotMatch(regel[0], /position: absolute/);
+    assert.match(regel[0], /position: relative;/);
+    assert.doesNotMatch(CSS, /\.wk-due-wort/);
     assert.match(CSS, /\.wk-due\[hidden\] \{\s*display: none;/);
+  });
+
+  it('has a column of its own at the end of the row on a phone, so the text stops before it', () => {
+    const phone = CSS.match(
+      /@media \(max-width: 768px\) \{\s*\.wk-tile \{\s*grid-template-columns: 40px minmax\(0, 1fr\) auto;\s*\}\s*\.wk-due \{[^}]*\}/
+    );
+    assert.ok(phone, 'no phone rule that gives the figure a column');
+    assert.match(phone[0], /grid-column: 3;/);
+    assert.match(phone[0], /grid-row: 1 \/ span 2;/);
+    assert.doesNotMatch(CSS, /\.wk-tile:has\(\.wk-due/);
   });
 });
 
