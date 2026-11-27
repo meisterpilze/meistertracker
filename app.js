@@ -30519,11 +30519,10 @@ function labLabelItems(id, c, detail, qr) {
   // No type word: the ID already opens with MC-/PD-/LC-, and the only place one
   // fitted was the top edge, which this label stock clips.
   //
-  // Die Herkunft hängt mit einem geschützten Leerzeichen an ihrem Pfeil: muss
-  // die erste Zeile umbrechen, steht "<- PD-…" zusammen in der zweiten.
-  const absaetze = [
-    { text: c.parentId ? id + ' \u2190\u00a0' + c.parentId : id, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }
-  ];
+  // Die Kennung allein. Woraus die Kultur angesetzt ist ("<- PD-…"), stand
+  // dahinter und nahm oft eine zweite Zeile; das zeigt jetzt der Scan (das
+  // Fenster der Kultur, der Stammbaum), nicht mehr das Etikett.
+  const absaetze = [{ text: id, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }];
   if (detail === 'sorte' || detail === 'full') {
     absaetze.push({ text: spParts.filter(Boolean).join(' \u2013 '), fontH: 24, maxZeilen: 2, kuerzbar: true });
   }

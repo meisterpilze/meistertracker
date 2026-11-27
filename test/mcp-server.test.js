@@ -986,10 +986,15 @@ describe('MCP label printing', () => {
       assert.ok(items[1].text.includes('PD-001'));
     });
 
-    it('shows parentId with arrow in line 1', () => {
-      // "<-", not the arrow character: font 0 has no glyph for it.
+    it('line 1 is the ID alone, without the culture it came from', () => {
+      // The parent ("<- MC-001") is what a scan shows, not the label.
       const items = labLabelItems('PD-001', culture, 'minimal', 55, false);
-      assert.equal(items[1].text, 'PD-001 <- MC-001');
+      assert.equal(items[1].text, 'PD-001');
+      for (const detail of ['minimal', 'sorte', 'full'])
+        assert.ok(
+          labLabelItems('PD-001', culture, detail, 55, false).every((i) => !String(i.text || '').includes('MC-001')),
+          detail
+        );
     });
 
     it('omits parentId arrow when parentId is null', () => {
@@ -1138,8 +1143,9 @@ describe('MCP label printing', () => {
         assert.ok(typeof barcodes[id] === 'number', 'culture barcode must be numeric');
       }
 
-      // PD-001 should show parent arrow
-      assert.ok(zpl.includes('PD-001 <- MC-001'), 'PD-001 label must show parent');
+      // PD-001 shows its ID, not the culture it came from
+      assert.ok(zpl.includes('PD-001'), 'PD-001 label must show its ID');
+      assert.ok(!zpl.includes('<- MC-001'), 'PD-001 label must not show its parent');
     });
 
     it('returns null for non-existent culture', () => {
@@ -1224,7 +1230,8 @@ describe('MCP label printing', () => {
       assert.equal(Number(bc[2]), expectedBc.mw);
       assert.equal(bc[3], bc[4]);
       assert.equal(Number(bc[3]), 90, 'barcode height ' + bc[3]);
-      assert.ok(mcpZpl.includes('PD-001 <- MC-001'), 'ID with parent arrow');
+      assert.ok(mcpZpl.includes('^FDPD-001^FS'), 'ID alone');
+      assert.ok(!mcpZpl.includes('MC-001'), 'no parent on the label');
       assert.ok(mcpZpl.includes('Pleurotus ostreatus HK35'), 'species name');
       assert.ok(mcpZpl.includes('XY-1'), 'strainText');
       assert.ok(mcpZpl.includes('Test note'), 'notes');

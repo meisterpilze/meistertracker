@@ -114,7 +114,9 @@ describe('Das Reishi-Etikett', () => {
       for (const z of [GEDANKENSTRICH, AUSLASSUNG, PFEIL, NBSP]) {
         assert.ok(!zpl.includes(z), name + ': Zeichen ' + z.charCodeAt(0).toString(16) + ' im Druck');
       }
-      assert.ok(zpl.includes('LC-LM-260926-01 <- PD-LM-200926-03'), name + ': Herkunft fehlt');
+      // Die Herkunft steht nicht mehr auf dem Etikett; die zeigt der Scan.
+      assert.ok(zpl.includes('LC-LM-260926-01'), name + ': die Kennung fehlt');
+      assert.ok(!zpl.includes('PD-LM-200926-03'), name + ': die Herkunft steht noch auf dem Etikett');
     }
   });
 });
@@ -285,8 +287,15 @@ describe('Keine Zeile läuft über, keine überdeckt eine andere', () => {
         });
         it(art + ': Kulturen', () => {
           for (const [fall, { id, c }] of Object.entries(KULTUREN)) {
-            const nummern = c.parentId ? [id, c.parentId] : [id];
-            pruefe(d.kultur(id, c, detail, qr), art + ' ' + fall, nummern);
+            const items = d.kultur(id, c, detail, qr);
+            pruefe(items, art + ' ' + fall, [id]);
+            // Woraus sie angesetzt ist, zeigt der Scan, nicht das Etikett.
+            if (c.parentId) {
+              const alles = texte(items)
+                .map((z) => z.text)
+                .join('');
+              assert.ok(!alles.includes(c.parentId), art + ' ' + fall + ': die Herkunft steht auf dem Etikett');
+            }
           }
         });
       }
