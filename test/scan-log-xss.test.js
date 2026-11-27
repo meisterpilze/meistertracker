@@ -91,7 +91,9 @@ describe('scan log: the ✕ button', () => {
     // of the list. Pinning the full class string made this fail the moment the
     // mobile branch added .fs-micro to the button, which is a presentation
     // change this test has no opinion about.
-    const m = APP.match(/\$\{isRecent \? ('<button class="btn-xs lg-del[^"]*"[\s\S]*?) : ''\}/);
+    // The condition in front of it may grow (who may delete a row); what is
+    // lifted is the button it guards.
+    const m = APP.match(/\$\{isRecent[^?]*\? ('<button class="btn-xs lg-del[^"]*"[\s\S]*?) : ''\}/);
     assert.ok(m, 'the ✕ button template no longer matches — has the row been rebuilt?');
     return new Function('e', 'esc', 't', 'return ' + m[1] + ';')(e, esc, () => 'Löschen');
   };
