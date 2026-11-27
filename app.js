@@ -593,6 +593,7 @@ async function loadCurrentUser() {
   } catch (e) {
     if (e.message !== 'unauthorized') console.error('Auth check failed:', e);
   }
+  showLogClear();
   showServerTab();
   showMcpTab();
   showCameraTab();
@@ -1878,6 +1879,7 @@ function openStab(page, sub) {
     renderBlockBook();
     loadBlockBook();
   }
+  if (page === 'dash' && sub === 'log') renderLog();
   if (page === 'lab' && sub === 'cultures') renderCultures();
   if (page === 'lab' && sub === 'work') {
     lwUpdate();
@@ -1911,7 +1913,6 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
-  if (page === 'settings' && sub === 'log') renderLog();
   if (page === 'orders' && sub === 'pack') renderOrderBoard();
   if (page === 'orders' && sub === 'inbox') renderOrders();
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
@@ -18317,6 +18318,21 @@ function toggleLogSort(col) {
   }
   renderLog();
 }
+// "Leeren" im Scan-Log löscht jeden Scan, und der Server lässt das nur Admins
+// (DELETE /api/scan-log). Der Log steht unter Zahlen, wo ihn jeder sieht; der
+// Knopf bleibt, wem er nützt.
+function showLogClear() {
+  const btn = document.getElementById('btn-37');
+  if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
+}
+// Wer eine Zeile löschen darf: ein Admin jede, sonst nur, wer sie geschrieben
+// hat. So entscheidet der Server (DELETE /api/scan-log/:id); ein Kreuz, das er
+// ablehnt, nähme die Zeile hier weg und brächte sie beim nächsten Abgleich
+// zurück.
+function logDarfLoeschen(e) {
+  if (!currentUser) return false;
+  return currentUser.role === 'admin' || (!!e.user && e.user === currentUser.username);
+}
 function renderLog() {
   const q = (document.getElementById('log-q').value || '').toLowerCase();
   const actionF = document.getElementById('log-action-filter').value;
@@ -18371,7 +18387,7 @@ function renderLog() {
     ? items
         .map((e) => {
           const isRecent = now - new Date(e.time).getTime() < h24;
-          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time fs-micro" style="color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td class="fs-xs" data-mlabel="${esc(t('settings.user'))}">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td class="fs-micro" data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace">${esc(e.batch) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent ? '<button class="btn-xs lg-del fs-micro" style="padding:2px 6px" data-time="' + esc(e.time) + '" data-batch="' + esc(e.batch || '') + '" data-action="' + esc(e.action) + '" data-bag="' + esc(e.bag || '') + '" title="' + esc(t('common.delete')) + '">✕</button>' : ''}</td></tr>`;
+          return `<tr><td data-mlabel="${esc(t('settings.time'))}" class="lg-time fs-micro" style="color:var(--c-text-muted)">${fmtDtTime(e.time)}</td><td class="fs-xs" data-mlabel="${esc(t('settings.user'))}">${esc(e.user) || '\u2014'}</td><td data-mlabel="${esc(t('settings.action'))}"><span class="badge ${e.action === 'ADD' ? 'b-add' : e.action === 'REMOVE' ? 'b-remove' : e.action === 'HARVEST' ? 'b-harvest' : 'b-move'}">${esc(e.action)}</span></td><td class="fs-micro" data-mlabel="${esc(t('batch.batchId'))}" style="font-family:monospace">${esc(e.batch) || '\u2014'}</td><td class="fs-micro" data-mlabel="${esc(t('settings.bag'))}" style="font-family:monospace">${esc(e.bag) || '\u2014'}</td><td data-mlabel="${esc(t('settings.from'))}">${esc(e.from) || '\u2014'}</td><td data-mlabel="${esc(t('settings.to'))}">${esc(e.to) || '\u2014'}</td><td data-mlabel="${esc(t('batch.species'))}">${e.species ? spDot(e.species) + esc(e.species) : '\u2014'}</td><td class="lg-actions">${isRecent && logDarfLoeschen(e) ? '<button class="btn-xs lg-del fs-micro" style="padding:2px 6px" data-time="' + esc(e.time) + '" data-batch="' + esc(e.batch || '') + '" data-action="' + esc(e.action) + '" data-bag="' + esc(e.bag || '') + '" title="' + esc(t('common.delete')) + '">✕</button>' : ''}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="9" class="empty">' + t('settings.noScans') + '</td></tr>';
@@ -38570,6 +38586,7 @@ function initEventListeners() {
   $('st-dash-overview').addEventListener('click', () => openStab('dash', 'overview'));
   $('st-dash-harvest').addEventListener('click', () => openStab('dash', 'harvest'));
   $('st-dash-blocks').addEventListener('click', () => openStab('dash', 'blocks'));
+  $('st-dash-log').addEventListener('click', () => openStab('dash', 'log'));
   // The lab cards are rebuilt wholesale on every sync, so their buttons are
   // delegated rather than carrying inline handlers.
   // Was fehlt, steht an einer Stelle: die Zeile oben in Arbeitsgänge und die
@@ -38905,9 +38922,6 @@ function initEventListeners() {
   if (taBox) taBox.addEventListener('click', toggleTaskAssigneeDropdown);
 
   // Settings
-  $('st-settings-log').addEventListener('click', () => {
-    openStab('settings', 'log');
-  });
   $('st-settings-backup').addEventListener('click', () => {
     openStab('settings', 'backup');
   });
