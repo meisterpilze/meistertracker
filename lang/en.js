@@ -2116,6 +2116,10 @@ window.LANG['en'] = {
   'scanFb.cultureUsed': 'Culture {id} is used up — take another one.',
   'scanFb.cultureSold': 'Culture {id} is already sold — take another one.',
   'scanFb.cultureContam': 'Culture {id} is marked as contaminated — take another one.',
+  'scanFb.cultureBackUsed': '{id} is marked as used up. Is it here: "Back into stock".',
+  'scanFb.cultureBackSold': '{id} is marked as sold. Is it here: "Back into stock".',
+  'scanFb.cultureMarkedContam': '{id} is marked as contaminated.',
+  'scanFb.cultureScanAgain': '{id} is marked as used up. Is it here? Scan it once more and it comes back.',
   'scanFb.locNotNeeded':
     '"{loc}" is a location label, but "{action}" is running — that needs no place. To move bags, cancel first with ✕.',
   'scanFb.moveNeedsBag': '{batch} is a whole batch — to move, scan the labels of the single bags.',

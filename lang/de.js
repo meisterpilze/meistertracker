@@ -2126,6 +2126,10 @@ window.LANG['de'] = {
   'scanFb.cultureUsed': 'Kultur {id} ist aufgebraucht — nimm eine andere.',
   'scanFb.cultureSold': 'Kultur {id} ist schon verkauft — nimm eine andere.',
   'scanFb.cultureContam': 'Kultur {id} ist als kontaminiert markiert — nimm eine andere.',
+  'scanFb.cultureBackUsed': '{id} steht als aufgebraucht drin. Ist sie da: „Wieder in den Bestand“.',
+  'scanFb.cultureBackSold': '{id} steht als verkauft drin. Ist sie da: „Wieder in den Bestand“.',
+  'scanFb.cultureMarkedContam': '{id} steht als kontaminiert drin.',
+  'scanFb.cultureScanAgain': '{id} steht als aufgebraucht drin. Ist sie da? Scanne sie noch einmal, dann kommt sie zurück.',
   'scanFb.locNotNeeded':
     '„{loc}" ist ein Platz-Etikett, aber gerade läuft „{action}" — das braucht keinen Platz. Zum Umziehen erst mit ✕ abbrechen.',
   'scanFb.moveNeedsBag': '{batch} ist eine ganze Charge — zum Umziehen die Etiketten der einzelnen Beutel scannen.',

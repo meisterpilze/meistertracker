@@ -1875,6 +1875,10 @@ window.LANG['pt'] = {
   'scanFb.cultureUsed': 'A cultura {id} está esgotada — use outra.',
   'scanFb.cultureSold': 'A cultura {id} já foi vendida — use outra.',
   'scanFb.cultureContam': 'A cultura {id} está marcada como contaminada — use outra.',
+  'scanFb.cultureBackUsed': '{id} está marcada como gasta. Está aqui: «Voltar ao stock».',
+  'scanFb.cultureBackSold': '{id} está marcada como vendida. Está aqui: «Voltar ao stock».',
+  'scanFb.cultureMarkedContam': '{id} está marcada como contaminada.',
+  'scanFb.cultureScanAgain': '{id} está marcada como gasta. Está aqui? Lê-a outra vez e ela volta.',
   'scanFb.locNotNeeded':
     '"{loc}" é uma etiqueta de local, mas "{action}" está ativo — isso não precisa de local. Para mover, cancele primeiro com ✕.',
   'scanFb.moveNeedsBag': '{batch} é um lote inteiro — para mover, escaneie as etiquetas de cada saco.',
