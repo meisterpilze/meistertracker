@@ -373,7 +373,6 @@ window.LANG['de'] = {
   'pickups.confirmed': 'Bestätigt',
   'pickups.pending': 'Noch nicht bestätigt',
   // Abholorte (Einstellungen)
-  'settings.tabPickupLocations': 'Abholorte',
   'pickupLoc.title': 'Abholorte',
   'pickupLoc.desc':
     'Orte, an denen Ware übergeben wird — die Halle, ein Marktstand, ein zweiter Standort. Ein Termin im Kalender wählt einen davon aus, statt den Ort in den Titel zu tippen: getippt gibt es dieselbe Schreibweise beim zweiten Mal anders, und wer den Namen draußen liest, sieht dann zwei Märkte. Der Name verlässt mit dem Ernte-Feed das Haus, die Adresse nicht.',
@@ -1620,7 +1619,7 @@ window.LANG['de'] = {
   'harvestFeed.packBad': 'Eine Menge ist eine ganze Grammzahl zwischen 25 und 25000.',
   'harvestFeed.site': 'Name dieses Betriebs im Feed (optional)',
   'harvestFeed.siteHint':
-    'Nur nötig, wenn mehrere Betriebe an denselben Empfänger senden: Die Kennung reist in jeder Meldung mit und sagt, von wem sie kommt. Das ist kein Abholort — wo Ware übergeben wird, steht unter Admin → Abholorte und wird am Kalendereintrag ausgewählt. Ein Empfänger vergleicht diesen Text wörtlich; wer ihn ändert, ändert drüben einen Schlüssel.',
+    'Nur nötig, wenn mehrere Betriebe an denselben Empfänger senden: Die Kennung reist in jeder Meldung mit und sagt, von wem sie kommt. Das ist kein Abholort — wo Ware übergeben wird, steht unter Abholungen → Abholorte und wird am Kalendereintrag ausgewählt. Ein Empfänger vergleicht diesen Text wörtlich; wer ihn ändert, ändert drüben einen Schlüssel.',
   'harvestFeed.sitePh': 'z. B. hof-nord',
   'harvestFeed.saveHint': 'Alle drei Karten sind eine Einstellung und werden zusammen gespeichert.',
   'harvestFeed.testNow': 'Jetzt einmal senden',

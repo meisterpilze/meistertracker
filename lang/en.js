@@ -370,7 +370,6 @@ window.LANG['en'] = {
   'pickups.confirmed': 'Confirmed',
   'pickups.pending': 'Not yet confirmed',
   // Pickup locations (Settings)
-  'settings.tabPickupLocations': 'Pickup locations',
   'pickupLoc.title': 'Pickup locations',
   'pickupLoc.desc':
     'Places where goods are handed over — the hall, a market stall, a second site. A calendar entry picks one of these instead of having the place typed into its title: typed, the second spelling shows up sooner or later, and whoever reads the name outside then sees two markets. The name leaves the building with the harvest feed; the address does not.',
@@ -1616,7 +1615,7 @@ window.LANG['en'] = {
   'harvestFeed.packBad': 'A size is a whole number of grams between 25 and 25000.',
   'harvestFeed.site': 'Name of this farm in the feed (optional)',
   'harvestFeed.siteHint':
-    'Only needed when several farms send to the same receiver: it rides along in every message and says who sent it. This is not a pickup address — where goods are handed over lives under Admin → Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so changing it changes a key at the other end.',
+    'Only needed when several farms send to the same receiver: it rides along in every message and says who sent it. This is not a pickup address — where goods are handed over lives under Pickups → Pickup locations and is picked on the calendar entry. A receiver matches this text literally, so changing it changes a key at the other end.',
   'harvestFeed.sitePh': 'e.g. north-farm',
   'harvestFeed.saveHint': 'All three cards are one setting and are saved together.',
   'harvestFeed.testNow': 'Send one now',
