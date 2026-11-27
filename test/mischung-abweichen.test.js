@@ -85,57 +85,66 @@ describe('die Mischung eines Ansatzes', () => {
   });
 });
 
-// Die zwei Felder, die eine Zahl sind: was nicht Kleie (und Mais) ist, ist
-// Pellets. Gegen Attrappen, weil sbBlendEdited im Formular lebt.
-function tippen(felder, welches) {
+// Die zwei Felder, die eine Zahl sind: was nicht Kleie (und Sojaschalen) ist,
+// ist Pellets. Gegen Attrappen, weil wkmBlendEdited im geführten Ablauf lebt,
+// dem einen Weg, Substrat anzusetzen. Das Formular, das dieselbe Rechnung ein
+// zweites Mal hatte, gibt es nicht mehr.
+function tippen(felder, welches, mix) {
   return new Function(
     'werte',
     'welches',
+    'mix',
     `
     const el = {};
     for (const id of Object.keys(werte)) el[id] = { value: String(werte[id]) };
-    const document = { getElementById: (id) => el[id] || null };
-    const parseDecimal = (v) => parseFloat(String(v).replace(',', '.'));
-    function sbBlendDirty() {}
-    function sbPreviewSoon() {}
-    ${hebeFunktion('_sbNum', quelle())}
+    const document = { getElementById: (id) => el[id] || null, querySelector: () => null };
+    const WKM = { recipeId: 1, mix: Object.assign({}, mix), unlesbar: {} };
+    const sbRecipeOf = () => ({ branPct: 20, soyhullPct: 0 });
+    const wkmMixAdjusted = () => false;
+    const wkmLoadPreview = () => {};
+    const setTimeout = () => 0;
+    const clearTimeout = () => {};
+    let _wkmMixTimer = null;
+    ${hebeFunktion('parseDecimal', quelle())}
     ${hebeFunktion('_sbSet', quelle())}
-    ${hebeFunktion('sbBlendEdited', quelle())}
-    sbBlendEdited(welches);
-    const raus = {};
+    ${hebeFunktion('wkmFeldLesen', quelle())}
+    ${hebeFunktion('wkmBlendEdited', quelle())}
+    wkmBlendEdited(welches);
+    const raus = { mix: WKM.mix };
     for (const id of Object.keys(el)) raus[id] = el[id].value;
     return raus;
   `
-  )(felder, welches);
+  )(felder, welches, mix || {});
 }
 
-describe('Pellets und Kleie im Formular', () => {
+describe('Pellets und Kleie im Ablauf', () => {
   it('setzt die Kleie, wenn jemand die Pellets tippt', () => {
-    const r = tippen({ 'sb-hw': 70, 'sb-wb': 20, 'sb-corn': 0 }, 'hw');
-    assert.equal(r['sb-wb'], '30', '70 % Pellets sind 30 % Kleie, sonst ergibt die Mischung nicht 100');
+    const r = tippen({ 'wkm-hw': 70, 'wkm-wb': 20 }, 'hw');
+    assert.equal(r['wkm-wb'], '30', '70 % Pellets sind 30 % Kleie, sonst ergibt die Mischung nicht 100');
+    assert.equal(r.mix.branPct, 30);
   });
 
   it('und die Pellets, wenn jemand die Kleie tippt', () => {
-    assert.equal(tippen({ 'sb-hw': 80, 'sb-wb': 30, 'sb-corn': 0 }, 'wb')['sb-hw'], '70');
+    assert.equal(tippen({ 'wkm-hw': 80, 'wkm-wb': 30 }, 'wb')['wkm-hw'], '70');
   });
 
-  it('zieht das Maismehl vorher ab', () => {
-    // Mit Maismehl, etwa 70/20/10. Die Pellets sind der Rest von allem, nicht nur
-    // von der Kleie.
-    const r = tippen({ 'sb-hw': 70, 'sb-wb': 20, 'sb-corn': 10 }, 'wb');
-    assert.equal(r['sb-hw'], '70');
+  it('zieht die Sojaschalen vorher ab', () => {
+    // Mit Sojaschalen, etwa 70/20/10. Die Pellets sind der Rest von allem, nicht
+    // nur von der Kleie.
+    const r = tippen({ 'wkm-hw': 70, 'wkm-wb': 20 }, 'wb', { soyhullPct: 10 });
+    assert.equal(r['wkm-hw'], '70');
   });
 
   it('lässt keine Mischung über 100 % zu', () => {
-    const r = tippen({ 'sb-hw': 140, 'sb-wb': 20, 'sb-corn': 0 }, 'hw');
-    assert.equal(r['sb-wb'], '0', 'mehr als 100 % Pellets sind 0 % Kleie, keine negative');
+    const r = tippen({ 'wkm-hw': 140, 'wkm-wb': 20 }, 'hw');
+    assert.equal(r['wkm-wb'], '0', 'mehr als 100 % Pellets sind 0 % Kleie, keine negative');
   });
 
   it('rührt Gips und Feuchte nicht an', () => {
     // Die beiden gehören zu keiner Waage: der Gips kommt oben drauf, die
     // Feuchte ist Wasser. Sie hier mitzurechnen wäre stiller Unsinn.
-    const r = tippen({ 'sb-hw': 70, 'sb-wb': 20, 'sb-corn': 0, 'sb-gyp': 1, 'sb-rh': 60 }, 'hw');
-    assert.equal(r['sb-gyp'], '1');
-    assert.equal(r['sb-rh'], '60');
+    const r = tippen({ 'wkm-hw': 70, 'wkm-wb': 20, 'wkm-gyp': 1, 'wkm-rh': 60 }, 'hw');
+    assert.equal(r['wkm-gyp'], '1');
+    assert.equal(r['wkm-rh'], '60');
   });
 });

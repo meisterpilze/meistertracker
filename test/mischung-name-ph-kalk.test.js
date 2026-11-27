@@ -466,7 +466,7 @@ describe('speichern in einem Tipp, mit Rückweg', () => {
   });
 
   it('fragt vor dem Speichern nicht nach', () => {
-    for (const fn of ['wkmSaveMix', 'wkmSaveDone', 'sbSaveMixFromForm']) {
+    for (const fn of ['wkmSaveMix', 'wkmSaveDone']) {
       assert.doesNotMatch(hebe(fn), /confirm2\(|confirm\(/, fn + ' fragt nach');
     }
   });
@@ -500,29 +500,6 @@ describe('speichern in einem Tipp, mit Rückweg', () => {
     assert.match(offen, /id="wkm-savename"/);
   });
 
-  it('zeigt es im Formular ebenso', () => {
-    const els = { 'sb-blend-reset': { style: {} }, 'sb-mixsave': { hidden: true } };
-    const dirty = (user, abweichend) => {
-      new Function(
-        'document',
-        'currentUser',
-        'function sbBlendAdjusted() { return ' +
-          abweichend +
-          '; }\n' +
-          hebe('wkmDarfSichern') +
-          '\n' +
-          hebe('sbBlendDirty') +
-          '\nsbBlendDirty();'
-      )({ getElementById: (id) => els[id] || null }, user);
-      return els['sb-mixsave'].hidden;
-    };
-    assert.equal(dirty({ role: 'admin' }, true), false);
-    assert.equal(dirty({ role: 'admin' }, false), true);
-    assert.equal(dirty({ role: 'user' }, true), true);
-    assert.match(HTML, /id="sb-mixsave" hidden/);
-    assert.match(HTML, /onclick="sbSaveMixFromForm\(\)"/);
-  });
-
   it('bietet es auf der Quittung an, wenn der Ansatz von der Mischung abwich', () => {
     const submit = hebe('wkmSubmit');
     assert.match(submit, /wkmDarfSichern\(\) && wkmWeichtAb\(recipeId, mix\)/);
@@ -537,14 +514,6 @@ describe('die neuen Felder im Browser', () => {
     const text = new Function('fmtKg', hebe('sbHydText') + '\nreturn sbHydText;')(fmtKg);
     assert.equal(text(0.214), '214 g');
     assert.equal(text(1.25), '1,25 kg');
-  });
-
-  it('liest und schickt Calciumhydroxid im Formular wie die anderen Anteile', () => {
-    assert.match(hebeKonstante('SB_BLEND_FIELDS', APP), /'sb-hyd'/);
-    assert.match(hebe('sbBlend'), /o\.hydroxidePct = hyd/);
-    assert.match(hebe('sbBlendAdjusted'), /_sbNum\('sb-hyd'\)/);
-    assert.match(HTML, /id="sb-hyd"[\s\S]{0,200}oninput="sbBlendEdited\('hyd'\)"/);
-    assert.match(HTML, /id="sb-ph"/);
   });
 
   it('führt es im Ablauf als Anteil der Mischung, den pH nicht', () => {
@@ -583,10 +552,8 @@ describe('die neuen Felder im Browser', () => {
     assert.equal(ctx.wkmPhOk(), true, 'leer heißt: noch nicht gemessen');
   });
 
-  it('schickt den pH mit dem Ansatz, aus dem Ablauf und aus dem Formular', () => {
+  it('schickt den pH mit dem Ansatz', () => {
     assert.match(hebe('wkmSubmit'), /steriMin,\n\s+mixPh,/);
-    assert.match(hebe('createSubstrateBatchUI'), /steriMin,\n\s+mixPh,/);
-    assert.match(hebe('createSubstrateBatchUI'), /t\('sub\.mixPhNaN'\)/);
   });
 
   it('zeigt in der Liste beide pH nebeneinander, vorher → nachher', () => {

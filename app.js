@@ -13060,13 +13060,11 @@ function nbEtikettenNachPlatz(batchObj, bags) {
   nbpOpen();
 }
 // ─── SUBSTRATE BATCHES (v67) ─────────────────────────────────
-// Two cards, because there are two steps and they cost different things. The
-// mix card turns kilograms of finished substrate into a shopping list and books
-// it against the shelf. The Charge card spends kilograms of an existing mix and
-// books only the spawn. Neither computes anything the server does not: the
-// browser posts a recipe and an amount, and the figures come back.
-let _sbTimer = null;
-let _sbLast = null;
+// Two steps, because they cost different things. Mixing (the guided flow,
+// wkm*) turns kilograms of finished substrate into a shopping list and books it
+// against the shelf. A Charge spends kilograms of an existing mix and books
+// only the spawn. Neither computes anything the server does not: the browser
+// posts a recipe and an amount, and the figures come back.
 let _sbList = [];
 
 // Wie lange der Hahn laufen muss, als mm:ss.
@@ -13085,22 +13083,8 @@ function waterTimeText(minutes) {
   const s = Math.round(n * 60);
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' min';
 }
-function sbPreviewSoon() {
-  clearTimeout(_sbTimer);
-  _sbTimer = setTimeout(sbPreview, 250);
-}
 
-// ── Die Mischung im Ansatz-Formular ──────────────────────────
-// Das Rezept der Sorte belegt die Felder, danach gehören sie diesem einen
-// Ansatz. Wer 70/30 mischen will, tippt hier 70 — vorher hätte er dafür das
-// Rezept der Sorte umschreiben müssen, und damit jeden künftigen Ansatz mit.
-const SB_BLEND_FIELDS = ['sb-hw', 'sb-wb', 'sb-soy', 'sb-corn', 'sb-gyp', 'sb-ca', 'sb-hyd', 'sb-rh'];
-function _sbNum(id) {
-  const el = document.getElementById(id);
-  if (!el || el.value === '') return null;
-  const v = parseDecimal(el.value);
-  return Number.isFinite(v) ? v : null;
-}
+// Eine Zahl in ein Feld der Mischung schreiben, auf zwei Stellen (wkmBlendEdited).
 function _sbSet(id, v) {
   const el = document.getElementById(id);
   if (el) el.value = v == null ? '' : String(Math.round(v * 100) / 100);
@@ -13139,10 +13123,6 @@ function sbBagChips(attr) {
       `<button type="button" class="wkf-w${k === cur ? ' on' : ''}" ${attr}="${k}">${esc(fmtKg(k, k % 1 ? 1 : 0))} kg</button>`
   ).join('');
 }
-function sbRenderBagChips() {
-  const box = document.getElementById('sb-bagkg-btns');
-  if (box) box.innerHTML = sbBagChips('data-sb-bagkg');
-}
 // Auf Gramm gerundet: 3,8 × 3 ist in Gleitkomma 11,399999…
 function sbTargetKg(bags, bagKg) {
   return Math.round(bags * bagKg * 1000) / 1000;
@@ -13152,18 +13132,6 @@ function sbParseBags(v) {
   const n = Number(String(v == null ? '' : v).trim());
   return Number.isInteger(n) && n > 0 ? n : 0;
 }
-(function wireSbBagChips() {
-  const box = document.getElementById('sb-bagkg-btns');
-  if (!box) return;
-  sbRenderBagChips();
-  box.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-sb-bagkg]');
-    if (!b) return;
-    sbSetBagKg(parseFloat(b.dataset.sbBagkg));
-    sbRenderBagChips();
-    sbPreview();
-  });
-})();
 
 // Das Wasser, wie es am Hahn gebraucht wird: erst `nowL`, dann messen, dann
 // höchstens `restL`. Der Server rechnet Lernfaktor und Rückhalt; ein älterer
@@ -13229,7 +13197,6 @@ async function sbSaveResidual() {
   }
   toast(t('sub.residSaved'));
   await loadResidualMoisture();
-  sbPreview();
 }
 
 async function loadSubstrateRecipes(force) {
@@ -13239,7 +13206,6 @@ async function loadSubstrateRecipes(force) {
   if (!Array.isArray(r)) return;
   _sbRecipes = r;
   _sbRecipesLoaded = true;
-  fillSbRecipeSelect();
   renderMixRecipes();
 }
 function sbRecipeOptions(selectedId) {
@@ -13392,15 +13358,6 @@ function sbRenameMix(id) {
     if (b) sbRenameMix(parseInt(b.dataset.sbMixname, 10));
   });
 })();
-function fillSbRecipeSelect() {
-  const el = document.getElementById('sb-recipe');
-  if (!el) return;
-  const cur = parseInt(el.value, 10);
-  const opts = '<option value="">' + esc(t('sub.pickMix')) + '</option>' + sbRecipeOptions(cur);
-  if (el.innerHTML === opts) return;
-  el.innerHTML = opts;
-  sbFillBlendFromRecipe();
-}
 // Die gewählte Mischung, so wie die Mischrechnung sie liest. Der Pelletanteil
 // steht nicht darin: er ist der Rest, und zwei Zahlen für dieselbe Größe
 // driften auseinander.
@@ -13418,245 +13375,8 @@ function sbRecipeOf(recipeId) {
     moisturePct: +r.rhPct || 0
   };
 }
-// Mischung gewechselt: die Felder kommen frisch aus deren Rezept. Eine
-// Abweichung, die für den vorigen Ansatz getippt wurde, still auf die nächste
-// Mischung mitzunehmen, wäre die unangenehmere Überraschung.
-function sbRecipeChanged() {
-  sbFillBlendFromRecipe();
-  sbPreview();
-}
-function sbFillBlendFromRecipe() {
-  sbFillBlend(sbRecipeOf(parseInt(document.getElementById('sb-recipe').value, 10)));
-}
-// Die Felder mit einer Mischung belegen: der gewählten, oder nach einem
-// zurückgenommenen Speichern wieder der, die getippt war.
-function sbFillBlend(rec) {
-  const cornWrap = document.getElementById('sb-corn-wrap');
-  if (!rec) {
-    SB_BLEND_FIELDS.forEach((id) => _sbSet(id, null));
-    if (cornWrap) cornWrap.style.display = 'none';
-    sbBlendDirty();
-    return;
-  }
-  _sbSet('sb-wb', rec.branPct);
-  _sbSet('sb-corn', rec.cornPct);
-  _sbSet('sb-soy', rec.soyhullPct);
-  _sbSet('sb-hw', 100 - rec.branPct - rec.cornPct - rec.soyhullPct);
-  _sbSet('sb-gyp', rec.gypsumPct);
-  _sbSet('sb-ca', rec.calciumPct);
-  _sbSet('sb-hyd', rec.hydroxidePct);
-  _sbSet('sb-rh', rec.moisturePct);
-  // Maismehl steht nur da, wo das Rezept welches vorsieht — sonst wäre es ein
-  // Feld, das bei den meisten Sorten 0 sagt und nur Platz kostet.
-  if (cornWrap) cornWrap.style.display = rec.cornPct > 0 ? '' : 'none';
-  sbBlendDirty();
-}
-// Pellets und Kleie sind eine Zahl in zwei Feldern: was nicht Kleie (und Mais,
-// Sojaschalen) ist, ist Pellets. Wer eines tippt, hat das andere mitgesagt — sonst stünde da
-// eine Mischung, die nicht 100 % ergibt, und die Rechnung nähme stillschweigend
-// eine andere.
-function sbBlendEdited(which) {
-  const corn = _sbNum('sb-corn') || 0;
-  const soy = _sbNum('sb-soy') || 0;
-  const rest = Math.max(0, 100 - corn - soy);
-  if (which === 'hw') {
-    const hw = Math.min(rest, Math.max(0, _sbNum('sb-hw') || 0));
-    _sbSet('sb-wb', rest - hw);
-  } else if (which === 'wb' || which === 'corn' || which === 'soy') {
-    const wb = Math.min(rest, Math.max(0, _sbNum('sb-wb') || 0));
-    _sbSet('sb-hw', rest - wb);
-  }
-  sbBlendDirty();
-  sbPreviewSoon();
-}
-// Weicht die Mischung vom Rezept ab? Steuert den Rückweg — und nur den; was
-// wirklich angesetzt wird, entscheidet der Server anhand derselben Zahlen.
-function sbBlendAdjusted() {
-  const rec = sbRecipeOf(parseInt(document.getElementById('sb-recipe').value, 10));
-  if (!rec) return false;
-  const gleich = (a, b) => Math.abs((a == null ? 0 : a) - b) < 1e-9;
-  return !(
-    gleich(_sbNum('sb-wb'), rec.branPct) &&
-    gleich(_sbNum('sb-corn'), rec.cornPct) &&
-    gleich(_sbNum('sb-soy'), rec.soyhullPct) &&
-    gleich(_sbNum('sb-gyp'), rec.gypsumPct) &&
-    gleich(_sbNum('sb-ca'), rec.calciumPct) &&
-    gleich(_sbNum('sb-hyd'), rec.hydroxidePct || 0) &&
-    gleich(_sbNum('sb-rh'), rec.moisturePct)
-  );
-}
-// Weicht eine Zahl ab, erscheinen der Rückweg zum Rezept und, für einen Admin,
-// das Speichern als neue Mischung. Beides steht da, ohne dass man es sucht.
-function sbBlendDirty() {
-  const neu = sbBlendAdjusted();
-  const btn = document.getElementById('sb-blend-reset');
-  if (btn) btn.style.display = neu ? '' : 'none';
-  const box = document.getElementById('sb-mixsave');
-  if (box) box.hidden = !(neu && wkmDarfSichern());
-}
 // Die Mischung aus dem Formular als neue Mischung speichern und gleich wählen:
 // der Ansatz, der gerade entsteht, heißt dann wie sie.
-let _sbMixSaving = false;
-async function sbSaveMixFromForm() {
-  if (_sbMixSaving) return;
-  const st = document.getElementById('sb-status');
-  const sel = document.getElementById('sb-recipe');
-  const alt = parseInt(sel.value, 10);
-  const rec = sbRecipeOf(alt);
-  if (!rec) return;
-  // Wie vor dem Anlegen: ein Feld, in dem keine Zahl steht, gälte still als leer.
-  const unlesbar = SB_BLEND_FIELDS.map((id) => document.getElementById(id)).find(
-    (el) => el && el.validity && el.validity.badInput
-  );
-  if (unlesbar) {
-    const lab = unlesbar.parentElement.querySelector('label');
-    setStatus(st, t('work.mNotNumber', { feld: lab ? lab.textContent.replace(/%/g, '').trim() : '' }), false);
-    return;
-  }
-  const m = Object.assign({}, rec, sbBlend());
-  const feld = document.getElementById('sb-mixsave-name');
-  _sbMixSaving = true;
-  const r = await sbSaveMixRecipe(feld ? feld.value : '', m);
-  _sbMixSaving = false;
-  if (!r || r.error) {
-    setStatus(st, t('sub.failed', { err: (r && r.error) || '?' }), false);
-    return;
-  }
-  setStatus(st, '', true);
-  if (feld) feld.value = '';
-  await loadSubstrateRecipes(true);
-  sel.value = String(r.id);
-  sbRecipeChanged();
-  sbMixSavedToast(r, () => {
-    // Zurück zur vorigen Mischung, mit den Zahlen, die getippt waren.
-    sel.value = String(alt);
-    sbFillBlend(m);
-    sbPreview();
-  });
-}
-function sbResetBlend() {
-  sbFillBlendFromRecipe();
-  sbPreview();
-}
-// Was an den Server geht: nur die vier Zahlen, die die Mischrechnung liest.
-function sbBlend() {
-  const o = {};
-  const wb = _sbNum('sb-wb');
-  if (wb != null) o.branPct = wb;
-  const corn = _sbNum('sb-corn');
-  if (corn != null) o.cornPct = corn;
-  const soy = _sbNum('sb-soy');
-  if (soy != null) o.soyhullPct = soy;
-  const gyp = _sbNum('sb-gyp');
-  if (gyp != null) o.gypsumPct = gyp;
-  const ca = _sbNum('sb-ca');
-  if (ca != null) o.calciumPct = ca;
-  const hyd = _sbNum('sb-hyd');
-  if (hyd != null) o.hydroxidePct = hyd;
-  const rh = _sbNum('sb-rh');
-  if (rh != null) o.moisturePct = rh;
-  return o;
-}
-
-async function sbPreview() {
-  const out = document.getElementById('sb-out');
-  const btn = document.getElementById('sb-go');
-  if (!out) return;
-  const recipeId = parseInt(document.getElementById('sb-recipe').value, 10);
-  const bags = sbParseBags(document.getElementById('sb-bags').value);
-  const bagKg = sbBagKg();
-  const kg = sbTargetKg(bags, bagKg);
-  _sbLast = null;
-  if (btn) btn.disabled = true;
-  if (!recipeId || kg <= 0) {
-    out.innerHTML = '<div class="fs-meta" style="color:var(--c-text-muted)">' + esc(t('sub.pickBoth')) + '</div>';
-    return;
-  }
-  const blend = sbBlend();
-  const r = await apiPost('/api/substrate-batches/preview', { recipeId, targetKg: kg, mix: blend });
-  if (!r || r.error) {
-    out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc((r && r.error) || '?') + '</div>';
-    return;
-  }
-  if (!r.hasRecipe) {
-    out.innerHTML = '<div class="fs-meta" style="color:var(--c-red-dark)">' + esc(t('sub.noRecipe')) + '</div>';
-    return;
-  }
-  const m = r.mix;
-  // Die Beschriftung, die der Server dem Ansatz geben wird (mixLabel), damit
-  // der Bestätigungsdialog sagt, was gleich in der Liste steht.
-  const label = r.label || r.recipeLabel;
-  _sbLast = { recipeId, kg, bags, bagKg, mix: m, label: label, blend: blend };
-  if (btn) btn.disabled = false;
-  const stock = (inventory && inventory.stock) || {};
-  // Red when the shelf cannot cover the line. The server clamps a deduction to
-  // what is actually there, so an unnoticed shortfall does not merely mean a
-  // short mix — the missing kilos are never booked at all.
-  // Every line the shelf cannot cover, collected while the table is built. The
-  // server clamps a deduction to what is actually there, so a mix started while
-  // short is recorded at full weight and quietly takes less — the gap has to be
-  // said out loud before it is booked, not inferred from a red number.
-  const shortfalls = [];
-  const row = (label, val, unit, mat, dec) => {
-    const short = mat && val > (stock[mat] || 0) + 1e-9;
-    if (short) shortfalls.push({ label, need: val, have: stock[mat] || 0 });
-    return (
-      '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
-      esc(label) +
-      '</td><td style="padding:2px 0;text-align:right;font-weight:600' +
-      (short ? ';color:var(--c-red-dark)' : '') +
-      '">' +
-      val.toFixed(dec == null ? 1 : dec) +
-      ' ' +
-      unit +
-      (short ? ' ⚠' : '') +
-      '</td></tr>'
-    );
-  };
-  out.innerHTML =
-    '<table class="fs-sm" style="border-collapse:collapse">' +
-    row(t('sub.totalKg'), kg, 'kg') +
-    row(t('sub.dryMix'), m.dryKg, 'kg') +
-    row(t('sub.pellets'), m.pelletsKg, 'kg', 'hardwood') +
-    row(t('sub.bran'), m.branKg, 'kg', 'wheatbran') +
-    (m.cornKg > 0.005 ? row(t('sub.corn'), m.cornKg, 'kg', 'corn') : '') +
-    (m.soyhullKg > 0.005 ? row(t('sub.soyhull'), m.soyhullKg, 'kg', 'soyhull') : '') +
-    row(t('sub.gypsum'), m.gypsumKg, 'kg', 'gypsum', 2) +
-    (m.calciumKg > 0.005 ? row(t('sub.calcium'), m.calciumKg, 'kg', 'calcium', 2) : '') +
-    // Ohne Lagerbestand, also auch ohne Warnung; unter einem Kilo in Gramm.
-    (m.hydroxideKg > 0.0005
-      ? m.hydroxideKg < 1
-        ? row(t('sub.hydroxide'), m.hydroxideKg * 1000, 'g', null, 0)
-        : row(t('sub.hydroxide'), m.hydroxideKg, 'kg', null, 2)
-      : '') +
-    row(t('sub.waterNow'), sbWater(r).nowL, 'L') +
-    '<tr><td style="padding:2px 10px 2px 0;color:var(--c-text-sec)">' +
-    esc(t('sub.waterTime')) +
-    '</td><td style="padding:2px 0;text-align:right;font-weight:600">' +
-    esc(waterTimeText(sbWater(r).nowMinutes)) +
-    '</td></tr>' +
-    row(t('sub.waterRest'), sbWater(r).restL, 'L') +
-    row(t('sub.moisture'), m.moisturePct, '%') +
-    '</table>' +
-    '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:6px">' +
-    esc(sbWaterHint(sbWater(r))) +
-    '</div>' +
-    '<div class="fs-xs" style="color:var(--c-text-muted);margin-top:4px">' +
-    esc(t('sub.noSpawnHint')) +
-    '</div>';
-  _sbLast.shortfalls = shortfalls;
-  if (shortfalls.length) {
-    const list = shortfalls
-      .map((x) => esc(t('sub.shortLine', { mat: x.label, need: x.need.toFixed(1), have: x.have.toFixed(1) })))
-      .join('<br>');
-    out.innerHTML =
-      '<div class="fs-floor" style="--fs-own:12.5px;background:var(--c-red-light);border:1px solid var(--c-red-border);color:var(--c-red-dark);' +
-      'border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.55">' +
-      '<b>' + esc(t('sub.shortTitle')) + '</b><br>' + list + '<br>' + esc(t('sub.shortHint')) +
-      '</div>' +
-      out.innerHTML;
-  }
-}
 
 // Anzahl, Größe und Kilo für die Texte, die einen Ansatz nennen.
 function sbMengeParams(menge, extra) {
@@ -13680,67 +13400,6 @@ function sbConfirmMix(subId, menge, label, knapp, dann) {
     t('sub.confirmMsg', sbMengeParams(menge, { recipe: label, id: subId })) + (knapp ? '\n\n' + t('sub.shortConfirm') : ''),
     t('sub.create'),
     dann
-  );
-}
-
-async function createSubstrateBatchUI() {
-  const st = document.getElementById('sb-status');
-  if (!_sbLast) {
-    setStatus(st, t('sub.pickBoth'), false);
-    return;
-  }
-  // Ein Zahlenfeld, in dem keine Zahl steht, meldet der Browser als leer —
-  // gebucht würde dann still das Rezept oder keine Zeit. badInput verrät es.
-  const unlesbar = SB_BLEND_FIELDS.concat('sb-steri', 'sb-ph')
-    .map((id) => document.getElementById(id))
-    .find((el) => el && el.validity && el.validity.badInput);
-  if (unlesbar) {
-    const lab = unlesbar.parentElement.querySelector('label');
-    setStatus(st, t('work.mNotNumber', { feld: lab ? lab.textContent.replace(/%|min/g, '').trim() : '' }), false);
-    return;
-  }
-  const steriMin = _sbNum('sb-steri');
-  if (steriMin != null && !(steriMin >= 0 && steriMin <= 1440)) {
-    setStatus(st, t('sub.steriNaN'), false);
-    return;
-  }
-  // Leer heißt: noch nicht gemessen. Der pH lässt sich am Ansatz nachtragen.
-  const mixPh = _sbNum('sb-ph');
-  if (mixPh != null && !(mixPh >= 0 && mixPh <= 14)) {
-    setStatus(st, t('sub.mixPhNaN'), false);
-    return;
-  }
-  const subId = sbGenId();
-  sbConfirmMix(
-    subId,
-    { bags: _sbLast.bags, bagKg: _sbLast.bagKg, kg: _sbLast.kg },
-    _sbLast.label,
-    !!(_sbLast.shortfalls && _sbLast.shortfalls.length),
-    async () => {
-      setStatus(st, t('sub.running'), true);
-      const r = await apiPost('/api/substrate-batches', {
-        subId,
-        recipeId: _sbLast.recipeId,
-        targetKg: _sbLast.kg,
-        // Dieselben Zahlen, die die Vorschau gerechnet hat. Sie hier wegzulassen
-        // hieße, etwas anderes anzulegen als das, was auf dem Schirm stand.
-        mix: _sbLast.blend,
-        steriMin,
-        mixPh,
-        notes: (document.getElementById('sb-notes').value || '').trim()
-      });
-      if (!r || r.error) {
-        setStatus(st, t('sub.failed', { err: (r && r.error) || '?' }), false);
-        return;
-      }
-      setStatus(st, t('sub.done', sbMengeParams(_sbLast, { id: r.subId })), true);
-      document.getElementById('sb-notes').value = '';
-      _sbSet('sb-steri', null);
-      _sbSet('sb-ph', null);
-      await loadData();
-      await refreshSubstrateBatches();
-      sbPreview();
-    }
   );
 }
 
@@ -39022,6 +38681,10 @@ function initEventListeners() {
   // als Ablage, aus der createBatch() liest — aufgeschlagen wird es nicht mehr.
   $('btn-batch-new').addEventListener('click', wkbOpen);
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
+  // Angesetzt wird auf einem Weg: dem geführten Ablauf, den auch die Kachel
+  // "Substrat" öffnet. Das Formular, das hier stand, war derselbe Ansatz ein
+  // zweites Mal, mit eigenen Feldern und eigenem Verhalten.
+  $('btn-sub-new').addEventListener('click', wkmOpen);
   // Ernten und Gute Blöcke sind Ansichten von Zahlen: gelesen, nicht bearbeitet.
   $('st-dash-overview').addEventListener('click', () => openStab('dash', 'overview'));
   $('st-dash-harvest').addEventListener('click', () => openStab('dash', 'harvest'));
@@ -41137,8 +40800,8 @@ function wkmMixFehler() {
   return u ? t('work.mNotNumber', { feld: t(WKM_FELD_NAME[u]) }) : t('work.mMixRange');
 }
 
-// Pellets und Kleie sind eine Zahl in zwei Feldern, wie in sbBlendEdited():
-// wer eines tippt, hat das andere mitgesagt.
+// Pellets und Kleie sind eine Zahl in zwei Feldern: wer eines tippt, hat das
+// andere mitgesagt.
 let _wkmMixTimer = null;
 function wkmBlendEdited(which) {
   if (!WKM.mix) WKM.mix = {};
@@ -41657,7 +41320,6 @@ function wkmSubmit(subId, menge, label, mix, steriMin, mixPh) {
     } else if (el.dataset.wkm === 'bagkg') {
       wkmRead();
       sbSetBagKg(parseFloat(el.dataset.val));
-      sbRenderBagChips();
       wkmRead();
       wkmRender();
       wkmLoadPreview();
@@ -41672,9 +41334,8 @@ function wkmSubmit(subId, menge, label, mix, steriMin, mixPh) {
   flow.addEventListener('change', (e) => {
     if (WKF.kind !== 'mix') return;
     if (e.target.closest('#wkm-recipe')) {
-      // Andere Mischung: die Anteile kommen frisch aus deren Rezept, wie im
-      // Formular (sbRecipeChanged). Eine Abweichung still mitzunehmen wäre die
-      // unangenehmere Überraschung.
+      // Andere Mischung: die Anteile kommen frisch aus deren Rezept. Eine
+      // Abweichung still mitzunehmen wäre die unangenehmere Überraschung.
       wkmRead();
       wkmMixFromRecipe();
       wkmRender();
