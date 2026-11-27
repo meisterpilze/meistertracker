@@ -32681,9 +32681,11 @@ function processScan(raw, opts) {
         setFb('err', t('scanFb.cultureNotInSystem', { id: val }));
         return;
       }
-      if (cultureGone(hit)) {
+      // Abgeschrieben, aber in der Hand: ein zweiter Scan holt sie zurück in den
+      // Bestand und nimmt sie (kulturNochmalGescannt). Kontaminiert nie.
+      if (cultureGone(hit) && !kulturNochmalGescannt(hit)) {
         _scanBeep(300, 150);
-        setFb('err', cultureRefusal(hit));
+        setFb('err', hit.status === 'contam' ? cultureRefusal(hit) : t('scanFb.cultureScanAgain', { id: hit.id }));
         return;
       }
       const addErr =
@@ -32710,8 +32712,12 @@ function processScan(raw, opts) {
       return;
     }
     if (c) {
+      // Abgeschrieben, aber hier gescannt: ihr Fenster, darin "Wieder in den
+      // Bestand" (renderCiActions). Vorher stand hier nur "aufgebraucht — nimm
+      // eine andere", und eine Schale, die vor einem stand, kam nicht zurück.
       if (cultureGone(c)) {
-        setFb('err', cultureRefusal(c));
+        openCultureSheet(c);
+        setFb('warn', cultureBackHint(c), { noModal: true });
         return;
       }
       closeCamScan();
@@ -33114,6 +33120,31 @@ function cultureRefusal(c) {
   if (c.status === 'contam') return t('scanFb.cultureContam', { id: c.id });
   if (c.status === 'sold') return t('scanFb.cultureSold', { id: c.id });
   return t('scanFb.cultureUsed', { id: c.id });
+}
+// Was ein Scan über eine abgeschriebene Kultur sagt, wenn ihr Fenster aufgeht:
+// wie sie dasteht, und bei aufgebraucht oder verkauft, wie sie zurückkommt.
+function cultureBackHint(c) {
+  if (c.status === 'contam') return t('scanFb.cultureMarkedContam', { id: c.id });
+  if (c.status === 'sold') return t('scanFb.cultureBackSold', { id: c.id });
+  return t('scanFb.cultureBackUsed', { id: c.id });
+}
+// Als Herkunft gescannt, aber aufgebraucht oder verkauft: der erste Scan sagt
+// das, ein zweiter derselben Kultur binnen einer Minute heißt "sie ist da".
+// Dann ist sie wieder im Bestand, mit Rückgängig, und der Scan geht weiter wie
+// bei jeder anderen. Kontaminiert kommt so nie zurück: daraus wird nichts
+// angesetzt, und das Fenster der Kultur kann es noch immer.
+const KULTUR_NOCHMAL_MS = 60000;
+let _kulturNochmal = { id: null, at: 0 };
+function kulturNochmalGescannt(c) {
+  if (c.status === 'contam') return false;
+  const jetzt = Date.now();
+  const nochmal = _kulturNochmal.id === c.id && jetzt - _kulturNochmal.at < KULTUR_NOCHMAL_MS;
+  _kulturNochmal = nochmal ? { id: null, at: 0 } : { id: c.id, at: jetzt };
+  if (!nochmal) return false;
+  const vorher = c.status;
+  setCultureStatus(c.id, 'active');
+  showUndoBar(t('ci.activeDone', { id: c.id }), () => setCultureStatus(c.id, vorher));
+  return true;
 }
 // ── Verbraucht: Körnerbrut aus dem Bestand ──────────────────
 // Ein Körnerbeutel, mit dem Blöcke beimpft wurden, stand weiter im Bestand, bis

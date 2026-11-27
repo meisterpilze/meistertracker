@@ -113,6 +113,7 @@ function werkbank(stand) {
     ${hebe('scanActionName')}
     ${hebe('cultureGone')}
     ${hebe('cultureRefusal')}
+    ${hebe('cultureBackHint')}
     ${hebe('_batchMmdd')}
     ${hebe('legacyBagMatch')}
     ${hebe('processScan')}
@@ -378,10 +379,24 @@ describe('Unbekannt heißt: erst nachfragen, dann sagen, was los ist', () => {
     assert.match(w.letzte().msg, /^scanFb\.cultureScanned /);
   });
 
-  it('sagt bei einer aufgebrauchten Kultur "aufgebraucht", nicht "used"', () => {
+  // Eine abgeschriebene Kultur, die gescannt wird, steht vor einem: ihr Fenster
+  // geht auf, darin "Wieder in den Bestand". Vorher war hier Schluss.
+  it('sagt bei einer aufgebrauchten Kultur "aufgebraucht", nicht "used", und öffnet ihr Fenster', () => {
     const w = werkbank({ scan: neutral(), cultures: [{ id: 'MC-LM-160926-01', status: 'used' }] });
     w.scan('MC-LM-160926-01');
-    assert.match(w.letzte().msg, /^scanFb\.cultureUsed /);
+    assert.match(w.letzte().msg, /^scanFb\.cultureBackUsed /);
+    assert.deepEqual(w.kulturFenster, ['MC-LM-160926-01']);
+  });
+  it('verkauft und kontaminiert öffnen ihr Fenster auch, jedes mit seinem Wort', () => {
+    for (const [status, key] of [
+      ['sold', 'cultureBackSold'],
+      ['contam', 'cultureMarkedContam']
+    ]) {
+      const w = werkbank({ scan: neutral(), cultures: [{ id: 'PD-LM-160926-01', status }] });
+      w.scan('PD-LM-160926-01');
+      assert.match(w.letzte().msg, new RegExp('^scanFb\\.' + key + ' '), status);
+      assert.deepEqual(w.kulturFenster, ['PD-LM-160926-01'], status);
+    }
   });
 
   it('fragt bei ganz Fremdem nach und nennt es dann kein Etikett aus diesem System', () => {
