@@ -37705,6 +37705,80 @@ let _camFacingMode = (function () {
   }
 })();
 let _camTorchOn = false;
+// Was die Kamera liefern soll, in einem Satz. Ein Strichcode braucht Punkte
+// quer über seine Striche, und ohne Angabe gab manches Telefon 480 im Quadrat.
+// html5-qrcode legte dazu nach dem Start seine eigene Vorgabe (aspectRatio)
+// allein über die Spur, und das löschte jede andere. Darum steht das Quadrat
+// hier mit drin: die Ansicht behält ihre Form, nur schärfer.
+function _camVorgaben() {
+  return { facingMode: _camFacingMode, aspectRatio: { ideal: 1 }, width: { ideal: 1080 }, height: { ideal: 1080 } };
+}
+// Scharfstellen, solange die Kamera läuft. Manches Android-Telefon stellt im
+// Browser nur beim Öffnen scharf, und ein Etikett, das danach näher kommt,
+// bleibt unscharf. Was die Kamera nicht kann, wird nicht verlangt.
+function _camFokus(track) {
+  let caps = null;
+  try {
+    caps = track.getCapabilities ? track.getCapabilities() : null;
+  } catch {
+    caps = null;
+  }
+  return caps && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')
+    ? [{ focusMode: 'continuous' }]
+    : [];
+}
+// applyConstraints ersetzt alles, was vorher galt. Darum gehen die Vorgaben
+// bei jedem Nachstellen mit (Licht, Schärfe), sonst fiel die Kamera beim
+// Einschalten des Lichts auf ihre kleine Auflösung zurück.
+function _camNachstellen(track, extra) {
+  const v = _camVorgaben();
+  delete v.facingMode; // die Seite der Kamera wechselt nur ein neuer Start
+  return track.applyConstraints({ ...v, advanced: [...extra, ..._camFokus(track)] });
+}
+// Der Barcode-Leser des Telefons (BarcodeDetector) liest Strichcodes viel
+// besser als der eigene von html5-qrcode, und html5-qrcode nimmt ihn, wo der
+// Browser ihn anbietet. Manches Android-Telefon bietet ihn an, ohne dass er
+// etwas liest (ohne die Google-Play-Dienste): dann las die Kamera gar nichts,
+// und html5-qrcode fiel nie auf den eigenen zurück. Kennt er QR und Code 128
+// nicht, liest jetzt der eigene.
+let _camNativ = null; // null: noch nicht gefragt
+function _camNativFragen() {
+  const BD = window.BarcodeDetector;
+  if (!BD || typeof BD.getSupportedFormats !== 'function') return Promise.resolve(false);
+  return Promise.resolve()
+    .then(() => BD.getSupportedFormats())
+    .then((f) => Array.isArray(f) && ['qr_code', 'code_128'].every((x) => f.includes(x)))
+    .catch(() => false);
+}
+// html5-qrcode liest nicht das Kamerabild, sondern eine Kopie des Kastens in
+// der Größe, die er auf dem Schirm hat: am Telefon gut 350 Punkte breit, egal
+// wie scharf die Kamera ist. Einem QR-Code reicht das; die dünnen Striche eines
+// Strichcodes verschwimmen darin. Hier bekommt die Kopie so viele Punkte, wie
+// die Kamera im Kasten hat (höchstens dreimal so viele), und setTransform
+// zeichnet den Kasten hinein, ohne die Bibliothek selbst zu ändern. Gespiegelt
+// wird dabei nicht mehr gelesen (disableFlip): kein Etikett hier ist gespiegelt.
+function _camScharfLesen() {
+  const proto = typeof Html5Qrcode === 'undefined' ? null : Html5Qrcode.prototype;
+  if (!proto || proto._mtScharf || typeof proto.setupUi !== 'function') return;
+  const setupUi = proto.setupUi;
+  proto.setupUi = function (breit, hoch, cfg) {
+    setupUi.call(this, breit, hoch, cfg);
+    try {
+      const ctx = this.context;
+      const kasten = this.qrRegion;
+      const video = this.element && this.element.querySelector('video');
+      if (!ctx || !kasten || !video || !video.clientWidth || !video.clientHeight) return;
+      const k = Math.min(3, video.videoWidth / video.clientWidth, video.videoHeight / video.clientHeight);
+      if (!(k > 1)) return;
+      ctx.canvas.width = Math.round(kasten.width * k);
+      ctx.canvas.height = Math.round(kasten.height * k);
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+    } catch {
+      /* dann eben in der Größe vom Schirm, wie vorher */
+    }
+  };
+  proto._mtScharf = true;
+}
 // Returns the active video MediaStreamTrack from the html5-qrcode reader, or
 // null if the camera hasn't attached one yet.
 function _camActiveTrack() {
@@ -37732,6 +37806,8 @@ function _detectTorchSupport() {
     }
     const btn = document.getElementById('btn-cam-torch');
     if (btn) btn.hidden = !caps || !caps.torch;
+    // Scharfstellen, solange die Kamera läuft (_camFokus).
+    if (_camFokus(track).length) _camNachstellen(track, []).catch(() => {});
   }
   check();
 }
@@ -37739,8 +37815,9 @@ function toggleTorch() {
   const track = _camActiveTrack();
   if (!track || !track.applyConstraints) return;
   const newState = !_camTorchOn;
-  track
-    .applyConstraints({ advanced: [{ torch: newState }] })
+  // Mit den Vorgaben (_camNachstellen); kann ein Browser das nicht, wie vorher.
+  _camNachstellen(track, [{ torch: newState }])
+    .catch(() => track.applyConstraints({ advanced: [{ torch: newState }] }))
     .then(function () {
       _camTorchOn = newState;
       const btn = document.getElementById('btn-cam-torch');
@@ -37775,7 +37852,20 @@ function openCamScan() {
     });
     return;
   }
-  _camScanner = new Html5Qrcode('cam-reader');
+  // Einmal fragen, ob der Barcode-Leser des Telefons liest (_camNativFragen).
+  // Die Antwort kommt sofort; wer die Kamera inzwischen zugemacht hat, bekommt
+  // sie davon nicht wieder auf.
+  if (_camNativ === null) {
+    _camNativFragen().then((ok) => {
+      _camNativ = ok;
+      if (_camState !== CAM_OPENING) return;
+      _camState = CAM_IDLE;
+      openCamScan();
+    });
+    return;
+  }
+  _camScharfLesen();
+  _camScanner = new Html5Qrcode('cam-reader', { useBarCodeDetectorIfSupported: _camNativ, verbose: false });
   const scanner = _camScanner;
   scanner
     .start(
@@ -37792,7 +37882,11 @@ function openCamScan() {
           const h = Math.max(80, Math.floor(w * 0.45));
           return { width: w, height: h };
         },
-        aspectRatio: 1.0
+        // Alles für die Kamera in einem Satz (_camVorgaben). aspectRatio steht
+        // nicht mehr hier: html5-qrcode legte es nach dem Start allein über die
+        // Spur und löschte damit die Auflösung.
+        videoConstraints: _camVorgaben(),
+        disableFlip: true
       },
       function (decoded) {
         if (scanner !== _camScanner) return;
