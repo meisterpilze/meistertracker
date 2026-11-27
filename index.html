@@ -3582,6 +3582,21 @@
                       oninput="sbBlendEdited('ca')"
                     />
                   </div>
+                  <!-- Wie Gips und Calciumcarbonat obendrauf auf die
+                       Trockenmischung, in kleineren Schritten: hier geht es um
+                       Zehntelprozent. -->
+                  <div>
+                    <label class="fs-xs"><span data-i18n="sub.hydroxide">Calciumhydroxid</span> %</label>
+                    <input
+                      type="number"
+                      id="sb-hyd"
+                      min="0"
+                      max="20"
+                      step="0.1"
+                      inputmode="decimal"
+                      oninput="sbBlendEdited('hyd')"
+                    />
+                  </div>
                   <div>
                     <label class="fs-xs"><span data-i18n="sub.moisture">Soll-Feuchte</span> %</label>
                     <input
@@ -3600,6 +3615,29 @@
                   <div>
                     <label class="fs-xs"><span data-i18n="sub.steri">Sterilisieren</span> min</label>
                     <input type="number" id="sb-steri" min="0" max="1440" step="1" inputmode="decimal" />
+                  </div>
+                  <!-- Auch keine Zahl der Mischung: am fertig gemischten Substrat
+                       gemessen. Wer erst nach dem Mischen misst, lässt es leer
+                       und trägt den pH am Ansatz nach. -->
+                  <div>
+                    <label class="fs-xs" data-i18n="sub.mixPhShort">pH gemessen</label>
+                    <input type="number" id="sb-ph" min="0" max="14" step="0.1" inputmode="decimal" />
+                  </div>
+                </div>
+                <!-- Erscheint, sobald eine Zahl von der gewählten Mischung
+                     abweicht (sbBlendDirty), und nur für einen Admin: ein Tipp
+                     speichert die Zahlen als neue Mischung. Der Name darf leer
+                     bleiben, dann heißt sie nach ihrem Verhältnis. -->
+                <div class="wkm-sichern" id="sb-mixsave" hidden>
+                  <label for="sb-mixsave-name" data-i18n="sub.saveMixName">Name der neuen Mischung</label>
+                  <div class="wkm-sichern-row">
+                    <input type="text" id="sb-mixsave-name" maxlength="60" data-i18n-placeholder="sub.saveMixPh" />
+                    <button type="button" class="btn btn-p" onclick="sbSaveMixFromForm()">
+                      <span data-i18n="sub.saveMix">Als Mischung speichern</span>
+                    </button>
+                  </div>
+                  <div class="fs-xs" style="color: var(--c-text-muted)" data-i18n="sub.saveMixHint">
+                    Ohne Namen heißt sie nach ihrem Verhältnis. Ohne Speichern gilt die Änderung nur für diesen Ansatz.
                   </div>
                 </div>
               </div>
@@ -3628,6 +3666,15 @@
                 <button type="button" class="btn btn-sm" style="margin-top: 8px" onclick="sbSaveResidual()">
                   <span data-i18n="sub.residSave">Speichern</span>
                 </button>
+              </details>
+              <!-- Die gespeicherten Mischungen: was im Feld "Rezept" zur Auswahl
+                   steht, mit allen Zahlen, und der Ort, an dem eine Mischung
+                   umbenannt wird. Zugeklappt, weil man sie selten ansieht. -->
+              <details id="sb-mixes" style="margin-top: 10px">
+                <summary class="fs-meta" style="cursor: pointer; color: var(--c-text-sec)">
+                  <span data-i18n="sub.mixesTitle">Gespeicherte Mischungen</span><span id="sb-mixes-n"></span>
+                </summary>
+                <div id="sb-mixes-list" style="margin-top: 6px"></div>
               </details>
               <div id="sb-out" style="margin-top: 10px"></div>
               <div style="margin-top: 8px">

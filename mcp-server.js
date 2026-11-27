@@ -2161,7 +2161,7 @@ function createMcpServer(database, onWrite, printer) {
   // Example: manage_recipes({ action: 'create', name: 'Beispielrezept', hardwoodPct: 85, wheatbranPct: 15, rhPct: 60 })
   server.tool(
     'manage_recipes',
-    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, soyhull%, gypsum%, rh% for quick batch creation. Hardwood is the remainder: 100 - wheatbran - soyhull. Use recipeId in create_batch to auto-fill substrate fields.',
+    'Create, update, or delete reusable substrate recipes. Recipes store hardwood%, wheatbran%, soyhull%, gypsum%, calcium carbonate%, calcium hydroxide%, rh% for quick batch creation. Hardwood is the remainder: 100 - wheatbran - soyhull. Use recipeId in create_batch to auto-fill substrate fields.',
     {
       action: z.enum(['create', 'update', 'delete']).describe('Action to perform'),
       id: z.number().optional().describe('Recipe ID (required for update/delete)'),
@@ -2170,6 +2170,8 @@ function createMcpServer(database, onWrite, printer) {
       wheatbranPct: z.number().optional().describe('Wheat bran percentage'),
       soyhullPct: z.number().optional().describe('Soy hull percentage of the dry blend'),
       gypsumPct: z.number().optional().describe('Gypsum percentage'),
+      calciumPct: z.number().optional().describe('Calcium carbonate percentage, on top of the dry blend'),
+      hydroxidePct: z.number().optional().describe('Calcium hydroxide percentage, on top of the dry blend'),
       rhPct: z.number().optional().describe('Relative humidity percentage'),
       notes: z.string().optional().describe('Notes')
     },
@@ -2186,6 +2188,8 @@ function createMcpServer(database, onWrite, printer) {
               wheatbran_pct: params.wheatbranPct || 0,
               soyhull_pct: params.soyhullPct || 0,
               gypsum_pct: params.gypsumPct || 0,
+              calcium_pct: params.calciumPct || 0,
+              hydroxide_pct: params.hydroxidePct || 0,
               rh_pct: params.rhPct || 0,
               notes: params.notes || null,
               created: new Date().toISOString()
@@ -2201,6 +2205,8 @@ function createMcpServer(database, onWrite, printer) {
               wheatbran_pct: params.wheatbranPct,
               soyhull_pct: params.soyhullPct,
               gypsum_pct: params.gypsumPct,
+              calcium_pct: params.calciumPct,
+              hydroxide_pct: params.hydroxidePct,
               rh_pct: params.rhPct,
               notes: params.notes
             });

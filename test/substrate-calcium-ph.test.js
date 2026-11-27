@@ -289,6 +289,8 @@ describe('die Felder im Browser', () => {
         '\n' +
         APP.match(/^const WKM_FELD_NAME = \{[\s\S]*?\n\};/m)[0] +
         '\n' +
+        APP.match(/^const WKM_KEIN_ANTEIL = .*;$/m)[0] +
+        '\n' +
         hebe('wkmFeldLesen') +
         '\n' +
         hebe('wkmUnlesbar') +

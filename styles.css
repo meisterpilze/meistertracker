@@ -10652,11 +10652,43 @@ button.wk-an-zeile:active {
   font-weight: 600;
   margin: 0;
 }
-.wkm-sichern-acts {
+/* display:flex oben schlägt das hidden-Attribut; der Kasten steht nur da, wenn
+   eine Zahl von der gewählten Mischung abweicht. */
+.wkm-sichern[hidden] {
+  display: none;
+}
+/* Name und Knopf nebeneinander. Am Telefon bricht der Knopf unter das Feld um
+   und bleibt so breit wie sein Text. */
+.wkm-sichern-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+.wkm-sichern-row input {
+  flex: 1 1 160px;
+  min-width: 0;
+  width: auto;
+}
+.wkm-sichern-row .btn {
+  flex: 0 0 auto;
+}
+/* Eine gespeicherte Mischung in der Liste unter dem Formular: Name, darunter
+   ihre Zahlen, rechts das Umbenennen. */
+.sb-mix-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--c-border);
+}
+.sb-mix-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sb-mix-text .fs-meta {
+  color: var(--c-text-sec);
 }
 .wkf-chipsrow {
   display: flex;

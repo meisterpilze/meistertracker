@@ -197,8 +197,11 @@ describe('Sojaschalen im Ansatz-Ablauf', () => {
   // Der Ablauf gegen Attrappen: Felder als { value }, die Knöpfe über ihr data-wkm.
   function ablauf(user) {
     const felder = {};
-    for (const id of ['hw', 'wb', 'soy', 'gyp', 'ca', 'rh', 'steri']) felder['wkm-' + id] = { value: '' };
-    const knoepfe = { mixreset: { hidden: true }, mixsave: { hidden: true } };
+    for (const id of ['hw', 'wb', 'soy', 'gyp', 'ca', 'hyd', 'rh', 'steri']) felder['wkm-' + id] = { value: '' };
+    // Das Speichern als neue Mischung ist ein Kasten unter den Feldern, kein
+    // Knopf mehr im Kopf: er steht da, sobald eine Zahl abweicht.
+    felder['wkm-sichern'] = { hidden: true };
+    const knoepfe = { mixreset: { hidden: true } };
     const document = {
       getElementById: (id) => felder[id] || null,
       querySelector: (sel) => {
@@ -221,15 +224,15 @@ describe('Sojaschalen im Ansatz-Ablauf', () => {
           '_sbSet',
           'sbRecipeOf',
           'wkmMixFromRecipe',
+          'wkmWeichtAb',
           'wkmMixAdjusted',
-          'wkmMischungNeu',
           'wkmDarfSichern',
           'wkmFeldLesen',
           'wkmBlendEdited'
         ]
           .map(hebe)
           .join('\n') +
-        '\nreturn { WKM, wkmMixFromRecipe, wkmBlendEdited, wkmMixAdjusted, wkmMischungNeu, wkmDarfSichern };'
+        '\nreturn { WKM, wkmMixFromRecipe, wkmBlendEdited, wkmMixAdjusted, wkmDarfSichern };'
     )(
       document,
       REZEPTE,
@@ -244,7 +247,14 @@ describe('Sojaschalen im Ansatz-Ablauf', () => {
     const { ctx } = ablauf({ role: 'admin' });
     ctx.WKM.recipeId = 2;
     ctx.wkmMixFromRecipe();
-    assert.deepEqual(ctx.WKM.mix, { branPct: 10, soyhullPct: 35, gypsumPct: 1, calciumPct: 0, moisturePct: 60 });
+    assert.deepEqual(ctx.WKM.mix, {
+      branPct: 10,
+      soyhullPct: 35,
+      gypsumPct: 1,
+      calciumPct: 0,
+      hydroxidePct: 0,
+      moisturePct: 60
+    });
   });
 
   it('lässt die Sojaschalen stehen, wenn Pellets oder Kleie getippt werden', () => {
@@ -276,19 +286,24 @@ describe('Sojaschalen im Ansatz-Ablauf', () => {
     assert.equal(felder['wkm-hw'].value, '80');
   });
 
-  it('bietet Speichern an, sobald eine Zahl einer Mischung abweicht, nicht wegen Calciumcarbonat', () => {
-    const { ctx, felder, knoepfe } = ablauf({ role: 'admin' });
+  // Bis Migration 126 zählte Calciumcarbonat nicht mit: gespeicherte Mischungen
+  // kannten es nicht. Jetzt wird die ganze Mischung gespeichert, also bietet
+  // jede abweichende Zahl das Speichern an.
+  it('bietet Speichern an, sobald eine Zahl von der Mischung abweicht, auch Calciumcarbonat', () => {
+    const { ctx, felder } = ablauf({ role: 'admin' });
     ctx.WKM.recipeId = 1;
     ctx.wkmMixFromRecipe();
+    assert.equal(felder['wkm-sichern'].hidden, true);
     felder['wkm-ca'].value = '2';
     ctx.wkmBlendEdited('ca');
     assert.equal(ctx.wkmMixAdjusted(), true);
-    assert.equal(ctx.wkmMischungNeu(), false);
-    assert.equal(knoepfe.mixsave.hidden, true);
+    assert.equal(felder['wkm-sichern'].hidden, false);
+    felder['wkm-ca'].value = '0';
+    ctx.wkmBlendEdited('ca');
+    assert.equal(felder['wkm-sichern'].hidden, true, 'zurückgetippt: nichts mehr zu speichern');
     felder['wkm-soy'].value = '25';
     ctx.wkmBlendEdited('soy');
-    assert.equal(ctx.wkmMischungNeu(), true);
-    assert.equal(knoepfe.mixsave.hidden, false);
+    assert.equal(felder['wkm-sichern'].hidden, false);
   });
 
   it('lässt nur einen Admin speichern, wie den Server', () => {
