@@ -408,6 +408,9 @@ let shelfItems = [];
 // Ob ein Shop direkt angebunden ist oder es Produkte oder Kunden gibt
 // (db.orderHubInUse); davon hängt ab, ob Bestellungen zwei Ansichten zeigt.
 let orderHubInUse = false;
+// Ob der Versanddienst eingeschaltet ist oder es schon Etiketten gibt
+// (db.shippingInUse); davon hängt ab, ob Bestellungen "Versandetiketten" zeigt.
+let shipInUse = false;
 // Regalbretter (v122): was der Server von selbst ausgebucht hat und noch keiner
 // beantwortet hat, wer wann "Noch da" sagte (Beutel → Zeit), und die Fristen,
 // nach denen der Server rechnet (siehe REGALBRETTER).
@@ -655,6 +658,33 @@ function showOrderHubTabs() {
   }
 }
 
+// Versandetiketten kauft Etiketten beim Versanddienst. Ist der aus, zeigte die
+// Ansicht nur den Hinweis, dass er aus ist, und stand trotzdem in jeder Liste.
+// Sie kommt, sobald er unter Admin › Versanddienst eingeschaltet wird; und wo
+// schon einmal ein Etikett gekauft wurde, bleibt sie. Wie bei den zwei
+// Ansichten darüber: Reiter und Eintrag zusammen, und wer auf ihr stand, steht
+// auf Packen.
+function showShipTab() {
+  for (const id of ['st-orders-versand', 'sn-orders-versand']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.style.display = shipInUse ? '' : 'none';
+  }
+  if (shipInUse) return;
+  const offen = document.querySelector('#p-orders > .stabs .stab.active');
+  if (!offen || offen.id !== 'st-orders-versand') return;
+  const seite = document.getElementById('p-orders');
+  if (seite && seite.classList.contains('active')) {
+    openStab('orders', 'pack');
+    return;
+  }
+  for (const pre of ['st', 'sp', 'sn']) {
+    const alt = document.getElementById(pre + '-orders-versand');
+    if (alt) alt.classList.remove('active');
+    const neu = document.getElementById(pre + '-orders-pack');
+    if (neu) neu.classList.add('active');
+  }
+}
+
 // MCP, camera and server are admin-only sub-tabs, and every sub-tab now carries
 // two buttons: one in the strip, one in the sidebar list. Reveal them together —
 // a half-shown pair is a sub-tab reachable from one layout but not the other.
@@ -777,6 +807,8 @@ function applyData(d) {
   shelfItems = d.shelf || [];
   orderHubInUse = !!d.orderHub;
   showOrderHubTabs();
+  shipInUse = !!d.shipOn;
+  showShipTab();
   autoBookouts = d.autoBookouts || [];
   stillThere = d.stillThere || {};
   brettFragen = new Map((Array.isArray(d.brettFragen) ? d.brettFragen : []).map((f) => [f.bag, f]));
