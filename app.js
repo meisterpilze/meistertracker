@@ -1635,8 +1635,13 @@ function toggleSidebar() {
     sb.classList.toggle('sb-open');
     ov.classList.toggle('sb-show');
     document.body.classList.toggle('sb-mobile-open');
-    // The sheet opens at its top, where the open page and its views stand.
-    if (sb.classList.contains('sb-open')) sb.scrollTop = 0;
+    // The sheet opens at its top: the search, the places one was in last, then
+    // the groups, with the one of the open page unfolded.
+    if (sb.classList.contains('sb-open')) {
+      mehrZeichne();
+      zuletztZeichne();
+      sb.scrollTop = 0;
+    }
   } else {
     sb.classList.toggle('sb-collapsed');
     document.body.classList.toggle('sb-is-collapsed');
@@ -1702,6 +1707,7 @@ if (sbPhone) {
   sbPhone.addEventListener('change', () => {
     sbClose();
     sbUncollapse();
+    mehrZeichne();
   });
 }
 
@@ -2124,6 +2130,221 @@ function sbSubOpen(btn) {
   }
   stab.click();
   sbCloseMobile();
+}
+
+// ── "Mehr" am Telefon: Gruppen, die auf- und zugehen ──
+// Das Blatt zeigte jede Seite mit allen ihren Ansichten auf einmal: an die
+// vierzig Ziele untereinander, zwei Bildschirme lang, und wer eines suchte, las
+// sie alle. Jetzt steht jede Gruppe der Liste als Überschrift da, und ein Tipp
+// klappt sie auf. Offen ist, was man offen gelassen hat (je Gerät gemerkt), und
+// die Gruppe der Seite, auf der man steht: dort will man am ehesten weiter.
+//
+// Die Liste bleibt flach, wie sie im Markup steht. Was zu einer Gruppe gehört,
+// ist alles zwischen ihrer Überschrift und der nächsten, auch die Listen der
+// Ansichten, die sbSubInit() erst einhängt; zugeklappt trägt jedes davon
+// .sb-fold-zu, und nur der Telefon-Block der styles.css kennt die Klasse. Am
+// Schreibtisch klappt nichts: dort ist die Überschrift eine Überschrift, ohne
+// Rolle und ohne Tabulator.
+const MEHR_KEY = 'mp-mehr-auf';
+let _mehrAuf = null;
+function mehrAuf() {
+  if (!_mehrAuf) {
+    _mehrAuf = new Set();
+    try {
+      for (const k of JSON.parse(localStorage.getItem(MEHR_KEY) || '[]')) _mehrAuf.add(String(k));
+    } catch {
+      // Nichts gemerkt oder nichts lesbar: dann ist nur die Gruppe der offenen Seite auf.
+    }
+  }
+  return _mehrAuf;
+}
+function mehrMerk(key, offen) {
+  mehrAuf()[offen ? 'add' : 'delete'](key);
+  try {
+    localStorage.setItem(MEHR_KEY, JSON.stringify([...mehrAuf()]));
+  } catch {
+    // Gilt bis zum nächsten Laden.
+  }
+}
+function mehrGruppen() {
+  const out = [];
+  document.querySelectorAll('.sb-nav > .sb-group-label[data-group]').forEach((label) => {
+    const teile = [];
+    for (let el = label.nextElementSibling; el && !el.classList.contains('sb-group-label'); el = el.nextElementSibling) {
+      teile.push(el);
+    }
+    out.push({ label, key: label.dataset.group, teile });
+  });
+  return out;
+}
+function mehrSetze(g, offen) {
+  g.label.classList.toggle('sb-zu', !offen);
+  g.label.setAttribute('aria-expanded', String(offen));
+  for (const el of g.teile) el.classList.toggle('sb-fold-zu', !offen);
+}
+// Beim Start, bei jedem Öffnen des Blatts und wenn das Fenster die Grenze
+// zwischen Telefon und Schreibtisch überschreitet.
+function mehrZeichne() {
+  const telefon = sbIsPhone();
+  for (const g of mehrGruppen()) {
+    if (!telefon) {
+      g.label.classList.remove('sb-zu');
+      for (const a of ['role', 'tabindex', 'aria-expanded']) g.label.removeAttribute(a);
+      for (const el of g.teile) el.classList.remove('sb-fold-zu');
+      continue;
+    }
+    g.label.setAttribute('role', 'button');
+    g.label.setAttribute('tabindex', '0');
+    const hier = g.teile.some((el) => el.classList.contains('sb-btn') && el.classList.contains('active'));
+    mehrSetze(g, hier || mehrAuf().has(g.key));
+  }
+}
+// Ein Tipp auf eine Überschrift. Nur diese Gruppe ändert sich: die der offenen
+// Seite darf man für dieses Mal zuklappen, beim nächsten Öffnen ist sie wieder auf.
+function mehrUmschalten(label) {
+  if (!sbIsPhone()) return;
+  const g = mehrGruppen().find((x) => x.label === label);
+  if (!g) return;
+  const offen = label.classList.contains('sb-zu');
+  mehrMerk(g.key, offen);
+  mehrSetze(g, offen);
+}
+
+// ── Zuletzt: die Orte, an denen man eben war ──
+// Die meisten Tage braucht man drei, vier Stellen der App, immer dieselben.
+// Sie stehen oben im Blatt, je ein Tipp, die jüngste zuerst.
+//
+// Gemerkt wird ein Ort, wenn man ihn mit einem Tipp verlässt: zurueckMerk()
+// kennt diesen Augenblick schon (ein Wechsel ist ein Schritt, go() und gleich
+// danach openStab() sind einer, ein Schritt zurück und alles vor der ersten
+// Berührung zählen nicht). Ein zweites Zählwerk in go() hätte jeden Sprung
+// gemerkt, den die App von selbst macht.
+//
+// Ein Ort ist eine Seite (ihr Eintrag in der Liste) und, wo sie Ansichten hat,
+// die Ansicht. Je Gerät gemerkt, ein paar mehr, als gezeigt werden: was dieser
+// Benutzer nicht sieht, fällt beim Zeigen heraus und soll keine Lücke lassen.
+const ZULETZT_KEY = 'mp-zuletzt';
+const ZULETZT_ZEIGEN = 4;
+const ZULETZT_MERKEN = 12;
+let _zuletzt = null;
+function zuletztListe() {
+  if (!_zuletzt) {
+    _zuletzt = [];
+    try {
+      for (const o of JSON.parse(localStorage.getItem(ZULETZT_KEY) || '[]')) {
+        if (o && typeof o.b === 'string') _zuletzt.push({ b: o.b, s: typeof o.s === 'string' ? o.s : null });
+      }
+    } catch {
+      // Nichts gemerkt oder nichts lesbar: die Zeile fängt leer an.
+    }
+  }
+  return _zuletzt;
+}
+// Der Ort aus whereAmI(), wie er gemerkt wird. Auf einer Seite mit eigener
+// Liste ihrer Ansichten (Admin am Telefon) ist die Liste selbst ein Ort.
+function zuletztOrt(w) {
+  if (!w || !w.page || !/^n-/.test(w.btnId || '')) return null;
+  const seite = document.getElementById('p-' + w.page);
+  const aufListe = !!seite && seite.classList.contains('stab-drill') && sbIsPhone() && !w.drilled;
+  return { b: w.btnId, s: aufListe ? null : w.stab || null };
+}
+const _zuletztGleich = (a, b) => a.b === b.b && (a.s || null) === (b.s || null);
+// Der Ort nach vorn, einmal, und nicht mehr als gemerkt wird.
+function zuletztNeu(liste, ort) {
+  if (!ort) return liste;
+  return [ort].concat(liste.filter((x) => !_zuletztGleich(x, ort))).slice(0, ZULETZT_MERKEN);
+}
+function zuletztMerk(w) {
+  const ort = zuletztOrt(w);
+  if (!ort) return;
+  _zuletzt = zuletztNeu(zuletztListe(), ort);
+  try {
+    localStorage.setItem(ZULETZT_KEY, JSON.stringify(_zuletzt));
+  } catch {
+    // Gilt bis zum nächsten Laden.
+  }
+}
+// Was davon zu zeigen ist. Nicht der Ort, an dem man steht. Nichts, was es
+// nicht mehr gibt oder was dieser Benutzer nicht sieht (Admin, eine
+// ausgeblendete Ansicht). Und nicht, wohin die Leiste unten ohnehin führt: eine
+// Seite der Leiste auf der Ansicht, mit der sie aufgeht.
+//
+// Der Name folgt der Kopfzeile (setPageTitle): auf der ersten Ansicht einer
+// Seite heißt der Ort wie die Seite, sonst wie die Ansicht.
+function zuletztOrte() {
+  const hier = zuletztOrt(whereAmI());
+  const out = [];
+  for (const o of zuletztListe()) {
+    if (hier && _zuletztGleich(o, hier)) continue;
+    const nav = document.getElementById(o.b);
+    if (!nav || nav.style.display === 'none') continue;
+    const stab = o.s ? document.getElementById(o.s) : null;
+    if (o.s && (!stab || stab.style.display === 'none')) continue;
+    const strip = stab ? stab.closest('.stabs') : null;
+    const erste = !stab || (!!strip && stab.id === strip.dataset.stabDefault);
+    if (erste && nav.classList.contains('sb-in-bottom-nav')) continue;
+    const eigen = !!stab && (!erste || stab.dataset.pageTitle !== undefined);
+    const quelle = eigen ? stab : nav.querySelector('[data-i18n]');
+    if (!quelle) continue;
+    out.push({ b: o.b, s: o.s, text: quelle.dataset.i18n ? t(quelle.dataset.i18n) : quelle.textContent.trim() });
+    if (out.length === ZULETZT_ZEIGEN) break;
+  }
+  return out;
+}
+function zuletztZeichne() {
+  const box = document.getElementById('sb-zuletzt');
+  const liste = document.getElementById('sb-zuletzt-liste');
+  if (!box || !liste) return;
+  const orte = zuletztOrte();
+  box.hidden = !orte.length;
+  liste.innerHTML = orte
+    .map(
+      (o) =>
+        `<button type="button" class="sb-zuletzt-btn" data-zuletzt-b="${esc(o.b)}"${o.s ? ` data-zuletzt-s="${esc(o.s)}"` : ''}>${esc(o.text)}</button>`
+    )
+    .join('');
+}
+// Dorthin, wie die Liste darunter es tut (sbSubOpen): die Seite über ihren
+// eigenen Eintrag, dann die Ansicht über ihren Reiter, und die Frage nach
+// Ungespeichertem einmal, bevor sich etwas bewegt.
+function zuletztOeffnen(btnId, stabId) {
+  const nav = document.getElementById(btnId);
+  if (!nav) return;
+  const page = nav.dataset.page;
+  const seite = document.getElementById('p-' + page);
+  if (seite && !seite.classList.contains('active')) {
+    if (!mayLeavePage()) return;
+    gsNav(btnId, page);
+  }
+  const stab = stabId ? document.getElementById(stabId) : null;
+  if (stab) stab.click();
+  // Der Ort war die Liste der Ansichten selbst (Admin am Telefon): zurück auf sie.
+  else if (seite && seite.classList.contains('stab-drill') && sbIsPhone()) seite.classList.remove('stab-drilled');
+  sbCloseMobile();
+}
+function mehrInit() {
+  const nav = document.querySelector('.sb-nav');
+  if (nav) {
+    nav.addEventListener('click', (e) => {
+      const label = e.target.closest('.sb-group-label[data-group]');
+      if (label) mehrUmschalten(label);
+    });
+    // Eine Überschrift mit der Rolle eines Knopfs muss auch auf die Tasten hören.
+    nav.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (!e.target.matches || !e.target.matches('.sb-group-label[data-group]')) return;
+      e.preventDefault();
+      mehrUmschalten(e.target);
+    });
+  }
+  const zuletzt = document.getElementById('sb-zuletzt-liste');
+  if (zuletzt) {
+    zuletzt.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-zuletzt-b]');
+      if (b) zuletztOeffnen(b.dataset.zuletztB, b.dataset.zuletztS || null);
+    });
+  }
+  mehrZeichne();
 }
 
 // The name at the top of the page: the phone's bar and the desk's page head.
@@ -37006,7 +37227,15 @@ function gsOpen() {
   if (gsCovered()) return;
   const bg = document.getElementById('m-search');
   if (!bg) return;
+  // Aus dem Blatt "Mehr" heraus geht das Blatt zuerst zu: die Suche führt
+  // irgendwohin, und das Blatt läge sonst offen über der Seite, auf der man
+  // ankommt. Den Fokus bekommt danach der Knopf zurück, der das Blatt öffnet;
+  // der Eintrag im geschlossenen Blatt ist inert.
   gsReturnFocus = document.activeElement;
+  if (document.body.classList.contains('sb-mobile-open')) {
+    sbCloseMobile();
+    gsReturnFocus = document.getElementById('tgl-17');
+  }
   gsSel = 0;
   gsIndexInvalidate();
   bg.classList.add('open');
@@ -37344,6 +37573,7 @@ function zurueckMerk(page, sub) {
   _zZeit = jetzt;
   _zSpur.push(w);
   if (_zSpur.length > Z_SPUR_MAX) _zSpur.shift();
+  zuletztMerk(w);
   _zAbgleichSpaeter();
 }
 
@@ -38252,7 +38482,8 @@ function initEventListeners() {
     go('lab', 'n-lab');
   });
   // Mobile bottom-nav buttons delegate to their sidebar counterparts so any
-  // side effects (e.g. n-batch resetting batchAttentionFilter) stay in one place.
+  // side effects (what an entry clears or draws when it is opened) stay in one
+  // place.
   //
   // The same loop marks those counterparts, which is what closes Phase 1's one
   // deferred item: below 769px the drawer repeated all five bottom-nav
@@ -38264,7 +38495,7 @@ function initEventListeners() {
   // bnId.slice(3)` is already how the two navigations are paired. Marking from
   // inside it cannot drift, because a bottom-nav entry that is added or removed
   // changes both halves in the same edit.
-  ['bn-work', 'bn-batch', 'bn-orders'].forEach((bnId) => {
+  ['bn-work', 'bn-bedarf', 'bn-orders'].forEach((bnId) => {
     const sidebarId = 'n-' + bnId.slice(3);
     const btn = $(bnId);
     if (btn) btn.addEventListener('click', () => $(sidebarId).click());
@@ -39259,6 +39490,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // once the document is settled keeps it off the critical path.
   stabDrillInit();
   sbSubInit();
+  mehrInit();
   gsInit();
 
   // PWA shortcuts (manifest.json -> shortcuts[]) launch with ?action=...

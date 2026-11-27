@@ -148,6 +148,7 @@ describe('Zurück: was als Schritt zählt', () => {
       const Date = { now: () => jetzt };
       const whereAmI = () => ({ ...hier });
       const _zAbgleichSpaeter = () => {};
+      const zuletztMerk = () => {};
       ${hebe('zurueckMerk')}
       for (const [page, sub, dt] of aufrufe) {
         jetzt += dt;

@@ -366,14 +366,18 @@ describe('the drawer and the bottom bar', () => {
   });
 
   it('has three places, the door to the rest, and the scanner', () => {
-    // The bar is the three views the work happens in. Orders came into it when
-    // the drawer was the only way in and they were opened many times a day;
-    // Dashboard and Labor left it for the sheet behind "Mehr", which is one tap
-    // from anywhere. The scanner used to float over the page and cover what
-    // stood in that corner; it is the bar's last button now.
+    // The bar is the three places the day runs through: what to do, what to
+    // make, what to pack. Orders came into it when the drawer was the only way
+    // in and they were opened many times a day; Dashboard and Labor left it for
+    // the sheet behind "Mehr", and Chargen followed when Bedarf took its place:
+    // a batch is something one looks up, and the sheet finds it. The scanner
+    // used to float over the page and cover what stood in that corner; it is
+    // the bar's last button now.
     const bar = HTML.match(/<nav class="bottom-nav[\s\S]*?<\/nav>/)[0];
     const pages = [...bar.matchAll(/data-page="([a-z]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(pages, ['work', 'batch', 'orders']);
+    assert.deepEqual(pages, ['work', 'bedarf', 'orders']);
+    assert.match(WIRING[0], /'bn-bedarf'/, 'the Bedarf button is not wired to the drawer entry');
+    assert.match(HTML, /id="n-bedarf" data-page="bedarf"/, 'the drawer entry the bar clicks is gone');
     assert.match(WIRING[0], /'bn-orders'/, 'the orders button is not wired to the drawer entry');
     assert.match(HTML, /id="n-orders" data-page="orders"/, 'the drawer entry the bar clicks is gone');
     // Short names of their own: "Arbeitsgänge" and "Bestellungen" do not fit a
