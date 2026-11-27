@@ -610,6 +610,11 @@ summary,
 .sb-sub {
   display: none;
 }
+/* Back to the tiles of "Mehr": a phone shows it, while its sheet lists the
+   views of one page (app.js, mehrSeite). */
+.mehr-zurueck {
+  display: none;
+}
 .sb-btn.active + .sb-sub {
   display: block;
 }
@@ -7168,9 +7173,9 @@ body:has(#m-camscan.open) .update-bar {
   .sb-in-bottom-nav {
     display: none;
   }
-  /* A page with views stays, open or not: its views stand under its name in
-     the sheet (see "The index" below), and a list under no name reads as part
-     of the group above it. Only a page without views is left to the bar. */
+  /* A page with views stays, as a tile: the bar opens it on its first view,
+     and its tile is the way to the others (see "Kacheln" below). Only a page
+     without views is left to the bar. */
   .sb-btn.sb-in-bottom-nav:has(+ .sb-sub) {
     display: flex;
   }
@@ -12321,11 +12326,6 @@ button.wk-an-zeile:active {
   font-size: 1rem;
   font-weight: 700;
 }
-/* "Zuletzt" belongs to the sheet a phone opens; the sidebar of a desk shows
-   every page at once and has no use for a second way to four of them. */
-.sb-zuletzt {
-  display: none;
-}
 /* The search is a field, and says what it takes: a name typed or a code read
    by the hand scanner land in the same place. */
 .sb-search-wrap {
@@ -12565,9 +12565,8 @@ button.wk-an-zeile:active {
   }
 
   /* ── "Mehr": the navigation, as a sheet ──
-     It comes up from the edge the button is on. From the top: the search, the
-     places one was in last, and every page by group, each group a heading that
-     folds. */
+     It comes up from the edge the button is on. From the top: the search, then
+     every page as a tile. */
   .sidebar {
     top: auto;
     right: 0;
@@ -12602,39 +12601,109 @@ button.wk-an-zeile:active {
     -webkit-mask-image: none;
     mask-image: none;
   }
-  /* ── The index ──
-     Every page lists its views here, not only the page that is open. A view of
-     another page was four taps away (the sheet, the page, the sheet again, the
-     view), and nothing said it existed before the second sheet. Now it is two,
-     and the sheet is the one place that shows everything the app has.
+  /* ── Kacheln ──
+     Every page is a tile: its picture over its name, three across, all on one
+     screen. The sheet was a list before, first every page with all its views
+     as pills, then six headings that fold; both were text to search through.
+     The headings of the groups are a desk's.
 
-     The views stand under their page as pills in a row that wraps, quieter
-     than the entries: the names of the pages stay the line the eye runs down.
-     They begin where the page's name begins (the entry's padding, its icon,
-     the gap). The selector names the entry in front of the list so that it
-     outranks ".sb-btn.active + .sb-sub { display: block }" by coming later. */
-  .sb-nav > .sb-btn + .sb-sub {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 2px 8px 10px 44px;
+     A tile is the entry the sidebar of a desk shows, turned on its side. Tiles
+     are as wide as their column, never as wide as the sheet. */
+  .sb-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 12px 12px;
   }
-  .sb-sub > .sb-sub-btn {
+  .sb-nav > .sb-group-label {
+    display: none;
+  }
+  .sb-nav > .sb-btn {
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
     width: auto;
+    min-height: 80px;
+    margin: 0;
+    padding: 10px 4px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-surface);
+    color: var(--c-text);
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .sb-nav > .sb-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+  /* The page that is open: the frame in ink. Outranks the rule that takes the
+     grey field off an open entry with views, which is a list's. */
+  .sb-nav > .sb-btn.active,
+  .sb-nav > .sb-btn.active:has(+ .sb-sub) {
+    border-color: var(--c-text);
+    background: var(--c-bg);
+  }
+  /* The views of a page are not under its tile. The selector names the entry
+     in front of the list so that it outranks
+     ".sb-btn.active + .sb-sub { display: block }" by coming later. */
+  .sb-nav > .sb-btn + .sb-sub {
+    display: none;
+  }
+  /* ── The views of one page ──
+     A tile of a page with several views does not open the page, it shows them
+     here: the tiles go, the name of the page stands on top as the way back,
+     and each view is a row. */
+  .sb-nav.mehr-seite {
+    display: block;
+  }
+  .sb-nav.mehr-seite > .sb-btn {
+    display: none;
+  }
+  .sb-nav.mehr-seite > .mehr-zurueck {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--tap-sm);
+    margin: 0 0 8px;
+    padding: 0 8px;
+    border: 0;
+    background: none;
+    color: var(--c-text);
+    font: inherit;
+    font-size: var(--fs-base);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mehr-zurueck-pfeil {
+    width: 9px;
+    height: 9px;
+    border-left: 2px solid var(--c-text-sec);
+    border-bottom: 2px solid var(--c-text-sec);
+    transform: rotate(45deg);
+  }
+  .sb-nav.mehr-seite > .sb-btn + .sb-sub.mehr-offen {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sb-sub.mehr-offen > .sb-sub-btn {
     margin: 0;
     padding: 0 14px;
-    border-radius: 999px;
-    background: var(--c-bg);
-    color: var(--c-text-sec);
-    font-weight: 500;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-surface);
+    color: var(--c-text);
   }
   /* The mark belongs to the view that is showing, on the page that is open.
      Every strip keeps an active tab of its own, and that one does not say
      "you are here". */
-  .sb-btn.active + .sb-sub > .sb-sub-btn.active {
-    background: var(--c-text);
-    color: var(--c-surface);
-    font-weight: 600;
+  .sb-btn.active + .sb-sub.mehr-offen > .sb-sub-btn.active {
+    border-color: var(--c-text);
+    background: var(--c-bg);
+    font-weight: 700;
   }
   .sb-header {
     position: sticky;
@@ -12660,78 +12729,6 @@ button.wk-an-zeile:active {
   .sb-btn.sb-search {
     min-height: var(--tap-sm);
     padding: 0 12px;
-  }
-  /* ── Zuletzt ──
-     The places one was in last, as pills in a row that wraps (app.js,
-     zuletztZeichne). The look of the views under a page: a place is a place. */
-  .sb-zuletzt:not([hidden]) {
-    display: block;
-    padding: 0 12px 6px;
-  }
-  .sb-zuletzt-t {
-    padding: 0 8px 6px;
-    color: var(--c-text-muted);
-    font-size: max(0.75rem, var(--fs-min));
-    font-weight: 500;
-  }
-  .sb-zuletzt-liste {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 0 8px;
-  }
-  .sb-zuletzt-btn {
-    min-height: var(--tap-sm);
-    padding: 0 14px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--c-bg);
-    color: var(--c-text);
-    font: inherit;
-    font-size: var(--fs-sm);
-    font-weight: 500;
-    cursor: pointer;
-  }
-  /* ── Groups that fold ──
-     Forty places under each other were two screens of list. Each group is a
-     heading now, a tap opens it (app.js, mehrZeichne): the heading gets the
-     role of a button there, and with it the height of one. The mark at its
-     end is drawn here; no character stands in the page for it.
-
-     display is left alone on purpose: a group whose pages are all in the bar
-     is hidden by the class that marks them, one class against two here. */
-  .sb-nav > .sb-group-label[data-group] {
-    position: relative;
-    margin-top: 2px;
-    padding: 14px 36px 14px 8px;
-    border-top: 1px solid var(--c-border-light);
-    color: var(--c-text);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    line-height: 1.25;
-    cursor: pointer;
-  }
-  .sb-nav > .sb-group-label[data-group]::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    right: 14px;
-    width: 8px;
-    height: 8px;
-    margin-top: -2px;
-    border-right: 2px solid var(--c-text-muted);
-    border-bottom: 2px solid var(--c-text-muted);
-    transform: rotate(-135deg);
-  }
-  .sb-nav > .sb-group-label[data-group].sb-zu::after {
-    margin-top: -7px;
-    transform: rotate(45deg);
-  }
-  /* What a folded group holds: its pages and their views. Later in the file
-     than every rule that shows them, and no lighter than any of them. */
-  .sb-nav > .sb-btn.sb-fold-zu,
-  .sb-nav > .sb-btn + .sb-sub.sb-fold-zu {
-    display: none;
   }
   .sb-sheet-title {
     display: block;

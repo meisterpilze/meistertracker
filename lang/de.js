@@ -35,7 +35,6 @@ window.LANG['de'] = {
   'nav.gStock': 'Lager',
   'nav.gNumbers': 'Auswerten',
   'nav.gSetup': 'Einrichten',
-  'nav.recent': 'Zuletzt',
   'nav.pickups': 'Abholungen',
   'nav.adminBack': 'Zur\u00fcck',
   'nav.backToList': 'Zur\u00fcck zur \u00dcbersicht',

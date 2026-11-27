@@ -2039,19 +2039,17 @@
           ><kbd class="sb-search-key" id="sb-search-key" data-i18n="search.keyCtrl" aria-hidden="true">Strg K</kbd>
         </button>
       </div>
-      <!-- Zuletzt: die Orte, an denen man eben war, je ein Tipp (zuletztZeichne).
-           Nur im Blatt "Mehr" am Telefon, und nur, solange es welche gibt. -->
-      <div class="sb-zuletzt" id="sb-zuletzt" hidden>
-        <div class="sb-zuletzt-t" data-i18n="nav.recent">Zuletzt</div>
-        <div class="sb-zuletzt-liste" id="sb-zuletzt-liste"></div>
-      </div>
       <nav class="sb-nav" data-i18n-aria-label="aria.mainNav" aria-label="Main navigation" role="navigation">
         <!-- Nach Sache geordnet, nicht nach Tätigkeit: Arbeiten, Nachschauen und
              Werkzeuge sagten, was man gerade tut, und die Seite, die man suchte,
-             konnte unter jedem davon stehen. Am Telefon ist jede Gruppe eine
-             Überschrift, die auf- und zugeht (mehrZeichne); am Schreibtisch nur
-             eine Überschrift. data-group ist der Schlüssel, unter dem sich das
-             Telefon merkt, was offen war. -->
+             konnte unter jedem davon stehen. Am Schreibtisch ist das die
+             Seitenleiste mit ihren Überschriften. Am Telefon macht styles.css
+             aus denselben Einträgen Kacheln, ohne Überschriften (mehrInit). -->
+        <!-- Nur am Telefon, und nur während das Blatt die Ansichten einer
+             Seite zeigt: zurück zu den Kacheln (mehrSeite, mehrRaster). -->
+        <button type="button" class="mehr-zurueck" id="mehr-zurueck" data-i18n-aria-label="work.back">
+          <span class="mehr-zurueck-pfeil" aria-hidden="true"></span><span id="mehr-zurueck-name"></span>
+        </button>
         <div class="sb-group-label" data-group="start" data-i18n="nav.gStart">Start</div>
         <button class="sb-btn active" id="n-work" data-page="work">
           <svg

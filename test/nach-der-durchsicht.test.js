@@ -12,7 +12,7 @@
 //    what is due took for a change and answered by building the week again.
 // 6. Bedarf matched "the same Sorte" by its name; two lists spell it differently.
 // 7. (The figure on a job, for a screen reader: test/heute-faellig.test.js.)
-// 8. Folding the group one stands in forgot that it had been left open.
+// 8. (Folding a group under "Mehr": the groups became tiles, test/mehr-blatt.test.js.)
 // 9. The Scan-Log under Zahlen did not follow a sync.
 //
 // Lifted functions against stand-ins, invented data, no browser.
@@ -247,54 +247,6 @@ describe('Zonen: a bag left in a contamination room', () => {
   it('is drawn under the rooms and opens the stock check', () => {
     assert.match(hebe('renderZones'), /zonenReihe\(\)\.map\(zonenKarte\)\.join\(''\) \+ zonenKontamHtml\(\);/);
     assert.ok(APP.includes("else if (action === 'zone-check') openZoneCheck(btn.dataset.zone);"));
-  });
-});
-
-describe('Mehr: folding the group one stands in', () => {
-  function blatt(gemerkt) {
-    const merk = [];
-    const klasse = (an) => {
-      const set = new Set(an);
-      return { contains: (k) => set.has(k), toggle: (k, v) => set[v ? 'add' : 'delete'](k) };
-    };
-    const label = { classList: klasse([]), setAttribute() {} };
-    const seite = { classList: klasse(['sb-btn', 'active']) };
-    const andere = { classList: klasse([]), setAttribute() {} };
-    const fremd = { classList: klasse(['sb-btn']) };
-    const gruppen = [
-      { label, key: 'hier', teile: [seite] },
-      { label: andere, key: 'dort', teile: [fremd] }
-    ];
-    const um = new Function(
-      'sbIsPhone',
-      'mehrGruppen',
-      'mehrMerk',
-      hebe('mehrSetze') + '\n' + hebe('mehrUmschalten') + '\nreturn mehrUmschalten;'
-    )(
-      () => true,
-      () => gruppen,
-      (k, offen) => merk.push([k, offen])
-    );
-    return { um, label, andere, merk, gemerkt };
-  }
-
-  it('closes it for now without forgetting that it was left open', () => {
-    const b = blatt();
-    b.um(b.label);
-    assert.equal(b.label.classList.contains('sb-zu'), true);
-    assert.deepEqual(b.merk, [], 'the next time, from another page, the group would be closed');
-    b.um(b.label);
-    assert.deepEqual(b.merk, [['hier', true]], 'opening it is remembered as before');
-  });
-
-  it('remembers both ways for every other group', () => {
-    const b = blatt();
-    b.um(b.andere);
-    b.um(b.andere);
-    assert.deepEqual(b.merk, [
-      ['dort', false],
-      ['dort', true]
-    ]);
   });
 });
 
