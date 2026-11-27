@@ -4447,7 +4447,11 @@
             <button class="stab" id="st-orders-customers" style="display: none" data-i18n="orders.customers">
               Kunden
             </button>
-            <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versandetiketten</button>
+            <!-- Hidden until the server says the shipping service is in use
+                 (showShipTab), like the two views above it. -->
+            <button class="stab" id="st-orders-versand" style="display: none" data-i18n="orders.versandTab">
+              Versandetiketten
+            </button>
           </div>
 
           <!-- Packen: the shop orders from Billbee, as what to pack today and what to

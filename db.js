@@ -4687,6 +4687,8 @@ function readAll(db, opts = {}) {
     // Ob Produkt-Zuordnung und Kunden etwas zu zeigen haben (orderHubInUse): die
     // Seite Bestellungen blendet beide aus, solange nicht.
     orderHub: orderHubInUse(db),
+    // Ob es unter Bestellungen Versandetiketten zu kaufen gibt (shippingInUse).
+    shipOn: shippingInUse(db),
     experiments: listExperiments(db),
     workPackages: listWorkPackages(db),
     // Forschungsproben samt Weitergaben: der Scanner oeffnet eine Probe sofort.
@@ -15660,6 +15662,18 @@ function orderHubInUse(db) {
   if (db.prepare('SELECT 1 FROM products LIMIT 1').get()) return true;
   return !!db.prepare('SELECT 1 FROM customers LIMIT 1').get();
 }
+// Is the shipping service in use? Bestellungen › Versandetiketten buys labels
+// from it. Switched off, the view is a notice that it is switched off, for
+// everyone who opens it. In use means: it is switched on, or a label was
+// bought before; a label that exists can be bought again from that view, and
+// data that exists is never hidden. Whether the keys are entered is not
+// asked: the view says so itself. Reads only; it goes out with /api/data, so
+// a user who may not read the setup learns no more than this yes or no.
+function shippingInUse(db) {
+  const on = db.prepare('SELECT 1 FROM shipping_config WHERE id = 1 AND enabled = 1').get();
+  if (on) return true;
+  return !!db.prepare('SELECT 1 FROM shipments LIMIT 1').get();
+}
 // Client-facing list — secrets are reduced to "is set" flags, never exposed.
 //
 // This is also where the Billbee-supersedes rule is decided, once, because the
@@ -17445,6 +17459,7 @@ module.exports = {
   getChannelConfig,
   listChannelConfigs,
   orderHubInUse,
+  shippingInUse,
   updateChannelConfig,
   setChannelSyncState,
   syringeStockSyncEnabled,
