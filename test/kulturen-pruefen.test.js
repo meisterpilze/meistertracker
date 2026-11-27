@@ -434,6 +434,42 @@ describe('Kulturen prüfen: ein Fach vom Laborbestand', () => {
   });
 });
 
+// Slants haben kein Fach: ein Tipp auf ihre Zahl öffnet das Blatt der Art. Dort
+// steht ihre Kamera, an der Zeile der Slants, und öffnet dieselbe Prüfung.
+describe('Kulturen prüfen: die Slants vom Blatt der Art', () => {
+  it('die Zeile der Slants hat die Kamera, die anderen Zeilen nicht', () => {
+    assert.match(
+      APP,
+      /const kamera =\s*sp && i\.key === 'MC'\s*\?\s*`<button type="button" class="lb-cam" data-lb-scan="MC" aria-label="\$\{esc\(t\('lf\.scan'\)\)\}"/
+    );
+    assert.match(APP, /\$\{soll\}\$\{weg\}\$\{kamera\}<\/div>\$\{make\}/);
+  });
+  it('die Kamera ist die vom Scan-Knopf, ohne Wort', () => {
+    const svg = /^const KAMERA_SVG =([\s\S]*?);$/m.exec(APP);
+    assert.ok(svg, 'KAMERA_SVG');
+    for (const teil of ['<rect x="2" y="5" width="20" height="15" rx="2" />', '<circle cx="12" cy="13" r="4" />'])
+      assert.ok(svg[1].includes(teil) && HTML.slice(HTML.indexOf('id="cam-fab"')).includes(teil), teil);
+  });
+  it('ein Tipp schließt das Blatt und öffnet die Prüfung für diese Art in diesem Gefäß', () => {
+    assert.match(APP, /closest\('\[data-lb-scan\]'\);\s*if \(sc\) return lbScannen\(sc\.dataset\.lbScan\);/);
+    assert.match(
+      APP,
+      /function lbScannen\(kind\) \{[^}]*lbSheetClose\(\);\s*openLabCheck\(\{ strainId: sp\.strainId, name: sp\.name, kind \}\);/
+    );
+    const CSS = quelle('styles.css');
+    assert.match(CSS, /\.lb-cam \{[^}]*min-height: var\(--tap-sm\)/);
+  });
+  it('die Prüfung kennt die Slants: Titel und Liste nur dieser Art', () => {
+    const a = baue({ cultures: BESTAND().map((c) => ({ ...c, strainId: 1 })) });
+    a.openLabCheck({ strainId: 1, name: 'Testart Alpha', kind: 'MC' });
+    assert.deepEqual(
+      a._zcExpected().map(([id]) => id),
+      ['MC-TA-171126-01']
+    );
+    assert.match(a.welt.els['zc-title'].textContent, /Testart Alpha · kind:MC/);
+  });
+});
+
 describe('Kulturen prüfen in der App', () => {
   it('das Blatt eines Fachs hat Scannen, bei Körnerbrut nicht, und Prüfen öffnet ohne Fach', () => {
     const m = HTML.slice(HTML.indexOf('id="m-labfach"'), HTML.indexOf('id="m-kbz"'));
