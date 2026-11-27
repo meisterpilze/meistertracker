@@ -5251,6 +5251,22 @@ button.lb-st {
   margin-left: 14px;
   color: var(--c-red-dark);
 }
+/* The camera on the slant line (slants have no sheet of their own): the icon
+   every scan starts from, quiet like the links beside it, with a full tap area. */
+.lb-cam {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-sm);
+  min-height: var(--tap-sm);
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-primary);
+  vertical-align: middle;
+  cursor: pointer;
+}
 /* What is gone: one row per culture, tap to mark. Rows are list items, so
    they span the sheet; the delete button below sizes to its words. */
 .lb-weg {

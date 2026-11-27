@@ -9928,6 +9928,14 @@ function lbSheetClose() {
   if (m) m.classList.remove('open');
   _lbSheet = null;
 }
+// Die Kamera an der Zeile der Slants: die Kulturen-Prüfung für diese Art in
+// diesem Gefäß, wie die Kamera im Blatt eines Fachs (lfAct 'scan').
+function lbScannen(kind) {
+  const sp = _lbSheet && _lbSpecies().find((x) => x.strainId === _lbSheet.strainId);
+  if (!sp) return;
+  lbSheetClose();
+  openLabCheck({ strainId: sp.strainId, name: sp.name, kind });
+}
 function _lbSub(i) {
   const teile = [t('lb.have', { n: _lbZahl(i, i.have) })];
   if (i.growing) teile.push(t('lb.growing', { n: _lbZahl(i, i.growing), date: i.readyAt ? fmtDtShort(i.readyAt) : '–' }));
@@ -9962,6 +9970,10 @@ const _lbSollText = (i) => {
   if (i.auto) return t('lb.sollAuto', { n: _lbZahl(i, i.soll || 0) + ' kg' });
   return i.soll ? t('lb.soll', { n: _lbZahl(i, i.soll) + (i.key === 'GSKG' ? ' kg' : '') }) : t('lb.sollNone');
 };
+// Die Kamera, wie sie überall steht, wo ein Scan beginnt (cam-fab).
+const KAMERA_SVG =
+  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="2" y="5" width="20" height="15" rx="2" /><circle cx="12" cy="13" r="4" /><path d="M8 5l1-2h6l1 2" /></svg>';
 function _lbSheetZeile(i, sp) {
   const k = esc(i.key);
   const offen = _lbSheet.sollOffen === i.key;
@@ -9986,10 +9998,17 @@ function _lbSheetZeile(i, sp) {
       ? `<button type="button" class="lb-soll-btn lb-weg-btn" data-lb-weg="${k}" aria-expanded="${wegOffen}">` +
         `${esc(t('lb.delete'))} <span aria-hidden="true">${wegOffen ? '‹' : '›'}</span></button>`
       : '';
+  // Slants haben kein Fach und damit kein eigenes Blatt: ihre Kamera steht hier,
+  // neben Soll und Löschen. Dieselbe Prüfung wie im Blatt eines Fachs; auch bei
+  // 0, denn ein Scan holt eine abgeschriebene Kultur zurück.
+  const kamera =
+    sp && i.key === 'MC'
+      ? `<button type="button" class="lb-cam" data-lb-scan="MC" aria-label="${esc(t('lf.scan'))}" title="${esc(t('lf.scan'))}">${KAMERA_SVG}</button>`
+      : '';
   return (
     `<div class="lb-line${i.urgency === 'now' ? ' lb-now' : i.make > 0 ? ' lb-under' : ''}">` +
     `<div class="lb-line-l"><b>${esc(_lbLang(i))}</b>${i.shop ? ` <small class="lb-shop">${esc(t('lb.shop'))}</small>` : ''}` +
-    `<small class="lb-info">${esc(_lbSub(i))}</small>${soll}${weg}</div>${make}</div>` +
+    `<small class="lb-info">${esc(_lbSub(i))}</small>${soll}${weg}${kamera}</div>${make}</div>` +
     (wegOffen && sp ? _lbWegListe(sp, i.key) : '')
   );
 }
@@ -38805,6 +38824,8 @@ function initEventListeners() {
     if (so) return lbSollZeigen(so.dataset.lbSoll);
     const wg = e.target.closest('[data-lb-weg]');
     if (wg) return lbWegZeigen(wg.dataset.lbWeg);
+    const sc = e.target.closest('[data-lb-scan]');
+    if (sc) return lbScannen(sc.dataset.lbScan);
     const wi = e.target.closest('[data-lb-wegid]');
     if (wi) return lbWegWaehlen(wi.dataset.lbWegid);
     const b = e.target.closest('[data-lb-act]');
