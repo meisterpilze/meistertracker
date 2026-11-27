@@ -37,8 +37,8 @@ const DASH = seite('dash');
 const BATCH = seite('batch');
 
 describe('Zahlen holds the figures', () => {
-  it('has the three views, Übersicht first', () => {
-    assert.deepEqual(reiter(DASH), ['st-dash-overview', 'st-dash-harvest', 'st-dash-blocks']);
+  it('has its four views, Übersicht first', () => {
+    assert.deepEqual(reiter(DASH), ['st-dash-overview', 'st-dash-harvest', 'st-dash-blocks', 'st-dash-log']);
     assert.match(DASH, /<button class="stab active" id="st-dash-overview"/, 'the page does not open on Übersicht');
   });
 
