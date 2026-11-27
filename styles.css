@@ -5093,11 +5093,47 @@ button.lb-st {
 .np-more {
   margin-top: 8px;
 }
-.np-foot {
-  margin-top: 6px;
+
+/* Bedarf: the same rows, in three bands. The heading of a band carries its
+   colour and how many rows it has. */
+.bd-band .bd-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bd-n {
+  margin-left: auto;
   color: var(--c-text-muted);
+  font-weight: 500;
+}
+.np-dot.np-week {
+  background: var(--c-text-muted);
+}
+.np-main .np-what {
+  display: block;
+}
+/* The text of a row that opens a sheet is a button; it looks like the text. */
+.bd-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bd-why {
+  display: block;
+  margin-top: 2px;
+  color: var(--c-text-sec);
   font-size: max(0.8125rem, var(--fs-min));
-  line-height: 1.45;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.bd-why.bd-late,
+.bd-why.kbp-alt {
+  color: var(--c-red-dark);
+  font-weight: 600;
 }
 
 /* The species sheet (m-lb). */
@@ -13110,44 +13146,12 @@ button.wk-bretter-row {
   margin-bottom: 6px;
 }
 
-/* Körnerbrut pro Woche (v123) on the lab page: rows like Nachproduzieren,
-   text left, a small button right. */
-.kbp-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--c-border-light);
-}
-.kbp-row:last-child {
-  border-bottom: 0;
-}
-.kbp-l {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.kbp-l b {
-  overflow-wrap: anywhere;
-}
-.kbp-l small {
-  display: block;
-  color: var(--c-text-muted);
-  font-size: max(0.75rem, var(--fs-min));
-  line-height: 1.35;
-}
-.kbp-l small.kbp-alt {
-  color: var(--c-red-dark);
-  font-weight: 600;
-}
 .kbp-make {
   color: var(--c-amber-dark);
   font-weight: 600;
 }
 .kbp-ok {
   color: var(--c-green-dark);
-}
-.kbp-go {
-  flex: 0 0 auto;
 }
 /* The calculation behind the grain spawn target, in the species sheet. */
 .kbp-plan {

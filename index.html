@@ -2061,6 +2061,21 @@
             <path d="m3.5 18 1 1 2-2" /></svg
           ><span data-i18n="nav.workSteps">Arbeitsgänge</span>
         </button>
+        <button class="sb-btn" id="n-bedarf" data-page="bedarf">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8M8 12h8" /></svg
+          ><span data-i18n="nav.bedarf">Bedarf</span>
+        </button>
         <button class="sb-btn" id="n-dash" data-page="dash">
           <svg
             width="18"
@@ -4907,28 +4922,9 @@
                opened under the same two cards, and the one somebody picked began
                a few screens down. -->
           <div class="sp active" id="sp-lab-stock">
-            <!-- What is missing, per species, first; shown only while something is
-                 (renderNachproduzieren). Same figures as the list below. -->
-            <div class="card" id="np-card" hidden>
-              <div class="sec" data-i18n="np.title">Nachproduzieren</div>
-              <div id="np-rows"></div>
-              <div class="np-foot" data-i18n="np.foot">
-                Gelb ist unter dem Soll, rot eine Bestellung, die nicht rausgehen kann. Das Soll setzt man je Sorte, mit
-                einem Tipp auf sie unten.
-              </div>
-            </div>
-            <!-- Körnerbrut pro Woche (v123): per species, how much grain spawn a
-                 week it needs, what is there and what to make (renderKbPlan).
-                 Same figures as the grain spawn stock in the list below. -->
-            <div class="card" id="kbp-card" hidden>
-              <div class="sec" data-i18n="kbp.title">Körnerbrut pro Woche</div>
-              <div id="kbp-rows"></div>
-              <div class="np-foot" data-i18n="kbp.foot">
-                Bedarf: Blöcke pro Woche × Blockgewicht × Körnerbrut-%, dazu der Online-Verkauf, aus den letzten 8 Wochen.
-                Soll: so viel, bis neue Körnerbrut fertig ist, und eine Woche dazu. „Rechnung“ zeigt, wie es zustande
-                kommt.
-              </div>
-            </div>
+            <!-- What is missing is on the Bedarf page; this line says for how many
+                 species and leads there (renderLabBedarf). Hidden while nothing is. -->
+            <button type="button" class="wk-alert" id="lb-bedarf" hidden></button>
             <!-- The lab's stock per species: slants, liquid culture, petri, syringes,
                  grain spawn. Replaces the tiles per culture type and the sales stock
                  card (renderLabStock). -->
@@ -7267,6 +7263,13 @@
           <div class="sp" id="sp-proj-research"><div id="pj-research"></div></div>
           <div class="sp" id="sp-proj-products"><div id="pj-products"></div></div>
           <div class="sp" id="sp-proj-build"><div id="pj-build"></div></div>
+        </div>
+        <!-- Bedarf: was herzustellen ist, an einer Stelle (renderBedarf). Drei
+             Gruppen: bestellt und nicht da, wird knapp, diese Woche. Die Zahlen
+             kommen aus dem Laborbestand, dem Packbrett, dem Verkaufsregal und der
+             Sortenliste; gerechnet wird hier nichts. -->
+        <div class="page" id="p-bedarf">
+          <div id="bd-list"></div>
         </div>
         <!-- Zonen: je Raum eine Karte mit einem Knopf "Bearbeiten", die Regale als
              Kacheln (renderZones). Anlegen über "+ Raum" (m-zone-add). -->

@@ -1786,6 +1786,7 @@ function go(page, btnId) {
     renderShelf();
   }
   if (page === 'zones') renderZones();
+  if (page === 'bedarf') bedarfLaden();
   if (page === 'print') {
     loadPrintQueue();
     fillBatchSelect();
@@ -2152,6 +2153,7 @@ function refresh() {
     renderShelf();
   }
   if (id === 'zones') renderZones();
+  if (id === 'bedarf') bedarfLaden();
   if (id === 'cal') renderCalendar();
   if (id === 'strains') renderStrains();
   if (id === 'proj') pjRefresh();
@@ -6349,7 +6351,7 @@ function buildSupplyTasks() {
 
 // Laborarbeit, die ansteht: je Art, was ihr fehlt.
 //
-// Dieselben Zahlen wie Nachproduzieren auf der Laborseite (db.labStock), nicht
+// Dieselben Zahlen wie der Bedarf (db.labStock, bedarfZeilen), nicht
 // eine zweite Rechnung aus den Kulturen hier: zwei Rechnungen über dasselbe
 // Regal sind genau das, was Kacheln und Verkaufsbestand auseinanderlaufen
 // ließ. Eine Zeile je Art, denn aus einer Quelle setzt man alles an, was ihr
@@ -9062,45 +9064,224 @@ function _lbChip(i) {
   return t('lb.chip.' + i.key, { n: _lbZahl(i, i.make) });
 }
 
-// ── Nachproduzieren: je Art, was ihr fehlt ──
-// Rot ist nur eine Bestellung, die gerade nicht aus dem Regal gehen kann; alles
-// unter dem Soll ist gelb (db.saleNeed). Die Arten mit Rot zuerst, dann die mit
-// den meisten Lücken. Sechs stehen da, der Rest auf einen Tipp: bei vierzig
-// Lücken wäre die Laborseite sonst nur diese Liste.
-const NP_ZEIGEN = 6;
-let _npAlle = false;
-function renderNachproduzieren(species) {
-  const card = document.getElementById('np-card');
-  if (!card) return;
-  const offen = species
-    .map((sp) => ({ sp, fehlt: _lbFehlt(sp) }))
-    .filter((x) => x.fehlt.length)
-    .sort(
-      (a, b) =>
-        Number(_lbDringend(b.sp)) - Number(_lbDringend(a.sp)) ||
-        b.fehlt.length - a.fehlt.length ||
-        a.sp.name.localeCompare(b.sp.name)
+// ── Bedarf: was herzustellen ist, an einer Stelle ──
+// Vier Rechnungen sagten es an sechs Stellen: der Laborbestand (zwei Karten auf
+// der Laborseite, "Nachproduzieren" und "Körnerbrut pro Woche"), das Packbrett
+// (Herstellen), das Verkaufsregal (ein Stichwort an der Zeile) und die
+// Sortenliste (eine Zeile der Tagesliste). Diese Seite rechnet nichts davon
+// neu. Sie stellt die Ergebnisse zusammen, in drei Gruppen:
+//
+//   rot    bestellt, nicht da: eine Bestellung wartet darauf
+//   knapp  unter seinem Soll oder Alarm, ohne dass jemand wartet
+//   woche  Körnerbrut für die Woche, und Sorten, bei denen nichts nachkommt
+//
+// Je Zeile ein Knopf, der die Arbeit auf dem Weg beginnt, den es schon gibt.
+// Körnerbrut in kg steht als eigene Zeile da und nicht als Stichwort an der
+// Art: beides wäre dieselbe Zahl zweimal. Was genug hat, steht eingeklappt
+// unter der Woche, damit die Rechnung jeder Sorte erreichbar bleibt.
+function bedarfZeilen(species, board, shelf, supply) {
+  const rot = [];
+  const knapp = [];
+  const woche = [];
+  const genug = [];
+  const luecken = (a, b) => b.fehlt.length - a.fehlt.length || a.sp.name.localeCompare(b.sp.name);
+  const lab = [];
+  for (const sp of species) {
+    const fehlt = _lbFehlt(sp).filter((i) => i.key !== 'GSKG');
+    if (fehlt.length) lab.push({ art: 'lab', sp, fehlt });
+  }
+  lab.sort(luecken);
+  for (const z of lab) (z.fehlt.some((i) => i.urgency === 'now') ? rot : knapp).push(z);
+  // Nach Bestellung hergestellt: was zu spät ist, zuerst (so schickt es das Brett).
+  for (const m of (board && board.make) || []) rot.push({ art: 'make', m });
+  for (const x of shelf || []) if (x.active && _shelfLow(x)) knapp.push({ art: 'shelf', x });
+  // Eine Sorte, der Körner fehlen, steht mit ihren kg schon da: "Körnerbrut
+  // ansetzen" aus der Sortenliste wäre dieselbe Arbeit ein zweites Mal.
+  const mitKb = new Set();
+  for (const z of _kbpZeilen(species)) {
+    const zeile = { art: 'kb', sp: z.sp, i: z.i, p: z.p };
+    if (!(z.i.make > 0) && !(z.p.oldKg > 0)) {
+      genug.push(zeile);
+      continue;
+    }
+    (z.i.urgency === 'now' ? rot : woche).push(zeile);
+    if (z.i.make > 0) mitKb.add(String(z.sp.name).toLowerCase());
+  }
+  for (const s of supply || []) {
+    if (s.taskAction === 'make-grain' && mitKb.has(String(s.name).toLowerCase())) continue;
+    woche.push({ art: 'supply', s });
+  }
+  return { rot, knapp, woche, genug };
+}
+function _bdKnopf(attr, label, vorn) {
+  return `<button type="button" class="btn btn-sm${vorn ? ' btn-p' : ''} np-go" ${attr}>${esc(label)}</button>`;
+}
+// Links, was es ist, und darunter warum; rechts der Knopf. Wo ein Blatt
+// dahintersteht (die Art, die Rechnung), öffnet es ein Tipp auf den Text.
+function _bdZeile(was, warum, knopf, oeffnet) {
+  const tag = oeffnet ? 'button' : 'div';
+  return (
+    '<div class="np-row">' +
+    `<${tag}${oeffnet ? ' type="button" ' + oeffnet : ''} class="np-main${oeffnet ? ' bd-open' : ''}">` +
+    `<span class="np-what">${was}</span>${warum}</${tag}>` +
+    knopf +
+    '</div>'
+  );
+}
+const _bdWarum = (text, cls) => (text ? `<small class="bd-why${cls ? ' ' + cls : ''}">${esc(text)}</small>` : '');
+function _bdZeileHtml(z) {
+  if (z.art === 'lab') {
+    const id = z.sp.strainId;
+    return _bdZeile(
+      esc(z.sp.name),
+      '<span class="np-chips">' +
+        z.fehlt.map((i) => `<span class="np-chip np-${esc(i.urgency)}">${esc(_lbChip(i))}</span>`).join('') +
+        '</span>',
+      _bdKnopf(`data-bd-ansetzen="${id}"`, t('np.go'), true),
+      `data-bd-art="${id}"`
     );
-  card.hidden = !offen.length;
-  if (!offen.length) return;
-  const zeigen = _npAlle ? offen : offen.slice(0, NP_ZEIGEN);
-  document.getElementById('np-rows').innerHTML =
-    zeigen
-      .map(({ sp, fehlt }) => {
-        const rot = _lbDringend(sp);
-        return (
-          '<div class="np-row">' +
-          `<i class="np-dot np-${rot ? 'now' : 'low'}" role="img" aria-label="${esc(t(rot ? 'np.now' : 'np.low'))}"></i>` +
-          `<div class="np-main"><div class="np-what">${esc(sp.name)}</div><div class="np-chips">` +
-          fehlt.map((i) => `<span class="np-chip np-${esc(i.urgency)}">${esc(_lbChip(i))}</span>`).join('') +
-          '</div></div>' +
-          `<button type="button" class="btn btn-sm btn-p np-go" data-np-strain="${sp.strainId}">${esc(t('np.go'))}</button></div>`
-        );
-      })
-      .join('') +
-    (offen.length > NP_ZEIGEN
-      ? `<button type="button" class="btn btn-sm np-more" data-np-more>${esc(t(_npAlle ? 'np.less' : 'np.more', { n: offen.length - NP_ZEIGEN }))}</button>`
-      : '');
+  }
+  if (z.art === 'kb') {
+    const { sp, i, p } = z;
+    const stand = [t('kbp.need', { n: _kbZahl(p.needKgWeek) }), t('kbp.have', { n: _kbZahl(i.have) })];
+    if (i.growing) stand.push(t('kbp.growing', { n: _kbZahl(i.growing) }));
+    const tun =
+      i.make > 0
+        ? `<span class="kbp-make">${esc(t('kbp.make', { n: _kbZahl(i.make) }))}</span>`
+        : `<span class="kbp-ok">${esc(t('kbp.enough'))}</span>`;
+    return _bdZeile(
+      esc(t('bd.kb', { name: sp.name })) + ' ' + tun,
+      _bdWarum(stand.join(' · ')) + (p.oldKg > 0 ? _bdWarum(_kbpAltText(p), 'kbp-alt') : ''),
+      i.make > 0
+        ? _bdKnopf(`data-bd-kb="${sp.strainId}" data-bd-kg="${esc(String(i.make))}"`, t('np.go'), true)
+        : _bdKnopf(`data-bd-art-kb="${sp.strainId}"`, t('kbp.show'), false),
+      `data-bd-art-kb="${sp.strainId}"`
+    );
+  }
+  if (z.art === 'make') {
+    const m = z.m;
+    const tage = m.byDay.map((d) => t('orders.board.labelOnQty', { qty: _obNum(d.qty), day: _obDay(d.day) }));
+    tage.push(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }));
+    return _bdZeile(
+      `${esc(_obNum(m.qty))} × ${esc(m.sku)}`,
+      _bdWarum(tage.join(' · '), m.overdue ? 'bd-late' : ''),
+      _bdKnopf('data-bd-pack', t('bd.toPack'), false)
+    );
+  }
+  if (z.art === 'shelf') {
+    return _bdZeile(
+      esc(z.x.name),
+      _bdWarum(t('bd.shelfWhy', { n: z.x.stock, min: z.x.minStock })),
+      _bdKnopf(`data-bd-shelf="${z.x.id}"`, t('bd.look'), false)
+    );
+  }
+  // Eine Sorte, bei der nichts nachkommt: Körner zuerst, wenn keine da sind.
+  const korn = z.s.taskAction === 'make-grain';
+  return _bdZeile(
+    esc(z.s.name),
+    _bdWarum(t('batch.supply.' + z.s.supply)),
+    _bdKnopf(
+      `data-bd-supply="${esc(z.s.key)}" data-bd-korn="${korn ? 1 : 0}"`,
+      t(korn ? 'todo.makeGrain' : 'todo.makeBatch'),
+      true
+    )
+  );
+}
+let _bdGenugOffen = false;
+function renderBedarf() {
+  const el = document.getElementById('bd-list');
+  if (!el) return;
+  // Vor der ersten Antwort des Labors keine Aussage: "nichts herzustellen" wäre
+  // dann eine Behauptung über Zahlen, die noch niemand gesehen hat.
+  if (!_lbData) {
+    el.innerHTML = '<div class="empty">' + esc(t('common.loading')) + '</div>';
+    return;
+  }
+  const z = bedarfZeilen(_lbSpecies(), _obBoard, shelfItems, buildSupplyTasks());
+  const gruppe = (ton, titel, zeilen, dazu) =>
+    zeilen.length || dazu
+      ? '<div class="card bd-band">' +
+        `<div class="sec bd-h"><i class="np-dot np-${ton}" aria-hidden="true"></i><span>${esc(t(titel))}</span>` +
+        `<span class="bd-n">${zeilen.length}</span></div>` +
+        zeilen.map(_bdZeileHtml).join('') +
+        (dazu || '') +
+        '</div>'
+      : '';
+  const genug = z.genug.length
+    ? `<button type="button" class="btn btn-sm np-more" data-bd-genug aria-expanded="${_bdGenugOffen}">` +
+      esc(_bdGenugOffen ? t('np.less') : t('bd.enough', { n: z.genug.length })) +
+      '</button>' +
+      (_bdGenugOffen ? z.genug.map(_bdZeileHtml).join('') : '')
+    : '';
+  el.innerHTML =
+    gruppe('now', 'bd.ordered', z.rot) +
+      gruppe('low', 'bd.low', z.knapp) +
+      gruppe('week', 'bd.week', z.woche, genug) || '<div class="empty">' + esc(t('bd.none')) + '</div>';
+}
+function bedarfOffen() {
+  const seite = document.getElementById('p-bedarf');
+  return !!(seite && seite.classList.contains('active'));
+}
+// Beim Öffnen und bei jedem Abgleich: das Labor und das Packbrett frisch vom
+// Server, das Regal und die Sortenliste sind mit dem Abgleich schon da.
+// loadLabStock() zeichnet über renderLabStock() neu, sobald es antwortet.
+function bedarfLaden() {
+  renderBedarf();
+  loadLabStock();
+  apiGet('/api/orders/board')
+    .then((b) => {
+      _obBoard = b;
+      if (bedarfOffen()) renderBedarf();
+    })
+    .catch(() => {
+      // Ohne Antwort bleibt, was vom Brett zuletzt da war.
+    });
+}
+function bedarfKlick(ziel) {
+  const el = ziel.closest(
+    '[data-bd-genug],[data-bd-ansetzen],[data-bd-kb],[data-bd-art],[data-bd-art-kb],[data-bd-pack],[data-bd-shelf],[data-bd-supply]'
+  );
+  if (!el) return;
+  const d = el.dataset;
+  if ('bdGenug' in d) {
+    _bdGenugOffen = !_bdGenugOffen;
+    renderBedarf();
+  } else if (d.bdAnsetzen) lbAnsetzen(Number(d.bdAnsetzen));
+  else if (d.bdKb) lbAnsetzen(Number(d.bdKb), { GSKG: Number(d.bdKg) });
+  else if (d.bdArt) lbSheetOpen(Number(d.bdArt));
+  else if (d.bdArtKb) kbpOeffnen(Number(d.bdArtKb));
+  else if ('bdPack' in d) {
+    // Der Vermerk "Hergestellt" steht an der Bestellung, auf dem Packbrett.
+    go('orders', 'n-orders');
+    openStab('orders', 'pack');
+  } else if (d.bdShelf) {
+    go('inv', 'n-inv');
+    openStab('inv', 'shelf');
+    renderShelf();
+    shelfSheetOpen(Number(d.bdShelf));
+  } else if (d.bdSupply) {
+    // Wie der Knopf der Tagesliste: das Schnell-Anlegen der Sorte.
+    const ms = _strainByKey(d.bdSupply);
+    if (!ms) {
+      setFb('err', t('todo.supplyNoSorte'));
+      return;
+    }
+    if (d.bdKorn === '1') {
+      msQuickLabor(ms.id);
+      _msqPickType('KB');
+    } else msQuickCharge(ms.id);
+  }
+}
+// Auf der Laborseite, über dem Bestand: eine Zeile, die zum Bedarf führt. Die
+// zwei Karten, die hier standen, sind dort.
+function renderLabBedarf(species) {
+  const el = document.getElementById('lb-bedarf');
+  if (!el) return;
+  const n = species.filter((sp) => _lbFehlt(sp).length).length;
+  el.hidden = !n;
+  if (!n) return;
+  el.classList.toggle('wk-np-now', species.some(_lbDringend));
+  el.textContent = tp('lb.bedarf', n);
 }
 // Oben in Arbeitsgänge, wo die App aufgeht: nur was rot ist, eine Bestellung,
 // die nicht rausgehen kann. Das Gelbe steht in der Tagesliste darunter
@@ -9183,9 +9364,9 @@ function renderLabStock() {
   const d = _lbData;
   if (!d) return;
   const species = _lbSpecies();
-  renderNachproduzieren(species);
   renderWorkNachproduzieren(species);
-  renderKbPlan(species);
+  renderLabBedarf(species);
+  if (bedarfOffen()) renderBedarf();
   const card = document.getElementById('lb-card');
   if (!card) return;
   card.hidden = !species.length;
@@ -9221,8 +9402,9 @@ function renderLabStock() {
 }
 
 // ── Körnerbrut pro Woche (v123) ──
-// Je Sorte eine Zeile: wie viel Körnerbrut sie pro Woche braucht (für Blöcke
-// und online), was da ist und wächst, was anzusetzen ist, und was alt wird.
+// Je Sorte eine Zeile im Bedarf (bedarfZeilen): wie viel Körnerbrut sie pro
+// Woche braucht (für Blöcke und online), was da ist und wächst, was anzusetzen
+// ist, und was alt wird.
 // Gerechnet wird auf dem Server (db.grainPlan); es ist dasselbe Soll, das der
 // kg-Vorrat in der Liste darunter und die Tagesliste lesen. "Rechnung" öffnet
 // die Sorte mit der Rechnung aufgeklappt.
@@ -9245,28 +9427,6 @@ function _kbpZeilen(species) {
 function _kbpAltText(p) {
   if (p.oldAt && Date.parse(p.oldAt) <= Date.now()) return t('kbp.oldNow', { n: _kbZahl(p.oldKg) });
   return t('kbp.old', { n: _kbZahl(p.oldKg), date: p.oldAt ? fmtDtShort(p.oldAt) : '–' });
-}
-// Eine Zeile wie in Nachproduzieren: links der Text, rechts ein kleiner Knopf.
-function _kbpZeile({ sp, i, p }) {
-  const stand = [t('kbp.need', { n: _kbZahl(p.needKgWeek) }), t('kbp.have', { n: _kbZahl(i.have) })];
-  if (i.growing) stand.push(t('kbp.growing', { n: _kbZahl(i.growing) }));
-  const tun =
-    i.make > 0
-      ? `<span class="kbp-make">${esc(t('kbp.make', { n: _kbZahl(i.make) }))}</span>`
-      : `<span class="kbp-ok">${esc(t('kbp.enough'))}</span>`;
-  return (
-    `<div class="kbp-row"><div class="kbp-l"><b>${esc(sp.name)}</b> ${tun}` +
-    `<small>${esc(stand.join(' · '))}</small>` +
-    (p.oldKg > 0 ? `<small class="kbp-alt">${esc(_kbpAltText(p))}</small>` : '') +
-    `</div><button type="button" class="btn btn-sm kbp-go" data-kbp-strain="${sp.strainId}">${esc(t('kbp.show'))}</button></div>`
-  );
-}
-function renderKbPlan(species) {
-  const card = document.getElementById('kbp-card');
-  if (!card) return;
-  const zeilen = _kbpZeilen(species);
-  card.hidden = !zeilen.length;
-  document.getElementById('kbp-rows').innerHTML = zeilen.map(_kbpZeile).join('');
 }
 function kbpOeffnen(strainId) {
   lbSheetOpen(strainId);
@@ -38078,6 +38238,9 @@ function initEventListeners() {
   $('n-inv').addEventListener('click', () => {
     go('inv', 'n-inv');
   });
+  $('n-bedarf').addEventListener('click', () => {
+    go('bedarf', 'n-bedarf');
+  });
   $('n-zones').addEventListener('click', () => {
     go('zones', 'n-zones');
   });
@@ -38456,25 +38619,11 @@ function initEventListeners() {
   $('st-dash-blocks').addEventListener('click', () => openStab('dash', 'blocks'));
   // The lab cards are rebuilt wholesale on every sync, so their buttons are
   // delegated rather than carrying inline handlers.
-  $('wk-np').addEventListener('click', () => {
-    go('lab', 'n-lab');
-    openStab('lab', 'stock');
-    const card = document.getElementById('np-card');
-    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  $('np-rows').addEventListener('click', (e) => {
-    if (e.target.closest('[data-np-more]')) {
-      _npAlle = !_npAlle;
-      renderNachproduzieren(_lbSpecies());
-      return;
-    }
-    const b = e.target.closest('[data-np-strain]');
-    if (b) lbAnsetzen(parseInt(b.dataset.npStrain, 10));
-  });
-  $('kbp-rows').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-kbp-strain]');
-    if (b) kbpOeffnen(parseInt(b.dataset.kbpStrain, 10));
-  });
+  // Was fehlt, steht an einer Stelle: die Zeile oben in Arbeitsgänge und die
+  // über dem Laborbestand führen beide zum Bedarf.
+  $('wk-np').addEventListener('click', () => go('bedarf', 'n-bedarf'));
+  $('lb-bedarf').addEventListener('click', () => go('bedarf', 'n-bedarf'));
+  $('bd-list').addEventListener('click', (e) => bedarfKlick(e.target));
   $('lb-list').addEventListener('click', (e) => {
     if (e.target.closest('[data-lb-ruhen]')) {
       _lbRuhenOffen = !_lbRuhenOffen;
