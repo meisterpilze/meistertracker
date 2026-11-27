@@ -11825,6 +11825,24 @@ let _lcResumed = null; // gesetzt, wenn die Haken von früher kamen
 // Kulturen, die ein Scan aus "aufgebraucht" oder "kontaminiert" zurückgeholt
 // hat, mit dem Status davor: ein Fehlscan lässt sich so zurücknehmen.
 const _lcRevived = new Map();
+// Vom Laborbestand aus (Scannen im Blatt eines Fachs): nur eine Art in einem
+// Gefäß. Dort hieß Zählen vorher, eine Zahl einzutippen, und welche Schalen
+// fehlten, nahm die App selbst: die ältesten. Mit dem Scan sagt jede Schale
+// selbst, dass sie da ist. Spritzen in allen Größen auf einmal: sie stehen
+// zusammen, unter dem einen Etikett der Art. Die Wahl der Gefäße oben bleibt,
+// wie sie war; sie gehört zur Inventur des ganzen Regals.
+let _lcFach = null; // { strainId, name, kind }
+function _lcImFach(c) {
+  const f = _lcFach;
+  return c.type === f.kind && (c.strainId === f.strainId || (!c.strainId && c.species === f.name));
+}
+// Was Ausbuchen und Von vorn anfassen: bei einem Fach nur dessen Haken. Wer die
+// Kiste einer Art durchscannt, hat die der nächsten vielleicht schon mit drin.
+function _lcHier() {
+  if (!_lcFach) return () => true;
+  const hier = new Set(cultures.filter(_lcImFach).map((c) => c.id));
+  return (id) => hier.has(id);
+}
 function _lcLies() {
   try {
     return JSON.parse(localStorage.getItem(LC_KEY) || 'null') || {};
@@ -11861,7 +11879,8 @@ function _lcMerke() {
 function _lcVergiss() {
   _lcSchreibe({ kinds: [..._lcKinds], lager: _lcLager });
 }
-function openLabCheck() {
+function openLabCheck(fach) {
+  _lcFach = fach && fach.kind ? { strainId: fach.strainId, name: fach.name || '', kind: fach.kind } : null;
   _zcMode = 'culture';
   _zcZone = null;
   _zcFound.clear();
@@ -11899,12 +11918,14 @@ function _lcKindName(k) {
   return v === key ? k : v;
 }
 // Die Knöpfe oben: je Gefäß, das es gerade gibt, mit seiner Zahl, und
-// Eingelagert, wenn etwas eingelagert ist.
+// Eingelagert, wenn etwas eingelagert ist. Bei einem Fach steht das Gefäß
+// schon fest; nur Eingelagert bleibt.
 function _lcKindsHtml() {
   const n = {};
   for (const c of _lcGehalten()) n[c.type] = (n[c.type] || 0) + 1;
-  const da = LC_KINDS.filter((k) => n[k] || _lcKinds.has(k));
-  const lagerN = cultures.filter((c) => c.status === 'stored' && _lcKinds.has(c.type)).length;
+  const da = _lcFach ? [] : LC_KINDS.filter((k) => n[k] || _lcKinds.has(k));
+  const zaehlt = (c) => (_lcFach ? _lcImFach(c) : _lcKinds.has(c.type));
+  const lagerN = cultures.filter((c) => c.status === 'stored' && zaehlt(c)).length;
   const knopf = (attr, on, text) =>
     `<button type="button" class="lf-size${on ? ' on' : ''}" ${attr} aria-pressed="${on}">${esc(text)}</button>`;
   return (
@@ -11916,7 +11937,12 @@ function _lcKindsHtml() {
     '</div>'
   );
 }
+// Das Fach, wie es im Titel und in der Rückfrage steht: "Testart · Petri".
+function _lcFachName() {
+  return _lcFach.name + ' · ' + _lcKindName(_lcFach.kind);
+}
 function _lcKindsText() {
+  if (_lcFach) return _lcFachName() + (_lcLager ? ', ' + t('labCheck.storedToo') : '');
   const namen = LC_KINDS.filter((k) => _lcKinds.has(k)).map(_lcKindName);
   if (_lcLager) namen.push(t('labCheck.storedToo'));
   return namen.join(', ');
@@ -11929,9 +11955,11 @@ function _lcSeit(ms) {
 }
 function _zcExpected() {
   if (_zcMode === 'culture') {
+    // Eine Spritze sagt in ihrer Zeile, wie groß sie ist.
+    const ml = (c) => (c.type === 'SY' ? ' · ' + (Number(c.ml) || 10) + ' ml' : '');
     return _lcGehalten()
-      .filter((c) => _lcKinds.has(c.type))
-      .map((c) => [c.id, { batchId: (c.species || '') + (c.strainText ? ' · ' + c.strainText : '') }])
+      .filter((c) => (_lcFach ? _lcImFach(c) : _lcKinds.has(c.type)))
+      .map((c) => [c.id, { batchId: (c.species || '') + (c.strainText ? ' · ' + c.strainText : '') + ml(c) }])
       .sort((a, b) => a[0].localeCompare(b[0]));
   }
   return Object.entries(getZoneBags(_zcZone)).sort((a, b) => a[0].localeCompare(b[0]));
@@ -11943,18 +11971,29 @@ function renderZoneCheck() {
   // ist: gezählt wird nur, was in dieser Liste steht.
   const found = expected.filter(([id]) => _zcFound.has(id)).length;
   document.getElementById('zc-title').textContent = kultur
-    ? t('labCheck.title')
+    ? _lcFach
+      ? t('labCheck.titleFach', { what: _lcFachName() })
+      : t('labCheck.title')
     : t('zoneCheck.title', { zone: zoneDisplayName(_zcZone) });
   document.getElementById('zc-count').textContent =
     t('zoneCheck.count', { found, total: expected.length }) +
     (_zcMoved ? ' · ' + t('zoneCheck.corrected', { n: _zcMoved }) : '') +
-    (kultur && _lcResumed && _zcFound.size ? ' · ' + t('labCheck.resumed', { time: _lcSeit(_lcResumed) }) : '');
+    // Bei einem Fach nur, wenn von früher etwas aus diesem Fach abgehakt ist.
+    (kultur && _lcResumed && (_lcFach ? found : _zcFound.size)
+      ? ' · ' + t('labCheck.resumed', { time: _lcSeit(_lcResumed) })
+      : '');
   const kinds = document.getElementById('zc-kinds');
   if (kinds) kinds.innerHTML = kultur ? _lcKindsHtml() : '';
   if (kultur) _lcMerke();
   const body = document.getElementById('zc-body');
   if (!expected.length) {
-    const leer = !kultur ? 'zoneCheck.empty' : _lcKinds.size ? 'labCheck.empty' : 'labCheck.pickKind';
+    const leer = !kultur
+      ? 'zoneCheck.empty'
+      : _lcFach
+        ? 'labCheck.emptyFach'
+        : _lcKinds.size
+          ? 'labCheck.empty'
+          : 'labCheck.pickKind';
     body.innerHTML =
       '<div style="color:var(--c-text-muted);font-style:italic;padding:14px 0">' + esc(t(leer)) + '</div>';
     document.getElementById('zc-foot').innerHTML = '';
@@ -11983,7 +12022,7 @@ function renderZoneCheck() {
   const scanBtn = `<button type="button" data-zc-act="scan" class="fs-base" style="${btn};flex-basis:100%;background:var(--c-primary,#16a34a);color:#fff;border-color:transparent;padding:13px">📷 ${esc(t(kultur ? 'labCheck.scanBtn' : 'zoneCheck.scanBtn'))}</button>`;
   // Von vorn: die Haken von einem halben Durchgang gestern weg, mit Rückgängig.
   const vonVorn =
-    kultur && _zcFound.size
+    kultur && (_lcFach ? found : _zcFound.size)
       ? `<button type="button" data-zc-act="restart" class="fs-sm" style="${btn};flex:0 1 auto;min-width:0;background:var(--c-surface);color:var(--c-text-sec)">${esc(t('labCheck.restart'))}</button>`
       : '';
   const missingBtns = kultur
@@ -12039,7 +12078,9 @@ function labCheckScanned(cultureId) {
   _lcMerke();
   if (!gehalten) return _zcFeedback('ok', t('labCheck.scanRevived', { id: c.id }));
   // Ein Gefäß, das oben nicht angetippt ist: abgehakt, aber nicht mitgezählt.
-  if (!_lcKinds.has(c.type))
+  // Bei einem Fach: eine andere Art oder ein anderes Gefäß.
+  if (_lcFach && !_lcImFach(c)) return _zcFeedback('ok', t('labCheck.scanOtherFach', { id: c.id }));
+  if (!_lcFach && !_lcKinds.has(c.type))
     return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: _lcKindName(c.type) }));
   if (c.status === 'stored' && !_lcLager)
     return _zcFeedback('ok', t('labCheck.scanOther', { id: c.id, kind: t('labCheck.stored') }));
@@ -12075,11 +12116,19 @@ function _zcMarkMissingUsed() {
     const wieder = [..._lcRevived];
     const start = _lcStart;
     missing.forEach((id) => setCultureStatus(id, 'used'));
-    _zcFound.clear();
-    _lcRevived.clear();
-    _lcStart = null;
-    _lcResumed = null;
-    _lcVergiss();
+    if (_lcFach) {
+      // Nur die Haken dieses Fachs gehen; die anderen warten auf ihr Fach.
+      const drin = _lcHier();
+      haken.filter(drin).forEach((id) => _zcFound.delete(id));
+      wieder.forEach(([id]) => drin(id) && _lcRevived.delete(id));
+      _lcMerke();
+    } else {
+      _zcFound.clear();
+      _lcRevived.clear();
+      _lcStart = null;
+      _lcResumed = null;
+      _lcVergiss();
+    }
     document.getElementById('m-zonecheck').classList.remove('open');
     showUndoBar(t('labCheck.done', { n: missing.length }), () => {
       vorher.forEach(([id, st]) => st && setCultureStatus(id, st));
@@ -12105,13 +12154,16 @@ function _lcVonVorn() {
   const wieder = [..._lcRevived];
   const start = _lcStart;
   const moved = _zcMoved;
-  wieder.forEach(([id, st]) => setCultureStatus(id, st));
-  _zcFound.clear();
-  _lcRevived.clear();
+  // Bei einem Fach nur dessen Haken, wie beim Ausbuchen.
+  const drin = _lcHier();
+  const zurueck = wieder.filter(([id]) => drin(id));
+  zurueck.forEach(([id, st]) => setCultureStatus(id, st));
+  haken.filter(drin).forEach((id) => _zcFound.delete(id));
+  zurueck.forEach(([id]) => _lcRevived.delete(id));
   _zcMoved = 0;
   renderZoneCheck();
   showUndoBar(t('labCheck.restarted'), () => {
-    wieder.forEach(([id]) => setCultureStatus(id, 'active'));
+    zurueck.forEach(([id]) => setCultureStatus(id, 'active'));
     _lcZurueck(haken, wieder, start, moved);
   });
 }
@@ -19833,6 +19885,9 @@ function lfRender() {
   sizes.innerHTML = f.kind === 'SY' || f.kind === 'KB' ? _lfSizesHtml(f) : '';
   sizes.hidden = !sizes.innerHTML;
   for (const id of ['m-lf-now', 'm-lf-alarmrow', 'm-lf-amt', 'm-lf-acts']) document.getElementById(id).hidden = gruppe;
+  // Scannen bei jeder Kultur, bei Spritzen auch ohne Größe. Körnerbrut hat dafür
+  // die Zählung und den Raum.
+  document.getElementById('m-lf-scanrow').hidden = f.kind === 'KB';
   if (gruppe) {
     document.getElementById('m-lf-help').textContent = t('lf.pickSize');
   } else {
@@ -20011,6 +20066,13 @@ function lfAct(a) {
   const f = _lfSheet.fach;
   if (a === 'close') return lfClose();
   if (a === 'print') return lfPrint();
+  // Scannen: jede Kultur einzeln statt einer Zahl (openLabCheck). Spritzen auch
+  // vom Etikett der Art aus, ohne gewählte Größe: geprüft werden alle Größen.
+  if (a === 'scan') {
+    if (f.kind === 'KB') return;
+    lfClose();
+    return openLabCheck(f);
+  }
   if (f.group) return toast(t('lf.pickSize'), 'err');
   const n = _lfN();
   if (Number.isNaN(n)) return toast(t('shelf.wholeNumber'), 'err');
@@ -39203,7 +39265,7 @@ function initEventListeners() {
   initUsbCard();
   $('btn-42').addEventListener('click', restoreBackup);
   $('reset-go').addEventListener('click', runCleanReset);
-  $('lab-check-btn').addEventListener('click', openLabCheck);
+  $('lab-check-btn').addEventListener('click', () => openLabCheck());
   $('zc-close').addEventListener('click', () => document.getElementById('m-zonecheck').classList.remove('open'));
   $('m-zonecheck').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');

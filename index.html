@@ -459,6 +459,38 @@
           <button type="button" class="btn btn-p" data-lf-act="sold" data-i18n="lf.sold">Verkauft</button>
           <button type="button" class="btn" data-lf-act="count" data-i18n="shelf.count">Das ist der Bestand</button>
         </div>
+        <!-- Jede Kultur einzeln statt einer Zahl: die Kulturen-Prüfung für diese
+             Art in diesem Gefäß (openLabCheck). Eine eigene Zeile, weil sie bei
+             Spritzen auch ohne gewählte Größe steht; bei Körnerbrut nicht. Die
+             Kamera wie überall, wo gescannt wird (cam-fab), ohne Wort daneben. -->
+        <div class="shelf-acts" id="m-lf-scanrow">
+          <button
+            type="button"
+            class="btn btn-p"
+            id="m-lf-scan"
+            data-lf-act="scan"
+            data-i18n-aria-label="lf.scan"
+            aria-label="Scannen"
+            data-i18n-title="lf.scan"
+            title="Scannen"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="2" y="5" width="20" height="15" rx="2" />
+              <circle cx="12" cy="13" r="4" />
+              <path d="M8 5l1-2h6l1 2" />
+            </svg>
+          </button>
+        </div>
         <p class="fs-meta shelf-help" id="m-lf-help"></p>
         <div id="m-lf-preview" class="shelf-preview"></div>
         <div class="modal-btns">
