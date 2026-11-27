@@ -1914,7 +1914,6 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'log') renderLog();
   if (page === 'orders' && sub === 'pack') renderOrderBoard();
   if (page === 'orders' && sub === 'inbox') renderOrders();
-  if (page === 'orders' && sub === 'tomake') renderOrdersDemand();
   if (page === 'orders' && sub === 'mapping') renderOrdersMapping();
   if (page === 'orders' && sub === 'customers') renderOrdersCustomers();
   if (page === 'orders' && sub === 'versand') renderOrdersVersand();
@@ -2199,7 +2198,6 @@ function _refreshOrdersActive() {
   const active = document.querySelector('#p-orders .sp.active');
   const id = active ? active.id : 'sp-orders-pack';
   if (id === 'sp-orders-pack') renderOrderBoard();
-  else if (id === 'sp-orders-tomake') renderOrdersDemand();
   else if (id === 'sp-orders-mapping') renderOrdersMapping();
   else if (id === 'sp-orders-customers') renderOrdersCustomers();
   else if (id === 'sp-orders-versand') renderOrdersVersand();
@@ -2281,50 +2279,6 @@ function setOrdersFilter(f) {
     .querySelectorAll('#sp-orders-inbox .oh-fchip')
     .forEach((c) => c.classList.toggle('active', (c.dataset.filter || '') === f));
   _renderOrdersInbox();
-}
-
-function renderOrdersDemand() {
-  const body = $('demand-body');
-  if (!body) return;
-  body.innerHTML = _ohEmpty(6, t('common.loading'));
-  apiGet('/api/orders/demand')
-    .then((d) => {
-      const rows = d.items || [];
-      if (!rows.length) {
-        body.innerHTML = _ohEmpty(5, t('orders.demandNone'));
-        return;
-      }
-      body.innerHTML = rows
-        .map((r) => {
-          const comps = (r.components || []).length
-            ? r.components
-                .map(
-                  (c) =>
-                    `<span style="display:inline-block;margin-right:10px;${c.short > 0 ? 'color:var(--c-red-dark);font-weight:600' : 'color:var(--c-text-muted)'}">` +
-                    `${esc(_ohMatName(c.mat))} ${_ohN(c.need)}${esc(c.unit || '')}${c.short > 0 ? ' (−' + _ohN(c.short) + ')' : ' ✓'}</span>`
-                )
-                .join('')
-            : '<span class="muted">—</span>';
-          const produce =
-            r.toProduce > 0
-              ? `<strong>${r.toProduce}</strong>${r.componentsShort ? ` <span class="oh-warn" title="${esc(t('orders.componentsShort'))}">⚠︎</span>` : ''}`
-              : r.backorder > 0
-                ? `<span class="oh-st oh-st-cancelled">${r.backorder} ${esc(t('orders.backorder'))}</span>`
-                : '<span class="muted">0</span>';
-          return (
-            `<tr><td data-mlabel="${esc(t('orders.th.product'))}"><strong>${esc(r.product)}</strong> <span class="muted fs-xs">${esc(r.category || '')}</span></td>` +
-            `<td data-mlabel="${esc(t('orders.th.demand'))}">${r.demand}</td>` +
-            `<td data-mlabel="${esc(t('orders.th.fromStock'))}">${r.fromStock}</td>` +
-            `<td data-mlabel="${esc(t('orders.th.toProduce'))}">${produce}</td>` +
-            `<td class="fs-xs" data-mlabel="${esc(t('orders.th.startBy'))}">${r.startBy ? esc(r.startBy) : '—'}</td>` +
-            `<td class="fs-xs" data-mlabel="${esc(t('orders.th.components'))}">${comps}</td></tr>`
-          );
-        })
-        .join('');
-    })
-    .catch(() => {
-      body.innerHTML = _ohEmpty(5, t('common.error'));
-    });
 }
 
 // ── Packen: what to pack today, what to make first ─────────────────────────
@@ -38279,7 +38233,6 @@ function initEventListeners() {
   $('n-orders').addEventListener('click', () => go('orders', 'n-orders'));
   $('st-orders-pack').addEventListener('click', () => openStab('orders', 'pack'));
   $('st-orders-inbox').addEventListener('click', () => openStab('orders', 'inbox'));
-  $('st-orders-tomake').addEventListener('click', () => openStab('orders', 'tomake'));
   $('st-orders-mapping').addEventListener('click', () => openStab('orders', 'mapping'));
   $('st-orders-customers').addEventListener('click', () => openStab('orders', 'customers'));
   $('st-orders-versand').addEventListener('click', () => openStab('orders', 'versand'));
