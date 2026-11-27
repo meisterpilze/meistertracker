@@ -1131,7 +1131,7 @@ function onNotifItemClick(e) {
     openStab('lab', 'stock');
     lfScanned(linkId);
   } else if (linkType === 'shelf' && linkId) {
-    // "Nachproduzieren" (checkShelf): das Fach unter Lager → Regal, mit seinem Blatt.
+    // "Nachproduzieren" (checkShelf): das Fach unter Lager → Verkaufsregal, mit seinem Blatt.
     go('inv', 'n-inv');
     openStab('inv', 'shelf');
     renderShelf();
@@ -18736,7 +18736,7 @@ function estBagsFromMat(mat, stockKg) {
 
 // ── Regal: fertige Ware, eine Zahl je Artikel ────────────────
 // Am Regalfach hängt ein Etikett mit QR-Code. Wer es scannt (oder den Artikel
-// unter Lager → Regal antippt), bekommt ein Blatt mit dem Bestand und drei
+// unter Lager → Verkaufsregal antippt), bekommt ein Blatt mit dem Bestand und drei
 // Knöpfen: Rein, Raus, oder "Das ist der Bestand" nach dem Zählen. Die Beutel
 // selbst tragen kein Etikett; gezählt wird das Fach. Welche Artikel es gibt,
 // legt das Team hier an, der Code kennt keinen.
