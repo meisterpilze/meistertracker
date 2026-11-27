@@ -1004,7 +1004,6 @@ window.LANG['pt'] = {
   'batch.noLocations': 'Nenhum local configurado',
   'batch.strainLabel': 'Cepa',
   'batch.strainPlaceholder': 'ex.: XY-1, Nordlicht\u2026',
-  'batch.whereGo': 'Para onde v\u00e3o esses sacos?',
   'batch.whereGoInfo': '{id} \u2014 {n} sacos precisam de um local inicial.',
   'batch.zones.rename': 'Renomear',
   'batch.zones.renamePrompt': 'Novo nome para \u201c{old}\u201d:',
@@ -1815,9 +1814,6 @@ window.LANG['pt'] = {
   'batchAddModal.location': 'Local / estante',
   'batchAddModal.addAll': 'Adicionar todos',
   // Move-bag modal
-  'locmove.bag': 'Saco',
-  'locmove.moveTo': 'Mover para:',
-  'locmove.removeBag': 'Remover este saco',
   // Users / account settings
   'users.account': 'Conta',
   'users.logout': 'Sair',
