@@ -2714,6 +2714,7 @@ window.LANG['en'] = {
   'inv.shortageTitle': 'Not enough stock',
   'inv.shortageProceed': 'Continue anyway? (Stock will clamp to zero; the missing amount is not recorded.)',
   'inv.alertBelow': 'Alert below {n}kg',
+  'inv.backToStock': 'Back to raw materials',
   'inv.logDelivery': '+ Log delivery',
   'inv.grainBagsEst': '\u2248 {n} grain bags @ {kg}kg each',
   'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg blocks',

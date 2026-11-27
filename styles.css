@@ -3239,6 +3239,10 @@ button {
   font-weight: 600;
   margin-bottom: 10px;
 }
+/* Der Weg zurück aus einem Formular, das ein Leitknopf geöffnet hat. */
+.inv-back {
+  margin-bottom: 10px;
+}
 /* Ein Formular ist so breit wie seine Felder, nicht so breit wie das Fenster.
    Die beiden Karten, die das hier tragen, standen bis vor kurzem nebeneinander
    in einem Zwei-Spalten-Raster und waren für dessen halbe Breite gebaut; als
