@@ -4432,8 +4432,14 @@
           <div class="stabs" data-stab-home="nav.orders">
             <button class="stab active" id="st-orders-pack" data-i18n="orders.packTab" data-page-title>Packen</button>
             <button class="stab" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
-            <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
-            <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
+            <!-- Die nächsten zwei gehören zur Direktanbindung eines Shops und kommen
+                 erst, wenn es eine gibt (showOrderHubTabs). -->
+            <button class="stab" id="st-orders-mapping" style="display: none" data-i18n="orders.mapping">
+              Produkt-Zuordnung
+            </button>
+            <button class="stab" id="st-orders-customers" style="display: none" data-i18n="orders.customers">
+              Kunden
+            </button>
             <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versandetiketten</button>
           </div>
 
