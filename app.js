@@ -30131,19 +30131,21 @@ function labelWrap(text, fontW, breite, maxZeilen) {
 // maxZeilen, minH, kuerzbar }. Jede Zeile bekommt die Breite, die auf ihrer
 // Höhe frei ist, und steht 4 Punkte unter der vorigen — die Abstände, die das
 // Etikett immer hatte. Zurück kommen die Zeilen und die Unterkante der letzten.
+// Mit `feld` ({ x, w }) stehen die Zeilen in diesem Feld statt zwischen den
+// Rändern: so steht der Kommentar neben einem QR-Code.
 //
 // Mit minH ist der Absatz eine Nummer, und die liest man am besten in einem
 // Stück: sie wird erst kleiner, bis minH, solange sie dann in eine Zeile
 // passt. Passt sie auch so nicht, bekommt sie die größte Schrift, in der sie
 // in ihren Zeilen ganz dasteht — umbrochen, aber nicht auch noch winzig.
-function labelLines(absaetze, y, badge) {
+function labelLines(absaetze, y, badge, feld) {
   const items = [];
   let unten = y;
   for (const a of absaetze) {
     if (!a.text) continue;
     const setze = (h) => {
       const zeileY = (i) => y + i * (h + 4);
-      const breite = (i) => _lineBlockW(zeileY(i), h, badge);
+      const breite = (i) => (feld ? feld.w : _lineBlockW(zeileY(i), h, badge));
       const max = a.maxZeilen === undefined ? 1 : a.maxZeilen;
       return { h, zeileY, breite, zeilen: labelWrap(a.text, h, (i) => breite(i) - 6, max) };
     };
@@ -30162,7 +30164,7 @@ function labelLines(absaetze, y, badge) {
     satz.zeilen.forEach((text, i) => {
       const item = {
         type: 'text',
-        x: LABEL_RAND.seite,
+        x: feld ? feld.x : LABEL_RAND.seite,
         y: satz.zeileY(i),
         blockW: satz.breite(i),
         fontH: satz.h,
@@ -30179,15 +30181,22 @@ function labelLines(absaetze, y, badge) {
   return { items: items, unten: unten };
 }
 // Code und Zeilen zu einem Etikett. Passt der Text nicht unter den Code, wird
-// ein kürzbarer Absatz — die Angaben zur Sorte — eine Zeile kürzer, und seine
-// letzte endet mit "...". Reicht auch eine Zeile nicht (unter einem QR, neben
-// einer Kultur mit langer Herkunft), fällt er ganz weg. Die Nummer und das
-// Datum kürzt nichts.
+// ein kürzbarer Absatz eine Zeile kürzer, und seine letzte endet mit "...".
+// Reicht auch eine Zeile nicht (unter einem QR, neben einer Kultur mit langer
+// Herkunft), fällt er ganz weg. Die Nummer und das Datum kürzt nichts.
+//
+// Kürzbar sind die Angaben zur Sorte und der Kommentar darunter. Zuerst gibt
+// der untere nach, also der Kommentar: wovon der Beutel ist, zählt mehr als die
+// Anmerkung dazu. Neben einem QR-Code nimmt der Kommentar unten keinen Platz
+// weg (`neben`), dort gibt er auch nicht nach.
 function labelLayout(bcVal, qr, absaetze, badge) {
   let liste = absaetze;
   for (;;) {
     const versuch = qr ? _labelQr(bcVal, liste, badge) : _labelBarcode(bcVal, liste, badge);
-    const i = liste.findIndex((a) => a.kuerzbar && a.maxZeilen > 0);
+    let i = -1;
+    liste.forEach((a, j) => {
+      if (a.kuerzbar && a.maxZeilen > 0 && !(qr && a.neben)) i = j;
+    });
     if (versuch.passt || i < 0) return versuch.items;
     liste = liste.map((a, j) => (j === i ? Object.assign({}, a, { maxZeilen: a.maxZeilen - 1 }) : a));
   }
@@ -30213,10 +30222,37 @@ function _labelBarcode(bcVal, absaetze, badge) {
 }
 // QR oben links, mag 5 → 125 Punkte (25 Module), die Zeilen darunter über die
 // ganze Breite.
+//
+// Rechts neben dem Code ist das Etikett leer, und unter ihm reicht der Platz
+// gerade für Nummer, Sorte und Datum. Ein Absatz mit `neben` — der Kommentar —
+// steht deshalb dort, so viele Zeilen, wie neben den Code passen.
 function _labelQr(bcVal, absaetze, badge) {
   const code = { type: 'qr', x: LABEL_RAND.seite, y: LABEL_RAND.oben, size: 125, mag: 5, val: bcVal };
-  const text = labelLines(absaetze, code.y + code.size + 20, badge);
-  return { passt: text.unten <= labelDims.heightDots - LABEL_RAND.unten, items: [code].concat(text.items) };
+  const x = code.x + code.size + 12;
+  const feld = { x: x, w: labelDims.widthDots - LABEL_RAND.seite - x };
+  const neben = absaetze
+    .filter((a) => a.neben)
+    .map((a) => Object.assign({}, a, { maxZeilen: Math.floor((code.size + 4) / (a.fontH + 4)) }));
+  const seite = labelLines(neben, code.y, null, feld);
+  const text = labelLines(
+    absaetze.filter((a) => !a.neben),
+    code.y + code.size + 20,
+    badge
+  );
+  return {
+    passt: text.unten <= labelDims.heightDots - LABEL_RAND.unten,
+    items: [code].concat(seite.items, text.items)
+  };
+}
+// Der Kommentar als eigener Absatz, ganz unten auf dem Etikett: klein, bis zwei
+// Zeilen. Vorher standen seine ersten 13 Zeichen hinter der Sorte, und oft
+// nicht einmal die, weil die Zeile schon voll war. Ein Zeilenumbruch im
+// Kommentar wird ein Leerzeichen. Ohne Kommentar kommt nichts dazu.
+function labelNotiz(notes) {
+  const text = String(notes || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? [{ text: text, fontH: 20, maxZeilen: 2, kuerzbar: true, neben: true }] : [];
 }
 // Was auf dem Beutel steht, wenn man sein Gewicht draufschreibt: 1 → "1kg",
 // 2.5 → "2,5kg". Der Punkt ist eine Programmiersprache, das Etikett liest ein
@@ -30264,41 +30300,38 @@ function bagLabelItems(bagId, batch, detail, _legacyFallbackIds, qr, bagKg) {
   const items = _badge ? _badge.items.slice() : [];
   // Von oben nach unten: die Nummer des Beutels — lieber kleiner als
   // umbrochen, sie muss ganz dastehen —, die Angaben zur Sorte, bis zwei
-  // Zeilen, und bei "Vollständig" die Daten. Wo was steht, rechnet
+  // Zeilen, bei "Vollständig" die Daten, und der Kommentar. Wo was steht, rechnet
   // labelLayout() aus: QR oben links und der Text darunter, oder der
   // Strichcode oben und alles senkrecht mittig.
   const absaetze = [{ text: bagId, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }];
   if (detail === 'sorte' || detail === 'full') {
     const species = batch.strainName || batch.species || '';
     const strainTxt = (batch.strainText || '').trim();
-    const rawNotes = (batch.notes || '').trim();
-    const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
     const parts = [species];
     if (bagKg != null) parts.push(labelKg(bagKg));
     if (strainTxt) parts.push(strainTxt);
-    if (notes) parts.push(notes);
     absaetze.push({ text: parts.filter(Boolean).join(' \u2013 '), fontH: 24, maxZeilen: 2, kuerzbar: true });
   }
   if (detail === 'full' && batch.due) {
     const daten = (batch.created ? fmtDt(batch.created) + ' - ' : '') + fmtDt(batch.due);
     absaetze.push({ text: daten, fontH: qr ? 24 : 28, minH: 18, bold: true });
   }
+  // Zuletzt der Kommentar der Charge, als eigene Zeile ganz unten.
+  if (detail === 'sorte' || detail === 'full') absaetze.push(...labelNotiz(batch.notes));
   return items.concat(labelLayout(bcVal, qr, absaetze, _badge));
 }
 
 function labLabelItems(id, c, detail, qr) {
-  // Build info line matching batch label pattern: strainName – strainText – notes(13)
+  // Die Angaben wie beim Beutel: Sorte – Stamm. Der Kommentar steht nicht mehr
+  // in dieser Zeile, sondern ganz unten (labelNotiz).
   const species = c.strainName || c.species || '';
   const strainTxt = (c.strainText || '').trim();
-  const rawNotes = (c.notes || '').trim();
-  const notes = rawNotes.length > 13 ? rawNotes.slice(0, 13) + '\u2026' : rawNotes;
   const spParts = [species];
   // Die Größe gleich hinter der Sorte: beim Packen ist sie, was man sucht.
   if (c.type === 'SY') spParts.push(syMl(c) + ' ml');
   // Ein Beutel Dübel sieht aus wie jeder andere Beutel: das Wort sagt, was drin ist.
   if (c.type === 'DU') spParts.push(c.stueck ? t('label.duebelCa', { n: c.stueck }) : t('label.duebel'));
   if (strainTxt) spParts.push(strainTxt);
-  if (notes) spParts.push(notes);
   // Numeric barcode: lookup from registry, fall back to legacy encoding
   const numBc = barcodeByEntity.get('culture:' + id);
   const bcVal = numBc ? String(numBc) : id.replace(/-/g, '_');
@@ -30316,6 +30349,7 @@ function labLabelItems(id, c, detail, qr) {
   if (detail === 'full' && c.created) {
     absaetze.push({ text: fmtDt(c.created), fontH: qr ? 24 : 28, minH: 18, bold: true });
   }
+  if (detail === 'sorte' || detail === 'full') absaetze.push(...labelNotiz(c.notes));
   return labelLayout(bcVal, qr, absaetze, null);
 }
 
