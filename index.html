@@ -4332,7 +4332,6 @@
           <div class="stabs" data-stab-home="nav.orders">
             <button class="stab active" id="st-orders-pack" data-i18n="orders.packTab" data-page-title>Packen</button>
             <button class="stab" id="st-orders-inbox" data-i18n="orders.inbox">Eingang</button>
-            <button class="stab" id="st-orders-tomake" data-i18n="orders.tomake">Was muss ich machen</button>
             <button class="stab" id="st-orders-mapping" data-i18n="orders.mapping">Produkt-Zuordnung</button>
             <button class="stab" id="st-orders-customers" data-i18n="orders.customers">Kunden</button>
             <button class="stab" id="st-orders-versand" data-i18n="orders.versandTab">Versandetiketten</button>
@@ -4498,31 +4497,6 @@
                     </tr>
                   </thead>
                   <tbody id="orders-body" role="rowgroup"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- To-Make -->
-          <div class="sp" id="sp-orders-tomake">
-            <div class="card">
-              <div class="sec" data-i18n="orders.demandTitle">Netto-Produktionsbedarf</div>
-              <div class="muted fs-meta" style="margin-bottom: 8px" data-i18n="orders.demandHint">
-                Offene Bestellungen minus reserviert. „Start bis" = frühestes Lieferdatum minus Vorlaufzeit.
-              </div>
-              <div style="overflow-x: auto">
-                <table id="t-demand" class="t-cards" role="table">
-                  <thead role="rowgroup">
-                    <tr role="row">
-                      <th data-i18n="orders.th.product" role="columnheader">Produkt</th>
-                      <th data-i18n="orders.th.demand" role="columnheader">Bedarf</th>
-                      <th data-i18n="orders.th.fromStock" role="columnheader">vom Lager</th>
-                      <th data-i18n="orders.th.toProduce" role="columnheader">produzieren</th>
-                      <th data-i18n="orders.th.startBy" role="columnheader">Start bis</th>
-                      <th data-i18n="orders.th.components" role="columnheader">Komponenten</th>
-                    </tr>
-                  </thead>
-                  <tbody id="demand-body" role="rowgroup"></tbody>
                 </table>
               </div>
             </div>
