@@ -3508,6 +3508,29 @@ const MIGRATIONS = [
       const has = db.prepare("SELECT COUNT(*) AS c FROM pragma_table_info('cultures') WHERE name='research_at'").get();
       if (!has.c) db.exec('ALTER TABLE cultures ADD COLUMN research_at TEXT');
     }
+  },
+  {
+    version: 126,
+    description: 'Calciumhydroxid in Mischung und Ansatz, Calciumcarbonat in der Mischung, pH am Ansatz',
+    fn(db) {
+      const addCol = (table, col, decl) => {
+        const has = db.prepare(`SELECT COUNT(*) as c FROM pragma_table_info('${table}') WHERE name='${col}'`).get();
+        if (!has.c) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+      };
+      // Calciumhydroxid geht wie Gips und Calciumcarbonat obendrauf auf die
+      // Trockenmischung. Am Ansatz steht, was wirklich hineinkam; an der Mischung,
+      // was sie vorsieht.
+      addCol('substrate_batches', 'hydroxide_pct', 'REAL DEFAULT 0');
+      addCol('substrate_batches', 'hydroxide_kg', 'REAL DEFAULT 0');
+      addCol('recipes', 'hydroxide_pct', 'REAL DEFAULT 0');
+      // Eine gespeicherte Mischung kannte bisher kein Calciumcarbonat: wer sie
+      // speicherte, verlor es und musste es bei jedem Ansatz neu eintippen.
+      addCol('recipes', 'calcium_pct', 'REAL DEFAULT 0');
+      // Gemessen am fertig gemischten Substrat. NULL heisst: nicht gemessen. Der
+      // pH der Chargen (batches.ph) ist ein anderer: der wird beim Beimpfen
+      // gemessen, nach dem Sterilisieren.
+      addCol('substrate_batches', 'mix_ph', 'REAL');
+    }
   }
 ];
 // Setzt eine Migration, die Text aus der Datei holt; openDb leert dann das WAL,
@@ -5779,6 +5802,10 @@ function computeMixBatch(rec, targetKg, opts) {
   const gyp = num(rec.gypsumPct, 0) / 100;
   // Calciumcarbonat wie Gips: ein Anteil der Trockenmischung, obendrauf.
   const calc = num(rec.calciumPct, 0) / 100;
+  // Calciumhydroxid ebenso. Es hat keinen Bestand im Lager: es geht um Gramm,
+  // und ein Rohstoff ohne eingetragenen Bestand wuerde jeden Ansatz als
+  // "Lager reicht nicht" melden.
+  const hyd = num(rec.hydroxidePct, 0) / 100;
   const moist = num(rec.moisturePct, 0) / 100;
 
   // Pellets are the remainder so the shares can never total anything but
@@ -5802,11 +5829,11 @@ function computeMixBatch(rec, targetKg, opts) {
   // es R0.
   const Rbran = o.residualBranPct == null || o.residualBranPct === '' ? R0 : num(o.residualBranPct, R0 * 100) / 100;
   const R = R0 + bran * (Rbran - R0);
-  const denom = 1 + gyp + calc - R;
+  const denom = 1 + gyp + calc + hyd - R;
   if (!(denom > 0)) throw new Error('Restfeuchte zu hoch fuer dieses Rezept');
 
   const dryKg = (target * (1 - moist)) / denom;
-  const waterL = target - dryKg * (1 + gyp + calc);
+  const waterL = target - dryKg * (1 + gyp + calc + hyd);
   // Negative water means the delivery is already wetter than the recipe target.
   // Clamping silently would hand over a mix that cannot reach spec.
   if (waterL < 0) {
@@ -5825,6 +5852,7 @@ function computeMixBatch(rec, targetKg, opts) {
   const soyhullKg = dryKg * soy;
   const gypsumKg = dryKg * gyp;
   const calciumKg = dryKg * calc;
+  const hydroxideKg = dryKg * hyd;
 
   const deltas = [];
   const push = (mat, kg) => {
@@ -5846,6 +5874,7 @@ function computeMixBatch(rec, targetKg, opts) {
     soyhullKg,
     gypsumKg,
     calciumKg,
+    hydroxideKg,
     waterL,
     // What the mix will actually measure once the residual moisture is in it —
     // the figure to check the halogen analyser against, not the recipe target.
@@ -5863,6 +5892,7 @@ function computeMixBatch(rec, targetKg, opts) {
     soyhullPct: num(rec.soyhullPct, 0),
     gypsumPct: num(rec.gypsumPct, 0),
     calciumPct: num(rec.calciumPct, 0),
+    hydroxidePct: num(rec.hydroxidePct, 0),
     rhPct: num(rec.moisturePct, 0),
     deltas
   };
@@ -5888,7 +5918,7 @@ function mixWithOverride(recipe, ov) {
   if (!ov || typeof ov !== 'object') return { recipe, adjusted: false };
   const out = { ...recipe };
   let adjusted = false;
-  for (const k of ['branPct', 'cornPct', 'soyhullPct', 'gypsumPct', 'calciumPct', 'moisturePct']) {
+  for (const k of ['branPct', 'cornPct', 'soyhullPct', 'gypsumPct', 'calciumPct', 'hydroxidePct', 'moisturePct']) {
     const v = ov[k];
     if (v == null || !Number.isFinite(+v)) continue;
     if (Math.abs(+v - (+recipe[k] || 0)) < 1e-9) continue;
@@ -5948,6 +5978,8 @@ function getMixFromRecipe(db, recipeId) {
       cornPct: 0,
       soyhullPct: r.soyhull_pct || 0,
       gypsumPct: r.gypsum_pct || 0,
+      calciumPct: r.calcium_pct || 0,
+      hydroxidePct: r.hydroxide_pct || 0,
       moisturePct: r.rh_pct || 0
     },
     opts: {
@@ -5988,8 +6020,8 @@ function createSubstrateBatch(db, b, userId) {
           hardwood_pct, wheatbran_pct, corn_pct, gypsum_pct, rh_pct,
           dry_kg, pellets_kg, bran_kg, corn_kg, gypsum_kg, water_l, moisture_pct,
           notes, created, status, water_now_l, calcium_pct, calcium_kg, steri_min,
-          soyhull_pct, soyhull_kg)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?, ?, ?)`
+          soyhull_pct, soyhull_kg, hydroxide_pct, hydroxide_kg, mix_ph)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       b.subId,
       found.strainId != null ? found.strainId : null,
@@ -6015,7 +6047,10 @@ function createSubstrateBatch(db, b, userId) {
       mix.calciumKg,
       _steriMinOf(b.steriMin),
       mix.soyhullPct,
-      mix.soyhullKg
+      mix.soyhullKg,
+      mix.hydroxidePct,
+      mix.hydroxideKg,
+      _phOf(b.mixPh)
     );
     for (const d of mix.deltas) {
       applyInventoryDeltaNoTxn(db, d.mat, d.deltaKg, 'mix', b.subId, userId || null);
@@ -6033,8 +6068,9 @@ function createSubstrateBatch(db, b, userId) {
 // abweicht. Ohne das stuende in der Liste der Rezeptname ueber einer anderen
 // Mischung, und zwei Ansaetze, die sich nur im Calciumcarbonat oder im Gips
 // unterscheiden, saehen gleich aus — gerade die, die man vergleichen will.
-// Calciumcarbonat steht immer da, sobald welches drin ist: Rezepte kennen es
-// nicht, also ist es immer eine Angabe dieses einen Ansatzes.
+// Calciumcarbonat und Calciumhydroxid stehen da, sobald der Ansatz davon
+// anders nimmt als die Mischung vorsieht. Das Rezept einer Sorte kennt beide
+// nicht; dort ist jede Menge eine Angabe dieses einen Ansatzes.
 //
 // Hier und nur hier gebaut. Die Vorschau gibt denselben Namen zurueck, damit
 // Dialog, Formular und Liste nicht je ihre eigene Fassung pflegen.
@@ -6050,7 +6086,8 @@ function mixLabel(base, recipe, mix) {
   // Soja ist. Was sich an den Pellets mitaendert, folgt daraus.
   if (anders(mix.soyhullPct, r.soyhullPct)) teile.push('Soja ' + zahl(mix.soyhullPct) + ' %');
   if (anders(mix.gypsumPct, r.gypsumPct)) teile.push('Gips ' + zahl(mix.gypsumPct) + ' %');
-  if (mix.calciumPct > 0) teile.push('CaCO₃ ' + zahl(mix.calciumPct) + ' %');
+  if (anders(mix.calciumPct, r.calciumPct)) teile.push('CaCO₃ ' + zahl(mix.calciumPct) + ' %');
+  if (anders(mix.hydroxidePct, r.hydroxidePct)) teile.push('Ca(OH)₂ ' + zahl(mix.hydroxidePct) + ' %');
   if (anders(mix.rhPct, r.moisturePct)) teile.push(zahl(mix.rhPct) + ' % Feuchte');
   return (base || '') + teile.map((x) => ' · ' + x).join('');
 }
@@ -6089,6 +6126,7 @@ function _mapSubstrateRow(r) {
       soyhullPct: r.soyhull_pct || 0,
       gypsumPct: r.gypsum_pct,
       calciumPct: r.calcium_pct || 0,
+      hydroxidePct: r.hydroxide_pct || 0,
       rhPct: r.rh_pct
     },
     dryKg: r.dry_kg,
@@ -6098,6 +6136,10 @@ function _mapSubstrateRow(r) {
     soyhullKg: r.soyhull_kg || 0,
     gypsumKg: r.gypsum_kg,
     calciumKg: r.calcium_kg || 0,
+    hydroxideKg: r.hydroxide_kg || 0,
+    // Am gemischten Substrat gemessen, vor dem Sterilisieren. phAvg weiter unten
+    // ist der pH der Chargen beim Beimpfen, also danach.
+    mixPh: r.mix_ph == null ? null : r.mix_ph,
     steriMin: r.steri_min == null ? null : r.steri_min,
     // Der pH der Chargen aus diesem Ansatz, gemessen beim Beimpfen: Mittel und
     // wie viele gemessen haben. Neben steriMin die Antwort auf "was macht die
@@ -6224,7 +6266,7 @@ function waterFactorOf(r) {
   const a = r.actual_rh_pct / 100;
   const t = r.rh_pct / 100;
   if (!(W > 0) || !(r.water_l > 0) || !(r.dry_kg > 0) || !(a > 0 && a < 1) || !(t > 0 && t < 1)) return null;
-  const solids = r.dry_kg + (r.gypsum_kg || 0) + (r.calcium_kg || 0);
+  const solids = r.dry_kg + (r.gypsum_kg || 0) + (r.calcium_kg || 0) + (r.hydroxide_kg || 0);
   const ausMaterial = a * (solids + W) - W;
   const noetig = (t * solids - ausMaterial) / (1 - t);
   const f = noetig / r.water_l;
@@ -6236,7 +6278,8 @@ function waterFactorOf(r) {
 function learnedWaterFactor(db) {
   const rows = db
     .prepare(
-      `SELECT water_l, dry_kg, gypsum_kg, calcium_kg, rh_pct, actual_rh_pct, actual_water_l FROM substrate_batches
+      `SELECT water_l, dry_kg, gypsum_kg, calcium_kg, hydroxide_kg, rh_pct, actual_rh_pct, actual_water_l
+         FROM substrate_batches
         WHERE actual_water_l > 0 AND actual_rh_pct IS NOT NULL ORDER BY created DESC LIMIT 50`
     )
     .all();
@@ -6406,6 +6449,18 @@ function setSubstrateSteriMin(db, subId, minutes) {
   db.prepare('UPDATE substrate_batches SET steri_min=? WHERE sub_id=?').run(v, subId);
   incrementDataVersion(db);
   return { subId, steriMin: v };
+}
+
+// Der pH des gemischten Substrats, nachgetragen wie die Sterilisierzeit: gemessen
+// wird nach dem Mischen, angelegt wird der Ansatz davor. Leer setzt auf "nicht
+// gemessen" zurueck.
+function setSubstrateMixPh(db, subId, ph) {
+  const row = db.prepare('SELECT id FROM substrate_batches WHERE sub_id=?').get(subId);
+  if (!row) return null;
+  const v = _phOf(ph);
+  db.prepare('UPDATE substrate_batches SET mix_ph=? WHERE sub_id=?').run(v, subId);
+  incrementDataVersion(db);
+  return { subId, mixPh: v };
 }
 
 // Der Ansatz mit dem pH seiner Chargen. Nur gemessene Chargen gehen ein: eine
@@ -13955,7 +14010,9 @@ function getContaminationReport(db, groupBy, startDate, endDate) {
 function insertRecipe(db, r) {
   const res = db
     .prepare(
-      'INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created, soyhull_pct) VALUES(?,?,?,?,?,?,?,?)'
+      `INSERT INTO recipes(name, hardwood_pct, wheatbran_pct, gypsum_pct, rh_pct, notes, created, soyhull_pct,
+                           calcium_pct, hydroxide_pct)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       r.name,
@@ -13965,7 +14022,9 @@ function insertRecipe(db, r) {
       r.rh_pct || 0,
       r.notes || null,
       r.created || new Date().toISOString(),
-      r.soyhull_pct || 0
+      r.soyhull_pct || 0,
+      r.calcium_pct || 0,
+      r.hydroxide_pct || 0
     );
   incrementDataVersion(db);
   return res.lastInsertRowid;
@@ -13973,13 +14032,25 @@ function insertRecipe(db, r) {
 
 /** Update an existing recipe */
 function updateRecipe(db, id, fields) {
-  const allowed = ['name', 'hardwood_pct', 'wheatbran_pct', 'soyhull_pct', 'gypsum_pct', 'rh_pct', 'notes'];
+  const allowed = [
+    'name',
+    'hardwood_pct',
+    'wheatbran_pct',
+    'soyhull_pct',
+    'gypsum_pct',
+    'calcium_pct',
+    'hydroxide_pct',
+    'rh_pct',
+    'notes'
+  ];
   const colMap = {
     name: 'name',
     hardwood_pct: 'hardwood_pct',
     wheatbran_pct: 'wheatbran_pct',
     soyhull_pct: 'soyhull_pct',
     gypsum_pct: 'gypsum_pct',
+    calcium_pct: 'calcium_pct',
+    hydroxide_pct: 'hydroxide_pct',
     rh_pct: 'rh_pct',
     notes: 'notes'
   };
@@ -14004,28 +14075,9 @@ function deleteRecipe(db, id) {
   return info.changes > 0;
 }
 
-/** Get all recipes */
-function getAllRecipes(db) {
-  return db
-    .prepare('SELECT * FROM recipes ORDER BY name')
-    .all()
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      hardwoodPct: r.hardwood_pct,
-      wheatbranPct: r.wheatbran_pct,
-      soyhullPct: r.soyhull_pct || 0,
-      gypsumPct: r.gypsum_pct,
-      rhPct: r.rh_pct,
-      notes: r.notes,
-      created: r.created
-    }));
-}
-
-/** Get a single recipe by id */
-function getRecipeById(db, id) {
-  const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(id);
-  if (!r) return null;
+// Eine Mischung, wie die App sie liest. An einer Stelle, damit Liste und
+// Einzelabruf nicht auseinanderlaufen, sobald eine Spalte dazukommt.
+function _mapRecipeRow(r) {
   return {
     id: r.id,
     name: r.name,
@@ -14033,27 +14085,74 @@ function getRecipeById(db, id) {
     wheatbranPct: r.wheatbran_pct,
     soyhullPct: r.soyhull_pct || 0,
     gypsumPct: r.gypsum_pct,
+    calciumPct: r.calcium_pct || 0,
+    hydroxidePct: r.hydroxide_pct || 0,
     rhPct: r.rh_pct,
     notes: r.notes,
     created: r.created
   };
 }
 
+/** Get all recipes */
+function getAllRecipes(db) {
+  // Ohne Ruecksicht auf Gross und Klein, sonst steht "anzucht" hinter "Zucht".
+  return db.prepare('SELECT * FROM recipes ORDER BY name COLLATE NOCASE').all().map(_mapRecipeRow);
+}
+
+/** Get a single recipe by id */
+function getRecipeById(db, id) {
+  const r = db.prepare('SELECT * FROM recipes WHERE id=?').get(id);
+  return r ? _mapRecipeRow(r) : null;
+}
+
+// Der Name einer Mischung, geprueft: nicht leer, hoechstens 60 Zeichen, und
+// keine zweite Mischung heisst so. `ausser` ist die Mischung selbst, wenn sie
+// umbenannt wird.
+function _recipeNameOf(db, raw, ausser) {
+  const name = String(raw == null ? '' : raw)
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!name) throw new Error('Mischung: Bitte einen Namen eingeben.');
+  if (name.length > 60) throw new Error('Mischung: Der Name hat höchstens 60 Zeichen.');
+  // UNIQUE in der Tabelle unterscheidet Groß und Klein; zwei Mischungen, die
+  // sich nur darin unterscheiden, wären in der Auswahl nicht auseinanderzuhalten.
+  const da = db.prepare('SELECT id FROM recipes WHERE name = ? COLLATE NOCASE').get(name);
+  if (da && da.id !== ausser) throw new Error('Mischung: „' + name + '“ gibt es schon.');
+  return name;
+}
+
+// Eine Mischung umbenennen. Ansaetze, die schon nach ihr gemischt sind, behalten
+// den Namen, unter dem sie angesetzt wurden (recipe_label ist eine Abschrift).
+function renameMixRecipe(db, id, rawName) {
+  const r = db.prepare('SELECT id FROM recipes WHERE id=?').get(id);
+  if (!r) return null;
+  const name = _recipeNameOf(db, rawName, r.id);
+  db.prepare('UPDATE recipes SET name=? WHERE id=?').run(name, r.id);
+  incrementDataVersion(db);
+  return getRecipeById(db, r.id);
+}
+
+// Eine Mischung wieder entfernen: das Rueckgaengig nach dem Speichern. Haengt
+// ein Produkt an ihr, bleibt sie stehen, mit einem Satz statt eines SQL-Fehlers.
+function removeMixRecipe(db, id) {
+  if (db.prepare('SELECT 1 FROM product_components WHERE recipe_id=?').get(id)) {
+    throw new Error('Mischung: Sie wird von einem Produkt verwendet und bleibt deshalb.');
+  }
+  return deleteRecipe(db, id);
+}
+
 // Eine neue Mischung, so wie sie im Ansatz-Formular steht. Bisher ging das nur
 // über das MCP-Werkzeug; wer mit Sojaschalen mischen will, braucht die Mischung
 // aber dort, wo er mischt. Kleie und Sojaschalen sind Teil der Trockenmischung,
-// die Pellets der Rest; Gips kommt obendrauf. Calciumcarbonat gehört nicht dazu:
-// gespeicherte Mischungen kennen es nicht, es kommt je Ansatz dazu.
+// die Pellets der Rest; Gips, Calciumcarbonat und Calciumhydroxid kommen obendrauf.
+// Gespeichert wird die ganze Mischung: wer sie später wählt, bekommt dieselben
+// Zahlen wieder, statt den Kalk bei jedem Ansatz neu einzutippen.
 //
 // Dieselben Grenzen wie das Formular (validateMixOverride im Server), dazu die
 // Soll-Feuchte als Pflicht: ohne sie lässt sich mit der Mischung nicht rechnen.
 function createMixRecipe(db, d) {
   const o = d || {};
-  const name = String(o.name == null ? '' : o.name)
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!name) throw new Error('Mischung: Bitte einen Namen eingeben.');
-  if (name.length > 60) throw new Error('Mischung: Der Name hat höchstens 60 Zeichen.');
+  const name = _recipeNameOf(db, o.name, null);
   const anteil = (v, feld, lo, hi) => {
     const n = v == null || v === '' ? 0 : Number(v);
     if (!Number.isFinite(n) || n < lo || n > hi) {
@@ -14064,19 +14163,18 @@ function createMixRecipe(db, d) {
   const bran = anteil(o.wheatbranPct, 'Weizenkleie', 0, 95);
   const soy = anteil(o.soyhullPct, 'Sojaschalen', 0, 95);
   const gyp = anteil(o.gypsumPct, 'Gips', 0, 20);
+  const calc = anteil(o.calciumPct, 'Calciumcarbonat', 0, 20);
+  const hyd = anteil(o.hydroxidePct, 'Calciumhydroxid', 0, 20);
   const rh = anteil(o.rhPct, 'Soll-Feuchte', 20, 90);
   if (bran + soy >= 100) throw new Error('Mischung: Weizenkleie und Sojaschalen lassen keinen Platz für Pellets.');
-  // UNIQUE in der Tabelle unterscheidet Groß und Klein; zwei Mischungen, die
-  // sich nur darin unterscheiden, wären in der Auswahl nicht auseinanderzuhalten.
-  if (db.prepare('SELECT 1 FROM recipes WHERE name = ? COLLATE NOCASE').get(name)) {
-    throw new Error('Mischung: „' + name + '“ gibt es schon.');
-  }
   const id = insertRecipe(db, {
     name,
     hardwood_pct: 100 - bran - soy,
     wheatbran_pct: bran,
     soyhull_pct: soy,
     gypsum_pct: gyp,
+    calcium_pct: calc,
+    hydroxide_pct: hyd,
     rh_pct: rh
   });
   return getRecipeById(db, Number(id));
@@ -17444,6 +17542,7 @@ module.exports = {
   setSubstrateNotes,
   setSubstrateBurstBags,
   setSubstrateSteriMin,
+  setSubstrateMixPh,
   writeOffSubstrateBatch,
   deleteSubstrateBatch,
   createBagBatchFromSubstrate,
@@ -17673,6 +17772,8 @@ module.exports = {
   getAllRecipes,
   getRecipeById,
   createMixRecipe,
+  renameMixRecipe,
+  removeMixRecipe,
   traceLineageBack,
   traceLineageForward,
   getProductionPipeline,

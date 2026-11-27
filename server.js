@@ -965,6 +965,7 @@ function validateMixOverride(mix) {
     soyhullPct: { min: 0, max: 95 },
     gypsumPct: { min: 0, max: 20 },
     calciumPct: { min: 0, max: 20 },
+    hydroxidePct: { min: 0, max: 20 },
     moisturePct: { min: 20, max: 90 }
   });
 }
@@ -8978,6 +8979,49 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
     });
     return;
   }
+  // Eine Mischung umbenennen. Nur ein Admin, wie beim Anlegen. Ansätze, die
+  // schon nach ihr gemischt sind, behalten ihren Namen.
+  const recipeNameMatch = req.url.match(/^\/api\/recipes\/(\d+)\/name$/);
+  if (req.method === 'POST' && recipeNameMatch) {
+    if (requireAdmin(req, res)) return;
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.renameMixRecipe(database, Number(recipeNameMatch[1]), data && data.name);
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        log('info', 'Mix recipe renamed', { actor: req.authUser.username, id: r.id });
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // Eine Mischung wieder entfernen: das Rückgängig nach dem Speichern.
+  const recipeDelMatch = req.url.match(/^\/api\/recipes\/(\d+)$/);
+  if (req.method === 'DELETE' && recipeDelMatch) {
+    if (requireAdmin(req, res)) return;
+    try {
+      const ok = db.removeMixRecipe(database, Number(recipeDelMatch[1]));
+      if (!ok) {
+        jsonErr(res, 404, 'not found');
+        return;
+      }
+      log('info', 'Mix recipe removed', { actor: req.authUser.username, id: Number(recipeDelMatch[1]) });
+      broadcastSSE(res);
+      jsonOk(res);
+    } catch (err) {
+      safeErr(res, err);
+    }
+    return;
+  }
   // Restfeuchte der Sackware (Pellets, Kleie). Lesen darf jeder, der ansetzt;
   // ändern nur ein Admin, weil es das Wasser jedes künftigen Ansatzes ändert.
   if (req.method === 'GET' && req.url === '/api/substrate-moisture') {
@@ -9162,6 +9206,33 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px;text-align:center}
           database,
           decodeURIComponent(subSteriMatch[1]),
           data && 'steriMin' in data ? data.steriMin : null
+        );
+        if (!r) {
+          jsonErr(res, 404, 'not found');
+          return;
+        }
+        broadcastSSE(res);
+        jsonOk(res, r);
+      } catch (err) {
+        safeErr(res, err);
+      }
+    });
+    return;
+  }
+  // pH des gemischten Substrats nachtragen. Leer setzt auf "nicht gemessen"
+  // zurück; die Grenzen prüft die DB-Schicht.
+  const subPhMatch = req.url.match(/^\/api\/substrate-batches\/([^/?]+)\/ph$/);
+  if (req.method === 'POST' && subPhMatch) {
+    jsonBody(req, res, (e, data) => {
+      if (e) {
+        jsonErr(res, 400, e.message);
+        return;
+      }
+      try {
+        const r = db.setSubstrateMixPh(
+          database,
+          decodeURIComponent(subPhMatch[1]),
+          data && 'mixPh' in data ? data.mixPh : null
         );
         if (!r) {
           jsonErr(res, 404, 'not found');
