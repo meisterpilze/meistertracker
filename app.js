@@ -37810,6 +37810,29 @@ function _camScharfLesen() {
   };
   proto._mtScharf = true;
 }
+// Was die Kamera sucht: was die App druckt (QR, Code 128), das GLS-Etikett
+// (DataMatrix, ITF) und EAN-13, damit ein Produkt-Strichcode noch "kein
+// Etikett von hier" bekommt. Jede Art kostet je Bild Zeit; ohne Liste suchte
+// sie siebzehn, und die gründliche Suche (_camGruendlich) wäre langsam.
+function _camFormate() {
+  const F = window.Html5QrcodeSupportedFormats;
+  return F ? [F.QR_CODE, F.CODE_128, F.DATA_MATRIX, F.ITF, F.EAN_13] : undefined;
+}
+// Der eigene Leser von html5-qrcode (ZXing, auf dem iPhone der einzige) lief
+// mit TRY_HARDER aus: ein Strichcode wurde nur auf 15 Zeilen um die Mitte des
+// Kastens gesucht und nie quer, also nur, wenn er genau mittig und waagrecht
+// lag. Jetzt sucht er jede Zeile und dreht das Bild, wenn er nichts findet.
+// Wo der Leser des Telefons liest, las ZXing dazu jedes zweite Bild mit
+// (getDecoder wechselt ab), langsamer und schlechter: da liest jetzt nur der
+// des Telefons.
+const ZXING_TRY_HARDER = 3; // DecodeHintType.TRY_HARDER der mitgelieferten ZXing
+function _camGruendlich(scanner) {
+  const q = scanner && scanner.qrcode;
+  if (!q || !q.primaryDecoder) return;
+  q.secondaryDecoder = null;
+  const hints = q.primaryDecoder.hints;
+  if (hints instanceof Map) hints.set(ZXING_TRY_HARDER, true);
+}
 // Nach jedem Treffer liest die Kamera kurz nicht (pause), dann geht es weiter.
 // Früher hielt pause(true) auch das Video an, und html5-qrcode liest erst
 // wieder, wenn das Video danach "playing" meldet. Auf manchem Telefon kam das
@@ -37918,13 +37941,20 @@ function openCamScan() {
     return;
   }
   _camScharfLesen();
-  _camScanner = new Html5Qrcode('cam-reader', { useBarCodeDetectorIfSupported: _camNativ, verbose: false });
+  _camScanner = new Html5Qrcode('cam-reader', {
+    formatsToSupport: _camFormate(),
+    useBarCodeDetectorIfSupported: _camNativ,
+    verbose: false
+  });
+  _camGruendlich(_camScanner);
   const scanner = _camScanner;
   scanner
     .start(
       { facingMode: _camFacingMode },
       {
-        fps: 10,
+        // Wie oft je Sekunde gelesen wird, mit der Pause dazwischen; ein Bild
+        // zu lesen dauert selbst schon, darum 15 statt 10.
+        fps: 15,
         qrbox: function (vw, vh) {
           // Wide-short rectangle — fits 1D barcodes (EAN/Code128) without clipping,
           // and QR codes still sit comfortably inside the width. Bumped from
