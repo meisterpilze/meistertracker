@@ -37,7 +37,6 @@ function rig(scanLog) {
     };
     const updateSD = () => {};
     const renderBatches = () => {};
-    const renderStatus = () => {};
     const renderDashBatchTasks = () => {};
     const flashUndoBar = () => {};
     const t = (k) => k;

@@ -58,11 +58,6 @@ describe('app.js: values in inline handlers and bag lists', () => {
     assert.doesNotMatch(APP, /JSON\.stringify\([^)]*\)\.replace\(\/"\/g, '&quot;'\)/);
   });
 
-  it('escapes the bag number in the location chips', () => {
-    assert.equal(APP.includes("${bg.id.split('-').pop()}"), false);
-    assert.ok(APP.includes("${esc(bg.id.split('-').pop())}"));
-  });
-
   it('escapes the times in the week and day views', () => {
     assert.doesNotMatch(APP, /\+\s*e\.startTime\s*\+/);
     assert.doesNotMatch(APP, /' — ' \+ e\.endTime\b/);

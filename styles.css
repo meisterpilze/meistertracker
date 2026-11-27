@@ -4700,188 +4700,6 @@ tr:hover td {
   font-style: italic;
 }
 
-/* ═══ DASHBOARD LOCATION OVERVIEW ══════════════════════════════ */
-.location-section {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 14px;
-  box-shadow: var(--shadow);
-}
-.location-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  cursor: pointer;
-  user-select: none;
-  /* Sie klappt eine ganze Ortsgruppe auf und zu, ist also ein Bedienelement
-     und kein Titel — mit 21 px war sie auf beiden Achsen unter der Marke, mit
-     der Maus unter 24 und mit dem Finger unter 44. Die Marke kommt aus dem
-     Token, damit sie der Eingabeachse folgt und nicht einer Breite. */
-  min-height: var(--tap-sm);
-}
-.location-section.collapsed .location-section-header {
-  margin-bottom: 0;
-}
-.location-section-body {
-  overflow: hidden;
-  transition: max-height 0.25s ease;
-}
-.location-section.collapsed .location-section-body {
-  max-height: 0 !important;
-  margin-top: 0;
-}
-.location-section-toggle {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-  color: var(--c-text-muted);
-}
-.location-section.collapsed .location-section-toggle {
-  transform: rotate(-90deg);
-}
-.location-section-title {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--c-text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.location-section-title .zone-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.location-section-count {
-  font-size: max(0.75rem, var(--fs-min));
-  color: var(--c-text-muted);
-  font-weight: 500;
-}
-.rack-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-.rack-grid.rack-grid-5col {
-  grid-template-columns: repeat(5, 1fr);
-}
-.rack-card-new {
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  padding: 14px;
-  background: var(--c-surface);
-  transition:
-    background-color 0.15s,
-    box-shadow 0.15s;
-}
-@media (hover: hover) {
-  .rack-card-new:hover {
-    background: var(--c-bg);
-    box-shadow: var(--shadow);
-  }
-}
-.rack-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.rack-card-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--c-text);
-}
-.rack-card-count {
-  font-size: max(0.75rem, var(--fs-min));
-  color: var(--c-text-muted);
-  font-weight: 500;
-}
-.rack-card-bar {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--c-border-light);
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-.rack-card-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-.rack-card-batches {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.batch-card {
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border-light);
-  border-left: 3px solid var(--c-border-light);
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-@media (hover: hover) {
-  .batch-card:hover {
-    border-color: var(--c-border);
-    box-shadow: var(--shadow);
-  }
-}
-/* Late is the word and the edge, not the whole card: when most Chargen are
-   late, a wall of pink said nothing about any of them. */
-.batch-card.batch-overdue {
-  border-left-color: var(--c-red);
-  background: var(--c-surface);
-}
-.batch-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: max(0.75rem, var(--fs-min));
-}
-.batch-card-species {
-  font-weight: 600;
-  color: var(--c-text);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.batch-card-count {
-  font-size: max(0.6875rem, var(--fs-min));
-  color: var(--c-text-muted);
-  font-weight: 500;
-}
-.batch-card-meta {
-  font-size: max(0.6875rem, var(--fs-min));
-  color: var(--c-text-muted);
-  margin-top: 3px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.batch-card-meta .overdue-text {
-  color: #b91c1c;
-  font-weight: 600;
-}
-.batch-card-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-  display: none;
-}
-.batch-card.expanded .batch-card-chips {
-  display: flex;
-}
 .bag-chip {
   font-size: max(0.6875rem, var(--fs-min));
   font-family: var(--ff-mono);
@@ -4901,59 +4719,6 @@ tr:hover td {
   background: #1a1a1a;
   color: #fff;
   border-color: #1a1a1a;
-}
-.tent-columns {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-.tent-column {
-  min-height: 80px;
-}
-.tent-column-header {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--c-text);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.tent-column-empty {
-  font-size: max(0.75rem, var(--fs-min));
-  color: var(--c-text-muted);
-  font-style: italic;
-  text-align: center;
-  padding: 20px 10px;
-  border: 1px dashed var(--c-border);
-  border-radius: var(--radius-sm);
-}
-.contam-section {
-  border-color: #fecaca;
-  background: #fff5f5;
-}
-.contam-section .location-section-title {
-  color: #b91c1c;
-}
-.action-bar-sticky {
-  position: sticky;
-  bottom: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  margin-top: 10px;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
-}
-.action-bar-sticky .action-bar-count {
-  font-size: max(0.75rem, var(--fs-min));
-  font-weight: 600;
-  color: var(--c-text);
 }
 /* ═══ OVERVIEW PERIOD TOGGLE ════════════════════════════════════ */
 /* The period pills and the CSV button. Wrapping is not decoration: measured at
@@ -5010,30 +4775,6 @@ tr:hover td {
   background: var(--c-surface);
   color: var(--c-text);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* ═══ LOCATIONS HEADER + INLINE SEARCH ═════════════════════════ */
-.dash-locations-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.dash-search-inline {
-  width: 200px;
-  font-size: max(0.75rem, var(--fs-min));
-  padding: 6px 10px;
-  border: 2px solid var(--c-border-strong, #94a3b8);
-  border-radius: var(--radius-sm);
-  background: var(--c-surface);
-  color: var(--c-text);
-  font-family: inherit;
-  transition: border-color 0.15s;
-}
-.dash-search-inline:focus {
-  outline: none;
-  border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
 }
 
 /* ═══ SUPPLY LIGHT ═══════════════════════════════════════════════
@@ -5571,7 +5312,7 @@ button.lb-st {
   column-gap: 8px;
   align-items: center;
 }
-/* The Sorte's colour as a stripe in front of its name; see .wk-zchip .zone-dot. */
+/* The Sorte's colour as a stripe in front of its name. */
 .sl-name .sp-dot {
   width: 4px;
   height: auto;
@@ -7184,12 +6925,6 @@ body:has(#m-camscan.open) .update-bar {
   margin-left: 2px;
 }
 
-/* Über der Grenze: schraffiert statt nur rot. Rot war schon dreimal vergeben,
-   und eine Schraffur liest auch, wer Farben schlecht unterscheidet. */
-.kap-voll {
-  background-image: repeating-linear-gradient(45deg, rgb(255 255 255 / 0.5) 0 3px, rgb(255 255 255 / 0) 3px 6px);
-}
-
 .dash-top-row {
   display: flex;
   gap: 10px;
@@ -7219,12 +6954,6 @@ body:has(#m-camscan.open) .update-bar {
   .g4,
   .g6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .rack-grid.rack-grid-5col {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .tent-columns {
-    grid-template-columns: repeat(2, 1fr);
   }
   .scan-modal {
     width: 90vw;
@@ -7390,12 +7119,6 @@ body:has(#m-camscan.open) .update-bar {
     flex-direction: column;
     align-items: stretch;
   }
-  .rack-grid.rack-grid-5col {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .tent-columns {
-    grid-template-columns: 1fr;
-  }
   .modal {
     width: 96%;
   }
@@ -7417,9 +7140,6 @@ body:has(#m-camscan.open) .update-bar {
   }
 }
 @media (max-width: 480px) {
-  .dash-search-inline {
-    width: 140px;
-  }
   .card {
     border-radius: var(--radius-sm);
   }
@@ -8277,14 +7997,9 @@ body:has(#m-camscan.open) .update-bar {
      So this stops enumerating components. 347 buttons render on a phone;
      this moves 12 of them, and every one it moves was under the floor or
      (three calendar buttons) at the universal 44px minimum rather than
-     the 48px §9 chose for Büro work. Nothing already above it changes.
-
-     A <div> with an onclick is a control the markup does not declare, so
-     no selector can find it in general. .location-section-header is the
-     one this app has. */
+     the 48px §9 chose for Büro work. Nothing already above it changes. */
   button,
-  [role='button'],
-  .location-section-header {
+  [role='button'] {
     min-height: var(--tap-sm-min);
   }
   /* min-height alone makes a taller box with the label at the top of it
@@ -12906,55 +12621,6 @@ button.wk-an-zeile:active {
   flex: 1 1 140px;
 }
 
-/* How many Chargen of a closed room are late, in the heading beside its count. */
-.location-section-late {
-  margin-left: auto;
-  color: var(--rot);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.location-section-late + .location-section-count {
-  margin-left: 12px;
-}
-/* In a hand the late count is a line of its own under the room's name: beside
-   it, name, count, bags and the button were four things in one narrow row. */
-@media (max-width: 768px) {
-  .location-section-header:has(.location-section-late) {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-  .location-section-title {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .location-section-late {
-    order: 5;
-    flex-basis: 100%;
-    margin-left: 0;
-    padding-left: 34px;
-  }
-  .location-section-late + .location-section-count {
-    margin-left: 0;
-  }
-}
-
-/* One rack that holds the room: its Chargen in as many columns as fit. */
-.rack-grid.rack-grid-1 {
-  grid-template-columns: minmax(0, 1fr);
-}
-.rack-grid-1 .rack-card-batches {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 6px;
-  align-items: start;
-}
-.rack-empty-line {
-  margin-top: 10px;
-  color: var(--c-text-sec);
-  font-size: var(--fs-sm);
-}
-
 /* Heute packen, on a wide desk: the parcels two abreast in the order of the
    list, so a full day is half as long to scroll. Parcels that go out together
    keep the full width of their frame. */
@@ -13198,11 +12864,6 @@ button.wk-an-zeile:active {
 .brett-feld select {
   min-height: var(--tap-sm, 48px);
 }
-.rack-card-bretter {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 .brett-zeile {
   display: flex;
   align-items: center;
@@ -13233,10 +12894,6 @@ button.wk-an-zeile:active {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.brett-zeile-ohne {
-  margin-bottom: 8px;
-  border-style: dashed;
 }
 .brett-chip {
   border-radius: 7px;
