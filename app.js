@@ -1783,6 +1783,7 @@ function go(page, btnId) {
   }
   if (page === 'inv') {
     renderInvStock();
+    renderSuppliers();
     renderShelf();
   }
   if (page === 'zones') renderZones();
@@ -1885,7 +1886,10 @@ function openStab(page, sub) {
   }
   if (page === 'lab' && sub === 'lineage') fillLineageSelect();
   if (page === 'lab' && sub === 'contam') renderContamReports();
-  if (page === 'inv' && sub === 'stock') renderInvStock();
+  if (page === 'inv' && sub === 'stock') {
+    renderInvStock();
+    renderSuppliers();
+  }
   if (page === 'inv' && sub === 'delivery') {
     delMatChange();
     adjMatChange();
@@ -2149,6 +2153,7 @@ function refresh() {
   }
   if (id === 'inv') {
     renderInvStock();
+    renderSuppliers();
     renderShelf();
   }
   if (id === 'zones') renderZones();
@@ -39113,15 +39118,12 @@ function initEventListeners() {
   $('st-inv-stock').addEventListener('click', () => {
     openStab('inv', 'stock');
   });
-  $('st-inv-delivery').addEventListener('click', () => {
-    openStab('inv', 'delivery');
-  });
+  // Lieferung erfassen: ein Leitknopf auf Rohstoffe, und aus dem Formular ein
+  // Knopf zurück. Kein Reiter, denn es legt etwas an.
+  $('btn-inv-delivery').addEventListener('click', () => openStab('inv', 'delivery'));
+  $('btn-inv-delivery-back').addEventListener('click', () => openStab('inv', 'stock'));
   $('st-inv-log').addEventListener('click', () => {
     openStab('inv', 'log');
-  });
-  $('st-inv-suppliers').addEventListener('click', () => {
-    openStab('inv', 'suppliers');
-    renderSuppliers();
   });
   $('del-mat').addEventListener('change', delMatChange);
   $('del-kg').addEventListener('input', delPreview);

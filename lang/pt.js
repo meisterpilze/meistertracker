@@ -2730,6 +2730,7 @@ window.LANG['pt'] = {
   'inv.shortageTitle': 'Stock insuficiente',
   'inv.shortageProceed': 'Continuar mesmo assim? (Estoque será limitado a 0; a quantidade em falta não é registrada.)',
   'inv.alertBelow': 'Alerta abaixo de {n}kg',
+  'inv.backToStock': 'Voltar às matérias-primas',
   'inv.logDelivery': '+ Registar entrega',
   'inv.grainBagsEst': '\u2248 {n} sacos de gr\u00e3os @ {kg}kg cada',
   'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg blocos',

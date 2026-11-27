@@ -2737,6 +2737,7 @@ window.LANG['de'] = {
   'inv.shortageTitle': 'Bestand reicht nicht',
   'inv.shortageProceed': 'Trotzdem fortfahren? (Bestand wird auf 0 gekappt; die fehlende Menge wird nicht erfasst.)',
   'inv.alertBelow': 'Alarm unter {n}kg',
+  'inv.backToStock': 'Zurück zu Rohstoffe',
   'inv.logDelivery': '+ Lieferung erfassen',
   'inv.grainBagsEst': '\u2248 {n} Getreidebeutel \u00e0 {kg}kg',
   'inv.blocksEst': '\u2248 {n} \u00d7 {kg}kg Bl\u00f6cke',
