@@ -401,6 +401,9 @@ let barcodeRegistry = new Map(),
 let alteEtiketten = new Map();
 // Regal: fertige Ware, eine Zahl je Artikel (renderShelf)
 let shelfItems = [];
+// Ob ein Shop direkt angebunden ist oder es Produkte oder Kunden gibt
+// (db.orderHubInUse); davon hängt ab, ob Bestellungen zwei Ansichten zeigt.
+let orderHubInUse = false;
 // Regalbretter (v122): was der Server von selbst ausgebucht hat und noch keiner
 // beantwortet hat, wer wann "Noch da" sagte (Beutel → Zeit), und die Fristen,
 // nach denen der Server rechnet (siehe REGALBRETTER).
@@ -604,6 +607,43 @@ function showAdminNav() {
   if (btn && currentUser && currentUser.role === 'admin') btn.style.display = '';
 }
 
+// Produkt-Zuordnung und Kunden gehören zur Direktanbindung eines Shops. Wer
+// seine Bestellungen über Billbee bekommt, hat weder Produkte noch Kunden in
+// der App, und die zwei Ansichten sind Listen, die leer bleiben. Sie stehen im
+// Markup mit display:none und kommen, sobald der Server sagt, dass es etwas
+// für sie gibt. Weggenommen ist nichts: sobald ein Shop unter Admin › Kanäle
+// eingeschaltet wird, sind beide da.
+//
+// Reiter und Eintrag in der Liste zusammen, wie bei showAdminSubTab(). Und wer
+// auf einer der beiden stand, steht auf Packen: sonst zeigte die Seite eine
+// Ansicht, die in keiner Liste mehr vorkommt.
+const ORDER_HUB_TABS = ['mapping', 'customers'];
+function showOrderHubTabs() {
+  for (const sub of ORDER_HUB_TABS) {
+    for (const id of ['st-orders-' + sub, 'sn-orders-' + sub]) {
+      const btn = document.getElementById(id);
+      if (btn) btn.style.display = orderHubInUse ? '' : 'none';
+    }
+  }
+  if (orderHubInUse) return;
+  const offen = document.querySelector('#p-orders > .stabs .stab.active');
+  const sub = offen ? offen.id.slice('st-orders-'.length) : '';
+  if (!ORDER_HUB_TABS.includes(sub)) return;
+  const seite = document.getElementById('p-orders');
+  if (seite && seite.classList.contains('active')) {
+    openStab('orders', 'pack');
+    return;
+  }
+  // Die Seite ist zu: nur die Marke umsetzen. openStab() schriebe den Titel
+  // von Bestellungen über die Seite, die gerade offen ist.
+  for (const pre of ['st', 'sp', 'sn']) {
+    const alt = document.getElementById(pre + '-orders-' + sub);
+    if (alt) alt.classList.remove('active');
+    const neu = document.getElementById(pre + '-orders-pack');
+    if (neu) neu.classList.add('active');
+  }
+}
+
 // MCP, camera and server are admin-only sub-tabs, and every sub-tab now carries
 // two buttons: one in the strip, one in the sidebar list. Reveal them together —
 // a half-shown pair is a sub-tab reachable from one layout but not the other.
@@ -724,6 +764,8 @@ function applyData(d) {
   rhythmTasks = d.rhythmTasks || [];
   recurringTasks = d.recurringTasks || [];
   shelfItems = d.shelf || [];
+  orderHubInUse = !!d.orderHub;
+  showOrderHubTabs();
   autoBookouts = d.autoBookouts || [];
   stillThere = d.stillThere || {};
   brettFragen = new Map((Array.isArray(d.brettFragen) ? d.brettFragen : []).map((f) => [f.bag, f]));
@@ -2243,7 +2285,10 @@ function renderOrders() {
     .then((d) => {
       const items = d.items || [];
       const banner = $('orders-unmapped-banner');
-      if (banner) banner.style.display = items.length ? 'flex' : 'none';
+      // Der Hinweis führt zur Produkt-Zuordnung. Ohne Direktanbindung ist jede
+      // Zeile einer Billbee-Bestellung "nicht zugeordnet", und der Hinweis
+      // stünde immer da und führte in eine Ansicht, die es dann nicht gibt.
+      if (banner) banner.style.display = items.length && orderHubInUse ? 'flex' : 'none';
       const cnt = $('orders-unmapped-count');
       if (cnt) cnt.textContent = items.length;
     })
@@ -2266,7 +2311,7 @@ function _renderOrdersInbox() {
         `<tr data-find="order:${esc(o.channelOrderId)}"><td data-mlabel="${esc(t('orders.th.channel'))}">${_ohChannel(o.channel)}</td>` +
         `<td class="fs-xs" data-mlabel="${esc(t('orders.th.order'))}" style="font-family:monospace">${esc(o.channelOrderId)}</td>` +
         `<td data-mlabel="${esc(t('orders.th.customer'))}">${esc(o.customerName || '—')}</td>` +
-        `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
+        `<td data-mlabel="${esc(t('orders.th.items'))}">${o.itemCount || 0}${o.unmappedCount && orderHubInUse ? ` <span class="oh-warn" title="${esc(t('orders.unmappedLines'))}">⚠︎</span>` : ''}</td>` +
         `<td class="fs-xs" data-mlabel="${esc(t('orders.th.shipBy'))}">${o.shipBy ? esc(fmtDt(o.shipBy)) : '—'}</td>` +
         `<td data-mlabel="${esc(t('orders.th.status'))}">${_ohStatus(o.status)}</td></tr>`
     )

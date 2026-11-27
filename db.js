@@ -4684,6 +4684,9 @@ function readAll(db, opts = {}) {
     // Was fertig im Regal steht: eine Zahl je Artikel. Der Scanner braucht sie
     // sofort, wenn ein Regal-Etikett gelesen wird.
     shelf: listShelfItems(db),
+    // Ob Produkt-Zuordnung und Kunden etwas zu zeigen haben (orderHubInUse): die
+    // Seite Bestellungen blendet beide aus, solange nicht.
+    orderHub: orderHubInUse(db),
     experiments: listExperiments(db),
     workPackages: listWorkPackages(db),
     // Forschungsproben samt Weitergaben: der Scanner oeffnet eine Probe sofort.
@@ -15638,6 +15641,25 @@ function getChannelConfig(db, channel) {
     lastError: r.last_error || null
   };
 }
+// Is the order hub in use? It is the part of Bestellungen that only works with
+// a shop connected directly: products that channel articles are mapped to, and
+// customers the direct connections bring in. An installation that takes its
+// orders in through Billbee has neither, and the two views for them
+// (Produkt-Zuordnung, Kunden) are lists that stay empty.
+//
+// In use means: a direct channel is switched on, or there is something in
+// either table already. Switched on is enough, connected is not asked for:
+// the mapping is prepared before the first order arrives. And data that
+// exists is never hidden, whatever the switches say.
+//
+// Reads only. It goes out with every /api/data, and getChannelConfig() writes
+// the row it does not find.
+function orderHubInUse(db) {
+  const on = db.prepare("SELECT 1 FROM sales_channel_config WHERE channel != 'billbee' AND enabled = 1 LIMIT 1").get();
+  if (on) return true;
+  if (db.prepare('SELECT 1 FROM products LIMIT 1').get()) return true;
+  return !!db.prepare('SELECT 1 FROM customers LIMIT 1').get();
+}
 // Client-facing list — secrets are reduced to "is set" flags, never exposed.
 //
 // This is also where the Billbee-supersedes rule is decided, once, because the
@@ -17422,6 +17444,7 @@ module.exports = {
   undoShippingLabelScan,
   getChannelConfig,
   listChannelConfigs,
+  orderHubInUse,
   updateChannelConfig,
   setChannelSyncState,
   syringeStockSyncEnabled,
