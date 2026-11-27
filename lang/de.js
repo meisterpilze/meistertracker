@@ -1415,7 +1415,6 @@ window.LANG['de'] = {
   'batch.noLocations': 'Keine Standorte konfiguriert',
   'batch.strainLabel': 'Stamm',
   'batch.strainPlaceholder': 'z.B. XY-1, Nordlicht\u2026',
-  'batch.whereGo': 'Wohin kommen diese Beutel?',
   'batch.whereGoInfo': '{id} \u2014 {n} Beutel ben\u00f6tigen einen Startstandort.',
   'batch.zones.rename': 'Umbenennen',
   'batch.zones.renamePrompt': 'Neuer Anzeigename f\u00fcr \u201e{old}\u201c:',
@@ -2060,9 +2059,6 @@ window.LANG['de'] = {
   'batchAddModal.location': 'Standort / Regal',
   'batchAddModal.addAll': 'Alle Beutel hinzuf\u00fcgen',
   // Move-bag modal
-  'locmove.bag': 'Beutel',
-  'locmove.moveTo': 'Umziehen nach:',
-  'locmove.removeBag': 'Diesen Beutel entfernen',
   // Users / account settings
   'users.account': 'Konto',
   'users.logout': 'Abmelden',

@@ -11714,7 +11714,6 @@ function locMoveTo(toLoc) {
   });
   lastLocUndoEntries = entries;
   selectedLocBags.clear();
-  document.getElementById('m-locmove').classList.remove('open');
   postScanEntries(entries); // I-12 zone check applies: these are MOVEs
   updateSD();
   renderBatches();
@@ -12153,7 +12152,6 @@ async function locRemoveSelected() {
   });
   lastLocUndoEntries = entries;
   selectedLocBags.clear();
-  document.getElementById('m-locmove').classList.remove('open');
   apiPost('/api/scan-log', { entries }).then(function (r) {
     if (r && r.ids)
       entries.forEach((e, i) => {
@@ -37295,7 +37293,6 @@ document.addEventListener('keydown', function (e) {
     'm-camscan',
     'm-cal-entry',
     'm-cal-detail',
-    'm-locmove',
     'm-bagselect',
     'm-baginfo',
     'm-addbags',
@@ -38097,12 +38094,6 @@ function initEventListeners() {
   $('ba-loc').addEventListener('change', baPreview);
   $('cls-7').addEventListener('click', closeBatchAdd);
   $('act-8').addEventListener('click', confirmBatchAdd);
-  $('m-locmove').addEventListener('click', function (e) {
-    if (e.target === this) this.classList.remove('open');
-  });
-  $('cls-9').addEventListener('click', () => {
-    document.getElementById('m-locmove').classList.remove('open');
-  });
   // Move-batch modal
   $('mb-cancel-btn').addEventListener('click', () => {
     if (_zpMandatory()) return;
@@ -38111,7 +38102,6 @@ function initEventListeners() {
   $('m-move-batch').addEventListener('click', function (e) {
     if (e.target === this && !_zpMandatory()) this.classList.remove('open');
   });
-  $('btn-10').addEventListener('click', locRemoveSelected);
   $('cls-11').addEventListener('click', () => {
     document.getElementById('m-baginfo').classList.remove('open');
   });

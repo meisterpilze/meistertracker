@@ -1410,7 +1410,6 @@ window.LANG['en'] = {
   'batch.noLocations': 'No locations configured',
   'batch.strainLabel': 'Strain designation',
   'batch.strainPlaceholder': 'e.g. XY-1, Nordlicht…',
-  'batch.whereGo': 'Where do these bags go?',
   'batch.whereGoInfo': '{id} — {n} bags need a starting location.',
   'batch.zones.rename': 'Rename',
   'batch.zones.renamePrompt': 'New display name for "{old}":',
@@ -2050,9 +2049,6 @@ window.LANG['en'] = {
   'batchAddModal.location': 'Location / rack',
   'batchAddModal.addAll': 'Add all bags',
   // Move-bag modal
-  'locmove.bag': 'Bag',
-  'locmove.moveTo': 'Move to:',
-  'locmove.removeBag': 'Remove this bag',
   // Users / account settings
   'users.account': 'Account',
   'users.logout': 'Logout',
