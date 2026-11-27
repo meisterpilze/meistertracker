@@ -34,7 +34,8 @@ const FUNKTIONEN = [
   'labelLines',
   'labelLayout',
   '_labelBarcode',
-  '_labelQr'
+  '_labelQr',
+  'labelNotiz'
 ];
 const runter = (src) => src.match(/^const LABEL_RUNTER = \d+;$/m)[0];
 // Die Rolle: 57 × 32 mm, und die Ränder, in denen nichts steht.
@@ -225,10 +226,23 @@ function pruefe(items, name, nummern) {
   const code = items.find((i) => i.type === 'barcode' || i.type === 'qr');
   assert.ok(code, name + ': kein Code');
   const zaehler = items.find((i) => i.type === 'text' && /^\/\d+$/.test(i.text));
-  const zeilen = texte(items)
-    .filter((i) => i !== zaehler)
+  // Neben einem QR-Code steht der Kommentar; alles andere steht unter dem Code.
+  const istNeben = (i) => code.type === 'qr' && i !== zaehler && i.x >= code.x + code.size;
+  const neben = texte(items)
+    .filter(istNeben)
     .sort((a, b) => a.y - b.y);
-  for (const z of zeilen.concat(zaehler ? [zaehler] : [])) {
+  const zeilen = texte(items)
+    .filter((i) => i !== zaehler && !istNeben(i))
+    .sort((a, b) => a.y - b.y);
+  // Neben dem Code: nicht höher und nicht tiefer als er, und keine Zeile auf
+  // der anderen.
+  let nebenOben = code.y;
+  for (const z of neben) {
+    assert.ok(z.y >= nebenOben, name + ': "' + z.text + '" überdeckt die Zeile darüber, neben dem Code');
+    nebenOben = z.y + z.fontH;
+  }
+  if (neben.length) assert.ok(nebenOben <= code.y + code.size, name + ': Kommentar reicht unter den Code');
+  for (const z of zeilen.concat(neben, zaehler ? [zaehler] : [])) {
     const breite = mcp.labelTextW(z.text, z.fontH);
     assert.ok(breite <= z.blockW - 6, name + ': "' + z.text + '" braucht ' + breite + ' von ' + z.blockW);
   }
@@ -315,6 +329,125 @@ describe('Keine Zeile läuft über, keine überdeckt eine andere', () => {
         assert.ok(zpl.includes('^FO' + z.x + ',' + (z.y + 5) + '^FB'), datei + ': ' + z.text);
     }
   });
+});
+
+// Der Kommentar einer Charge oder Kultur stand mit seinen ersten 13 Zeichen
+// hinter der Sorte, und oft nicht einmal das, weil die Zeile voll war. Er hat
+// jetzt seinen eigenen Platz: ganz unten, unter einem QR-Code daneben.
+describe('Der Kommentar steht unten auf dem Etikett', () => {
+  const KURZ = 'Testnotiz: zweite Runde';
+  const LANG =
+    'Testnotiz, die so lang ist, dass sie auch in zwei Zeilen nicht ganz auf das Etikett passt und gekürzt wird';
+  const mit = (charge, notes) => Object.assign({}, charge, { notes });
+  const unterDemCode = (items) =>
+    texte(items)
+      .filter((i) => !/^\/\d+$/.test(i.text))
+      .sort((a, b) => a.y - b.y);
+
+  for (const [datei, d] of Object.entries(DRUCKER)) {
+    it(datei + ': als eigene, letzte Zeile, ganz und nicht mehr hinter der Sorte', () => {
+      for (const detail of ['sorte', 'full']) {
+        const items = d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, KURZ), detail, false, 2.5);
+        const zeilen = unterDemCode(items);
+        const letzte = zeilen[zeilen.length - 1];
+        assert.equal(letzte.text, KURZ, detail);
+        assert.equal(letzte.fontH, 20, 'kleiner als die Angaben darüber');
+        assert.equal(zeilen.filter((z) => z.text.includes('Testnotiz')).length, 1, 'nur einmal');
+        assert.ok(
+          zeilen.some((z) => z.text === 'Blue Oyster - 2,5kg'),
+          'die Sorte steht ohne den Kommentar da'
+        );
+        pruefe(items, datei + ' ' + detail + ' Kommentar', ['BO-280926-01-01']);
+      }
+    });
+
+    it(datei + ': unter dem Datum, wenn eines dasteht', () => {
+      const zeilen = unterDemCode(d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, KURZ), 'full', false, 2.5));
+      const datum = zeilen.findIndex((z) => /12\.10\.2026|12\.10\.26/.test(z.text));
+      assert.ok(datum >= 0, 'kein Datum: ' + zeilen.map((z) => z.text).join(' | '));
+      assert.equal(datum, zeilen.length - 2);
+    });
+
+    it(datei + ': bis zwei Zeilen, dann drei Punkte', () => {
+      const items = d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, LANG), 'sorte', false, 2.5);
+      const notiz = unterDemCode(items).filter((z) => z.fontH === 20);
+      assert.equal(notiz.length, 2);
+      assert.ok(notiz[0].text.startsWith('Testnotiz, die so lang ist'));
+      assert.ok(notiz[1].text.endsWith('...'), notiz[1].text);
+      pruefe(items, datei + ' langer Kommentar', ['BO-280926-01-01']);
+    });
+
+    it(datei + ': nicht auf dem Etikett, das nur Code und Nummer trägt, und nicht ohne Kommentar', () => {
+      const nur = d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, KURZ), 'minimal', false, 2.5);
+      assert.ok(!texte(nur).some((z) => z.text.includes('Testnotiz')));
+      for (const leer of ['', '   ', null, undefined]) {
+        assert.deepEqual(
+          d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, leer), 'sorte', false, 2.5),
+          d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, ''), 'sorte', false, 2.5)
+        );
+      }
+    });
+
+    it(datei + ': ein Zeilenumbruch im Kommentar wird ein Leerzeichen', () => {
+      const items = d.beutel(
+        'BO-280926-01-01',
+        mit(CHARGEN.kurz.charge, 'Testnotiz\n  zweite\tRunde'),
+        'sorte',
+        false,
+        2.5
+      );
+      assert.ok(texte(items).some((z) => z.text === 'Testnotiz zweite Runde'));
+      assert.doesNotMatch(d.zpl(items), /[\n\t]\S*Runde/);
+    });
+
+    it(datei + ': er gibt als Erster nach, die Angaben zur Sorte bleiben', () => {
+      // Lange Nummer, lange Angaben, Datum: für den Kommentar bleibt eine Zeile
+      // oder keine. Was über ihm steht, ist dasselbe wie ohne ihn.
+      const { id, charge } = CHARGEN.lang;
+      const ohne = unterDemCode(d.beutel(id, mit(charge, ''), 'full', false, 2.5));
+      const items = d.beutel(id, mit(charge, LANG), 'full', false, 2.5);
+      const zeilen = unterDemCode(items);
+      assert.deepEqual(
+        zeilen.slice(0, ohne.length).map((z) => z.text),
+        ohne.map((z) => z.text)
+      );
+      const notiz = zeilen.slice(ohne.length);
+      assert.ok(notiz.length <= 2 && notiz.every((z) => z.fontH === 20), notiz.length + ' Zeilen Kommentar');
+      pruefe(items, datei + ' alles lang', [id]);
+    });
+
+    it(datei + ': neben dem QR-Code, weil darunter kein Platz mehr ist', () => {
+      const ohne = d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, ''), 'full', true, 2.5);
+      const items = d.beutel('BO-280926-01-01', mit(CHARGEN.kurz.charge, LANG), 'full', true, 2.5);
+      const qr = items.find((i) => i.type === 'qr');
+      const neben = texte(items).filter((z) => !/^\/\d+$/.test(z.text) && z.x >= qr.x + qr.size);
+      assert.ok(neben.length >= 2 && neben.length <= 5, neben.length + ' Zeilen');
+      assert.ok(neben[0].text.startsWith('Testnotiz'));
+      assert.ok(neben.every((z) => z.fontH === 20 && z.x + z.blockW <= W - RAND.seite));
+      // Unter dem Code steht dasselbe wie ohne Kommentar, an derselben Stelle.
+      assert.deepEqual(
+        items.filter((i) => !neben.includes(i)),
+        ohne
+      );
+      pruefe(items, datei + ' QR Kommentar', ['BO-280926-01-01']);
+    });
+
+    it(datei + ': auf dem Etikett einer Kultur ebenso', () => {
+      const c = { strainName: 'Lions Mane', strainText: 'LQ', notes: KURZ, created: '2026-09-20' };
+      for (const detail of ['sorte', 'full']) {
+        const items = d.kultur('MC-LM-200926-01', c, detail, false);
+        const zeilen = unterDemCode(items);
+        assert.equal(zeilen[zeilen.length - 1].text, KURZ, detail);
+        assert.ok(zeilen.some((z) => z.text === 'Lions Mane - LQ'));
+        pruefe(items, datei + ' Kultur ' + detail, ['MC-LM-200926-01']);
+      }
+      const nur = d.kultur('MC-LM-200926-01', c, 'minimal', false);
+      assert.ok(!texte(nur).some((z) => z.text.includes('Testnotiz')));
+      const qr = d.kultur('MC-LM-200926-01', c, 'full', true);
+      const code = qr.find((i) => i.type === 'qr');
+      assert.ok(texte(qr).some((z) => z.text === KURZ && z.x >= code.x + code.size));
+    });
+  }
 });
 
 describe('app.js und mcp-server.js messen und umbrechen gleich', () => {

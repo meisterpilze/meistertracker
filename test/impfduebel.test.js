@@ -114,6 +114,7 @@ describe('Impfdübel: das Etikett', () => {
       const barcodeByEntity = new Map();
       const fmtDt = () => '';
       const labelLayout = (bc, qr, a) => fang(a);
+      const labelNotiz = () => [];
       ${hebe('labLabelItems')}
       labLabelItems(c.id, c, 'sorte', false);
     `

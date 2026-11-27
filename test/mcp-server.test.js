@@ -899,12 +899,13 @@ describe('MCP label printing', () => {
       for (const teil of ['Pleurotus ostreatus HK35', 'HK35', 'Test batch']) assert.ok(info.includes(teil), info);
     });
 
-    it('full: adds due date line', () => {
+    it('full: adds due date line, and the comment below it', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'full', 42, false);
-      const dueLine = items[items.length - 1];
+      const dueLine = items[items.length - 2];
       assert.equal(dueLine.bold, true);
       assert.ok(dueLine.text.includes('22.03.2025'));
       assert.equal(items.filter((i) => i.bold).length, 1);
+      assert.equal(items[items.length - 1].text, 'Test batch', 'the comment is the last line');
     });
 
     it('uses barcodeNum as barcode value when provided', () => {
@@ -925,19 +926,37 @@ describe('MCP label printing', () => {
       assert.equal(items[0].x, 20, 'inside the side margin');
     });
 
-    it('with QR: text centered full-width below QR', () => {
+    it('with QR: text centered full-width below QR, the comment beside it', () => {
       const items = bagLabelItems('FB-2025-001-01', batch, 'sorte', 42, true);
-      for (const it of items.filter((i) => i.type === 'text')) {
+      const qr = items[0];
+      const below = items.filter((i) => i.type === 'text' && i.y >= qr.y + qr.size);
+      assert.ok(below.length >= 2);
+      for (const it of below) {
         assert.equal(it.x, 20, 'text starts at the side margin');
         assert.equal(it.blockW, 416, 'text width must be 456 minus both margins');
       }
+      // Below the code there is room for ID, species and date only; the space
+      // to its right was empty.
+      const beside = items.filter((i) => i.type === 'text' && i.y < qr.y + qr.size);
+      assert.deepEqual(
+        beside.map((i) => [i.text, i.x, i.blockW]),
+        [['Test batch', 157, 279]]
+      );
     });
 
-    it('truncates long notes to 13 chars + ellipsis', () => {
+    it('prints a long comment on its own lines at the bottom, shortened with three dots', () => {
       // Three dots, not the ellipsis character: font 0 has no glyph for it.
-      const longBatch = { ...batch, notes: 'This is a very long note that should be truncated' };
+      // The comment used to be cut to 13 characters behind the species.
+      const longBatch = {
+        ...batch,
+        notes: 'This is a very long note that does not fit on two lines of the label and has to be shortened at the end'
+      };
       const items = bagLabelItems('FB-2025-001-01', longBatch, 'sorte', 42, false);
-      assert.ok(infoText(items).endsWith('This is a ver...'), infoText(items));
+      const lines = items.filter((i) => i.type === 'text').map((i) => i.text);
+      const note = lines.slice(-2);
+      assert.ok(note[0].startsWith('This is a very long note'), note[0]);
+      assert.ok(note[1].endsWith('...'), note[1]);
+      assert.ok(!lines.slice(0, -2).join(' ').includes('This is'), 'not behind the species any more');
     });
 
     it('omits due date line when batch.due is null', () => {
@@ -988,11 +1007,12 @@ describe('MCP label printing', () => {
       for (const teil of ['Pleurotus ostreatus HK35', 'XY-1', 'Test note']) assert.ok(info.includes(teil), info);
     });
 
-    it('full: adds created date line', () => {
+    it('full: adds created date line, and the comment below it', () => {
       const items = labLabelItems('PD-001', culture, 'full', 55, false);
-      const dateLine = items[items.length - 1];
+      const dateLine = items[items.length - 2];
       assert.equal(dateLine.bold, true);
       assert.equal(dateLine.text, '01.02.25');
+      assert.equal(items[items.length - 1].text, 'Test note');
     });
 
     it('full without species: date one line below the ID', () => {
@@ -1159,18 +1179,21 @@ describe('MCP label printing', () => {
       // Barcode: ^BY{mw},2.0,90^BCN,90,N,N,N^FD100^FS
       const expectedBc = bcParams('100');
       assert.ok(
-        mcpZpl.includes('^FO' + expectedBc.x + ',43^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD100^FS'),
+        mcpZpl.includes('^FO' + expectedBc.x + ',31^BY' + expectedBc.mw + ',2.0,90^BCN,90,N,N,N^FD100^FS'),
         'barcode command must match frontend format'
       );
 
       // Text line 1: bagId
       assert.ok(mcpZpl.includes('^FDFB-2025-001-01^FS'), 'bag ID text');
 
-      // Text line 2: species, with a hyphen the printer's font actually has
-      assert.ok(mcpZpl.includes('^FDPleurotus ostreatus HK35 - Test^FS'), 'species line');
+      // Text line 2: species, without the comment that used to trail it
+      assert.ok(mcpZpl.includes('^FDPleurotus ostreatus HK35^FS'), 'species line');
 
       // Text line 3: due date (bold = doubled)
       assert.ok(mcpZpl.includes('^FDF\u00e4llig: 22.03.2025^FS'), 'due date line');
+
+      // Text line 4: the comment, a line of its own at the bottom
+      assert.ok(mcpZpl.indexOf('^FDTest^FS') > mcpZpl.indexOf('22.03.2025'), 'comment line');
 
       assert.ok(mcpZpl.endsWith('^XZ'), 'footer');
     });
@@ -1191,11 +1214,11 @@ describe('MCP label printing', () => {
 
       // Structural checks
       assert.ok(mcpZpl.startsWith('^XA^PW456^LL256'), 'header');
-      // The species line needs two lines here. On the 57 x 32 mm roll the
-      // barcode still keeps its full 90 dots (on 50 x 30 mm it had to give up
-      // height), laid out at y=24 and printed 5 dots lower.
+      // Four lines of text: ID, species, date, comment. On the 57 x 32 mm roll
+      // the barcode still keeps its full 90 dots (on 50 x 30 mm it had to give
+      // up height), laid out at y=26 and printed 5 dots lower.
       const expectedBc = bcParams('200');
-      const bc = mcpZpl.match(/\^FO(\d+),29\^BY(\d),2\.0,(\d+)\^BCN,(\d+),N,N,N\^FD200\^FS/);
+      const bc = mcpZpl.match(/\^FO(\d+),31\^BY(\d),2\.0,(\d+)\^BCN,(\d+),N,N,N\^FD200\^FS/);
       assert.ok(bc, 'barcode command');
       assert.equal(Number(bc[1]), expectedBc.x);
       assert.equal(Number(bc[2]), expectedBc.mw);
