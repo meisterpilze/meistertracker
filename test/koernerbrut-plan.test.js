@@ -327,10 +327,11 @@ describe('Körnerbrut-Plan: die Seite', () => {
     assert.match(SRC, /if \(i\.auto\) return t\('lb\.sollAuto'/);
   });
 
-  it('die Karte steht auf der Laborseite, wird mitgezeichnet und öffnet die Art', () => {
-    assert.ok(HTML.includes('id="kbp-card"') && HTML.includes('id="kbp-rows"'));
-    assert.match(hebeFunktion('renderLabStock', SRC), /renderKbPlan\(species\)/);
-    assert.match(SRC, /\$\('kbp-rows'\)\.addEventListener\('click'/);
+  it('die Zeilen stehen im Bedarf, werden mit dem Laborbestand gezeichnet und öffnen die Art', () => {
+    assert.ok(HTML.includes('id="bd-list"') && !HTML.includes('id="kbp-card"'));
+    assert.match(hebeFunktion('renderLabStock', SRC), /if \(bedarfOffen\(\)\) renderBedarf\(\);/);
+    assert.match(hebeFunktion('bedarfZeilen', SRC), /_kbpZeilen\(species\)/);
+    assert.match(hebeFunktion('bedarfKlick', SRC), /else if \(d\.bdArtKb\) kbpOeffnen\(Number\(d\.bdArtKb\)\);/);
     assert.match(hebeFunktion('kbpOeffnen', SRC), /_lbSheet\.sollOffen = 'GSKG'/);
   });
 

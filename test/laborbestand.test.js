@@ -280,7 +280,8 @@ function seite(species, extra = '') {
     '_lbKurz',
     '_lbLang',
     '_lbChip',
-    'renderNachproduzieren',
+    'renderLabBedarf',
+    'bedarfOffen',
     'renderWorkNachproduzieren',
     '_lbStat',
     '_lbStatCls',
@@ -288,15 +289,12 @@ function seite(species, extra = '') {
     '_lfCls',
     '_lfLang',
     '_lbZeile',
-    // Körnerbrut pro Woche (v123): renderLabStock zeichnet die Karte mit.
     '_kbpZeilen',
     '_kbpAltText',
-    '_kbpZeile',
-    'renderKbPlan',
     'renderLabStock',
     'buildLabMinTasks'
   ];
-  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbZahl', '_kbZahl', 'NP_ZEIGEN'];
+  const consts = ['_lbSpecies', '_lbFehlt', '_lbDringend', '_lbZahl', '_kbZahl'];
   const code =
     consts.map((n) => APP.match(new RegExp('^const ' + n + ' = .*;$', 'm'))[0]).join('\n') +
     '\n' +
@@ -309,7 +307,7 @@ function seite(species, extra = '') {
     'fmtDtShort',
     'fmtKg',
     `let _lbData = ${JSON.stringify({ enabled: true, species })};
-    let _npAlle = false;
+    const tp = (k, n) => t(k + (n === 1 ? '.one' : '.other'), { n });
     let _lbRuhenOffen = false;
     ${code}
     renderLabStock();
@@ -417,34 +415,24 @@ describe('Laborbestand: die Liste je Sorte', () => {
   });
 });
 
-describe('Laborbestand: Nachproduzieren je Sorte', () => {
+// Was fehlt, steht im Bedarf (test/bedarf.test.js). Auf der Laborseite bleibt
+// eine Zeile, die sagt, bei wie vielen Sorten, und dorthin führt.
+describe('Laborbestand: die Zeile zum Bedarf', () => {
   it('ist weg, solange nichts fehlt', () => {
-    assert.equal(seite([art(1, 'Testart Alpha', { PD: { have: 3 } })]).els['np-card'].hidden, true);
+    assert.equal(seite([art(1, 'Testart Alpha', { PD: { have: 3 } })]).els['lb-bedarf'].hidden, true);
   });
 
-  it('je Sorte, was ihr fehlt, als Stichworte; rot zuerst; ein Knopf je Sorte', () => {
-    const { els } = seite([
-      art(1, 'Testart Alpha', { MC: { make: 2, urgency: 'low' }, LC: { make: 1, urgency: 'low' } }),
+  it('sagt, bei wie vielen Sorten etwas fehlt, und ist rot, wenn eine Bestellung wartet', () => {
+    const gelb = seite([art(1, 'Testart Alpha', { MC: { make: 2, urgency: 'low' } })]).els['lb-bedarf'];
+    assert.equal(gelb.hidden, false);
+    assert.equal(gelb.textContent, 'lb.bedarf.one{"n":1}');
+    assert.equal(gelb.klassen.has('wk-np-now'), false);
+    const rot = seite([
+      art(1, 'Testart Alpha', { MC: { make: 2, urgency: 'low' } }),
       art(2, 'Testart Beta', { SY10: { ordered: 1, make: 1, urgency: 'now' } })
-    ]);
-    const h = els['np-rows'].innerHTML;
-    assert.ok(
-      h.indexOf('Testart Beta') < h.indexOf('Testart Alpha'),
-      'eine Bestellung, die nicht rausgeht, steht oben'
-    );
-    assert.match(h, /np-chip np-now">lb\.chip\.SY\{"n":1,"ml":10\}/);
-    assert.match(
-      h,
-      /np-chip np-low">lb\.chip\.MC\{"n":"2"\}<\/span><span class="np-chip np-low">lb\.chip\.LC\{"n":"1"\}/
-    );
-    assert.match(h, /data-np-strain="1">np\.go</);
-  });
-
-  it('zeigt sechs Sorten und den Rest auf einen Tipp', () => {
-    const viele = Array.from({ length: 8 }, (_, i) => art(i + 1, 'Testart ' + i, { PD: { make: 1, urgency: 'low' } }));
-    const h = seite(viele).els['np-rows'].innerHTML;
-    assert.equal((h.match(/class="np-row"/g) || []).length, 6);
-    assert.match(h, /data-np-more>np\.more\{"n":2\}/);
+    ]).els['lb-bedarf'];
+    assert.equal(rot.textContent, 'lb.bedarf.other{"n":2}');
+    assert.equal(rot.klassen.has('wk-np-now'), true);
   });
 
   it('in Arbeitsgänge oben nur, was rot ist', () => {
@@ -588,8 +576,8 @@ describe('Laborbestand: wo es steht', () => {
   // Navigation stehen, begann jede unter denselben zwei Karten, und die gewählte
   // erst Bildschirme weiter unten. Jetzt sind die zwei eine eigene Ansicht, die
   // erste, auf der die Seite aufgeht: der Anfang bleibt der Bestand.
-  it('die zwei Karten sind die Ansicht "Bestand", die erste und die, auf der das Labor aufgeht; die Kacheln sind weg', () => {
-    const np = HTML.indexOf('id="np-card"');
+  it('die Zeile zum Bedarf und der Bestand sind die Ansicht "Bestand", die erste und die, auf der das Labor aufgeht; die Kacheln sind weg', () => {
+    const np = HTML.indexOf('id="lb-bedarf"');
     const lb = HTML.indexOf('id="lb-card"');
     const reiter = HTML.indexOf('<div class="stabs" data-stab-home="nav.lab">');
     const ansicht = HTML.indexOf('<div class="sp active" id="sp-lab-stock">');
@@ -600,11 +588,18 @@ describe('Laborbestand: wo es steht', () => {
     assert.equal((leiste.match(/class="stab active"/g) || []).length, 1);
     assert.equal(HTML.indexOf('id="dash-lab-stock"'), -1);
     assert.equal(HTML.indexOf('id="vb-card"'), -1);
+    // Nachproduzieren und Körnerbrut pro Woche stehen im Bedarf.
+    assert.equal(HTML.indexOf('id="np-card"'), -1);
+    assert.equal(HTML.indexOf('id="kbp-card"'), -1);
   });
 
-  it('der Hinweis "unter Labor-Minimum" öffnet die Ansicht Bestand, nicht die zuletzt gewählte', () => {
-    const i = APP.indexOf("$('wk-np').addEventListener");
-    assert.match(APP.slice(i, i + 300), /go\('lab', 'n-lab'\);\s*openStab\('lab', 'stock'\);/);
+  it('der Hinweis oben in Arbeitsgänge und die Zeile über dem Bestand öffnen den Bedarf', () => {
+    for (const id of ['wk-np', 'lb-bedarf']) {
+      assert.ok(
+        APP.includes("$('" + id + "').addEventListener('click', () => go('bedarf', 'n-bedarf'));"),
+        id + ' führt nicht zum Bedarf'
+      );
+    }
   });
 
   it('ein Tipp in der Glocke öffnet die Sorte', () => {
