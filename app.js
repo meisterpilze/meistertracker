@@ -1961,7 +1961,6 @@ function openStab(page, sub) {
   if (page === 'settings' && sub === 'backup') loadUsbBackup();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
   if (page === 'settings' && sub === 'harvestfeed') loadHarvestFeedSettings();
-  if (page === 'settings' && sub === 'pickuplocations') renderPickupLocations();
   if (page === 'settings' && sub === 'versand') loadShipSettings();
   if (page === 'settings' && sub === 'channels') loadChannelsSettings();
   if (page === 'settings' && sub === 'mcp') loadMcpSettings();
@@ -2933,11 +2932,23 @@ function _pickupWhen(p) {
 // screen full of finished collections is the state this switch exists to end.
 let pickupsPast = false;
 
+// Abholorte, unten auf der Seite Abholungen: nur für Admins, denn nur sie
+// dürfen sie ändern (POST und DELETE /api/pickup-locations). Die Karte steht
+// mit display:none im Markup; wer kein Admin ist, bekommt sie nie zu sehen,
+// statt einer Liste mit Knöpfen, die der Server ablehnt.
+function showPickupLocations() {
+  const card = document.getElementById('pickuploc-card');
+  if (!card) return;
+  const admin = !!currentUser && currentUser.role === 'admin';
+  card.style.display = admin ? '' : 'none';
+  if (admin) renderPickupLocations();
+}
 function renderPickups() {
   // The upper half of the page. Not awaited: the two halves come from different
   // routes and neither needs the other, so making the bookings wait on the
   // release table would only add a stall to the half people open this page for.
   loadHarvestReleases();
+  showPickupLocations();
 
   const body = $('pickups-body');
   if (!body) return;
@@ -38995,11 +39006,6 @@ function initEventListeners() {
   // calling it here as well would fetch the config twice on every click.
   $('st-settings-harvestfeed').addEventListener('click', () => {
     openStab('settings', 'harvestfeed');
-  });
-  // openStab() renders this sub-tab itself; a second call here would rebuild the
-  // table twice on every click.
-  $('st-settings-pickuplocations').addEventListener('click', () => {
-    openStab('settings', 'pickuplocations');
   });
   $('pickuploc-add-btn').addEventListener('click', () => editPickupLocation());
   $('st-settings-printer').addEventListener('click', () => {

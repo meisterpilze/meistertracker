@@ -369,7 +369,6 @@ window.LANG['pt'] = {
   'pickups.confirmed': 'Confirmado',
   'pickups.pending': 'Ainda não confirmado',
   // Locais de levantamento (Definições)
-  'settings.tabPickupLocations': 'Locais de levantamento',
   'pickupLoc.title': 'Locais de levantamento',
   'pickupLoc.desc':
     'Locais onde a mercadoria é entregue — o armazém, uma banca de mercado, um segundo sítio. Uma marcação no calendário escolhe um destes em vez de ter o local escrito no título: escrito à mão, mais cedo ou mais tarde aparece uma segunda grafia, e quem lê o nome lá fora passa a ver dois mercados. O nome sai com o feed de colheita; a morada não.',
@@ -1204,7 +1203,7 @@ window.LANG['pt'] = {
   'harvestFeed.packBad': 'Uma quantidade é um número inteiro de gramas entre 25 e 25000.',
   'harvestFeed.site': 'Nome desta quinta no feed (opcional)',
   'harvestFeed.siteHint':
-    'Só é preciso quando várias quintas enviam para o mesmo destinatário: segue em cada mensagem e diz quem a enviou. Não é um local de levantamento — onde a mercadoria é entregue fica em Admin → Locais de levantamento e escolhe-se na entrada do calendário. O destinatário compara este texto literalmente, por isso alterá-lo altera uma chave do outro lado.',
+    'Só é preciso quando várias quintas enviam para o mesmo destinatário: segue em cada mensagem e diz quem a enviou. Não é um local de levantamento — onde a mercadoria é entregue fica em Levantamentos → Locais de levantamento e escolhe-se na entrada do calendário. O destinatário compara este texto literalmente, por isso alterá-lo altera uma chave do outro lado.',
   'harvestFeed.sitePh': 'p. ex. quinta-norte',
   'harvestFeed.saveHint': 'Os três cartões são uma só definição e são guardados em conjunto.',
   'harvestFeed.testNow': 'Enviar um agora',
