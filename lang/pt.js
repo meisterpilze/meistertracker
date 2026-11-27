@@ -2058,6 +2058,7 @@ window.LANG['pt'] = {
   'zones.addRoom': '+ Zona',
   'zones.edit': 'Editar',
   'zones.freeN': '{n} sem prateleira',
+  'zones.contamLeft': '{zone}: {n} sacos ainda registados · verificar',
   'zones.tentHint': 'Sem prateleiras: uma contagem por espécie',
   'zones.noShelves': 'sem prateleiras',
   'zones.noStrain': 'sem espécie',

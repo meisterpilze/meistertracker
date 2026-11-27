@@ -90,42 +90,40 @@ describe('Heute: the figure on the job', () => {
     const el = (id) =>
       (els[id] = els[id] || {
         hidden: true,
-        textContent: '',
+        innerHTML: '',
         rot: false,
-        label: '',
         classList: {
           toggle(k, an) {
             els[id].rot = !!an;
           }
-        },
-        setAttribute(k, v) {
-          els[id].label = v;
         }
       });
     new Function(
       'document',
       'tp',
+      'esc',
       'dashLabGroupOpen',
       ZAEHLEN + '\n' + hebe('renderWorkTileDue') + '\nreturn renderWorkTileDue;'
     )(
       { getElementById: el },
       (k, n) => k + ':' + n,
+      (s) => String(s),
       false
     )(open);
     return els;
   }
 
-  it('shows the count, with words for a screen reader, and red when late', () => {
+  it('shows the count to the eye and says it in words to a screen reader, red when late', () => {
     const els = zeichne([{ kind: 'harvest', overdue: true }, { kind: 'harvest' }, { kind: 'fruiting' }]);
-    assert.deepEqual(
-      [els['wk-due-harvest'].hidden, els['wk-due-harvest'].textContent, els['wk-due-harvest'].rot],
-      [false, '2', true]
-    );
-    assert.equal(els['wk-due-harvest'].label, 'work.dueN:2');
-    assert.deepEqual(
-      [els['wk-due-move'].hidden, els['wk-due-move'].textContent, els['wk-due-move'].rot],
-      [false, '1', false]
-    );
+    const ernte = els['wk-due-harvest'];
+    assert.equal(ernte.hidden, false);
+    assert.equal(ernte.rot, true);
+    // An aria-label on a span without a role is not read out; the words are text.
+    assert.equal(ernte.innerHTML, '<span aria-hidden="true">2</span><span class="wk-due-wort">work.dueN:2</span>');
+    assert.equal(els['wk-due-move'].rot, false);
+    assert.match(els['wk-due-move'].innerHTML, /^<span aria-hidden="true">1<\/span>/);
+    assert.doesNotMatch(hebe('renderWorkTileDue'), /setAttribute\('aria-label'/);
+    assert.match(CSS, /\.wk-due-wort \{[^}]*clip: rect\(0 0 0 0\);/);
   });
 
   it('hides the figure of a job with nothing due, and takes an old one away', () => {

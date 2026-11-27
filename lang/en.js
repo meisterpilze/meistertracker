@@ -2296,6 +2296,7 @@ window.LANG['en'] = {
   'zones.addRoom': '+ Zone',
   'zones.edit': 'Edit',
   'zones.freeN': '{n} not on a shelf',
+  'zones.contamLeft': '{zone}: {n} bags still recorded · check',
   'zones.tentHint': 'No shelves: one count per species',
   'zones.noShelves': 'no shelves',
   'zones.noStrain': 'no species',

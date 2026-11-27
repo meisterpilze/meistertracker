@@ -2310,6 +2310,7 @@ window.LANG['de'] = {
   'zones.addRoom': '+ Raum',
   'zones.edit': 'Bearbeiten',
   'zones.freeN': '{n} in keinem Fach',
+  'zones.contamLeft': '{zone}: {n} Beutel noch erfasst · prüfen',
   'zones.tentHint': 'Keine Fächer: eine Zahl je Art',
   'zones.noShelves': 'keine Fächer',
   'zones.noStrain': 'keine Art',
