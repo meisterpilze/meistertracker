@@ -3615,183 +3615,14 @@
                  Species-neutral — a mix is only the blend it was made to, and
                  any Sorte may draw from it. This is the only place raw material
                  leaves the shelf. -->
-            <div class="card form-card" id="sb-card" style="border: 1px solid var(--c-accent)">
-              <div class="card-head" style="--wk-c: var(--c-blue-dark); --wk-cl: var(--c-blue-light)">
-                <span class="card-head-art" aria-hidden="true"><svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="20" width="100" height="52" rx="26" fill="currentColor" opacity=".15"/><ellipse cx="46" cy="46" rx="13" ry="26" fill="currentColor" opacity=".10"/><path d="M44 33l26 26M44 59l26-26" stroke="currentColor" stroke-width="3.4" opacity=".20" stroke-linecap="round"/><path d="M96 14a26 26 0 0 1 12 14" stroke="currentColor" stroke-width="3.4" opacity=".28" stroke-linecap="round" fill="none"/><path d="M110 30l-1-9 -8 5z" fill="currentColor" opacity=".28"/><path d="M40 72l-9 30M104 72l9 30" stroke="currentColor" stroke-width="5" opacity=".20" stroke-linecap="round"/><path d="M24 104h96" stroke="currentColor" stroke-width="4" opacity=".26" stroke-linecap="round"/></svg></span>
+            <!-- Angesetzt wird im geführten Ablauf (wkmOpen), demselben, den die
+                 Kachel "Substrat" in Arbeitsgänge öffnet. Hier stand das ganze
+                 Formular noch einmal. Geblieben ist, was nur diese Karte hatte:
+                 die gespeicherten Mischungen und wie feucht die Sackware ankommt. -->
+            <div class="card" id="sb-card">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap">
                 <div class="sec" style="margin: 0" data-i18n="sub.title">Substrat ansetzen</div>
-              </div>
-              <div class="fs-meta" style="color: var(--c-text-sec); margin: 4px 0 10px" data-i18n="sub.desc">
-                Menge fertiges Substrat und Rezept angeben. Nur dieser Schritt bucht Pellets, Kleie und Gips vom Lager
-                ab — die Chargen darunter ziehen dann Kilo aus dem Ansatz.
-              </div>
-              <div class="g2">
-                <div>
-                  <label data-i18n="sub.recipe">Rezept</label>
-                  <select id="sb-recipe" onchange="sbRecipeChanged()"></select>
-                </div>
-                <div>
-                  <label data-i18n="sub.bags">Anzahl Beutel</label>
-                  <input type="text" id="sb-bags" value="50" inputmode="numeric" oninput="sbPreviewSoon()" />
-                </div>
-              </div>
-              <!-- Gezählt wird in Beuteln, nicht in Kilo: so wird abgefüllt. Die
-                   Kilo rechnet sbTargetKg() aus Anzahl mal Größe. -->
-              <div style="margin-top: 8px">
-                <label data-i18n="batch.bagWeight">Beutelgewicht</label>
-                <div class="wkf-chipsrow" id="sb-bagkg-btns"></div>
-              </div>
-              <!-- Die Mischung. Aus der gewählten Mischung (Tabelle recipes)
-                   vorbelegt und hier für diesen einen Ansatz änderbar, ohne
-                   dass jemand dafür die gespeicherte Mischung umschreibt und
-                   damit jeden künftigen Ansatz mit.
-                   Pellets und Kleie sind eine Zahl in zwei Feldern: was nicht
-                   Kleie (und Mais) ist, ist Pellets. -->
-              <div style="margin-top: 12px">
-                <div
-                  style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap"
-                >
-                  <label style="margin: 0" data-i18n="sub.blendTitle">Mischung</label>
-                  <button
-                    type="button"
-                    id="sb-blend-reset"
-                    class="btn-xs"
-                    style="display: none"
-                    onclick="sbResetBlend()"
-                  >
-                    <span data-i18n="sub.blendReset">Zurück zum Rezept</span>
-                  </button>
-                </div>
-                <div class="sb-blend-row">
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.pellets">Pellets</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-hw"
-                      min="0"
-                      max="100"
-                      step="1"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('hw')"
-                    />
-                  </div>
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.bran">Weizenkleie</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-wb"
-                      min="0"
-                      max="100"
-                      step="1"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('wb')"
-                    />
-                  </div>
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.soyhull">Sojaschalen</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-soy"
-                      min="0"
-                      max="95"
-                      step="1"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('soy')"
-                    />
-                  </div>
-                  <div id="sb-corn-wrap" style="display: none">
-                    <label class="fs-xs"><span data-i18n="sub.corn">Maismehl</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-corn"
-                      min="0"
-                      max="95"
-                      step="1"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('corn')"
-                    />
-                  </div>
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.gypsum">Gips</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-gyp"
-                      min="0"
-                      max="20"
-                      step="0.5"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('gyp')"
-                    />
-                  </div>
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.calcium">Calciumcarbonat</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-ca"
-                      min="0"
-                      max="20"
-                      step="0.5"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('ca')"
-                    />
-                  </div>
-                  <!-- Wie Gips und Calciumcarbonat obendrauf auf die
-                       Trockenmischung, in kleineren Schritten: hier geht es um
-                       Zehntelprozent. -->
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.hydroxide">Calciumhydroxid</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-hyd"
-                      min="0"
-                      max="20"
-                      step="0.1"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('hyd')"
-                    />
-                  </div>
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.moisture">Soll-Feuchte</span> %</label>
-                    <input
-                      type="number"
-                      id="sb-rh"
-                      min="20"
-                      max="90"
-                      step="0.5"
-                      inputmode="decimal"
-                      oninput="sbBlendEdited('rh')"
-                    />
-                  </div>
-                  <!-- Keine Zahl der Mischung: ändert die Rechnung nicht, wird
-                       nur mit dem Ansatz gespeichert, damit sich der pH der
-                       Chargen gegen die Sterilisierzeit lesen lässt. -->
-                  <div>
-                    <label class="fs-xs"><span data-i18n="sub.steri">Sterilisieren</span> min</label>
-                    <input type="number" id="sb-steri" min="0" max="1440" step="1" inputmode="decimal" />
-                  </div>
-                  <!-- Auch keine Zahl der Mischung: am fertig gemischten Substrat
-                       gemessen. Wer erst nach dem Mischen misst, lässt es leer
-                       und trägt den pH am Ansatz nach. -->
-                  <div>
-                    <label class="fs-xs" data-i18n="sub.mixPhShort">pH gemessen</label>
-                    <input type="number" id="sb-ph" min="0" max="14" step="0.1" inputmode="decimal" />
-                  </div>
-                </div>
-                <!-- Erscheint, sobald eine Zahl von der gewählten Mischung
-                     abweicht (sbBlendDirty), und nur für einen Admin: ein Tipp
-                     speichert die Zahlen als neue Mischung. Der Name darf leer
-                     bleiben, dann heißt sie nach ihrem Verhältnis. -->
-                <div class="wkm-sichern" id="sb-mixsave" hidden>
-                  <label for="sb-mixsave-name" data-i18n="sub.saveMixName">Name der neuen Mischung</label>
-                  <div class="wkm-sichern-row">
-                    <input type="text" id="sb-mixsave-name" maxlength="60" data-i18n-placeholder="sub.saveMixPh" />
-                    <button type="button" class="btn btn-p" onclick="sbSaveMixFromForm()">
-                      <span data-i18n="sub.saveMix">Als Mischung speichern</span>
-                    </button>
-                  </div>
-                  <div class="fs-xs" style="color: var(--c-text-muted)" data-i18n="sub.saveMixHint">
-                    Ohne Namen heißt sie nach ihrem Verhältnis. Ohne Speichern gilt die Änderung nur für diesen Ansatz.
-                  </div>
-                </div>
+                <button type="button" class="btn btn-p" id="btn-sub-new" data-i18n="sub.newBtn">Ansetzen</button>
               </div>
               <!-- Wie feucht Pellets und Kleie ankommen. Gilt für alle Ansätze,
                    deshalb zugeklappt: es ändert sich mit der Lieferung, nicht
@@ -3828,17 +3659,6 @@
                 </summary>
                 <div id="sb-mixes-list" style="margin-top: 6px"></div>
               </details>
-              <div id="sb-out" style="margin-top: 10px"></div>
-              <div style="margin-top: 8px">
-                <label data-i18n="sub.notes">Notiz</label>
-                <input type="text" id="sb-notes" maxlength="200" />
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap">
-                <button id="sb-go" class="btn btn-p" onclick="createSubstrateBatchUI()" data-i18n="sub.create">
-                  Ansatz anlegen
-                </button>
-                <span class="fs-meta" id="sb-status" style="color: var(--c-text-sec)"></span>
-              </div>
             </div>
             <div class="card">
               <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px">
