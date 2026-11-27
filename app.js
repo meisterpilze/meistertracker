@@ -1853,6 +1853,12 @@ function go(page, btnId) {
   if (page === 'cal') {
     renderCalendar();
     loadCalDAVImports().then(() => renderCalendar());
+    // Wer in ein Abholfenster gebucht hat, damit das Absagen oder Verschieben
+    // eines Termins vorher fragt (confirmBookedWindow). Das stand im Zweig
+    // openStab('cal', 'cal'), und der Kalender hat keine Reiter mehr: die Liste
+    // blieb leer, und die Warnung kam nie. Nicht abgewartet und ohne Folgen,
+    // wenn es nicht antwortet: der Kalender zeichnet auch ohne.
+    loadPickupBookings().catch(() => {});
   }
   // Admin opens on whichever sub-tab is selected — Server on the first visit of
   // a session, and after that wherever the user last was. Clicking that button
@@ -1958,12 +1964,6 @@ function openStab(page, sub) {
     renderLabPreview();
   }
   if (page === 'print' && sub === 'ref') renderRefBarcodes();
-  if (page === 'cal' && sub === 'cal') {
-    loadCalDAVImports().then(() => renderCalendar());
-    // Best effort, and deliberately not awaited: the calendar must draw whether
-    // or not this answers. With no answer the warning simply does not fire.
-    loadPickupBookings();
-  }
   if (page === 'settings' && sub === 'caldav') loadCaldavSettings();
   if (page === 'settings' && sub === 'backup') loadUsbBackup();
   if (page === 'settings' && sub === 'duckdns') loadDuckdnsSettings();
@@ -35810,7 +35810,7 @@ function saveBatchDueFromDetail(id) {
 }
 
 // ── Windows somebody has already booked into ────────────────
-// `[{event, date, count}]`, refreshed when the calendar opens. The join between
+// `[{event, date, count}]`, refreshed when the calendar opens (go). The join between
 // a calendar entry and its bookings is made on the server: a booking names the
 // window by the id the harvest feed published, and reimplementing that id here
 // would give two versions of one key. The one that drifts reads as "nobody has
