@@ -3106,7 +3106,7 @@ window.LANG['de'] = {
   'lf.alarmUnder': 'Alarm unter {n} (was wächst, zählt mit; offene Bestellungen ziehen ab)',
   'lf.alarmOff': 'Kein Alarm',
   'lf.alarmPaused': 'Außer Programm: kein Alarm',
-  'lf.help': 'Add legt neue an und druckt ihre Etiketten. Remove = im Labor verbraucht, Verkauft = an einen Kunden; beide nehmen die ältesten. Scannen hakt jede Kultur einzeln ab.',
+  'lf.help': 'Add legt neue an und druckt ihre Etiketten. Remove = im Labor verbraucht, Verkauft = an einen Kunden; beide nehmen die ältesten. Die Kamera hakt jede Kultur einzeln ab.',
   'lf.helpKB': 'Add legt fertige Beutel ohne Etikett an, wie beim Zählen. Remove = verbraucht, Verkauft = an einen Kunden; beide nehmen die ältesten fertigen Beutel.',
   'lf.notEnough': 'Es sind nur {n} da.',
   'lf.doneOut': '{n} × {what} verbraucht',

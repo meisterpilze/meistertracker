@@ -437,7 +437,11 @@ describe('Kulturen prüfen: ein Fach vom Laborbestand', () => {
 describe('Kulturen prüfen in der App', () => {
   it('das Blatt eines Fachs hat Scannen, bei Körnerbrut nicht, und Prüfen öffnet ohne Fach', () => {
     const m = HTML.slice(HTML.indexOf('id="m-labfach"'), HTML.indexOf('id="m-kbz"'));
-    assert.match(m, /id="m-lf-scan" data-lf-act="scan"/);
+    assert.match(m, /id="m-lf-scan"\s+data-lf-act="scan"\s+data-i18n-aria-label="lf\.scan"/);
+    // Die Kamera wie am Scan-Knopf unten, kein Wort: data-i18n würde sie überschreiben.
+    const knopf = m.slice(m.indexOf('id="m-lf-scan"'), m.indexOf('</button>', m.indexOf('id="m-lf-scan"')));
+    assert.match(knopf, /<circle cx="12" cy="13" r="4" \/>/);
+    assert.doesNotMatch(knopf, /data-i18n="/);
     assert.match(
       APP,
       /if \(a === 'scan'\) \{\s*if \(f\.kind === 'KB'\) return;\s*lfClose\(\);\s*return openLabCheck\(f\);/

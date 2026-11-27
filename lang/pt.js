@@ -3099,7 +3099,7 @@ window.LANG['pt'] = {
   'lf.alarmUnder': 'Alarme abaixo de {n} (o que cresce conta; encomendas abertas descontam)',
   'lf.alarmOff': 'Sem alarme',
   'lf.alarmPaused': 'Fora de produção: sem alarme',
-  'lf.help': 'Add cria novos e imprime as etiquetas. Remove = gasto no laboratório, Vendido = foi para um cliente; ambos tiram os mais antigos. Ler marca cada cultura uma a uma.',
+  'lf.help': 'Add cria novos e imprime as etiquetas. Remove = gasto no laboratório, Vendido = foi para um cliente; ambos tiram os mais antigos. A câmara marca cada cultura uma a uma.',
   'lf.helpKB': 'Add junta sacos prontos sem etiqueta, como na contagem. Remove = gasto, Vendido = foi para um cliente; ambos tiram os sacos prontos mais antigos.',
   'lf.notEnough': 'Só há {n}.',
   'lf.doneOut': '{n} × {what} gasto',

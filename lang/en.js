@@ -3083,7 +3083,7 @@ window.LANG['en'] = {
   'lf.alarmUnder': 'Alarm below {n} (growing ones count; open orders are subtracted)',
   'lf.alarmOff': 'No alarm',
   'lf.alarmPaused': 'Not in production: no alarm',
-  'lf.help': 'Add makes new ones and prints their labels. Remove = used up in the lab, Sold = went to a customer; both take the oldest. Scan ticks off each culture one by one.',
+  'lf.help': 'Add makes new ones and prints their labels. Remove = used up in the lab, Sold = went to a customer; both take the oldest. The camera ticks off each culture one by one.',
   'lf.helpKB': 'Add puts finished bags in without labels, as when counting. Remove = used up, Sold = went to a customer; both take the oldest finished bags.',
   'lf.notEnough': 'There are only {n}.',
   'lf.doneOut': '{n} × {what} used up',
