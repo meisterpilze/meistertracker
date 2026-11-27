@@ -1823,6 +1823,7 @@ function go(page, btnId) {
   if (page === 'work') {
     renderDashBatchTasks();
     loadLabStock();
+    wkPackLaden();
   }
   if (page === 'batch') renderBatches();
   if (page === 'lab') {
@@ -2185,6 +2186,7 @@ function refresh() {
   if (id === 'work') {
     renderDashBatchTasks();
     loadLabStock();
+    wkPackLaden();
   }
   // Von Zahlen nur die Übersicht, und nur wenn sie offen ist: vier Diagramme
   // hinter display:none neu zu bauen ist Arbeit für nichts. Die Ernten zeichnet
@@ -7429,7 +7431,7 @@ function _wkAnRowHtml(it, inJob) {
 // forwards its tap to the notice it stands for.
 function _wkNoticeRowsHtml() {
   let html = '';
-  for (const id of ['wk-alert', 'wk-np', 'wk-usb', 'wk-usb-key']) {
+  for (const id of ['wk-alert', 'wk-np', 'wk-pack', 'wk-usb', 'wk-usb-key']) {
     const el = document.getElementById(id);
     if (!el || el.hidden) continue;
     const text = id === 'wk-alert' ? el.dataset.full || '' : (el.textContent || '').trim();
@@ -7504,6 +7506,70 @@ function _wkAnGruppeHtml(g, items) {
     (offen ? '<div class="wk-an-teil">' + items.map((it) => _wkAnRowHtml(it, true)).join('') + '</div>' : '')
   );
 }
+// ── Was heute ansteht, an dem Arbeitsgang, der es erledigt ──
+// Am Telefon sind die sieben Arbeitsgänge das erste Bild, und was ansteht,
+// steht darunter: wer die App aufmacht, sieht, was er tun KANN, und muss
+// blättern, um zu sehen, was er tun SOLL. Die Liste nach oben zu holen hieße,
+// die Arbeitsgänge unter den Falz zu schieben, und die stehen mit Absicht oben.
+// Also sagt jeder Arbeitsgang selbst, wie viel heute auf ihn wartet: dieselben
+// Zeilen wie "Was ansteht" (buildWeekPlan, der heutige Tag), nur gezählt.
+//
+// Substrat und Kontamination haben keine Zahl: nichts im Plan verlangt sie.
+// 'grain' heißt im Plan "Beimpfen": durchgewachsene Körnerbrut wartet auf Beutel.
+const WK_DUE_TILE = { fruiting: 'move', harvest: 'harvest', labmin: 'lab', labgroup: 'lab', grain: 'batch' };
+function wkTileDue(open) {
+  const out = {};
+  for (const it of open) {
+    let tile = WK_DUE_TILE[it.kind];
+    // Eine Sorte, bei der nichts nachkommt: Körner zuerst, sonst die Beutel.
+    if (it.kind === 'supply') tile = it.task && it.task.taskAction === 'make-grain' ? 'grain' : 'batch';
+    if (!tile) continue;
+    // Eine zusammengefasste Laborzeile steht für so viele Arten, wie sie Zeilen
+    // hat. Aufgeklappt stehen die Arten selbst daneben und zählen selbst (wie
+    // PLAN_KINDS.labgroup.weight): beides zu zählen ergäbe das Doppelte.
+    const rows = it.kind === 'labgroup' ? (dashLabGroupOpen ? [] : _labRows(it)) : null;
+    const n = rows ? rows.length : 1;
+    if (!n) continue;
+    const late = rows ? rows.some((l) => l.empty) : !!it.overdue;
+    const d = out[tile] || (out[tile] = { n: 0, late: false });
+    d.n += n;
+    if (late) d.late = true;
+  }
+  return out;
+}
+function renderWorkTileDue(open) {
+  const due = wkTileDue(open);
+  for (const tile of ['lab', 'grain', 'batch', 'move', 'harvest']) {
+    const el = document.getElementById('wk-due-' + tile);
+    if (!el) continue;
+    const d = due[tile];
+    el.hidden = !d || !d.n;
+    if (el.hidden) continue;
+    el.textContent = String(d.n);
+    el.classList.toggle('rot', d.late);
+    el.setAttribute('aria-label', tp('work.dueN', d.n));
+  }
+}
+// Pakete, die heute zu packen sind, als Hinweis über den Arbeitsgängen: das
+// Packbrett weiß es (order-board.js), und wer hier anfängt, erfuhr es erst
+// auf der Seite Packen. Gefragt wird beim Öffnen und bei jedem Abgleich.
+function renderWorkPack(board) {
+  const el = document.getElementById('wk-pack');
+  if (!el) return;
+  const n = board && board.pack ? board.pack.length : 0;
+  el.hidden = !n;
+  if (n) el.textContent = tp('work.packN', n);
+}
+function wkPackLaden() {
+  apiGet('/api/orders/board')
+    .then((b) => {
+      _obBoard = b;
+      renderWorkPack(b);
+    })
+    .catch(() => {
+      // Ohne Antwort bleibt der Hinweis, wie er war.
+    });
+}
 function renderWorkDue(week) {
   const box = document.getElementById('wk-an');
   if (!box) return;
@@ -7517,6 +7583,7 @@ function renderWorkDue(week) {
     return it.zone && order[it.zone] != null ? order[it.zone] : 999;
   };
   const open = day.items.filter((it) => !it.done).sort((a, b) => rank(a) - rank(b));
+  renderWorkTileDue(open);
   let html = '';
   for (const g of WK_AN_GRUPPEN) {
     const items = open.filter((it) => g.kinds.includes(it.kind));
@@ -38659,6 +38726,10 @@ function initEventListeners() {
   // Was fehlt, steht an einer Stelle: die Zeile oben in Arbeitsgänge und die
   // über dem Laborbestand führen beide zum Bedarf.
   $('wk-np').addEventListener('click', () => go('bedarf', 'n-bedarf'));
+  $('wk-pack').addEventListener('click', () => {
+    go('orders', 'n-orders');
+    openStab('orders', 'pack');
+  });
   $('lb-bedarf').addEventListener('click', () => go('bedarf', 'n-bedarf'));
   $('bd-list').addEventListener('click', (e) => bedarfKlick(e.target));
   $('lb-list').addEventListener('click', (e) => {

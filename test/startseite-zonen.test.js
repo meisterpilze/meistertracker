@@ -136,7 +136,9 @@ describe('Startseite — Was ansteht, nach Arbeit', () => {
     '_wkAnRowHtml',
     '_wkNoticeRowsHtml',
     '_wkAnOffen',
-    `const WK_AN_CHEV = '<svg/>';\n${decl[0]}\n${lift('_wkAnGruppeHtml')}\n${lift('renderWorkDue')}\nreturn renderWorkDue;`
+    // The figures on the jobs (renderWorkTileDue) are counted in the same pass and
+    // have a test of their own, test/heute-faellig.test.js.
+    `const WK_AN_CHEV = '<svg/>';\nconst renderWorkTileDue = () => {};\n${decl[0]}\n${lift('_wkAnGruppeHtml')}\n${lift('renderWorkDue')}\nreturn renderWorkDue;`
   )(
     { getElementById: () => box, querySelector: () => null },
     [],
