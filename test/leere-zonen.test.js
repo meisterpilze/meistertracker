@@ -83,22 +83,4 @@ describe('leere Zonenliste', () => {
     assert.doesNotMatch(html, /zones\.empty|common\.loading/);
     assert.match(html, /zone-card/);
   });
-
-  // Dasselbe auf der Arbeitsgang-Seite, die dieselbe leere Liste anders
-  // beschriftet — und denselben Fehler machte.
-  // renderPipelineKPIs hieß die Attrappe früher, dann renderSorteTiles; seit
-  // der Sortenliste ruft renderStatus an genau denselben Stellen renderBatches.
-  // Die Standorte liegen inzwischen auf einem eigenen Reiter, und renderStatus
-  // baut sie nur noch, wenn der offen ist — die Attrappe muss also einen
-  // aktiven Reiter vortäuschen, sonst prüft der Test den Auslassungspfad.
-  const DASH_ATTRAPPEN =
-    'const renderBatches = () => {}; const renderOverviewKPIs = () => {};' +
-    " document.getElementById = (id) => (id === 'sp-batch-locations' ? { classList: { contains: () => true } } : ausgabe);";
-
-  it('hält die Arbeitsgang-Seite an dieselbe Regel', () => {
-    const ohne = umgebung({ zones: [], datenGeladen: false });
-    assert.match(ohne.lauf(hebeFunktion('renderStatus'), 'renderStatus', DASH_ATTRAPPEN), /common\.loading/);
-    const mit = umgebung({ zones: [], datenGeladen: true });
-    assert.match(mit.lauf(hebeFunktion('renderStatus'), 'renderStatus', DASH_ATTRAPPEN), /dash\.noZones/);
-  });
 });

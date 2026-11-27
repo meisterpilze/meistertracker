@@ -3453,14 +3453,6 @@
         <div class="page" id="p-batch">
           <div class="stabs" data-stab-home="nav.batches">
             <button class="stab active" id="st-batch-list" data-i18n="batch.allBatches">All batches</button>
-            <!-- "Where does everything stand" used to sit on top of the batch
-                 list, which meant this page answered the same question three
-                 times: a stage strip counting bags, a room view counting the
-                 same bags by rack, and a table grouping them by stage again.
-                 The room view is a real tool — it is the only place bags can be
-                 selected and moved in bulk — so it keeps everything it had and
-                 gets its own tab instead of competing for the first screen. -->
-            <button class="stab" id="st-batch-locations" data-i18n="batch.locationsTab">Standorte</button>
             <button class="stab" id="st-batch-substrate" data-i18n="sub.tab">Substrat-Ansätze</button>
           </div>
           <!-- All batches -->
@@ -3500,31 +3492,6 @@
               </p>
               <div id="ch-list"></div>
             </div>
-          </div>
-          <!-- Where everything currently sits, by room. Unchanged in every
-               respect except which tab it is on: same racks, same bag chips,
-               same multi-select and bulk move, same search. -->
-          <div class="sp" id="sp-batch-locations">
-            <div class="card" style="padding: 10px 14px">
-              <!-- Location overview — collapsible; the search sits in the body so it hides when collapsed -->
-              <div class="dash-locations-header">
-                <input
-                  type="text"
-                  id="status-q"
-                  class="dash-search-inline"
-                  data-i18n-aria-label="aria.searchDashboard"
-                  aria-label="Search dashboard"
-                  data-i18n-placeholder="dash.search"
-                  placeholder="Search..."
-                />
-              </div>
-              <div id="dash-locations"></div>
-            </div>
-            <!-- It has to live in the same page as the chips it acts on: .page
-                 is display:none for every page but the open one, so while it sat
-                 in p-dash the racks moved here and their bulk-move bar did not,
-                 and selecting bags offered nothing to do with them. -->
-            <div id="loc-action-bar" class="action-bar-sticky" style="display: none"></div>
           </div>
           <!-- Every mix ever made, open and spent. Not front and center: this is
                where you go to count them and to find the one that went wrong. -->

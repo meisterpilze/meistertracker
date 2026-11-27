@@ -373,7 +373,7 @@ describe('↩ in der Kamera', () => {
       const fb = [];
       const setFb = (type, msg) => fb.push(msg);
       const updateSD = () => {};
-      const renderStatus = () => {};
+      const renderBatches = () => {};
       const t = (k, p) => k + ' ' + JSON.stringify(p);
       const zoneDisplayName = (x) => x;
       ${hebe('modeRunUntally')}

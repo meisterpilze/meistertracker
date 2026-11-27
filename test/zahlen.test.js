@@ -59,7 +59,7 @@ describe('Zahlen holds the figures', () => {
   });
 
   it('left Chargen with the views that work on batches', () => {
-    assert.deepEqual(reiter(BATCH), ['st-batch-list', 'st-batch-locations', 'st-batch-substrate']);
+    assert.deepEqual(reiter(BATCH), ['st-batch-list', 'st-batch-substrate']);
     assert.doesNotMatch(BATCH, /id="(harvest-body|bb-good|sp-batch-harvest|sp-batch-blocks)"/);
   });
 

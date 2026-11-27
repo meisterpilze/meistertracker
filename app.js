@@ -1766,20 +1766,16 @@ function go(page, btnId) {
     if (subList.scrollIntoView) subList.scrollIntoView({ block: 'nearest' });
   }
   if (navBtn.scrollIntoView) navBtn.scrollIntoView({ block: 'nearest' });
-  // The pipeline strip and the "where is everything" list live on the Chargen
-  // page now, and lab stock on Labor — each section carries its own overview
-  // instead of the dashboard carrying all of them. renderStatus fills both
-  // #metrics and #dash-locations, so it belongs with the page that shows them.
+  // Each section carries its own overview instead of the dashboard carrying all
+  // of them: the Chargen on their page, lab stock on Labor, and where everything
+  // stands on Zonen (the room view under Chargen is gone, see zoneEditZeichne).
   // The day's work is the top of Arbeitsgänge now, above the seven jobs that do
   // it — it was the Dashboard's Farm mode, which was two buttons and this row.
   if (page === 'work') {
     renderDashBatchTasks();
     loadLabStock();
   }
-  if (page === 'batch') {
-    renderStatus();
-    renderBatches();
-  }
+  if (page === 'batch') renderBatches();
   if (page === 'lab') {
     loadLabStock();
     renderCultures();
@@ -1811,8 +1807,8 @@ function go(page, btnId) {
   }
   // The history charts load on first arrival. applyDashMode() used to do this on
   // the way into Overview mode; the mode is gone and the page is the Overview.
-  // Die Betriebsseite zeichnete sich nie selbst. renderOverviewKPIs() haengt
-  // an renderStatus(), das fuer die Chargen-Seite laeuft — wer Betrieb oeffnete,
+  // Die Betriebsseite zeichnete sich nie selbst. renderOverviewKPIs() hing an
+  // der Raumansicht der Chargen-Seite, die es nicht mehr gibt — wer Betrieb oeffnete,
   // sah also, was beim letzten Besuch der Chargen uebrig geblieben war, und beim
   // Neuladen gar nichts. Dieselbe Sache wie bei Arbeitsgaenge (#566), eine Seite
   // weiter.
@@ -1870,10 +1866,6 @@ function openStab(page, sub) {
   if (page === 'batch' && sub === 'list') {
     renderBatches();
   }
-  // Painted on arrival rather than on every sync: renderStatus() walks the whole
-  // scan log once per rack and once per zone, and this panel is display:none
-  // until somebody asks for it.
-  if (page === 'batch' && sub === 'locations') renderStatus();
   if (page === 'batch' && sub === 'new') nbEnsureReady();
   if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
   if (page === 'dash' && sub === 'overview') {
@@ -2148,7 +2140,6 @@ function refresh() {
   // lädt sich selbst nach (_bbOpen).
   if (id === 'dash' && dashUebersichtOffen()) renderOverviewKPIs();
   if (id === 'batch') {
-    renderStatus();
     renderBatches();
   }
   if (id === 'lab') {
@@ -5320,8 +5311,6 @@ function exportOverviewCSV() {
   a.click();
 }
 
-const CHEVRON_SVG =
-  '<svg class="location-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 let ZONE_LABELS = {};
 let ZONE_COLORS = {};
 function rackLabel(id) {
@@ -5329,543 +5318,6 @@ function rackLabel(id) {
   return m ? t('dash.rackN', { n: m[0] }) : id.replace(/_/g, ' ');
 }
 
-function renderStatus() {
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const el = document.getElementById('dash-locations');
-  if (!el) return;
-  // The room view moved to its own sub-tab, and rebuilding it while that tab is
-  // closed is pure waste: getRackBags/getZoneBags walk the entire scan log, and
-  // this function calls them about thirty times. Only the Sorten tiles still
-  // have to run, so only the rack markup is skipped.
-  //
-  // renderOverviewKPIs() stand hier einmal mit, aus der Zeit, als die
-  // Betriebsseite sich nicht selbst zeichnete. Es endet in
-  // renderOverviewCharts(), und das ruft .destroy() und new Chart() auf vier
-  // Leinwaenden — auf einer Seite mit display:none, bei jedem Scan. Seit
-  // go() und refresh() die Betriebsseite kennen, zeichnet sie sich selbst.
-  const panel = document.getElementById('sp-batch-locations');
-  if (panel && !panel.classList.contains('active')) {
-    renderBatches();
-    return;
-  }
-  if (!zones.length) {
-    // Wie auf der Zonenseite: ohne Daten keine Aussage über die Daten.
-    el.innerHTML = '<div class="empty">' + t(datenGeladen ? 'dash.noZones' : 'common.loading') + '</div>';
-    renderBatches();
-    return;
-  }
-  if (!batches.length) {
-    el.innerHTML = '<div class="empty">' + t('dash.noBatches') + '</div>';
-    renderBatches();
-    return;
-  }
-
-  // Compute per-batch status.
-  //
-  // The four per-stage bag counters that used to be accumulated here fed
-  // renderPipelineKPIs() and nothing else. The Sorten tiles need the same
-  // numbers broken down per Sorte rather than as one total, so they are
-  // summed in sorteRollup() from the same getStatus().c — one place doing
-  // it once, instead of a total here and a breakdown there that could drift.
-  const batchData = batches.map((b) => {
-    const { c, total, status } = getStatus(b.batchId);
-    const harv = getHarvested(b.batchId);
-    const due = new Date(b.due);
-    const ov =
-      isBatchOverdue(b) && zones.some((z) => (z.role === 'incubation' || z.role === 'spawn') && (c[z.id] || 0) > 0);
-    return { b, c, total, status, harv, due, ov };
-  });
-
-  // Filter by search
-  const filtered = batchData.filter(
-    (d) =>
-      !q ||
-      d.b.batchId.toLowerCase().includes(q) ||
-      (d.b.species || '').toLowerCase().includes(q) ||
-      (d.b.strain || '').toLowerCase().includes(q) ||
-      (d.b.strainName || '').toLowerCase().includes(q)
-  );
-
-  // One sort control above all the rooms, not one per room — the question
-  // "what am I looking at first" has the same answer in every tent.
-  let html = locSortControlHtml();
-  // Render zones dynamically by role
-  const fruitingZones = zones.filter((z) => z.role === 'fruiting');
-  const contamZones = zones.filter((z) => z.role === 'contaminated');
-  zones
-    .filter((z) => z.role !== 'fruiting' && z.role !== 'contaminated')
-    .forEach((z) => {
-      if (z.racks.length > 0)
-        html += renderRackSection(
-          z.id,
-          z.racks.map((r) => r.id),
-          filtered
-        );
-      else html += renderSimpleZoneSection(z, filtered);
-    });
-  if (fruitingZones.length) html += renderFruitingSection(fruitingZones, filtered);
-  contamZones.forEach((z) => {
-    const contamBags = getZoneBags(z.id);
-    if (Object.keys(contamBags).length > 0) html += renderContamSection(z, filtered);
-  });
-
-  el.innerHTML = html;
-  renderBatches();
-  updateActionBar();
-}
-
-// Which rooms of Standorte are open, kept per device. Every room starts closed
-// with its bag count and how many of its Chargen are late in the heading, and
-// a search opens them all. A room used to open by itself when anything in it
-// was late; once Chargen pile up that is every room, and the view ran to
-// screen after screen of cards.
-let _locOpen = null;
-function _locIsOpen(key) {
-  if (!_locOpen) {
-    _locOpen = new Set();
-    try {
-      for (const k of JSON.parse(localStorage.getItem('mp-loc-open') || '[]')) _locOpen.add(String(k));
-    } catch {
-      // Nothing kept, or nothing readable: every room starts closed.
-    }
-  }
-  return _locOpen.has(key);
-}
-function _locRemember(key, open) {
-  _locIsOpen(key);
-  _locOpen[open ? 'add' : 'delete'](key);
-  try {
-    localStorage.setItem('mp-loc-open', JSON.stringify([..._locOpen]));
-  } catch {
-    // Kept until the next reload.
-  }
-}
-function _locSectionClass(key, q) {
-  return 'location-section' + (q || _locIsOpen(key) ? '' : ' collapsed');
-}
-function _locLateHtml(n) {
-  return n ? `<span class="location-section-late">${esc(tp('work.grp.late', n))}</span>` : '';
-}
-function renderRackSection(zone, racks, filtered) {
-  const color = ZONE_COLORS[zone];
-  const zoneObj = zones.find((z) => z.id === zone);
-  const cap = zoneObj ? zoneObj.maxCapacity : null;
-  let totalBags = 0;
-  racks.forEach((r) => (totalBags += Object.keys(getRackBags(r)).length));
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-
-  // Racks with nothing on them are named in one line under the ones that hold
-  // something, not drawn as columns that say "Leer": when one rack holds a
-  // whole room, the empty columns beside it took the width from it.
-  // Ein Regal mit Brettern bleibt sichtbar, auch leer: seine Bretter sind die
-  // Knöpfe, über die etwas daraufkommt.
-  const emptyRacks = racks.filter((r) => !Object.keys(getRackBags(r)).length && !((rackVon(r) || {}).levels > 0));
-  const shownRacks = q || emptyRacks.length === racks.length ? racks : racks.filter((r) => !emptyRacks.includes(r));
-  const now = new Date();
-  const rackCards = shownRacks
-    .map((rackId) => {
-      const bags = getRackBags(rackId);
-      const count = Object.keys(bags).length;
-      // Ein Regal mit Brettern: je Brett eine Zeile mit dem, was darauf steht.
-      // Antippen öffnet dasselbe Blatt wie das Etikett.
-      const rk = rackVon(rackId);
-      if (rk && rk.levels > 0) {
-        const art = brettArt(rk.strainId);
-        let zeilen = '';
-        for (let l = 1; l <= rk.levels; l++) {
-          const ort = brettOrt(rackId, l);
-          const list = brettBeutel(ort);
-          const chips = list.length
-            ? brettGruppen(list)
-                .map((g) => {
-                  const z = brettZustand(g.bags[0], now);
-                  return `<span class="brett-chip brett-${z.k}"><b>${g.bags.length}×</b> ${esc(fmtDtShort(g.made))}</span>`;
-                })
-                .join('')
-            : `<span class="brett-chip-leer">${esc(t('brett.emptyShort'))}</span>`;
-          zeilen += `<button type="button" class="brett-zeile" data-brett-open="${esc(ort)}"><span class="brett-zeile-n">${l}</span><span class="brett-zeile-chips">${chips}</span></button>`;
-        }
-        return `<div class="rack-card-new">
-      <div class="rack-card-header">
-        <span class="rack-card-name">${rackLabel(rackId)}${art ? ' · ' + esc(art.name) : ''}</span>
-        <span class="rack-card-count">${tp('dash.bags', count)}</span>
-      </div>
-      <div class="rack-card-bretter">${zeilen}</div>
-    </div>`;
-      }
-      const byBatch = {};
-      Object.entries(bags).forEach(([bagId, d]) => {
-        if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
-        byBatch[d.batchId].bags.push({ id: bagId, loc: rackId });
-      });
-      // Filter batches by search
-      const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
-        ([bid, d]) =>
-          !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
-      );
-
-      let batchHtml = batchEntries
-        .map(([bid, d]) => {
-          const bd = filtered.find((f) => f.b.batchId === bid);
-          const ov = bd ? bd.ov : false;
-          d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
-        <div class="batch-card-header">
-          <span class="batch-card-species">${esc(d.sp)}</span>
-          <span class="batch-card-count">${d.bags.length}</span>
-        </div>
-        <div class="batch-card-meta">
-          <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
-          <span>${esc(d.st)}</span>
-          ${bd && bd.ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}
-        </div>
-        <div class="batch-card-chips">${d.bags
-          .map((bg) => {
-            const sel = selectedLocBags.has(bg.id);
-            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
-          })
-          .join('')}</div>
-      </div>`;
-        })
-        .join('');
-      if (!batchEntries.length && !count)
-        batchHtml = `<div class="fs-xs" style="color:var(--c-text-muted);font-style:italic">${t('dash.empty')}</div>`;
-
-      return `<div class="rack-card-new">
-      <div class="rack-card-header">
-        <span class="rack-card-name">${rackLabel(rackId)}</span>
-        <span class="rack-card-count">${tp('dash.bags', count)}</span>
-      </div>
-      <div class="rack-card-bar"><div class="rack-card-bar-fill" style="background:${color};width:${Math.min(100, Math.round((count / 20) * 100))}%"></div></div>
-      <div class="rack-card-batches">${batchHtml}</div>
-    </div>`;
-    })
-    .join('');
-
-  const rackCount = shownRacks.length;
-  const gridClass = rackCount > 4 ? 'rack-grid rack-grid-5col' : rackCount === 1 ? 'rack-grid rack-grid-1' : 'rack-grid';
-  const emptyLine =
-    shownRacks.length < racks.length
-      ? `<div class="rack-empty-line">${esc(t('dash.empty'))}: ${emptyRacks.map((r) => esc(rackLabel(r))).join(', ')}</div>`
-      : '';
-  const capHtml = cap
-    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${totalBags > cap ? '#ef4444' : color};width:${Math.min(100, Math.round((totalBags / cap) * 100))}%;border-radius:3px"></div></div>
-      <span class="fs-xs" style="color:${totalBags > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((totalBags / cap) * 100)}%</span>
-    </div>`
-    : '';
-  const late = filtered.filter(
-    (d) => d.ov && Object.keys(d.c).some((zid) => (zid === zone || racks.includes(zid)) && d.c[zid] > 0)
-  ).length;
-  // Was in einem Raum mit Brettern auf keinem Brett steht: neue Beutel, und
-  // alles von vor den Brettern. Eine Zeile oben; sie öffnet das Blatt dazu.
-  const ohneBrett = brettZoneMitBrettern(zoneObj) ? brettOhne(zone).length : 0;
-  const ohneHtml = ohneBrett
-    ? `<button type="button" class="brett-zeile brett-zeile-ohne" data-brett-frei="${esc(zone)}"><span class="brett-zeile-n">?</span><span class="brett-zeile-chips">${esc(t('brett.notOnShelfN', { n: ohneBrett }))}</span></button>`
-    : '';
-  return `<div class="${_locSectionClass(zone, q)}" data-zone="${esc(zone)}">
-    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${esc(zoneDisplayName(zone))}</div>
-      ${_locLateHtml(late)}
-      <span class="location-section-count">${cap ? totalBags + ' / ' + cap + ' Bags' : tp('dash.bags', totalBags)}</span>
-      <button class="fs-xs" type="button" data-zone-check="${esc(zone)}" style="margin-left:8px;flex:none;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-card);cursor:pointer">${esc(t('zoneCheck.btn'))}</button>
-    </div>
-    <div class="location-section-body">${capHtml}${ohneHtml}
-      <div class="${gridClass}">${rackCards}</div>${emptyLine}
-    </div>
-  </div>`;
-}
-
-function renderFruitingSection(fruitingZones, filtered) {
-  let totalBags = 0;
-  fruitingZones.forEach((z) => (totalBags += Object.keys(getZoneBags(z.id)).length));
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const color = fruitingZones[0]?.color || ZONE_ROLE_COLOR.fruiting;
-
-  const tentCols = fruitingZones
-    .map((z) => {
-      const bags = getZoneBags(z.id);
-      const entries = Object.entries(bags);
-      const byBatch = {};
-      entries.forEach(([bagId, d]) => {
-        if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
-        byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
-      });
-      const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
-        ([bid, d]) =>
-          !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
-      );
-
-      if (!batchEntries.length) {
-        return `<div class="tent-column">
-        <div class="tent-column-header">${esc(zoneDisplayName(z.id))}</div>
-        <div class="tent-column-empty">${t('dash.empty')}</div>
-      </div>`;
-      }
-      const cards = batchEntries
-        .map(([bid, d]) => {
-          const bd = filtered.find((f) => f.b.batchId === bid);
-          const harv = bd ? bd.harv : 0;
-          const due = bd ? bd.due : null;
-          const ov = bd ? bd.ov : false;
-          d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-          return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
-        <div class="batch-card-header">
-          <span class="batch-card-species">${esc(d.sp)}</span>
-          <span class="batch-card-count">${d.bags.length}</span>
-        </div>
-        <div class="batch-card-meta">
-          <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
-          <span>${esc(d.st)}</span>
-          ${harv > 0 ? `<span style="color:var(--c-amber-dark);font-weight:500">${t('dash.harvested')}: ${harv}g</span>` : ''}
-          ${due ? `<span style="color:${ov ? 'var(--c-red-dark)' : 'var(--c-text-muted)'}">${t('dash.due')}: ${fmtDt(due)}${ov ? ' \u26a0' : ''}</span>` : ''}
-        </div>
-        <div class="batch-card-chips">${d.bags
-          .map((bg) => {
-            const sel = selectedLocBags.has(bg.id);
-            return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
-          })
-          .join('')}</div>
-      </div>`;
-        })
-        .join('');
-      const cap = z.maxCapacity;
-      const capBar = cap
-        ? `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
-        <div style="flex:1;height:5px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div class="${entries.length > cap ? 'kap-voll' : ''}" style="height:100%;background-color:${z.color || color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
-        <span class="fs-micro" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'}">${Math.round((entries.length / cap) * 100)}%</span>
-      </div>`
-        : '';
-      // Je Art eine Karte mit Zahl und Grenzen; antippen öffnet Raus und Zählen.
-      const arten = new Map();
-      for (const x of brettZeltBeutel(z.id, null)) if (x.strainId) arten.set(x.strainId, (arten.get(x.strainId) || 0) + 1);
-      const artKarten = [...arten].map(([sid, n]) => zeltKarteHtml(z, brettArt(sid), sid, n)).join('');
-      return `<div class="tent-column">
-      <div class="tent-column-header">${esc(zoneDisplayName(z.id))} <span class="fs-xs" style="font-weight:400;color:var(--c-text-muted)">(${cap ? entries.length + '/' + cap : entries.length})</span></div>${capBar}
-      ${artKarten ? '<div class="zelt-karten">' + artKarten + '</div>' : ''}
-      ${cards}
-    </div>`;
-    })
-    .join('');
-
-  return `<div class="${_locSectionClass('fruiting', q)}" data-zone="fruiting">
-    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${color}"></span>${t('dash.fruitingTents')}</div>
-      <span class="location-section-count">${tp('dash.bags', totalBags)}</span>
-    </div>
-    <div class="location-section-body">
-      <div class="tent-columns">${tentCols}</div>
-    </div>
-  </div>`;
-}
-
-// The room lists came out in scan-log insertion order — effectively the order
-// bags happened to be added, which is no order at all once a tent holds twenty
-// batches. One sort, shared by the simple, rack and fruiting renderers so a
-// room never sorts differently from the room next to it.
-const LOC_SORTS = ['due', 'species', 'bags', 'id'];
-const LOC_SORT_LABEL = { due: 'th.due', species: 'th.species', bags: 'worklist.bags', id: 'th.batchId' };
-let _locSortKey = null;
-function locSortKey() {
-  if (_locSortKey === null) {
-    // Guarded like the other stored preferences: storage revoked mid-session
-    // must not throw inside a render.
-    try {
-      _locSortKey = localStorage.getItem('mp-loc-sort') || '';
-    } catch (e) {
-      _locSortKey = '';
-    }
-  }
-  // Due date is the default because it is the one that says what to do next.
-  return LOC_SORTS.includes(_locSortKey) ? _locSortKey : 'due';
-}
-function setLocSort(key) {
-  if (!LOC_SORTS.includes(key)) return;
-  _locSortKey = key;
-  try {
-    localStorage.setItem('mp-loc-sort', key);
-  } catch (e) {
-    /* storage disabled — the choice just won't survive a reload */
-  }
-  renderStatus();
-}
-function locSortControlHtml() {
-  const cur = locSortKey();
-  return (
-    '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px">' +
-    '<span class="fs-xs" style="color:var(--c-text-muted);flex-shrink:0">' +
-    esc(t('sort.by')) +
-    '</span>' +
-    LOC_SORTS.map((k) => {
-      const on = k === cur;
-      return (
-        '<button type="button" class="fs-floor" data-action="loc-sort" data-key="' +
-        esc(k) +
-        '" aria-pressed="' +
-        on +
-        '" style="--fs-own:10.5px;padding:3px 8px;border-radius:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
-        (on ? 'var(--c-accent)' : 'var(--c-border)') +
-        ';background:' +
-        (on ? 'var(--c-accent)' : 'transparent') +
-        ';color:' +
-        (on ? '#fff' : 'var(--c-text-sec)') +
-        '">' +
-        esc(t(LOC_SORT_LABEL[k])) +
-        '</button>'
-      );
-    }).join('') +
-    '</div>'
-  );
-}
-// batchEntries is [batchId, {sp, st, bags}] in all three renderers, so they can
-// share this. Ties break on the batch id, which keeps the order stable rather
-// than reshuffling equal rows on every re-render.
-function sortZoneBatches(batchEntries) {
-  const key = locSortKey();
-  const dueOf = (bid) => {
-    const b = batchById(bid);
-    return b ? b.due : null;
-  };
-  return [...batchEntries].sort((x, y) => {
-    if (key === 'species') return sortCmp(x[1].sp, y[1].sp) || sortCmp(x[0], y[0]);
-    // Most bags first: "where is the bulk of the work" is the question here.
-    if (key === 'bags') return y[1].bags.length - x[1].bags.length || sortCmp(x[0], y[0]);
-    if (key === 'id') return sortCmp(x[0], y[0]);
-    // sortCmp already sinks null to the end, so an undated batch lands last
-    // rather than pretending to be the most urgent thing in the room.
-    return sortCmp(dueOf(x[0]), dueOf(y[0])) || sortCmp(x[0], y[0]);
-  });
-}
-function renderSimpleZoneSection(zone, filtered) {
-  const bags = getZoneBags(zone.id);
-  const entries = Object.entries(bags);
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const byBatch = {};
-  entries.forEach(([bagId, d]) => {
-    if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
-    byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
-  });
-  const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
-    ([bid, d]) =>
-      !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
-  );
-  const cards = batchEntries
-    .map(([bid, d]) => {
-      d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      const bd = filtered.find((f) => f.b.batchId === bid);
-      const ov = !!(bd && bd.ov);
-      return `<div class="batch-card${ov ? ' batch-overdue' : ''}" onclick="this.classList.toggle('expanded')">
-      <div class="batch-card-header"><span class="batch-card-species">${esc(d.sp)}</span><span class="batch-card-count">${d.bags.length}</span></div>
-      <div class="batch-card-meta"><span class="fs-micro" style="font-family:monospace">${esc(bid)}</span><span>${esc(d.st)}</span>${ov ? `<span class="overdue-text">${t('dash.overdue')}</span>` : ''}</div>
-      <div class="batch-card-chips">${d.bags
-        .map((bg) => {
-          const sel = selectedLocBags.has(bg.id);
-          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
-        })
-        .join('')}</div>
-    </div>`;
-    })
-    .join('');
-  if (!cards) return '';
-  const cap = zone.maxCapacity;
-  const capHtml = cap
-    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <div style="flex:1;height:6px;background:var(--c-bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${entries.length > cap ? '#ef4444' : zone.color};width:${Math.min(100, Math.round((entries.length / cap) * 100))}%;border-radius:3px"></div></div>
-      <span class="fs-xs" style="color:${entries.length > cap ? '#ef4444' : 'var(--c-text-muted)'};white-space:nowrap">${Math.round((entries.length / cap) * 100)}%</span>
-    </div>`
-    : '';
-  const late = filtered.filter((d) => d.ov && (d.c[zone.id] || 0) > 0).length;
-  return `<div class="${_locSectionClass(zone.id, q)}" data-zone="${esc(zone.id)}">
-    <div class="location-section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-      <div class="location-section-title">${CHEVRON_SVG}<span class="zone-dot" style="background:${zone.color}"></span>${esc(zoneDisplayName(zone.id))}</div>
-      ${_locLateHtml(late)}
-      <span class="location-section-count">${cap ? entries.length + ' / ' + cap + ' Bags' : tp('dash.bags', entries.length)}</span>
-    </div>
-    <div class="location-section-body">${capHtml}
-      <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
-    </div>
-  </div>`;
-}
-
-function renderContamSection(zone, filtered) {
-  const bags = getZoneBags(zone.id);
-  const entries = Object.entries(bags);
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  const byBatch = {};
-  entries.forEach(([bagId, d]) => {
-    if (!byBatch[d.batchId]) byBatch[d.batchId] = { sp: d.species, st: d.strain, bags: [] };
-    byBatch[d.batchId].bags.push({ id: bagId, loc: d.loc });
-  });
-  const batchEntries = sortZoneBatches(Object.entries(byBatch)).filter(
-    ([bid, d]) =>
-      !q || bid.toLowerCase().includes(q) || d.sp.toLowerCase().includes(q) || d.st.toLowerCase().includes(q)
-  );
-  if (!batchEntries.length) return '';
-
-  const cards = batchEntries
-    .map(([bid, d]) => {
-      d.bags.sort((a, b) => (parseInt(a.id.split('-').pop()) || 0) - (parseInt(b.id.split('-').pop()) || 0));
-      return `<div class="batch-card" onclick="this.classList.toggle('expanded')">
-      <div class="batch-card-header">
-        <span class="batch-card-species">${esc(d.sp)}</span>
-        <span class="batch-card-count">${d.bags.length}</span>
-      </div>
-      <div class="batch-card-meta">
-        <span class="fs-micro" style="font-family:monospace">${esc(bid)}</span>
-        <span>${esc(d.st)}</span>
-      </div>
-      <div class="batch-card-chips">${d.bags
-        .map((bg) => {
-          const sel = selectedLocBags.has(bg.id);
-          return `<span class="bag-chip${sel ? ' selected' : ''}" data-bag="${esc(bg.id)}" data-batch="${esc(bid)}" data-loc="${esc(bg.loc)}">${esc(bg.id.split('-').pop())}</span>`;
-        })
-        .join('')}</div>
-    </div>`;
-    })
-    .join('');
-
-  return `<div class="location-section contam-section">
-    <div class="location-section-header">
-      <div class="location-section-title"><span class="zone-dot" style="background:${zone.color}"></span>\u26a0 ${esc(zoneDisplayName(zone.id))}</div>
-      <span class="location-section-count">${tp('dash.bags', entries.length)}</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">${cards}</div>
-  </div>`;
-}
-
-function updateActionBar() {
-  const bar = document.getElementById('loc-action-bar');
-  if (!bar) return;
-  const n = selectedLocBags.size;
-  if (n > 0) {
-    bar.style.display = 'flex';
-    bar.innerHTML = `<span class="action-bar-count">${tp('dash.bagsSelected', n)}</span><span style="flex:1"></span>
-      <button class="btn btn-sm fs-xs" onclick="locSelectAllVisible()">${t('dash.selectAll')}</button>
-      <button class="btn btn-sm fs-xs" onclick="selectedLocBags.clear();renderStatus()">${t('dash.clear')}</button>
-      <button class="btn btn-sm btn-p fs-xs" onclick="openLocMovePopup()">${t('dash.move')}</button>
-      <button class="btn btn-sm btn-r fs-xs" onclick="locRemoveSelected()">${t('dash.remove')}</button>`;
-  } else {
-    bar.style.display = 'none';
-  }
-}
-
-function locSelectAllVisible() {
-  const q = (document.getElementById('status-q')?.value || '').toLowerCase();
-  ZONES.forEach((z) => {
-    const bags = getZoneBags(z);
-    Object.entries(bags).forEach(([bagId, d]) => {
-      if (
-        !q ||
-        bagId.toLowerCase().includes(q) ||
-        (d.batchId || '').toLowerCase().includes(q) ||
-        (d.species || '').toLowerCase().includes(q) ||
-        (d.strain || '').toLowerCase().includes(q)
-      )
-        selectedLocBags.set(bagId, { batchId: d.batchId, loc: d.loc });
-    });
-  });
-  renderStatus();
-}
 function setOvPeriod(p) {
   ovPeriod = p;
   localStorage.setItem('mp-ov-period', p);
@@ -6322,7 +5774,6 @@ function _undoMove(snap) {
   groups.forEach((g) => moveBagsTo(g.batch, g.bags, g.dest, (m) => (back += m || 0), { reason: 'undo' }));
   updateSD();
   renderBatches();
-  renderStatus();
   renderDashBatchTasks();
   flashUndoBar(t('dash.undone', { n: back }));
 }
@@ -6338,7 +5789,6 @@ function moveBatchToFruiting(batchId) {
   moveBatchTo(b, dest, function (moved, skipped) {
     updateSD();
     renderBatches();
-    renderStatus();
     renderDashBatchTasks();
     if (!moved) {
       setFb(
@@ -9172,7 +8622,6 @@ function bulkSectionToFruiting(bucket) {
       targets.forEach((b) => moveBatchTo(b, dest, (m) => (moved += m || 0)));
       updateSD();
       renderBatches();
-      renderStatus();
       renderDashBatchTasks();
       showUndoBar(t('dash.bulkFruitingDone', { n: moved, dest: zoneDisplayName(dest) }), () => _undoMove(snap));
     }
@@ -10582,7 +10031,6 @@ function brettRueckgaengig(entries) {
 function brettNeuZeichnen() {
   updateSD();
   renderBatches();
-  renderStatus();
   renderDashBatchTasks();
   if (_brett) brettZeichne();
 }
@@ -11459,17 +10907,6 @@ function brettWire() {
       brettZeichne();
     }
   });
-  // Standorte: ein Brett, "auf keinem Brett" oder eine Art im Zelt antippen.
-  const orte = document.getElementById('dash-locations');
-  if (orte)
-    orte.addEventListener('click', (ev) => {
-      const el = ev.target.closest('[data-brett-open],[data-brett-frei],[data-zelt-zone]');
-      if (!el) return;
-      const d = el.dataset;
-      if (d.brettOpen) brettOeffne({ kind: 'platz', loc: d.brettOpen });
-      else if (d.brettFrei) brettOeffne({ kind: 'frei', zone: d.brettFrei });
-      else if (d.zeltZone) brettOeffne({ kind: 'zelt', zone: d.zeltZone, strainId: Number(d.zeltArt) || null });
-    });
   rackEditWire();
 }
 
@@ -11521,7 +10958,7 @@ async function rackEditSave() {
   syncNow();
   rackEditClose();
   renderZones();
-  renderStatus();
+  renderBatches();
   toast(t('rackEdit.saved', { n: r.levels }));
 }
 // Was auf das Etikett eines Fachs kommt: Raum und Regal fürs Band, die Nummer
@@ -11637,14 +11074,6 @@ function getZoneBags(zone) {
   });
   return bags;
 }
-function toggleLocBag(bagId, batchId, loc) {
-  if (selectedLocBags.has(bagId)) selectedLocBags.delete(bagId);
-  else selectedLocBags.set(bagId, { batchId, loc });
-  // Toggle chip class
-  const el = document.querySelector(`.bag-chip[data-bag="${CSS.escape(bagId)}"]`);
-  if (el) el.classList.toggle('selected', selectedLocBags.has(bagId));
-  updateActionBar();
-}
 // Most-recently-used move/placement destinations, newest-first and de-duped,
 // so the common moves (Inkubation → Fruchtung / Kontamination) are one tap
 // instead of a scroll through every zone + rack. Sourced from scanLog, which
@@ -11692,7 +11121,8 @@ function rememberDest(loc) {
     /* storage disabled — recents still work from scanLog */
   }
 }
-// Destination picker for the bags selected on the dashboard. Uses the shared
+// Destination picker for the bags a stock check did not find (_zcSelectMissing
+// puts them into selectedLocBags). Uses the shared
 // _openZonePicker (same list as the batch-move and placement pickers) instead of
 // the old bespoke grid + two-step confirm: picking a destination moves straight
 // away, and the Undo in the feedback bar covers a mistap. Destinations the
@@ -11704,39 +11134,6 @@ function openLocMovePopup() {
     excludeLocs: srcLocs
   });
 }
-// Event delegation for bag chip clicks
-document.getElementById('dash-locations').addEventListener('click', function (e) {
-  // The sort chips sit above the zones, so handle them before anything that
-  // treats a click as landing inside a room.
-  const ls = e.target.closest('[data-action="loc-sort"]');
-  if (ls) {
-    e.preventDefault();
-    e.stopPropagation();
-    setLocSort(ls.dataset.key);
-    return;
-  }
-  // Stocktake button sits inside the zone header, whose own click toggles the
-  // section — stop the event so opening the check doesn't also collapse it.
-  const zc = e.target.closest('[data-zone-check]');
-  if (zc) {
-    e.preventDefault();
-    e.stopPropagation();
-    openZoneCheck(zc.dataset.zoneCheck);
-    return;
-  }
-  // The heading's own handler has turned the room already; keep what it is now.
-  const head = e.target.closest('.location-section-header');
-  if (head && head.parentElement.dataset.zone) {
-    const sec = head.parentElement;
-    _locRemember(sec.dataset.zone, !sec.classList.contains('collapsed'));
-    return;
-  }
-  const chip = e.target.closest('.bag-chip[data-bag]');
-  if (!chip) return;
-  e.preventDefault();
-  e.stopPropagation();
-  toggleLocBag(chip.dataset.bag, chip.dataset.batch, chip.dataset.loc);
-});
 let lastLocUndoEntries = [];
 function locMoveTo(toLoc) {
   if (!selectedLocBags.size) return;
@@ -11770,7 +11167,8 @@ function locMoveTo(toLoc) {
   document.getElementById('m-locmove').classList.remove('open');
   postScanEntries(entries); // I-12 zone check applies: these are MOVEs
   updateSD();
-  renderStatus();
+  renderBatches();
+  renderZones();
   setLocFb(t('scanFb.moved', { n: n, loc: toLoc }));
 }
 // ─── ZONE CHECK (stocktake) ─────────────────────────────────
@@ -12213,7 +11611,8 @@ async function locRemoveSelected() {
       });
   });
   updateSD();
-  renderStatus();
+  renderBatches();
+  renderZones();
   setLocFb(t('scanFb.removed', { n: n }));
 }
 // The same element and the same skin setFb uses. It said `scan-toast` for a
@@ -12247,7 +11646,8 @@ function locUndo() {
     if (mi !== -1) movements.splice(mi, 1);
   }
   updateSD();
-  renderStatus();
+  renderBatches();
+  renderZones();
   // Delete each persisted row by its own id (owner-or-admin ACL) instead of the
   // admin-only DELETE /scan-log/last/N, which 403'd for workers (yet still
   // showed "success") and for admins deleted the globally-newest N rows —
@@ -12649,7 +12049,7 @@ function spawnZuruecknehmen(entries) {
   _placementByBag = null;
   _rhythmIndex = null;
   updateSD();
-  renderStatus();
+  renderBatches();
   // Dieselbe Leiste, auf der eben noch Rückgängig stand: dort schaut man hin.
   toast(t('batch.spawnBack', { n: entries.length }));
 }
@@ -13045,7 +12445,6 @@ async function createBatch() {
         inventory.stock = stockSnapshot;
         toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
-        renderStatus();
         return;
       }
       // Register new barcode numbers from server response
@@ -13068,7 +12467,6 @@ async function createBatch() {
       inocAskConsume(batchObj, _inocUsed);
       _inocUsed = [];
       renderBatches();
-      renderStatus();
     })
     .finally(() => {
       if (createBtn) createBtn.disabled = false;
@@ -13117,7 +12515,6 @@ function nbPlaceAndPrint(batchObj, bags) {
     addBagsToLocation(batchObj, bags, raum, function () {
       updateSD();
       renderBatches();
-      renderStatus();
     });
     nbEtikettenNachPlatz(batchObj, bags);
     return;
@@ -14706,7 +14103,7 @@ function postScanEntries(entries, opts) {
         const was =
           entries.length === 1 ? entries[0].bag || entries[0].batch : t('scanFb.nBags', { n: entries.length });
         setFb('err', t('scanFb.notSaved', { what: was, reason: r.error }));
-        if (typeof renderStatus === 'function') renderStatus();
+        if (typeof renderBatches === 'function') renderBatches();
         updateSD();
         return;
       }
@@ -14879,7 +14276,6 @@ function openZonePickModal(batch, bags, onDone) {
         setFb('ok', batch.batchId + ': ' + added + ' Bags \u2192 ' + zoneDisplayName(dest), { noModal: true });
         updateSD();
         renderBatches();
-        renderStatus();
       });
       if (onDone) onDone();
     },
@@ -15021,7 +14417,6 @@ function openMoveBatchModal(batchId) {
       );
       updateSD();
       renderBatches();
-      renderStatus();
       renderDashBatchTasks();
       // Same one-tap reversal the \u2192 Fruchtung buttons offer. Skipped when the
       // snapshot is empty (nothing had a prior location to restore).
@@ -16018,7 +15413,6 @@ function delBatch(id) {
     scanLog = scanLog.filter((x) => x.batch !== id);
     harvests = harvests.filter((x) => x.batch !== id);
     renderBatches();
-    renderStatus();
   });
 }
 
@@ -18889,7 +18283,7 @@ function deleteLogEntry(btn, time, batch, action, bag) {
       const serverId = entry._serverId || entry.id;
       if (serverId) apiDelete('/api/scan-log/' + serverId);
       renderLog();
-      renderStatus();
+      renderBatches();
     }
   );
 }
@@ -22229,7 +21623,14 @@ function zoneEditZeichne() {
   const knopf = (a, label, aus) =>
     `<button type="button" class="btn btn-sm${a === 'delete' ? ' btn-r' : ''}" data-zone-edit="${a}"${aus ? ' disabled' : ''}>${esc(label)}</button>`;
   const gruppe = (k) => `<div class="zone-sheet-grp">${esc(t(k))}</div>`;
+  // Prüfen (openZoneCheck): was die App in diesem Raum erwartet, abhaken, was
+  // da ist. Der Knopf stand in der Kopfzeile des Raums unter Chargen › Standorte,
+  // und nur bei Räumen mit Regalen; die Ansicht ist weg, der Knopf steht hier.
+  const pruefen = z.racks.length
+    ? gruppe('zones.grpCheck') + `<div class="zone-sheet-row">${knopf('check', t('zoneCheck.btn'))}</div>`
+    : '';
   document.getElementById('m-zone-edit-body').innerHTML =
+    pruefen +
     gruppe('zones.grpRoom') +
     '<div class="zone-sheet-row">' +
     knopf('rename', t('batch.zones.rename')) +
@@ -22272,6 +21673,7 @@ function zoneEditWire() {
     else if (a === 'capacity') editZoneCapacity(id);
     else if (a === 'add-rack') addRackToZone(id);
     else if (a === 'qr') printZoneQrBrowser(id);
+    else if (a === 'check') openZoneCheck(id);
     else if (a === 'delete') removeZone(id);
   });
 }
@@ -22441,7 +21843,7 @@ async function addZone() {
     });
     rebuildZoneConstants();
     renderZones();
-    renderStatus();
+    renderBatches();
     zoneAddClose();
     document.getElementById('zone-name').value = '';
     document.getElementById('zone-racks').value = '';
@@ -22467,7 +21869,6 @@ function renameZone(id) {
       }
       z.name = newName;
       renderZones();
-      renderStatus();
       renderBatches();
     });
   });
@@ -22502,7 +21903,7 @@ function editZoneCapacity(id) {
       z.maxCapacity = cap;
       setFb('ok', t('zones.capacitySaved'));
       renderZones();
-      renderStatus();
+      renderBatches();
       renderDashBatchTasks();
     });
   });
@@ -22519,7 +21920,7 @@ function removeZone(id) {
     zones = zones.filter((x) => x.id !== id);
     rebuildZoneConstants();
     renderZones();
-    renderStatus();
+    renderBatches();
   });
 }
 function addRackToZone(zoneId) {
@@ -22545,7 +21946,7 @@ function addRackToZone(zoneId) {
       if (zone) zone.racks.push({ id: rackId, sortOrder: zone.racks.length + 1 });
       rebuildZoneConstants();
       renderZones();
-      renderStatus();
+      renderBatches();
     });
   });
 }
@@ -22563,7 +21964,7 @@ function removeRack(rackId) {
       });
       rebuildZoneConstants();
       renderZones();
-      renderStatus();
+      renderBatches();
     });
   });
 }
@@ -28540,7 +27941,6 @@ function createGrainBatch(opts) {
         inventory.stock = stockSnapshot;
         toast(t('batch.saveFailed') + r.error, 'err');
         renderBatches();
-        renderStatus();
         return;
       }
       if (r && r.bagBarcodes) {
@@ -28980,7 +28380,6 @@ function biMoveTo(dest) {
     }
     updateSD();
     renderBatches();
-    renderStatus();
   };
   if (biWholeBatch) moveBatchTo(b, dest, cb);
   else moveBagsTo(b, [biBagId], dest, cb);
@@ -31984,7 +31383,7 @@ function undoSuccessRow(btn) {
   _scanBeep(400, 100);
   setFb('info', undoneMsg(entry));
   updateSD();
-  renderStatus();
+  renderBatches();
   renderScanSuccesses();
 }
 // Transient overlay background flash to reinforce feedback
@@ -32564,7 +31963,7 @@ function scanRueckgaengig(entry) {
   _scanBeep(400, 100);
   setFb('info', undoneMsg(entry));
   updateSD();
-  renderStatus();
+  renderBatches();
   if (typeof renderScanSuccesses === 'function') renderScanSuccesses();
 }
 // Ctrl+Z undo support
@@ -32749,7 +32148,7 @@ function handleZoneMismatch(r, entries) {
     modeRunUntally(e);
   }
   if (typeof setFb === 'function') setFb('err', movedMeanwhileMsg(r.bag, r.current_zone));
-  if (typeof renderStatus === 'function') renderStatus();
+  if (typeof renderBatches === 'function') renderBatches();
   if (typeof updateSD === 'function') updateSD();
   // Der eigene Stand war alt, sonst gäbe es den Konflikt nicht. Gleich den neuen
   // holen: dann geht der nächste Scan desselben Beutels durch, statt wieder
@@ -37500,8 +36899,8 @@ function gsGoto(rec) {
   // this one.
   if (kind.clear) kind.clear();
   kind.go(rec);
-  // CSS.escape, which is what this repo uses for the same job in
-  // toggleLocBag(). An order id comes out of a channel payload.
+  // CSS.escape, which is what this repo uses for the same job elsewhere.
+  // An order id comes out of a channel payload.
   if (kind.flash) gsFlash('[data-find="' + CSS.escape(gsKey(rec)) + '"]');
 }
 
@@ -38843,7 +38242,6 @@ function initEventListeners() {
   $('btn-22').addEventListener('click', cancelHarvest);
 
   // Dashboard
-  $('status-q').addEventListener('input', renderStatus);
   // Delegated clicks for Batch tasks + Ready-to-harvest cards
   function dashTaskCardClick(e) {
     const el = e.target.closest('[data-action]');
@@ -39012,9 +38410,6 @@ function initEventListeners() {
   $('st-batch-list').addEventListener('click', () => {
     openStab('batch', 'list');
   });
-  // Was added to the markup and never wired, so the room view — the only place
-  // bags can be selected and moved in bulk — was unreachable by tapping.
-  $('st-batch-locations').addEventListener('click', () => openStab('batch', 'locations'));
   // Derselbe Weg wie die Kachel auf der Arbeitsgang-Seite: der geführte Ablauf,
   // nicht das lange Formular. Zwei Wege zur selben Charge hießen zwei Formulare
   // mit zwei Verhalten, und das lange endete ohne Fenster. sp-batch-new bleibt
@@ -40107,7 +39502,7 @@ function wkfBookHarvest() {
   });
   if (typeof renderHarvests === 'function') renderHarvests();
   if (typeof updateSD === 'function') updateSD();
-  if (typeof renderStatus === 'function') renderStatus();
+  if (typeof renderBatches === 'function') renderBatches();
 }
 
 // ─── Step 2b: move — where to ────────────────────────────────────────────────
@@ -40164,7 +39559,6 @@ function wkfBookMove() {
     WKF.step = 'done';
     wkfRender();
     if (typeof renderBatches === 'function') renderBatches();
-    if (typeof renderStatus === 'function') renderStatus();
     if (typeof updateSD === 'function') updateSD();
   });
 }
