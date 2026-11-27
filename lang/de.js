@@ -2773,6 +2773,7 @@ window.LANG['de'] = {
   'cam.notFound': 'Keine Kamera gefunden — dieses Gerät hat keine, oder der Browser darf sie nicht benutzen.',
   'cam.inUse': 'Die Kamera benutzt gerade eine andere App — die schließen, dann nochmal „Scannen".',
   'cam.unknownError': 'Die Kamera startet nicht — App neu starten, dann nochmal. ({err})',
+  'cam.scanFailed': 'Dieser Scan hat nicht geklappt. Die Kamera liest weiter — scanne ihn noch einmal.',
   'cam.nothingToUndo': 'Nichts zum R\u00fcckg\u00e4ngig machen',
   'cam.scanCleared': 'Scan zur\u00fcckgesetzt',
   // Offline

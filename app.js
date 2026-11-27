@@ -37810,6 +37810,28 @@ function _camScharfLesen() {
   };
   proto._mtScharf = true;
 }
+// Nach jedem Treffer liest die Kamera kurz nicht (pause), dann geht es weiter.
+// Früher hielt pause(true) auch das Video an, und html5-qrcode liest erst
+// wieder, wenn das Video danach "playing" meldet. Auf manchem Telefon kam das
+// nach ein paar Scans nicht mehr: die Kamera stand, mit dem grünen Rahmen vom
+// letzten Treffer, bis man sie zu- und wieder aufmachte. Jetzt läuft das Bild
+// weiter, und liest die Kamera nach dem Weiter noch immer nicht, versucht sie
+// es gleich noch einmal.
+const CAM_PAUSIERT = 3; // Html5QrcodeScannerState.PAUSED
+function _camWeiter(scanner, versuch) {
+  if (scanner !== _camScanner || _camState !== CAM_OPEN) return;
+  let steht = false;
+  try {
+    if (scanner.getState() === CAM_PAUSIERT) {
+      scanner.resume();
+      steht = scanner.getState() === CAM_PAUSIERT; // wartet noch aufs Video
+    }
+  } catch (e) {
+    steht = true;
+    console.warn('Kamera: Weiterlesen ging nicht', e);
+  }
+  if (steht && versuch < 5) setTimeout(() => _camWeiter(scanner, versuch + 1), 1000);
+}
 // Returns the active video MediaStreamTrack from the html5-qrcode reader, or
 // null if the camera hasn't attached one yet.
 function _camActiveTrack() {
@@ -37934,21 +37956,26 @@ function openCamScan() {
         }
         _camLastDecoded = decoded;
         _camLastDecodedAt = now;
-        scanner.pause(true);
-        processScan(decoded);
+        // Kurz nicht lesen; das Bild läuft weiter (_camWeiter sagt, warum).
+        try {
+          scanner.pause(false);
+        } catch (e) {
+          /* las gerade nicht: dann gibt es nichts anzuhalten */
+        }
         // Stocktake runs bag-to-bag at pace, and every bag is a different code,
         // so the 3 s dedup window already covers double-reads — a long pause on
         // top of it just makes the walk feel sluggish.
         const pauseMs = _zcScanMode ? ZC_SCAN_PAUSE_MS : SCAN_PAUSE_MS;
-        setTimeout(function () {
-          // Only resume if we're still the active scanner AND the state hasn't
-          // moved to closing in the meantime.
-          if (scanner === _camScanner && _camState === CAM_OPEN) {
-            try {
-              scanner.resume();
-            } catch (e) {}
-          }
-        }, pauseMs);
+        // Das Weiter steht vor dem Scan: wirft der einen Fehler, liest die Kamera
+        // trotzdem weiter, statt stehen zu bleiben. Ob sie noch offen ist, prüft
+        // _camWeiter.
+        setTimeout(() => _camWeiter(scanner, 0), pauseMs);
+        try {
+          processScan(decoded);
+        } catch (e) {
+          console.error('Scan failed:', decoded, e);
+          setFb('err', t('cam.scanFailed'));
+        }
       },
       function () {}
     )

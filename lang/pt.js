@@ -2766,6 +2766,7 @@ window.LANG['pt'] = {
   'cam.notFound': 'Nenhuma câmera encontrada — este aparelho não tem, ou o navegador não pode usá-la.',
   'cam.inUse': 'Outro aplicativo está usando a câmera — feche-o e toque em "Escanear" de novo.',
   'cam.unknownError': 'A câmera não inicia — reinicie o aplicativo e tente de novo. ({err})',
+  'cam.scanFailed': 'Esta leitura não funcionou. A câmera continua a ler — leia outra vez.',
   'cam.nothingToUndo': 'Nada para desfazer',
   'cam.scanCleared': 'Scan redefinido',
   // Offline
