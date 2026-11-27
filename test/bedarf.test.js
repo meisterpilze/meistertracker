@@ -167,6 +167,7 @@ function seite({ species, board = null, shelf = [], supply = [], geladen = true,
     hebe('_bdKnopf'),
     hebe('_bdZeile'),
     hebe('_bdZeileHtml'),
+    hebe('_bdSetze'),
     hebe('renderBedarf')
   ].join('\n');
   new Function(
@@ -180,7 +181,8 @@ function seite({ species, board = null, shelf = [], supply = [], geladen = true,
     'shelfItems',
     'buildSupplyTasks',
     `let _lbData = ${JSON.stringify(geladen ? { species } : null)};
-     let _obBoard = ${JSON.stringify(board)};
+     let _bdBoard = ${JSON.stringify(board)};
+     let _bdHtml = '';
      let _bdGenugOffen = ${genugOffen};
      ${code}
      renderBedarf();`

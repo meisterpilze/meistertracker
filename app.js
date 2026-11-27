@@ -2211,7 +2211,10 @@ function mehrUmschalten(label) {
   const g = mehrGruppen().find((x) => x.label === label);
   if (!g) return;
   const offen = label.classList.contains('sb-zu');
-  mehrMerk(g.key, offen);
+  // Die Gruppe der offenen Seite zuzuklappen gilt für dieses Mal und vergisst
+  // nicht, dass man sie offen gelassen hatte.
+  const hier = g.teile.some((el) => el.classList.contains('sb-btn') && el.classList.contains('active'));
+  if (offen || !hier) mehrMerk(g.key, offen);
   mehrSetze(g, offen);
 }
 
@@ -2388,6 +2391,10 @@ function dashUebersichtOffen() {
   const el = document.getElementById('sp-dash-overview');
   return !!(el && el.classList.contains('active'));
 }
+function dashLogOffen() {
+  const el = document.getElementById('sp-dash-log');
+  return !!(el && el.classList.contains('active'));
+}
 
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
@@ -2418,6 +2425,9 @@ function refresh() {
   // ihr Reiter beim Öffnen und confirmHarvest() nach jeder Ernte; das Blockbuch
   // lädt sich selbst nach (_bbOpen).
   if (id === 'dash' && dashUebersichtOffen()) renderOverviewKPIs();
+  // Der Scan-Log zeigt, was eben gescannt wurde, auch von anderen: er folgt dem
+  // Abgleich. Nur die Zeilen werden ersetzt, Suche und Filter bleiben stehen.
+  if (id === 'dash' && dashLogOffen()) renderLog();
   if (id === 'batch') {
     renderBatches();
   }
@@ -2578,11 +2588,14 @@ let _obBoard = null;
 
 // A day as the floor says it: "heute", "morgen", or a short weekday and date.
 // Parsed at noon so no time zone can push the day over midnight.
-function _obDay(day) {
-  if (!day || !_obBoard) return '';
-  if (day === _obBoard.today) return t('orders.board.today');
+// `board` for a page that holds a board of its own (Bedarf): the day is said
+// against the day that board was built on.
+function _obDay(day, board) {
+  const b = board || _obBoard;
+  if (!day || !b) return '';
+  if (day === b.today) return t('orders.board.today');
   const d = new Date(day + 'T12:00:00');
-  const tomorrow = new Date(_obBoard.today + 'T12:00:00');
+  const tomorrow = new Date(b.today + 'T12:00:00');
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (d.toDateString() === tomorrow.toDateString()) return t('orders.board.tomorrow');
   return d.toLocaleDateString(loc(), { weekday: 'short', day: '2-digit', month: '2-digit' });
@@ -7770,9 +7783,12 @@ function renderWorkTileDue(open) {
     const d = due[tile];
     el.hidden = !d || !d.n;
     if (el.hidden) continue;
-    el.textContent = String(d.n);
+    // Die Zahl für das Auge, die Worte für den Bildschirmleser: ein aria-label
+    // an einem span ohne Rolle wird nicht vorgelesen, und der Knopf hieße
+    // "Ernte erfassen … 2".
+    el.innerHTML =
+      '<span aria-hidden="true">' + d.n + '</span><span class="wk-due-wort">' + esc(tp('work.dueN', d.n)) + '</span>';
     el.classList.toggle('rot', d.late);
-    el.setAttribute('aria-label', tp('work.dueN', d.n));
   }
 }
 // Pakete, die heute zu packen sind, als Hinweis über den Arbeitsgängen: das
@@ -7782,13 +7798,17 @@ function renderWorkPack(board) {
   const el = document.getElementById('wk-pack');
   if (!el) return;
   const n = board && board.pack ? board.pack.length : 0;
-  el.hidden = !n;
-  if (n) el.textContent = tp('work.packN', n);
+  // Nur schreiben, was sich ändert: die Hinweise werden beobachtet
+  // (renderWorkDue), und derselbe Text noch einmal gesetzt zählte dort als
+  // Änderung und ließ bei jedem Abgleich den Wochenplan ein zweites Mal bauen.
+  const text = n ? tp('work.packN', n) : '';
+  if (el.hidden !== !n) el.hidden = !n;
+  if (n && el.textContent !== text) el.textContent = text;
 }
 function wkPackLaden() {
   apiGet('/api/orders/board')
     .then((b) => {
-      _obBoard = b;
+      // Nur der Hinweis. _obBoard gehört der Seite Packen (siehe _bdBoard).
       renderWorkPack(b);
     })
     .catch(() => {
@@ -9399,9 +9419,15 @@ function bedarfZeilen(species, board, shelf, supply) {
   const woche = [];
   const genug = [];
   const luecken = (a, b) => b.fehlt.length - a.fehlt.length || a.sp.name.localeCompare(b.sp.name);
+  // Körnerbrut in kg hat ihre eigene Zeile, wo der Plan eine hat (_kbpZeilen).
+  // Wo nicht — ein Soll von Hand ohne Verbrauch, eine Art außer Programm mit
+  // offener Bestellung — bleibt sie das Stichwort an der Art: sonst fehlte die
+  // Lücke hier ganz, während die Zeile über dem Laborbestand sie mitzählt.
+  const kb = _kbpZeilen(species);
+  const mitZeile = new Set(kb.map((z) => z.sp.strainId));
   const lab = [];
   for (const sp of species) {
-    const fehlt = _lbFehlt(sp).filter((i) => i.key !== 'GSKG');
+    const fehlt = _lbFehlt(sp).filter((i) => i.key !== 'GSKG' || !mitZeile.has(sp.strainId));
     if (fehlt.length) lab.push({ art: 'lab', sp, fehlt });
   }
   lab.sort(luecken);
@@ -9410,19 +9436,25 @@ function bedarfZeilen(species, board, shelf, supply) {
   for (const m of (board && board.make) || []) rot.push({ art: 'make', m });
   for (const x of shelf || []) if (x.active && _shelfLow(x)) knapp.push({ art: 'shelf', x });
   // Eine Sorte, der Körner fehlen, steht mit ihren kg schon da: "Körnerbrut
-  // ansetzen" aus der Sortenliste wäre dieselbe Arbeit ein zweites Mal.
+  // ansetzen" aus der Sortenliste wäre dieselbe Arbeit ein zweites Mal. Erkannt
+  // am Schlüssel der Sorte ('id:3'), und am Namen nur, wo sie keinen Eintrag
+  // unter den Pilzsorten hat: die zwei Listen schreiben einen Namen nicht immer gleich.
   const mitKb = new Set();
-  for (const z of _kbpZeilen(species)) {
+  for (const z of kb) {
     const zeile = { art: 'kb', sp: z.sp, i: z.i, p: z.p };
     if (!(z.i.make > 0) && !(z.p.oldKg > 0)) {
       genug.push(zeile);
       continue;
     }
     (z.i.urgency === 'now' ? rot : woche).push(zeile);
-    if (z.i.make > 0) mitKb.add(String(z.sp.name).toLowerCase());
+    if (z.i.make > 0) {
+      mitKb.add('id:' + z.sp.strainId);
+      mitKb.add('n:' + String(z.sp.name).toLowerCase());
+    }
   }
   for (const s of supply || []) {
-    if (s.taskAction === 'make-grain' && mitKb.has(String(s.name).toLowerCase())) continue;
+    const schonDa = mitKb.has(String(s.key)) || mitKb.has('n:' + String(s.name).toLowerCase());
+    if (s.taskAction === 'make-grain' && schonDa) continue;
     woche.push({ art: 'supply', s });
   }
   return { rot, knapp, woche, genug };
@@ -9474,7 +9506,7 @@ function _bdZeileHtml(z) {
   }
   if (z.art === 'make') {
     const m = z.m;
-    const tage = m.byDay.map((d) => t('orders.board.labelOnQty', { qty: _obNum(d.qty), day: _obDay(d.day) }));
+    const tage = m.byDay.map((d) => t('orders.board.labelOnQty', { qty: _obNum(d.qty), day: _obDay(d.day, _bdBoard) }));
     tage.push(t(m.orders === 1 ? 'orders.board.ordersN.one' : 'orders.board.ordersN.other', { n: m.orders }));
     return _bdZeile(
       `${esc(_obNum(m.qty))} × ${esc(m.sku)}`,
@@ -9502,16 +9534,30 @@ function _bdZeileHtml(z) {
   );
 }
 let _bdGenugOffen = false;
+// Das Packbrett, wie der Bedarf es zuletzt bekam. Ein eigenes und nicht
+// _obBoard: aus dem arbeitet die Seite Packen, und eine Antwort, die hierher
+// unterwegs war, während jemand dorthin wechselt, legte sonst einen älteren
+// Stand unter ein Brett, auf dem schon etwas abgehakt ist.
+let _bdBoard = null;
+// Was zuletzt in der Liste stand. Ein Abgleich bringt bis zu drei Antworten,
+// und meist ändert keine etwas: dann wird nichts ersetzt, und ein Tipp, der
+// gerade unterwegs ist, trifft noch den Knopf, auf den er zielte.
+let _bdHtml = '';
+function _bdSetze(el, html) {
+  if (html === _bdHtml && el.innerHTML) return;
+  _bdHtml = html;
+  el.innerHTML = html;
+}
 function renderBedarf() {
   const el = document.getElementById('bd-list');
   if (!el) return;
   // Vor der ersten Antwort des Labors keine Aussage: "nichts herzustellen" wäre
   // dann eine Behauptung über Zahlen, die noch niemand gesehen hat.
   if (!_lbData) {
-    el.innerHTML = '<div class="empty">' + esc(t('common.loading')) + '</div>';
+    _bdSetze(el, '<div class="empty">' + esc(t('common.loading')) + '</div>');
     return;
   }
-  const z = bedarfZeilen(_lbSpecies(), _obBoard, shelfItems, buildSupplyTasks());
+  const z = bedarfZeilen(_lbSpecies(), _bdBoard, shelfItems, buildSupplyTasks());
   const gruppe = (ton, titel, zeilen, dazu) =>
     zeilen.length || dazu
       ? '<div class="card bd-band">' +
@@ -9527,10 +9573,8 @@ function renderBedarf() {
       '</button>' +
       (_bdGenugOffen ? z.genug.map(_bdZeileHtml).join('') : '')
     : '';
-  el.innerHTML =
-    gruppe('now', 'bd.ordered', z.rot) +
-      gruppe('low', 'bd.low', z.knapp) +
-      gruppe('week', 'bd.week', z.woche, genug) || '<div class="empty">' + esc(t('bd.none')) + '</div>';
+  const html = gruppe('now', 'bd.ordered', z.rot) + gruppe('low', 'bd.low', z.knapp) + gruppe('week', 'bd.week', z.woche, genug);
+  _bdSetze(el, html || '<div class="empty">' + esc(t('bd.none')) + '</div>');
 }
 function bedarfOffen() {
   const seite = document.getElementById('p-bedarf');
@@ -9544,7 +9588,7 @@ function bedarfLaden() {
   loadLabStock();
   apiGet('/api/orders/board')
     .then((b) => {
-      _obBoard = b;
+      _bdBoard = b;
       if (bedarfOffen()) renderBedarf();
     })
     .catch(() => {
@@ -21843,7 +21887,27 @@ function renderZones() {
     el.innerHTML = '<div class="empty">' + esc(t(datenGeladen ? 'zones.empty' : 'common.loading')) + '</div>';
     return;
   }
-  el.innerHTML = zonenSucheHtml() + zonenReihe().map(zonenKarte).join('');
+  el.innerHTML = zonenSucheHtml() + zonenReihe().map(zonenKarte).join('') + zonenKontamHtml();
+}
+// Ein Raum für Kontamination hat keine Karte: eine Meldung bucht den Beutel
+// aus, er steht nirgends. Ein Beutel, der per Scan dorthin umgezogen wurde,
+// steht aber noch dort, und seit es die Raumansicht unter Chargen nicht mehr
+// gibt, zeigte ihn keine Seite. Dann sagt es eine Zeile unter den Räumen, und
+// ein Tipp öffnet das Prüfen des Raums: was nicht mehr da ist, wird dort
+// ausgebucht, was woanders steht, dorthin umgezogen.
+function zonenKontamHtml() {
+  return zones
+    .filter((z) => z.role === 'contaminated')
+    .map((z) => {
+      const n = Object.keys(getZoneBags(z.id)).length;
+      if (!n) return '';
+      return (
+        `<button type="button" class="wk-alert zone-kontam" data-action="zone-check" data-zone="${esc(z.id)}">` +
+        esc(t('zones.contamLeft', { zone: zoneDisplayName(z.id), n })) +
+        '</button>'
+      );
+    })
+    .join('');
 }
 
 // ── Wo steht was ──
@@ -38696,6 +38760,7 @@ function initEventListeners() {
     else if (action === 'rack-open') zonenRegalUmschalten(btn.dataset.rack);
     else if (action === 'rack-edit') rackEditOpen(btn.dataset.rack);
     else if (action === 'frei-open') brettOeffne({ kind: 'frei', zone: btn.dataset.zone });
+    else if (action === 'zone-check') openZoneCheck(btn.dataset.zone);
   });
   // Ein Fach, ein Regal, "in keinem Fach" oder ein Zelt aus "Wo steht …?" oder
   // einem aufgeklappten Regal: dasselbe Blatt wie das Etikett.

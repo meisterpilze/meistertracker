@@ -67,6 +67,7 @@ function seite({ zones = ZONEN, beutel = {}, regalBeutel = {}, frei = {} } = {})
     ${ROLLEN}
     ${hebeFunktion('zonenReihe', APP)}
     ${hebeFunktion('zonenKarte', APP)}
+    ${hebeFunktion('zonenKontamHtml', APP)}
     ${hebeFunktion('renderZones', APP)}
     renderZones();`
   )(el, zones, beutel, regalBeutel, frei);

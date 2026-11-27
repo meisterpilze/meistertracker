@@ -62,7 +62,7 @@ function umgebung({ zones, datenGeladen }) {
 describe('leere Zonenliste', () => {
   const ZONE = { id: 'SPAWN', name: 'Spawn', role: 'spawn', racks: [], sortOrder: 1 };
   // renderZones zeichnet jede Karte mit zonenKarte, in der Reihe von zonenReihe.
-  const LISTE = ['zonenReihe', 'zonenKarte', 'renderZones'].map(hebeFunktion).join('\n');
+  const LISTE = ['zonenReihe', 'zonenKarte', 'zonenKontamHtml', 'renderZones'].map(hebeFunktion).join('\n');
 
   it('sagt vor der ersten Antwort nur, dass geladen wird', () => {
     const u = umgebung({ zones: [], datenGeladen: false });

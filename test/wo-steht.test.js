@@ -135,6 +135,7 @@ function welt({ plaetze = PLAETZE } = {}) {
       'zonenRegalUmschalten',
       'zonenFundZiel',
       'zonenKarte',
+      'zonenKontamHtml',
       'renderZones'
     ]
       .map((n) => hebeFunktion(n, APP))

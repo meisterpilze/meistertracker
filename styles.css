@@ -9769,6 +9769,19 @@ button.wk-an-zeile:active {
 .wk-due[hidden] {
   display: none;
 }
+/* "2 fällig" for a screen reader; the eye has the figure. */
+.wk-due-wort {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .wk-due.rot {
   background: var(--c-red-strong);
 }
