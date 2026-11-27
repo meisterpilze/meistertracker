@@ -12290,6 +12290,11 @@ button.wk-an-zeile:active {
   font-size: 1rem;
   font-weight: 700;
 }
+/* "Zuletzt" belongs to the sheet a phone opens; the sidebar of a desk shows
+   every page at once and has no use for a second way to four of them. */
+.sb-zuletzt {
+  display: none;
+}
 /* The search is a field, and says what it takes: a name typed or a code read
    by the hand scanner land in the same place. */
 .sb-search-wrap {
@@ -12529,8 +12534,9 @@ button.wk-an-zeile:active {
   }
 
   /* ── "Mehr": the navigation, as a sheet ──
-     It comes up from the edge the button is on. Every other page is in it, and
-     under the page that is open, that page's views. */
+     It comes up from the edge the button is on. From the top: the search, the
+     places one was in last, and every page by group, each group a heading that
+     folds. */
   .sidebar {
     top: auto;
     right: 0;
@@ -12564,17 +12570,6 @@ button.wk-an-zeile:active {
     overflow: visible;
     -webkit-mask-image: none;
     mask-image: none;
-  }
-  /* The page that is open comes first, with its views: that is what somebody
-     standing on that page opens the sheet for, and the last page of the list
-     would otherwise put them under everything else. */
-  .sb-nav {
-    display: flex;
-    flex-direction: column;
-  }
-  .sb-nav > .sb-btn.active:has(+ .sb-sub),
-  .sb-nav > .sb-btn.active + .sb-sub {
-    order: -1;
   }
   /* ── The index ──
      Every page lists its views here, not only the page that is open. A view of
@@ -12619,8 +12614,92 @@ button.wk-an-zeile:active {
   }
   .sb-header .sb-logo,
   .sb-toggle-fold,
-  /* The magnifier is in the top bar on a phone. */
+  /* No keyboard to press it on. */
+  .sb-search-key {
+    display: none;
+  }
+  /* ── Search first ──
+     The field stood in the sidebar of a desk only; a phone had the magnifier
+     in the top bar, which is not where somebody looks who has just opened the
+     list to find a page. Here it is the first thing in the sheet, as high as a
+     thumb needs it. */
   .sb-search-wrap {
+    padding: 4px 12px 10px;
+  }
+  .sb-btn.sb-search {
+    min-height: var(--tap-sm);
+    padding: 0 12px;
+  }
+  /* ── Zuletzt ──
+     The places one was in last, as pills in a row that wraps (app.js,
+     zuletztZeichne). The look of the views under a page: a place is a place. */
+  .sb-zuletzt:not([hidden]) {
+    display: block;
+    padding: 0 12px 6px;
+  }
+  .sb-zuletzt-t {
+    padding: 0 8px 6px;
+    color: var(--c-text-muted);
+    font-size: max(0.75rem, var(--fs-min));
+    font-weight: 500;
+  }
+  .sb-zuletzt-liste {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 8px;
+  }
+  .sb-zuletzt-btn {
+    min-height: var(--tap-sm);
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  /* ── Groups that fold ──
+     Forty places under each other were two screens of list. Each group is a
+     heading now, a tap opens it (app.js, mehrZeichne): the heading gets the
+     role of a button there, and with it the height of one. The mark at its
+     end is drawn here; no character stands in the page for it.
+
+     display is left alone on purpose: a group whose pages are all in the bar
+     is hidden by the class that marks them, one class against two here. */
+  .sb-nav > .sb-group-label[data-group] {
+    position: relative;
+    margin-top: 2px;
+    padding: 14px 36px 14px 8px;
+    border-top: 1px solid var(--c-border-light);
+    color: var(--c-text);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    line-height: 1.25;
+    cursor: pointer;
+  }
+  .sb-nav > .sb-group-label[data-group]::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    width: 8px;
+    height: 8px;
+    margin-top: -2px;
+    border-right: 2px solid var(--c-text-muted);
+    border-bottom: 2px solid var(--c-text-muted);
+    transform: rotate(-135deg);
+  }
+  .sb-nav > .sb-group-label[data-group].sb-zu::after {
+    margin-top: -7px;
+    transform: rotate(45deg);
+  }
+  /* What a folded group holds: its pages and their views. Later in the file
+     than every rule that shows them, and no lighter than any of them. */
+  .sb-nav > .sb-btn.sb-fold-zu,
+  .sb-nav > .sb-btn + .sb-sub.sb-fold-zu {
     display: none;
   }
   .sb-sheet-title {
