@@ -597,7 +597,13 @@ async function loadCurrentUser() {
   showMcpTab();
   showCameraTab();
   showAdminNav();
+  showLogoutName();
   loadUsbBackup();
+}
+// Wer angemeldet ist, neben "Abmelden" unten im Menü.
+function showLogoutName() {
+  const el = document.getElementById('sb-logout-user');
+  if (el) el.textContent = currentUser && currentUser.username ? currentUser.username : '';
 }
 function showAdminNav() {
   const btn = document.getElementById('n-settings');
@@ -39093,6 +39099,11 @@ function initEventListeners() {
     else locRemoveSelected();
   });
   $('btn-43').addEventListener('click', doLogout);
+  // Unten im Menü, für jeden. Erst die Frage nach ungespeicherter Arbeit, wie
+  // bei jedem Weg von der Seite weg: ein Tipp daneben soll kein Formular kosten.
+  $('sb-logout').addEventListener('click', () => {
+    if (mayLeavePage()) doLogout();
+  });
   $('btn-44').addEventListener('click', addUser);
   $('btn-45').addEventListener('click', copyCalDavUrl);
   $('caldav-enabled').addEventListener('change', saveCaldavSettings);
