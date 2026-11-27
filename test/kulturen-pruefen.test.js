@@ -329,7 +329,131 @@ describe('Kulturen prüfen: was gescannt ist, bleibt auf dem Telefon', () => {
   });
 });
 
+// Vom Laborbestand aus: das Blatt einer Art in einem Gefäß hat Scannen. Dann
+// zählt nur diese Art in diesem Gefäß, und die Wahl der Gefäße oben bleibt.
+// Spritzen in allen Größen: sie stehen zusammen, unter einem Etikett der Art.
+describe('Kulturen prüfen: ein Fach vom Laborbestand', () => {
+  const FACH = { strainId: 1, name: 'Testart Alpha', kind: 'PD', size: null };
+  const bestand = () => [
+    ...BESTAND().map((c) => ({ ...c, strainId: 1 })),
+    { id: 'PD-TB-171126-01', type: 'PD', status: 'active', species: 'Testart Beta', strainId: 2 },
+    { id: 'SY-TA-171126-02', type: 'SY', status: 'active', species: 'Testart Alpha', strainId: 1, ml: 20 }
+  ];
+  let a;
+  beforeEach(() => {
+    a = baue({ cultures: bestand() });
+    a.openLabCheck(FACH);
+  });
+
+  it('erwartet nur die Schalen dieser Art, ohne Knöpfe für die Gefäße', () => {
+    assert.deepEqual(
+      a._zcExpected().map(([id]) => id),
+      ['PD-TA-171126-01', 'PD-TA-171126-02']
+    );
+    assert.doesNotMatch(a.welt.els['zc-kinds'].innerHTML, /data-zc-kind=/);
+    assert.match(a.welt.els['zc-title'].textContent, /^labCheck\.titleFach .*Testart Alpha · kind:PD/);
+  });
+
+  it('eine Schale einer anderen Art: abgehakt, nicht mitgezählt, nicht abgeschrieben', () => {
+    a.labCheckScanned('PD-TB-171126-01');
+    assert.match(a.welt.feedback.at(-1)[1], /^labCheck\.scanOtherFach/);
+    a.labCheckScanned('PD-TA-171126-01');
+    a._zcMarkMissingUsed();
+    assert.deepEqual(a.welt.status, [['PD-TA-171126-02', 'used']]);
+    assert.match(a.welt.bestaetigt, /"kinds":"Testart Alpha · kind:PD"/);
+  });
+
+  it('eine abgeschriebene Schale dieser Art, die im Regal steht, ist wieder da', () => {
+    a.labCheckScanned('PD-TA-171126-03');
+    assert.equal(status(a, 'PD-TA-171126-03'), 'active');
+    assert.deepEqual(
+      a._zcExpected().map(([id]) => id),
+      ['PD-TA-171126-01', 'PD-TA-171126-02', 'PD-TA-171126-03']
+    );
+    assert.ok(a._zcFound.has('PD-TA-171126-03'));
+  });
+
+  it('Spritzen: alle Größen der Art, auch vom Etikett ohne Größe, jede mit ihrer Größe in der Zeile', () => {
+    for (const fach of [
+      { ...FACH, kind: 'SY', size: 10 },
+      { ...FACH, kind: 'SY', size: null, group: true }
+    ]) {
+      const b = baue({ cultures: bestand() });
+      b.openLabCheck(fach);
+      assert.deepEqual(
+        b._zcExpected().map(([id, d]) => [id, d.batchId]),
+        [
+          ['SY-TA-171126-01', 'Testart Alpha · 10 ml'],
+          ['SY-TA-171126-02', 'Testart Alpha · 20 ml']
+        ],
+        'ohne ml ist eine Spritze 10 ml'
+      );
+    }
+  });
+
+  it('Ausbuchen nimmt nur die Haken dieses Fachs weg; die der anderen Art warten auf deren Fach', () => {
+    a.labCheckScanned('PD-TB-171126-01');
+    a.labCheckScanned('PD-TA-171126-01');
+    a._zcMarkMissingUsed();
+    assert.deepEqual([...a._zcFound], ['PD-TB-171126-01']);
+    const b = weiter(a, a.welt.jetzt + 1);
+    assert.ok(b._zcFound.has('PD-TB-171126-01'), 'auch nach einem Neuladen');
+    a.welt.undo();
+    assert.equal(status(a, 'PD-TA-171126-02'), 'active');
+    assert.ok(a._zcFound.has('PD-TA-171126-01'));
+  });
+
+  it('Von vorn auch: nur dieses Fach, und eine zurückgeholte Schale der anderen Art bleibt aktiv', () => {
+    a.welt.cultures.push({ id: 'PD-TB-171126-02', type: 'PD', status: 'used', species: 'Testart Beta', strainId: 2 });
+    a.labCheckScanned('PD-TB-171126-02');
+    a.labCheckScanned('PD-TA-171126-03');
+    a._lcVonVorn();
+    assert.equal(status(a, 'PD-TA-171126-03'), 'used');
+    assert.equal(status(a, 'PD-TB-171126-02'), 'active');
+    assert.deepEqual([...a._zcFound], ['PD-TB-171126-02']);
+    a.welt.undo();
+    assert.equal(status(a, 'PD-TA-171126-03'), 'active');
+    assert.ok(a._zcFound.has('PD-TA-171126-03'));
+  });
+
+  it('die Wahl der Gefäße für das ganze Regal bleibt, und Prüfen danach zählt wieder alle Arten', () => {
+    const b = weiter(a, a.welt.jetzt + 1);
+    assert.deepEqual([...b._lcKinds].sort(), ['LC', 'PD']);
+    assert.ok(b._zcExpected().some(([id]) => id === 'PD-TB-171126-01'));
+  });
+
+  it('Haken einer anderen Art von vorhin sagen nicht "fortgesetzt"', () => {
+    a.labCheckScanned('PD-TB-171126-01');
+    const b = baue({
+      cultures: a.welt.cultures,
+      speicher: Object.fromEntries(a.welt.speicher),
+      jetzt: a.welt.jetzt + 1
+    });
+    b.openLabCheck(FACH);
+    assert.doesNotMatch(b.welt.els['zc-count'].textContent, /labCheck\.resumed/);
+  });
+});
+
 describe('Kulturen prüfen in der App', () => {
+  it('das Blatt eines Fachs hat Scannen, bei Körnerbrut nicht, und Prüfen öffnet ohne Fach', () => {
+    const m = HTML.slice(HTML.indexOf('id="m-labfach"'), HTML.indexOf('id="m-kbz"'));
+    assert.match(m, /id="m-lf-scan" data-lf-act="scan"/);
+    assert.match(
+      APP,
+      /if \(a === 'scan'\) \{\s*if \(f\.kind === 'KB'\) return;\s*lfClose\(\);\s*return openLabCheck\(f\);/
+    );
+    assert.match(APP, /getElementById\('m-lf-scanrow'\)\.hidden = f\.kind === 'KB';/);
+    assert.match(m, /<div class="shelf-acts" id="m-lf-scanrow">/, 'eigene Zeile: [hidden] gilt über .shelf-acts');
+    assert.ok(
+      APP.indexOf("if (a === 'scan')") < APP.indexOf("if (f.group) return toast(t('lf.pickSize')"),
+      'Scannen geht auch am Spritzen-Etikett, ohne gewählte Größe'
+    );
+    assert.match(APP, /\$\('lab-check-btn'\)\.addEventListener\('click', \(\) => openLabCheck\(\)\);/);
+    for (const code of ['de', 'en', 'pt'])
+      for (const k of ['lf.scan', 'labCheck.titleFach', 'labCheck.emptyFach', 'labCheck.scanOtherFach'])
+        assert.ok(sprache(code)[k], code + ': ' + k);
+  });
+
   it('das Blatt hat eine Zeile für die Gefäße über der Liste', () => {
     const m = HTML.slice(HTML.indexOf('id="m-zonecheck"'));
     assert.ok(m.indexOf('id="zc-kinds"') > 0 && m.indexOf('id="zc-kinds"') < m.indexOf('id="zc-body"'));
