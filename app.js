@@ -1816,8 +1816,13 @@ function go(page, btnId) {
   // sah also, was beim letzten Besuch der Chargen uebrig geblieben war, und beim
   // Neuladen gar nichts. Dieselbe Sache wie bei Arbeitsgaenge (#566), eine Seite
   // weiter.
-  if (page === 'dash') renderOverviewKPIs();
-  if (page === 'dash' && !kpiHistoryData) loadKpiHistory();
+  //
+  // Seit die Seite Ansichten hat (Übersicht, Ernten, Gute Blöcke), zeichnet
+  // die, die offen ist: dieselbe Regel wie bei Vorhaben und Bestellungen unten.
+  if (page === 'dash') {
+    const stab = document.querySelector('#p-dash .stab.active');
+    if (stab) stab.click();
+  }
   if (page === 'strains') renderStrains();
   // Dieselbe Regel wie bei Admin und Bestellungen: welcher Reiter aufgeht,
   // entscheidet die Leiste und nicht diese Liste. Der Reiter weiß selbst, was
@@ -1871,8 +1876,12 @@ function openStab(page, sub) {
   if (page === 'batch' && sub === 'locations') renderStatus();
   if (page === 'batch' && sub === 'new') nbEnsureReady();
   if (page === 'batch' && sub === 'substrate') renderSubstrateTab();
-  if (page === 'batch' && sub === 'harvest') renderHarvests();
-  if (page === 'batch' && sub === 'blocks') {
+  if (page === 'dash' && sub === 'overview') {
+    renderOverviewKPIs();
+    if (!kpiHistoryData) loadKpiHistory();
+  }
+  if (page === 'dash' && sub === 'harvest') renderHarvests();
+  if (page === 'dash' && sub === 'blocks') {
     renderBlockBook();
     loadBlockBook();
   }
@@ -2105,6 +2114,11 @@ function setPageTitle(page, navBtn) {
   }
 }
 
+function dashUebersichtOffen() {
+  const el = document.getElementById('sp-dash-overview');
+  return !!(el && el.classList.contains('active'));
+}
+
 function refresh() {
   // P-05: invalidate the per-batch status cache before each render. This is
   // belt-and-braces — applyData() also clears it on incoming data — but
@@ -2128,7 +2142,11 @@ function refresh() {
     renderDashBatchTasks();
     loadLabStock();
   }
-  if (id === 'dash') renderOverviewKPIs();
+  // Von Zahlen nur die Übersicht, und nur wenn sie offen ist: vier Diagramme
+  // hinter display:none neu zu bauen ist Arbeit für nichts. Die Ernten zeichnet
+  // ihr Reiter beim Öffnen und confirmHarvest() nach jeder Ernte; das Blockbuch
+  // lädt sich selbst nach (_bbOpen).
+  if (id === 'dash' && dashUebersichtOffen()) renderOverviewKPIs();
   if (id === 'batch') {
     renderStatus();
     renderBatches();
@@ -29098,7 +29116,7 @@ function _bbCanDelete(c) {
   return !!currentUser && (currentUser.role === 'admin' || (!!c.by && c.by === currentUser.username));
 }
 function _bbOpen() {
-  const el = document.getElementById('sp-batch-blocks');
+  const el = document.getElementById('sp-dash-blocks');
   return !!(el && el.classList.contains('active'));
 }
 // Körnerbrut ist kein Block: sie wird verbraucht, nicht geerntet.
@@ -29397,7 +29415,7 @@ document.getElementById('bi-notes').addEventListener('click', (e) => {
   const del = e.target.closest('[data-bb-del]');
   if (del) deleteBlockComment(parseInt(del.dataset.bbDel, 10));
 });
-document.getElementById('sp-batch-blocks').addEventListener('click', (e) => {
+document.getElementById('sp-dash-blocks').addEventListener('click', (e) => {
   const del = e.target.closest('[data-bb-del]');
   if (del) deleteBlockComment(parseInt(del.dataset.bbDel, 10));
 });
@@ -39003,10 +39021,10 @@ function initEventListeners() {
   // als Ablage, aus der createBatch() liest — aufgeschlagen wird es nicht mehr.
   $('btn-batch-new').addEventListener('click', wkbOpen);
   $('st-batch-substrate').addEventListener('click', () => openStab('batch', 'substrate'));
-  $('st-batch-harvest').addEventListener('click', () => {
-    openStab('batch', 'harvest');
-  });
-  $('st-batch-blocks').addEventListener('click', () => openStab('batch', 'blocks'));
+  // Ernten und Gute Blöcke sind Ansichten von Zahlen: gelesen, nicht bearbeitet.
+  $('st-dash-overview').addEventListener('click', () => openStab('dash', 'overview'));
+  $('st-dash-harvest').addEventListener('click', () => openStab('dash', 'harvest'));
+  $('st-dash-blocks').addEventListener('click', () => openStab('dash', 'blocks'));
   // The lab cards are rebuilt wholesale on every sync, so their buttons are
   // delegated rather than carrying inline handlers.
   $('wk-np').addEventListener('click', () => {

@@ -16,7 +16,8 @@ window.LANG['pt'] = {
   'common.required': 'obrigatório',
   // Nav
   'nav.tools': 'Ferramentas',
-  'nav.dashboard': 'Painel',
+  'nav.dashboard': 'Números',
+  'dash.tabOverview': 'Visão geral',
   'nav.batches': 'Lotes',
   'nav.lab': 'Laborat\u00f3rio',
   'nav.inventory': 'Invent\u00e1rio',
