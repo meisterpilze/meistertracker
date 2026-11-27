@@ -497,11 +497,10 @@ function labLabelItems(id, c, detail, barcodeNum, qr) {
   const spParts = [species];
   if (strainTxt) spParts.push(strainTxt);
   const bcVal = barcodeNum ? String(barcodeNum) : id.replace(/-/g, '_');
-  // Die Herkunft hängt mit einem geschützten Leerzeichen an ihrem Pfeil, wie
-  // in app.js: bricht die erste Zeile um, steht "<- PD-…" zusammen darunter.
-  const absaetze = [
-    { text: c.parentId ? id + ' \u2190\u00a0' + c.parentId : id, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }
-  ];
+  // Die Kennung allein, wie in app.js. Woraus die Kultur angesetzt ist ("<- PD-…"), stand
+  // dahinter und nahm oft eine zweite Zeile; das zeigt jetzt der Scan (das
+  // Fenster der Kultur, der Stammbaum), nicht mehr das Etikett.
+  const absaetze = [{ text: id, fontH: qr ? 28 : 24, minH: 18, maxZeilen: 2 }];
   if (detail === 'sorte' || detail === 'full') {
     absaetze.push({ text: spParts.filter(Boolean).join(' \u2013 '), fontH: 24, maxZeilen: 2, kuerzbar: true });
   }
