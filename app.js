@@ -336,14 +336,16 @@ function rebuildZoneConstants() {
   });
   locColor = { ...ZONE_COLORS };
   // Actions + Quantities stay as text barcodes; Zones + Racks use numeric barcodes
+  // Jede Gruppe trägt den Schlüssel ihres Namens (refGroupName), keinen Namen:
+  // gebaut wird einmal je Datenstand, die Sprache kann danach wechseln.
   REF_GROUPS = [
     {
-      g: 'Actions',
+      g: 'print.refActions',
       items: ['ADD', 'MOVE', 'MOVE_BATCH', 'REMOVE', 'HARVEST', 'CONTAM'].map((a) => ({ val: a, label: a }))
     }
   ];
   REF_GROUPS.push({
-    g: 'Zones',
+    g: 'print.refZones',
     items: ZONES.map((z) => {
       const bc = barcodeByEntity.get('zone:' + z);
       return { val: bc ? String(bc) : z, label: z };
@@ -355,9 +357,11 @@ function rebuildZoneConstants() {
       const rIds = z.racks.map((r) => r.id);
       for (let i = 0; i < rIds.length; i += 5) {
         const chunk = rIds.slice(i, i + 5);
-        const label = z.name + ' Racks ' + (i + 1) + '–' + (i + chunk.length);
         REF_GROUPS.push({
-          g: label,
+          g: 'print.refRacks',
+          zone: z.id,
+          from: i + 1,
+          to: i + chunk.length,
           items: chunk.map((r) => {
             const bc = barcodeByEntity.get('rack:' + r);
             return { val: bc ? String(bc) : r, label: r };
@@ -31584,6 +31588,12 @@ async function makeQR(val) {
   });
 }
 
+// Der Name einer Gruppe, in der Sprache, die gerade gilt. Der Raum heißt, wie
+// er überall heißt (zoneDisplayName), nicht wie er in der Datenbank steht.
+function refGroupName(group) {
+  if (!group.zone) return t(group.g);
+  return t(group.g, { zone: zoneDisplayName(group.zone), from: group.from, to: group.to });
+}
 async function renderRefBarcodes() {
   // P-02: JsBarcode + QRCode are lazy-loaded.
   if (typeof JsBarcode === 'undefined' || typeof QRCode === 'undefined') await loadVendorLibs();
@@ -31593,7 +31603,7 @@ async function renderRefBarcodes() {
   for (const group of REF_GROUPS) {
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = `<div class="sec">${group.g}</div>`;
+    card.innerHTML = `<div class="sec">${esc(refGroupName(group))}</div>`;
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;align-items:flex-end';
     for (const item of group.items) {
@@ -31651,7 +31661,7 @@ async function printRef() {
   // inch of paper. A rem would follow the reader's browser setting and change
   // how much fits on the page, which is not what a browser setting is for.
   title.style.cssText = 'font-family:Arial,sans-serif;font-size:15px;font-weight:bold;margin-bottom:12px;padding:8px';
-  title.textContent = 'Reference ' + (useQR ? 'QR Codes' : 'Barcodes');
+  title.textContent = t(useQR ? 'print.refSheetQr' : 'print.refBarcodes');
   sheet.appendChild(title);
   let delay = 0;
   for (const group of REF_GROUPS) {
@@ -31659,7 +31669,7 @@ async function printRef() {
     sec.className = 'fs-micro';
     sec.style.cssText =
       'font-family:Arial,sans-serif;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:var(--c-text-muted);margin:14px 8px 8px';
-    sec.textContent = group.g;
+    sec.textContent = refGroupName(group);
     sheet.appendChild(sec);
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;padding:0 8px';
