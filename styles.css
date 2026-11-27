@@ -683,6 +683,19 @@ body.admin-mode #n-settings .sb-ico-back {
   }
 }
 
+/* Abmelden, with who is signed in at the end of the row. The name gives way
+   first: a long one is cut with an ellipsis, the word "Abmelden" never is. */
+.sb-logout-user {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-text-muted);
+  font-weight: 400;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sb-sync {
   display: flex;
   align-items: center;
