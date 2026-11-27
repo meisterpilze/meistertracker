@@ -10225,42 +10225,6 @@ button.wk-an-zeile:active {
   color: var(--c-text-muted);
 }
 
-/* move targets */
-.wkf-zones {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
-}
-.wkf-zone {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  text-align: left;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  cursor: pointer;
-  font: inherit;
-  color: var(--c-text);
-  min-height: max(48px, var(--tap-min));
-}
-.wkf-zone.sel {
-  border-color: var(--c-primary);
-  background: var(--c-primary-light);
-  box-shadow: 0 0 0 1px var(--c-primary);
-}
-.wkf-zone-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  flex: none;
-}
-.wkf-zone-n {
-  font-size: 0.8125rem;
-  font-weight: 650;
-}
-
 /* receipt */
 .wkf-receipt {
   display: flex;
@@ -10318,8 +10282,7 @@ button.wk-an-zeile:active {
   .wkf-row-meta {
     grid-column: 1 / -1;
   }
-  .wkf-two,
-  .wkf-zones {
+  .wkf-two {
     grid-template-columns: 1fr;
   }
   /* Three columns and four children, placed rather than left to auto-flow: id,

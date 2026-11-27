@@ -39375,7 +39375,6 @@ const WKF = {
   // gepflückt werden und trotzdem eine Welle sind.
   flushOverride: null,
   releaseAll: false,
-  dest: null, // destination zone id (move)
   receipt: null
 };
 
@@ -39470,7 +39469,6 @@ function wkfOpen(kind) {
   WKF.grams = {};
   WKF.flushOverride = null;
   WKF.releaseAll = false;
-  WKF.dest = null;
   WKF.receipt = null;
   wkf('m-work-flow').classList.add('open');
   wkfRender();
@@ -39499,10 +39497,6 @@ function wkfBack() {
   if (WKF.step === 'detail') {
     WKF.step = 'pick';
     WKF.batchId = null;
-    // Ein Ziel aus der vorigen Charge darf nicht überleben: der Fußknopf ist
-    // allein an WKF.dest gebunden, also wäre „Buchen" beim nächsten Schritt
-    // sofort aktiv und würde in eine Zone buchen, die niemand gewählt hat.
-    WKF.dest = null;
     wkfRender();
     return;
   }
@@ -39524,7 +39518,7 @@ function wkfStepChips() {
     WKF.kind === 'harvest'
       ? [t('work.stepBatch'), t('work.stepGrams'), t('work.stepBooked')]
       : WKF.kind === 'move'
-        ? [t('work.stepBatch'), t('work.stepTarget'), t('work.stepBooked')]
+        ? [t('work.stepBatch'), t('work.stepTarget')]
         : [t('work.stepBatch'), t('work.stepReport')];
   const at = WKF.step === 'pick' ? 0 : WKF.step === 'detail' ? 1 : 2;
   return (
@@ -39548,7 +39542,9 @@ function wkfRender() {
   wkf('wkf-back').hidden = WKF.step !== 'detail';
   wkf('wkf-steps').innerHTML = WKF.step === 'done' ? '' : wkfStepChips();
   if (WKF.step === 'pick') return wkfRenderPick();
-  if (WKF.step === 'detail') return WKF.kind === 'harvest' ? wkfRenderHarvest() : wkfRenderMove();
+  // Nur die Ernte hat einen zweiten Schritt hier; Umziehen und Kontamination
+  // übergeben nach der Wahl der Charge (wkfPickBatch).
+  if (WKF.step === 'detail') return wkfRenderHarvest();
   if (WKF.step === 'done') return wkfRenderReceipt();
 }
 
@@ -39589,9 +39585,16 @@ function wkfRenderPick() {
 
 function wkfPickBatch(batchId) {
   WKF.batchId = batchId;
-  // Siehe wkfBack(): eine Zielzone gilt immer nur für die Charge, für die sie
-  // gewählt wurde.
-  WKF.dest = null;
+  // Umziehen ist anderswo ein fertiger Weg: der Ziel-Wähler, den auch
+  // "Umziehen" an einer Charge öffnet (openMoveBatchModal), mit Regalen, den
+  // zuletzt gewählten Plätzen und Rückgängig. Hier stand dafür ein eigener
+  // Schritt: nur Räume, dann "Buchen", dann eine Quittung, und kein Weg
+  // zurück. Zwei Arten, dieselbe Charge umzuziehen. Also übergibt der Ablauf.
+  if (WKF.kind === 'move') {
+    wkfClose();
+    openMoveBatchModal(batchId);
+    return;
+  }
   // The contamination report is already a finished dialog — it only ever lacked
   // a way in that wasn't a scan. So this flow hands over and gets out of the way.
   if (WKF.kind === 'contam') {
@@ -39780,64 +39783,6 @@ function wkfBookHarvest() {
   if (typeof renderHarvests === 'function') renderHarvests();
   if (typeof updateSD === 'function') updateSD();
   if (typeof renderBatches === 'function') renderBatches();
-}
-
-// ─── Step 2b: move — where to ────────────────────────────────────────────────
-
-function wkfRenderMove() {
-  const bags = wkLiveBags(WKF.batchId, null);
-  // Vor dem Aufbau, nicht danach: vorher wurde die Fußzeile mit einem aktiven
-  // „Buchen" geschrieben und erst anschließend der Körper durch den Leerfall
-  // ersetzt — der Knopf blieb stehen und buchte auf eine Charge ohne Beutel.
-  // Die Charge selbst wird nicht mehr mitgeprüft: ist sie zwischen Auswahl und
-  // Anzeige verschwunden, liefert wkLiveBags() ohnehin nichts, und der Leerfall
-  // muss dann erst recht greifen — sonst steht ein Buchen-Knopf da, den
-  // wkfBookMove() anschließend wortlos verweigert.
-  if (!bags.length) {
-    wkf('wkf-body').innerHTML = `<div class="wkf-empty">${esc(t('work.noBagsStanding'))}</div>`;
-    wkf('wkf-foot').innerHTML = `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>`;
-    return;
-  }
-  const here = bags[0].zoneId;
-  const targets = zones.filter((z) => z.id !== here);
-  wkf('wkf-body').innerHTML =
-    `<div class="wkf-hint">${esc(t('work.moveHint', { n: bags.length, batch: WKF.batchId }))}</div>` +
-    '<div class="wkf-zones">' +
-    targets
-      .map(
-        (z) => `<button type="button" class="wkf-zone${WKF.dest === z.id ? ' sel' : ''}"
-          onclick="WKF.dest='${escJs(z.id)}'; wkfRender()">
-          <span class="wkf-zone-dot" style="background:${esc(z.color || '#94a3b8')}"></span>
-          <span class="wkf-zone-n">${esc(z.name || z.id)}</span>
-        </button>`
-      )
-      .join('') +
-    '</div>';
-  wkf('wkf-foot').innerHTML =
-    `<button class="btn" data-wk="back">${esc(t('work.back'))}</button>` +
-    `<button class="btn btn-p" data-wk="book-move" ${WKF.dest ? '' : 'disabled'}>${esc(t('work.book'))}</button>`;
-}
-
-function wkfBookMove() {
-  const b = batches.find((x) => x.batchId === WKF.batchId);
-  if (!b || !WKF.dest) return;
-  const destZone = ZONE_BY_ID[WKF.dest] || {};
-  moveBatchTo(b, WKF.dest, function (moved, skipped) {
-    WKF.receipt = {
-      headline: t('work.receiptMove', { n: moved, zone: destZone.name || WKF.dest }),
-      lines: [
-        [t('work.rBatch'), b.batchId],
-        [t('work.rMoved'), String(moved)],
-        [t('work.rSkipped'), String(skipped || 0)],
-        [t('work.rBy'), (currentUser && currentUser.username) || '—']
-      ],
-      next: null
-    };
-    WKF.step = 'done';
-    wkfRender();
-    if (typeof renderBatches === 'function') renderBatches();
-    if (typeof updateSD === 'function') updateSD();
-  });
 }
 
 // ─── Step 3: the receipt ─────────────────────────────────────────────────────
@@ -40081,7 +40026,6 @@ function applyWkTileOrder() {
       if (!act) return;
       if (act.dataset.wk === 'back') wkfBackDispatch();
       else if (act.dataset.wk === 'book-harvest') wkfBookHarvest();
-      else if (act.dataset.wk === 'book-move') wkfBookMove();
       else if (act.dataset.wk === 'receipt-next') wkfReceiptNext();
     });
     bg.addEventListener('input', (e) => {
